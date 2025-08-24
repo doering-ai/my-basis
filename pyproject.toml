@@ -1,0 +1,18 @@
+[project]
+name            = "MyBasis"
+version         = "0.1.0"
+description     = "A shared repository of basic python utilties for clean, functional text processing."
+readme          = "README.md"
+license         = "MIT"
+requires-python = ">=3.13"
+dependencies    = []
+
+
+[project.scripts]
+
+[build-system]
+requires      = ["setuptools>=70.0.0", "setuptools-scm>=7", "wheel>=0.40.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.package-dir]
+"mybasis" = "src/"

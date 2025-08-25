@@ -20,27 +20,26 @@ from types import ModuleType
 from collections import Counter, deque
 from datetime import datetime, timezone
 from pathlib import Path
-from time import perf_counter_ns
-import functools as ft
-import itertools as it
-import more_itertools as mi
-import contextlib as ctx
-import regex as re
-from regex import Pattern, Match
 from shutil import get_terminal_size
-import logging as lg
+from time import perf_counter_ns
+import contextlib as ctx
+import functools as ft
 import importlib as imp
 import importlib.metadata as impm
+import itertools as it
+import logging as lg
 import os
 import subprocess as sbp
+import sys
 import textwrap
+import warnings
 
 # External imports
 ## General
 import pydantic as pyd
 from pydantic_core import core_schema as pyd_schema
 import pandas as pd
-import quart as qt
+import more_itertools as mi
 
 ## Metrics
 import logfire as fire
@@ -48,10 +47,10 @@ from opentelemetry.metrics import Counter as OpenTelemetryCounter
 
 ## Serialization
 from unidecode import unidecode
-import warnings
+import regex as re
+from regex import Pattern, Match
 
 # Internal imports
-from .constants import ROOT
 
 ############
 ### DATA ###
@@ -236,7 +235,7 @@ def validate_arch_file(*paths: pyd.FilePath) -> bool:
     return True
 
 
-async def find_file(pattern: str, root: pyd.DirectoryPath = ROOT) -> Path | None:
+async def find_file(pattern: str, root: pyd.DirectoryPath) -> Path | None:
     """
     Find a file matching the given pattern in the specified root directory.
     Returns the first matching file or None if no match is found.
@@ -255,7 +254,7 @@ async def find_file(pattern: str, root: pyd.DirectoryPath = ROOT) -> Path | None
         return None
 
 
-async def find_files(*names: str, root: pyd.DirectoryPath = ROOT) -> list[Path]:
+async def find_files(*names: str, root: pyd.DirectoryPath) -> list[Path]:
     ret: list[Path] = []
     for name in names:
         if not name:
@@ -363,7 +362,7 @@ def setup_py_logging(
     is_dev: bool,
     package: str,
     logger: lg.Logger | None = None,
-    app: qt.Quart | None = None,
+    app: Any | None = None,
     maxsize: int = 2**26,  # 64 MB
     maxcount: int = 2**10,  # 1024 backups
 ) -> lg.Logger:
@@ -400,7 +399,7 @@ def setup_fire_logging(
     package: str,
     logger: lg.Logger,
     is_dev: bool = True,
-    app: qt.Quart | None = None,
+    app: Any | None = None,
     **kwargs: Any,
 ) -> None:
 
@@ -453,7 +452,7 @@ def setup_logging(
     fire_token: str,
     package: str = '',
     logger: lg.Logger | None = None,
-    app: qt.Quart | None = None,
+    app: Any | None = None,
     maxsize: int = 2**26,  # 64 MB
     maxcount: int = 2**10,  # 1024 backups
     **fire_kwargs: Any,
@@ -958,9 +957,9 @@ def parse_domain(url: str, default: str = '') -> str:
     return default
 
 
-def import_module(file: pyd.FilePath) -> ModuleType:
+def import_module(file: pyd.FilePath, root: pyd.DirectoryPath) -> ModuleType:
     validate_arch_file(file)
-    pathstr = file.with_suffix('').relative_to(ROOT).as_posix().replace('/', '.')
+    pathstr = file.with_suffix('').relative_to(root).as_posix().replace('/', '.')
     return imp.import_module(pathstr)
 
 

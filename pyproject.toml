@@ -5,7 +5,30 @@ description     = "A shared repository of basic python utilties for clean, funct
 readme          = "README.md"
 license         = "MIT"
 requires-python = ">=3.13"
-dependencies    = []
+dependencies    = [
+    "aiohttp>=3.12.15",
+    "coverage>=7.10.5",
+    "logfire>=4.3.5",
+    "more-itertools>=10.7.0",
+    "mypy>=1.17.1",
+    "opentelemetry-instrumentation-aiohttp-client>=0.57b0",
+    "opentelemetry-instrumentation-asgi>=0.57b0",
+    "pandas>=2.3.2",
+    "pandas-stubs>=2.3.0.250703",
+    "pydantic>=2.11.7",
+    "pytest>=8.4.1",
+    "pytest-asyncio>=1.1.0",
+    "pytest-cov>=6.2.1",
+    "python-dateutil>=2.9.0.post0",
+    "pyyaml>=6.0.2",
+    "regex>=2025.7.34",
+    "requests>=2.32.5",
+    "types-python-dateutil>=2.9.0.20250822",
+    "types-pyyaml>=6.0.12.20250822",
+    "types-regex>=2025.7.34.20250809",
+    "unidecode>=1.4.0",
+    "yapf>=0.43.0",
+]
 
 
 [project.scripts]
@@ -15,4 +38,4 @@ requires      = ["setuptools>=70.0.0", "setuptools-scm>=7", "wheel>=0.40.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.package-dir]
-"mybasis" = "src/"
+"my" = "src/"

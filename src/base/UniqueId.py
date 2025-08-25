@@ -1,19 +1,19 @@
 ############
 ### HEAD ###
 ############
-# Standard imports
+### STANDARD
 from typing import ClassVar
 from uuid import uuid4
 
-# External imports
+### EXTERNAL
 import regex as re
 import pydantic as pyd
 
-# Internal imports
+### INTERNAL
 
 
 ############
-### DATA ###
+### BODY ###
 ############
 class UniqueId(pyd.RootModel[str]):
     """ Validates and operates on 32bit hex strings """

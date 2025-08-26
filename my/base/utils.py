@@ -1,7 +1,7 @@
 ############
 ### HEAD ###
 ############
-# Standard imports
+### STANDARD
 import asyncio as aio
 from typing import (
     Any,
@@ -28,13 +28,14 @@ import importlib as imp
 import importlib.metadata as impm
 import itertools as it
 import logging as lg
+import logging.handlers
 import os
 import subprocess as sbp
 import sys
 import textwrap
 import warnings
 
-# External imports
+### EXTERNAL
 ## General
 import pydantic as pyd
 from pydantic_core import core_schema as pyd_schema
@@ -50,7 +51,7 @@ from unidecode import unidecode
 import regex as re
 from regex import Pattern, Match
 
-# Internal imports
+### INTERNAL
 
 ############
 ### DATA ###
@@ -369,15 +370,17 @@ def setup_py_logging(
     # I. Validate log directory and logging object
     validate_dir(logdir)
     if logger is None:
-        impm.metadata(package)['Name']
-        logger = lg.getLogger()
+        try:
+            name = impm.metadata(package)['Name']
+        except impm.PackageNotFoundError:
+            name = package
+        logger = lg.getLogger(name)
+
     # I. Name and setup a new file in this dir
     file = logdir / _name_logfile(logger.name)
     assert not file.exists(), f"Log file {file} already exists."
 
-    file_handler = lg.handlers.RotatingFileHandler(#type: ignore
-        file, maxBytes=maxsize, backupCount=maxcount
-    )
+    file_handler = lg.handlers.RotatingFileHandler(file, maxBytes=maxsize, backupCount=maxcount)
     file_handler.setLevel(lg.DEBUG if is_dev else lg.INFO)
     file_handler.setFormatter(lg.Formatter('[%(asctime)s %(levelname)s] %(message)s'))
 
@@ -402,14 +405,22 @@ def setup_fire_logging(
     app: Any | None = None,
     **kwargs: Any,
 ) -> None:
+    assert fire_token and package, "Tried to initialize fire logging w/o token or package."
+
+    try:
+        name = impm.metadata(package)['Name']
+        version = impm.version(package)
+    except impm.PackageNotFoundError:
+        name = package
+        version = '0.0.0'
 
     # I. Choose basic configuration settings
     settings: dict = dict(
         token=fire_token,
-        service_name=impm.metadata(package)['Name'] if package else 'nexus',
-        service_version=impm.version(package) if package else '0.0',
+        service_name=name,
+        service_version=version,
         environment="development" if is_dev else "production",
-        send_to_logfire=False,
+        send_to_logfire=not is_dev,
         scrubbing=False,
         inspect_arguments=True,
     )

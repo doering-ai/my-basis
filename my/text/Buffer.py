@@ -15,7 +15,7 @@ import logfire
 import numpy as np
 
 ### INTERNAL
-from ..base import utilities as ut
+from ..base import utils as ut
 from .Span import Span
 
 ############

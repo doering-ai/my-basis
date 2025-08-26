@@ -9,7 +9,7 @@ import textwrap
 import pydantic as pyd
 
 ### INTERNAL
-from ..base import utilities as ut
+from ..base import utils as ut
 from ..text import Buffer, RegexStore
 from .Lang import Lang
 from .Block import Block

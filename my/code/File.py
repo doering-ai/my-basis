@@ -9,7 +9,7 @@ from pathlib import Path
 import pydantic as pyd
 
 ### INTERNAL
-from ..base import utilities as ut
+from ..base import utils as ut
 from ..text import Buffer
 from .Lang import Lang
 from .Imports import Imports

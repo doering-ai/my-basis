@@ -11,7 +11,7 @@ import pickle as pkl
 import pydantic as pyd
 
 # Internal imports
-from ..base.utilities import posix
+from ..base.utils import posix
 
 ############
 ### BODY ###

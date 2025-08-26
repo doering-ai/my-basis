@@ -11,7 +11,7 @@ import pydantic as pyd
 import regex as re
 
 ### INTERNAL
-from ..base import utilities as ut
+from ..base import utils as ut
 from ..type import AutocastModel
 from ..text import Span, Buffer, RegexStore
 from .Lang import Lang

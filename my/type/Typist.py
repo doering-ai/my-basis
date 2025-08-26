@@ -37,7 +37,7 @@ import dateutil.parser
 import yaml
 
 ### INTERNAL
-from ..base import utilities as ut
+from ..base import utils as ut
 from ..perf import Cache, NestedCache
 
 ############

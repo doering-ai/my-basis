@@ -2,7 +2,7 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import Any, Iterable, Callable, Mapping, Sequence
+from typing import Any, Iterable, Callable, Mapping, Sequence, Collection
 from collections import deque, Counter
 
 ### EXTERNAL
@@ -53,14 +53,14 @@ class TestAliases:
 
     @pyt.mark.parametrize(
         'pattern, expected', [
-            (r'aliases\.py', True),
-            (r'my/aliases\.py', True),
-            (r'my/my/aliases\.py', False),
+            (r'utils\.py', True),
+            (r'base/utils\.py', True),
+            (r'invalid/base/utils\.py', False),
         ]
     )
     @pyt.mark.asyncio
-    async def test_find_file(self, pattern: str, expected: bool):
-        ret = await ut.find_file(pattern)
+    async def test_find_file(self, pattern: str, expected: bool, root):
+        ret = await ut.find_file(pattern, root)
         assert (ret is not None) == expected
 
     @pyt.mark.parametrize(
@@ -202,7 +202,7 @@ class TestAliases:
             (dict(a=1), 'a', 1),
         ]
     )
-    def test_has_only(self, data: Iterable, target: str, expected: int):
+    def test_has_only(self, data: Collection, target: str, expected: int):
         assert ut.has_only(data, target) == bool(expected)
 
     @pyt.mark.parametrize(
@@ -212,7 +212,7 @@ class TestAliases:
             (dict(a=1), 'a', 0),
         ]
     )
-    def test_has_none(self, data: Iterable, target: str, expected: int):
+    def test_has_none(self, data: Collection, target: str, expected: int):
         assert ut.has_none(data, target) == bool(expected)
 
     @pyt.mark.parametrize(

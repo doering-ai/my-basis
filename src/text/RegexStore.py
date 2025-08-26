@@ -15,8 +15,7 @@ from regex import Match, Pattern, RegexFlag
 import pydantic as pyd
 
 ### INTERNAL
-from my import DEBUG
-import my.aliases as al
+from ..base import utils as ut
 from .Span import Span
 from .MatchData import MatchData
 from .Buffer import Buffer
@@ -24,6 +23,8 @@ from .Buffer import Buffer
 ############
 ### DATA ###
 ############
+DEBUG = False
+
 # General type aliases
 Params = dict[str, str]
 Captures = dict[str, list[str]]
@@ -36,7 +37,7 @@ Branches = list[Atoms]
 Block = tuple[Atoms, Atoms, Atoms]
 RgxParser = (
     str  # base case: Simply renames the output
-    | Callable[[str], str]  # 1st case: returns some subset to the same name 
+    | Callable[[str], str]  # 1st case: returns some subset to the same name
     | Callable[[str], dict[str, str]]  # 2nd case: returns to any number of other names
     | Callable[[str], dict[str, str] | str]  # 3rd case: combo of above two
 )
@@ -204,21 +205,21 @@ class RegexStore(pyd.BaseModel, arbitrary_types_allowed=True):
     ## 0+ Regex Map ##
     ##################
     NO_ESC: ClassVar[str] = NO_ESC
-    RGXS: ClassVar[dict[str, Pattern]] = al.regex_dict(
+    RGXS: ClassVar[dict[str, Pattern]] = ut.regex_dict(
         dict(
             struct_mark=''.join([
                 r'(?P<divis><\|>|\||\[.*?\])?',
                 r'(?P<group>[:>&|]|<?[=!]|P<\w+>)?',
                 rf'{FLAGS}?(?P<quant>{QUANT})',
             ]),
-            set=NO_ESC + al.multi_rgx(r'(?P<start>\[)', rf'(?P<end>\]{QUANT})'),
-            group=NO_ESC + al.multi_rgx(
+            set=NO_ESC + ut.multi_rgx(r'(?P<start>\[)', rf'(?P<end>\]{QUANT})'),
+            group=NO_ESC + ut.multi_rgx(
                 rf'(?P<start>\((?:\?(?>[:>&|]|<?[=!]|P[=<]|{FLAGS}:)?)?)',
                 rf'(?P<end>\){QUANT})',
             ),
             inline_flags=rf'{NO_ESC}\(\?{FLAGS}:',
-            atom=NO_ESC + al.multi_rgx(
-                r'\\' + al.multi_rgx(
+            atom=NO_ESC + ut.multi_rgx(
+                r'\\' + ut.multi_rgx(
                     r'\d+|g<\d+>',
                     r'L<\w+>',
                     r'[Pp]\{[[:alpha:]]+\}',
@@ -367,7 +368,7 @@ class RegexStore(pyd.BaseModel, arbitrary_types_allowed=True):
             pattern = self.patterns[pattern].pattern
         assert isinstance(pattern, str)
 
-        return al.replace(
+        return ut.replace(
             pattern,
             (self.RGXS['inline_flags'], r'(?:(?\1)'),
         )
@@ -499,7 +500,7 @@ class RegexStore(pyd.BaseModel, arbitrary_types_allowed=True):
         """ Validate the usual public paramaters, returning a guaranteed Buffer. """
         if isinstance(patterns, str):
             patterns = [patterns]
-        assert al.has_all(self.patterns, *patterns), f'Unknown pattern(s): {patterns}'
+        assert ut.has_all(self.patterns, *patterns), f'Unknown pattern(s): {patterns}'
         return patterns, str(text) if isinstance(text, Buffer) else text
 
     @staticmethod
@@ -575,7 +576,7 @@ class RegexStore(pyd.BaseModel, arbitrary_types_allowed=True):
                     branches[j] = (cls._apply_quantity(j_br[0], '?'), *j_br[1:])
 
         # II. Combine the branches into one atomic group
-        return al.drop_at(branches, to_drop), inferred_optional
+        return ut.drop_at(branches, to_drop), inferred_optional
 
     @classmethod
     def _render_branches(

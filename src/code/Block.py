@@ -9,14 +9,12 @@ import functools as ft
 ### EXTERNAL
 import pydantic as pyd
 import regex as re
-import logfire as fire
 
 ### INTERNAL
-from my import AutocastModel, aliases as al
-from my._010_types._0_enumerations import SrcLang
-from ..text.Span import Span
-from ..text.Buffer import Buffer
-from ..text.RegexStore import RegexStore
+from ..base import utilities as ut
+from ..type import AutocastModel
+from ..text import Span, Buffer, RegexStore
+from .Lang import Lang
 
 NO_ESC = RegexStore.NO_ESC
 BufferField = pyd.Field(default_factory=Buffer.new)
@@ -25,7 +23,7 @@ BufferField = pyd.Field(default_factory=Buffer.new)
 ############
 ### BODY ###
 ############
-class SrcBlock(AutocastModel):
+class Block(AutocastModel):
     RGXS: ClassVar[RegexStore] = RegexStore.new(
         options=dict(
             separator=r' *\n',
@@ -133,7 +131,7 @@ class SrcBlock(AutocastModel):
         ]),
         no_indent=r'\n\S',
     )
-    TYPE_BASES: ClassVar[dict[str, re.Pattern]] = al.regex_dict(
+    TYPE_BASES: ClassVar[dict[str, re.Pattern]] = ut.regex_dict(
         dict(
             str=r'Buffer|(?:re\.)?Pattern',
             list=r'Iter\w+|Sequence',
@@ -151,8 +149,8 @@ class SrcBlock(AutocastModel):
 
         @classmethod
         def new(cls, text: str) -> Self:
-            if match := SrcBlock.RGXS.fullmatch('arg_parts', text):
-                data = {key: SrcBlock._clean_sig_part(val) for key, val in match.flat.items()}
+            if match := Block.RGXS.fullmatch('arg_parts', text):
+                data = {key: Block._clean_sig_part(val) for key, val in match.flat.items()}
                 return cls(**data)
             return cls(key='')
 
@@ -172,14 +170,14 @@ class SrcBlock(AutocastModel):
             return self.ann_base(self.ann)
 
         def all_bases(self) -> set[str]:
-            return set(SrcBlock.RGXS['typesplit'].split(self.base))
+            return set(Block.RGXS['typesplit'].split(self.base))
 
         @staticmethod
         def ann_base(ann: str) -> str:
             if not ann:
                 return ''
             ret = Buffer.RGXS['arrays'].sub('', ann)
-            for base, rgx in SrcBlock.TYPE_BASES.items():
+            for base, rgx in Block.TYPE_BASES.items():
                 ret = rgx.sub(base, ret)
                 if ret == base:
                     break
@@ -200,7 +198,7 @@ class SrcBlock(AutocastModel):
     sig: str = ''
     doc: Buffer = BufferField
     code: Buffer = BufferField
-    lang: SrcLang = SrcLang.PY
+    lang: Lang = Lang.PY
     indent: int = 0
 
     # Functional data (optional)
@@ -234,7 +232,7 @@ class SrcBlock(AutocastModel):
 
         # II. Unindent the code, if necessary
         self.code.dedent()
-        if self.sig and not self.code and self.lang == SrcLang.PY:
+        if self.sig and not self.code and self.lang == Lang.PY:
             self.code = Buffer.new('pass')
 
         # III. Extract docstring from the code text
@@ -258,21 +256,21 @@ class SrcBlock(AutocastModel):
         return cls.RGXS['_qm'].sub('', text.strip())
 
     @classmethod
-    def _render_doc(cls, text: str, lang: SrcLang) -> str:
+    def _render_doc(cls, text: str, lang: Lang) -> str:
         """
         Renders a docstring for the given text and language.
         """
         if not text:
             return ''
-        text = al.wrap_paragraphs(text.strip('\n'))
+        text = ut.wrap_paragraphs(text.strip('\n'))
         if '\n' not in text and len(text) < 80:
             sep = ' '
         else:
             sep = '\n'
-            if lang == SrcLang.TS:
+            if lang == Lang.TS:
                 text = textwrap.indent(text, ' * ', lambda line: not line.startswith(' *'))
 
-        start, end = ('"""', '"""') if lang == SrcLang.PY else ('/**', '*/')
+        start, end = ('"""', '"""') if lang == Lang.PY else ('/**', '*/')
         return sep.join([start, text, end])
 
     @classmethod
@@ -312,14 +310,14 @@ class SrcBlock(AutocastModel):
         return Span(0, 0)
 
     @classmethod
-    def _block_span(cls, text: Buffer, pos: int, lang: SrcLang) -> Span:
+    def _block_span(cls, text: Buffer, pos: int, lang: Lang) -> Span:
         """
         Returns a Span object representing the block of code starting at the specified position.
         The block is determined by the language of the source code.
         """
-        if lang == SrcLang.PY:
+        if lang == Lang.PY:
             return cls._py_block_span(text, pos)
-        elif lang == SrcLang.TS:
+        elif lang == Lang.TS:
             return cls._ts_block_span(text, pos)
         else:
             raise ValueError(f'Unsupported language {lang} for block extraction.')
@@ -343,7 +341,7 @@ class SrcBlock(AutocastModel):
             args: A single string containing all the args found in a function's signature.
 
         Yields:
-            SrcBlock.Arg objects representing individual arguments, positional or otherwise.
+            Block.Arg objects representing individual arguments, positional or otherwise.
         """
         args = re.sub(r'[ \n]{2,}|\n', ' ', args.strip())
         yield from cls._extract_args__manual(args)
@@ -367,7 +365,7 @@ class SrcBlock(AutocastModel):
             yield arg
 
     @classmethod
-    def _extract_doc(cls, text: Buffer, lang: SrcLang) -> Buffer:
+    def _extract_doc(cls, text: Buffer, lang: Lang) -> Buffer:
         """
         Extracts the docstring from the given text based on the language.
 
@@ -377,24 +375,24 @@ class SrcBlock(AutocastModel):
         """
         if (match := cls.RGXS.search(f'{lang.prefix}_doc', text)) and match.start <= 8:
             text.drop(match.span).strip('\n')
-            return Buffer.new(al.unwrap_paragraphs(match.at('text').strip('\n')))
+            return Buffer.new(ut.unwrap_paragraphs(match.at('text').strip('\n')))
         else:
             return Buffer()
 
     @staticmethod
-    def _extract_methods(block: Buffer, lang: SrcLang) -> list['SrcBlock']:
+    def _extract_methods(block: Buffer, lang: Lang) -> list['Block']:
         """
-        Returns a list of SrcBlock objects representing the methods in the specified section.
+        Returns a list of Block objects representing the methods in the specified section.
         If no section is specified, returns methods from all sections.
         """
         ret = []
-        for match in SrcBlock.RGXS.finditer(f'{lang.prefix}_method', block):
+        for match in Block.RGXS.finditer(f'{lang.prefix}_method', block):
             s0, s1 = match.span
-            b0, b1 = SrcBlock._block_span(block, s1, lang)
+            b0, b1 = Block._block_span(block, s1, lang)
             if b0 == b1:
                 continue
             ret.append(
-                SrcBlock.new(
+                Block.new(
                     sig=block[s0:s1],
                     code=block[b0:b1],
                     annotations=match.get('annotation', []),
@@ -442,21 +440,21 @@ class SrcBlock(AutocastModel):
         sig, code = self.render()
 
         # II. Ensure TS blocks are wrapped in braces
-        if self.lang == SrcLang.TS:
+        if self.lang == Lang.TS:
             if not sig.endswith('{'):
                 sig += '{'
             if not code.endswith('\n}'):
                 code += '\n}'
 
         # III. Indent everything if necessary
-        ret = f'{sig}\n{al.indent(code, 4)}'
+        ret = f'{sig}\n{ut.indent(code, 4)}'
         if self.indent:
-            ret = al.indent(ret, self.indent * 4)
+            ret = ut.indent(ret, self.indent * 4)
         return ret
 
-    def parse_methods(self) -> dict[str, list['SrcBlock']]:
+    def parse_methods(self) -> dict[str, list['Block']]:
         """
-        Returns a list of SrcBlock objects representing the methods in this block.
+        Returns a list of Block objects representing the methods in this block.
         If no methods are found, returns an empty list.
         """
         if methods := self._extract_methods(self.code, self.lang):
@@ -481,9 +479,9 @@ class SrcBlock(AutocastModel):
     @ft.cached_property
     def is_static(self) -> bool:
         """ Returns True if the method is static, False otherwise. """
-        return al.any_has_any(self.annotations, '@staticmethod', '@classmethod')
+        return ut.any_has_any(self.annotations, '@staticmethod', '@classmethod')
 
     @ft.cached_property
     def is_property(self) -> bool:
         """ Returns True if the method is a property, False otherwise. """
-        return al.any_has_any(self.annotations, 'property')
+        return ut.any_has_any(self.annotations, 'property')

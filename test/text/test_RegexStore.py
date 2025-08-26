@@ -5,12 +5,9 @@
 
 ### EXTERNAL
 import pytest as pyt
-import logfire
 
 ### INTERNAL
-from my._010_types._1_dataclasses.text.RegexStore import (
-    RegexStore, RgxList, RgxVal, RgxDef, GroupKind
-)
+from my.text import (RegexStore, RgxList, RgxVal, GroupKind)
 
 Captures = dict[str, list[str]]
 Params = dict[str, str]

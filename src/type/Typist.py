@@ -1,7 +1,7 @@
 ############
 ### HEAD ###
 ############
-# Standard imports
+### STANDARD
 from typing import (
     Any,
     ClassVar,
@@ -28,7 +28,7 @@ from enum import Enum
 from copy import deepcopy
 import json
 
-# External imports
+### EXTERNAL
 import logfire as fire
 import pydantic as pyd
 import dateutil.parser
@@ -36,10 +36,9 @@ import dateutil.parser
 ## YAML
 import yaml
 
-# Internal imports
-import my.aliases as al
-from .Cache import Cache
-from .NestedCache import NestedCache
+### INTERNAL
+from ..base import utilities as ut
+from ..perf import Cache, NestedCache
 
 ############
 ### DATA ###
@@ -81,7 +80,7 @@ class Typist(pyd.BaseModel):
     )
 
     ### RGXS (can't use RegexStore since they depend on this class)
-    RGXS: ClassVar[dict[str, re.Pattern]] = al.regex_dict(
+    RGXS: ClassVar[dict[str, re.Pattern]] = ut.regex_dict(
         dict(
             # Types
             int=r'-?\d+',
@@ -94,7 +93,7 @@ class Typist(pyd.BaseModel):
             splitter=r' *(?:[,]|\/\/) *',
             no_space_splitter=r'(?<=\w)[.:](?=\w)',
             yaml=r'(?sm)^```yaml *\n(?P<content>.+?)\n``` *$',
-            timedelta=r'(?i)' + al.multi_rgx(
+            timedelta=r'(?i)' + ut.multi_rgx(
                 r'(?P<weeks>\d+) ?(?:w|weeks?)(?![a-z])',
                 r'(?P<days>\d+) ?(?:d|days?)(?![a-z])',
                 r'(?P<hours>\d+) ?(?:h|hours?)(?![a-z])',
@@ -170,7 +169,7 @@ class Typist(pyd.BaseModel):
 
     def _cast_model_members(self, items: Iterable[tuple[Any, Any]],
                             target: type[pyd.BaseModel]) -> dict[str, Any]:
-        annotations = al.instance_aliases(target)
+        annotations = ut.instance_aliases(target)
         return {key: typist.flexcast(val, annotations.get(key, None)) for key, val in items}
 
     def _sorter(self, origin: type, tvar: TypeArg) -> int:
@@ -320,7 +319,7 @@ class Typist(pyd.BaseModel):
         if hasattr(target, 'new') and callable(target.new):
             # I. Shortcut to the "new" function, assuming it's ready to handle a basic data arg
             return target.new(data)
-        elif items := al.map_items(data):
+        elif items := ut.map_items(data):
             # II. Else, cast all the data and then pass it in to the normal pydantic constructor
             return target(**self._cast_model_members(items, target))
         return data
@@ -399,7 +398,7 @@ class Typist(pyd.BaseModel):
         self, data: object, target: type[Mapping], ktype: TypeArg, vtype: TypeArg
     ) -> object:
         # III. Handle maps
-        if items := al.map_items(data):
+        if items := ut.map_items(data):
             keys, values = mi.unzip(items)
             return dict(zip(self.flexcast_all(keys, ktype), self.flexcast_all(values, vtype)))
         elif issubclass(target, Counter) and isinstance(data, Series) and ktype:
@@ -416,11 +415,11 @@ class Typist(pyd.BaseModel):
         """ Handle series (lists, tuples, deques, and sets) """
         # I. Prepare the data
         if isinstance(data, str) and self.splits:
-            if '.' in data and not al.has_any(data, ' ', ','):
+            if '.' in data and not ut.has_any(data, ' ', ','):
                 data = list(filter(bool, self.RGXS['no_space_splitter'].split(data)))
             else:
                 data = list(filter(bool, self.RGXS['splitter'].split(data)))
-        elif isinstance(data, Mapping) and (items := al.map_items(data)):
+        elif isinstance(data, Mapping) and (items := ut.map_items(data)):
             data = items
         elif not isinstance(data, Collection):
             data = list(data) if isinstance(data, Iterator) else [data]
@@ -457,7 +456,7 @@ class Typist(pyd.BaseModel):
         if isinstance(file, bytes):
             return file.decode('utf-8')
         elif isinstance(file, Path):
-            al.validate_file(file)
+            ut.validate_file(file)
             return file.read_text()
         elif not file:
             return ''
@@ -583,7 +582,7 @@ class Typist(pyd.BaseModel):
                 # III.iii. If the main types don't match, either recurse or give up here
                 if issubclass(c1, pyd.BaseModel):
                     # III.ii.a. Recurse into Pydantic models
-                    ret = any(recur(t0, ann) for ann in al.instance_fields(c1).values())
+                    ret = any(recur(t0, ann) for ann in ut.instance_fields(c1).values())
                 elif c1v:
                     # III.ii.b. Recurse into the value field
                     ret = recur(t0, c1v)
@@ -604,7 +603,7 @@ class Typist(pyd.BaseModel):
             values = list(values)
 
         target_names = [
-            al.find_key(self.DESERIALIZE_RGXS, lambda rgx: bool(rgx.fullmatch(val)))
+            ut.find_key(self.DESERIALIZE_RGXS, lambda rgx: bool(rgx.fullmatch(val)))
             for val in values
         ]
         if any(target_names):
@@ -636,7 +635,7 @@ class Typist(pyd.BaseModel):
                 except ValueError:
                     newtext = ''
             else:
-                newtext = al.get_any(code_map, code, code.lower()) or ''
+                newtext = ut.get_any(code_map, code, code.lower()) or ''
 
             replacements[match[0]] = newtext
 
@@ -668,7 +667,7 @@ class Typist(pyd.BaseModel):
         if isinstance(data, tuple) and ktype and isinstance(ktype, tuple):
             # IV. Handle heterogenous tuple types
             return (len(data) == len(ktype)) and all(it.starmap(isinstance, zip(data, ktype)))
-        elif ktype and vtype and (items := al.map_items(data)):  #type: ignore
+        elif ktype and vtype and (items := ut.map_items(data)):  #type: ignore
             # V. Handle maps
             keys, values = mi.unzip(items)
             return self.all_are(keys, ktype) and self.all_are(values, vtype)
@@ -744,7 +743,7 @@ class Typist(pyd.BaseModel):
         base, *rest = models
         distillate: dict = {}
         for key in set(base.keys()):
-            if key in exclude or not al.all_has_all(rest, key):
+            if key in exclude or not ut.all_has_all(rest, key):
                 continue
 
             _type = type(base[key])
@@ -756,7 +755,7 @@ class Typist(pyd.BaseModel):
 
             elif issubclass(_type, list | deque | set):
                 # II. Handle series, removing the shared values
-                if shared := set(filter(lambda item: al.all_has_all(restvals, item), base[key])):
+                if shared := set(filter(lambda item: ut.all_has_all(restvals, item), base[key])):
                     for model in models:
                         if model[key]:
                             model[key] = _type(it.filterfalse(shared.__contains__, model[key]))
@@ -818,7 +817,7 @@ class Typist(pyd.BaseModel):
             if isinstance(data, Series):
                 return list(map(_recur, data))
             elif isinstance(data, Mapping):
-                return al.val_map(_recur, data)
+                return ut.val_map(_recur, data)
 
         return data
 
@@ -927,7 +926,7 @@ class Typist(pyd.BaseModel):
         """ Set an attribute on an object, casting it to the appropriate type if necessary. """
         # I. Infer the type to cast to, when possible
         if tvar is None:
-            tvar = al.instance_fields(type(obj)).get(key, None)
+            tvar = ut.instance_fields(type(obj)).get(key, None)
 
         # II. When we have a parseable type, cast the value before setting
         if tvar is not None and self._parseable(tvar):

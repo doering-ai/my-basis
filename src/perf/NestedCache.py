@@ -1,15 +1,15 @@
 ############
 ### HEAD ###
 ############
-# Standard imports
+### STANDARD
 from typing import TypeVar, Generic, Hashable, Iterator
 import functools as ft
 import more_itertools as mi
 
-# External imports
+### EXTERNAL
 import pydantic as pyd
 
-# Internal imports
+### INTERNAL
 
 ############
 ### DATA ###

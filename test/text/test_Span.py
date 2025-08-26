@@ -8,7 +8,7 @@ from typing import Any
 import pytest as pyt
 
 ### INTERNAL
-from my._010_types._1_dataclasses.text.Span import Span
+from my.text import Span
 
 
 ############

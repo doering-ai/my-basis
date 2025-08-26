@@ -21,7 +21,8 @@ import logfire
 import json
 
 ### INTERNAL
-from my import Typist, TypeArg, aliases as al
+from ..base import utils as ut
+from .Typist import Typist, TypeArg
 
 typist = Typist(firsts=True, splits=True)
 
@@ -63,23 +64,23 @@ class Predicate(pyd.BaseModel):
     def _validate_data(cls, kwargs: dict[str, Any]) -> dict[str, Any]:
         # I. Base case: parse maps and lists of items (i.e. 2-tuples)
         data = kwargs.pop('data', {})
-        items = al.map_items(data)
+        items = ut.map_items(data)
         if not items:
             try:
                 if isinstance(data, str) and (_json := json.loads(data, strict=False)):
                     # II.i. Parse JSON objects
-                    items = al.map_items(_json)
+                    items = ut.map_items(_json)
                 elif (
                     isinstance(data, Series) and typist.all_are(data, str)
-                    and al.all_has_all(data, ':')
+                    and ut.all_has_all(data, ':')
                 ):
                     if all(text.startswith('{') and text.endswith('}') for text in data):
                         # II.ii. Parse lists of JSON objects
                         if all(_jsons := [json.loads(text, strict=False) for text in data]):
-                            items = list(mi.flatten(map(al.map_items, _jsons)))
+                            items = list(mi.flatten(map(ut.map_items, _jsons)))
                     elif _json := json.loads(f'{{{", ".join(data)}}}', strict=False):
                         # II.iii. Parse lists of JSON fields
-                        items = al.map_items(_json)
+                        items = ut.map_items(_json)
             except Exception:
                 items = []
 
@@ -112,7 +113,7 @@ class Predicate(pyd.BaseModel):
                 ret[field] = cls._abbreviate(values)
             else:
                 # II. Decast simple, atomic types (i.e. int, float, and bool)
-                if al.any_has_any(values, '\n'):
+                if ut.any_has_any(values, '\n'):
                     values = list(map(cls._escape, values))
                 _vals = typist.flex_deserialize(values)
 
@@ -152,7 +153,7 @@ class Predicate(pyd.BaseModel):
         ret: dict = {}
         if (
             ktype or (vtype and not typist.match(vtype, Mapping))
-            or not al.any_has_any(source.keys(), '.')
+            or not ut.any_has_any(source.keys(), '.')
         ):
             # II. Skip nesting if the types or values don't permit it
             ret = dict(
@@ -267,7 +268,7 @@ class Predicate(pyd.BaseModel):
     ) -> Iterator[tuple[str, list[str]]]:
         """
         Cast a dictionary to a list of predicate slots, expanding nested dictionaries by separating
-        keys with `.` characters. 
+        keys with `.` characters.
         """
         parent = f'{parent}.' if parent else ''
         for field, val in data.items():
@@ -330,7 +331,7 @@ class Predicate(pyd.BaseModel):
             else:
                 # III.ii. Otherwise, just compare basic presence of each value
                 return all(
-                    al.has_all(self[_field], *set(values)) for _field, values in other.items()
+                    ut.has_all(self[_field], *set(values)) for _field, values in other.items()
                 )
 
     def __eq__(self, other: object) -> bool:
@@ -358,19 +359,19 @@ class Predicate(pyd.BaseModel):
         return not (self == other)
 
     def __iadd__(self: SubType, other: object) -> SubType:
-        for field, value in al.map_items(other):
+        for field, value in ut.map_items(other):
             self.write(field, value, overwrite=False)
         return self
 
     def __ior__(self: SubType, other: object) -> SubType:
-        for field, value in al.map_items(other):
+        for field, value in ut.map_items(other):
             self.write(field, value, overwrite=True)
         return self
 
     def __iand__(self: SubType, other: object) -> SubType:
         filter_items = Predicate.new(other, duplicates=self.duplicates).items()
         self.data = {
-            field: al.common_elements(self[field], values)
+            field: ut.common_elements(self[field], values)
             for field, values in filter_items
             if field in self.data
         }
@@ -382,7 +383,7 @@ class Predicate(pyd.BaseModel):
         elif isinstance(other, Series) and typist.all_are(other, str):
             for field in filter(self.__contains__, set(other)):
                 del self.data[field]
-        elif items := al.map_items(other):
+        elif items := ut.map_items(other):
             for field, values in filter(lambda item: item[0] in self.data, items):
                 values = self.cast_to_list(values, self.duplicates)
                 self.data[field] = list(it.filterfalse(values.__contains__, self.data[field]))

@@ -15,7 +15,7 @@ import logfire
 import numpy as np
 
 ### INTERNAL
-from my import DEBUG, aliases as al
+from ..base import utilities as ut
 from .Span import Span
 
 ############
@@ -33,6 +33,7 @@ def no_spans() -> SpanArray:
 
 
 NO_ESC = r'(?<!(?:^|[^\\])\\)'
+DEBUG = False
 
 
 ############
@@ -41,7 +42,7 @@ NO_ESC = r'(?<!(?:^|[^\\])\\)'
 class Buffer(pyd.BaseModel):
     BUFF_LEN: int = 1
     NO_ESC: ClassVar[str] = NO_ESC
-    RGXS: ClassVar[dict[str, Pattern]] = al.regex_dict(
+    RGXS: ClassVar[dict[str, Pattern]] = ut.regex_dict(
         dict(
             bactic=NO_ESC + rf'(?s:`[^`\n]+{NO_ESC}`|```.+?{NO_ESC}```)',
             nowiki=NO_ESC + r'(?si:<nowiki>.+?<\/nowiki>)',
@@ -54,16 +55,16 @@ class Buffer(pyd.BaseModel):
     text: list[str] = ['']
     uid: str = ''  # optional
 
-    fences: Annotated[SpanArray, al.pyd_schemify(SpanArray)] = pyd.Field(default_factory=no_spans)
+    fences: Annotated[SpanArray, ut.pyd_schemify(SpanArray)] = pyd.Field(default_factory=no_spans)
     fence_rgxs: list[str] = []
-    fence_rgx: al.Regex | None = pyd.Field(default=None, exclude=True)
+    fence_rgx: ut.Regex | None = pyd.Field(default=None, exclude=True)
 
     @pyd.model_validator(mode='after')
     def _validate(self) -> 'Buffer':
         assert len(self.text) == self.BUFF_LEN
         if len(self.fence_rgxs) > 0:
             self.fence_rgx = re.compile(
-                al.multi_rgx(
+                ut.multi_rgx(
                     *[
                         self.RGXS[rgx].pattern if rgx in self.RGXS else rgx
                         for rgx in self.fence_rgxs
@@ -213,10 +214,10 @@ class Buffer(pyd.BaseModel):
             pre, post = '', ''
             if x0 > 0:
                 _text = self[max(x0 - n, 0):x0]
-                pre = char[len(al.shared_suffix(char, _text)):]
+                pre = char[len(ut.shared_suffix(char, _text)):]
             if x1 < len(self):
                 _text = self[x1:min(x1 + n, len(self))]
-                post = char[:n - len(al.shared_prefix(char, _text))]
+                post = char[:n - len(ut.shared_prefix(char, _text))]
 
         newtext = ''.join([
             pre,
@@ -320,12 +321,12 @@ class Buffer(pyd.BaseModel):
         """
         Split spans into those that come before the reference span and those after, applying a
         shift to the latter array
-        
+
         Args:
             source: Array of spans with shape (n, 2)
             ref_span: Reference span (start, end)
             delta: Amount to shift spans after the reference
-            
+
         Returns:
             tuple of (pre_spans, shifted_post_spans)
         """
@@ -341,7 +342,7 @@ class Buffer(pyd.BaseModel):
     def shift_spans(spans: SpanArray | list[Span], delta: int, pos: int = 0) -> None:
         """
         Shift spans by a given delta, starting from a given position.
-        
+
         Args:
             spans: Array of spans with shape (n, 2)
             delta: Amount to shift spans
@@ -364,7 +365,7 @@ class Buffer(pyd.BaseModel):
     def find_chads(self, rgx: Pattern, b0: int = 0, b1: int = -1) -> tuple[list[Span], list[Span]]:
         """
         A subsection of pair_iterator's functionality that searches for one or more "hanging chads",
-        representing unmatched delimiters of the given regex pair. 
+        representing unmatched delimiters of the given regex pair.
         """
         pos = b0
         b1 = b1 if b1 != -1 else len(self)
@@ -460,7 +461,7 @@ class Buffer(pyd.BaseModel):
         b0: int = 0,
         b1: int = -1,
     ) -> tuple[Span, str, str, str] | None:
-        """ 
+        """
         Find the matching start or end to the given pair member, returning None if nothing is found.
         """
         for span, start, body, end in self.pair_iterator(rgx, 'all', b0, b1):

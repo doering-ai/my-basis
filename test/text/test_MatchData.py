@@ -8,7 +8,7 @@ from regex import Match
 from pytest import mark
 
 ### INTERNAL
-from my._010_types._1_dataclasses.text import MatchData
+from my.text import MatchData
 
 Captures = dict[str, list[str]]
 Params = dict[str, str]

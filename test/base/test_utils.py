@@ -9,8 +9,7 @@ from collections import deque, Counter
 import pytest as pyt
 
 ### INTERNAL
-import my.aliases as al
-from my._010_types._1_dataclasses.text import Buffer
+from my import utils as ut
 
 
 ############
@@ -22,35 +21,35 @@ class TestAliases:
     # -------------------
     # @pyt.mark.parametrize('data, expected', [])
     # def test_posix(self, data: str, expected: str):
-    #     assert al.posix(data) == expected
+    #     assert ut.posix(data) == expected
 
     # @pyt.mark.parametrize('data, expected', [])
     # def test_instrument(self, data: str, expected: str):
-    #     assert al.instrument(data) == expected
+    #     assert ut.instrument(data) == expected
 
     # @pyt.mark.parametrize('data, expected', [])
     # def test_measure_context(self, data: str, expected: str):
-    #     assert al.measure_context(data) == expected
+    #     assert ut.measure_context(data) == expected
 
     # @pyt.mark.parametrize('data, expected', [])
     # def test_monitor(self, data: str, expected: str):
-    #     assert al.monitor(data) == expected
+    #     assert ut.monitor(data) == expected
 
     # @pyt.mark.parametrize('data, expected', [])
     # def test_wrap(self, data: str, expected: str):
-    #     assert al.wrap(data) == expected
+    #     assert ut.wrap(data) == expected
 
     # @pyt.mark.parametrize('data, expected', [])
     # def test_bootstrap_logfire(self, data: str, expected: str):
-    #     assert al.bootstrap_logfire(data) == expected
+    #     assert ut.bootstrap_logfire(data) == expected
 
     # @pyt.mark.parametrize('data, expected', [])
     # def test_validate_dir(self, data: str, expected: str):
-    #     assert al.validate_dir(data) == expected
+    #     assert ut.validate_dir(data) == expected
 
     # @pyt.mark.parametrize('data, expected', [])
     # def test_validate_file(self, data: str, expected: str):
-    #     assert al.validate_file(data) == expected
+    #     assert ut.validate_file(data) == expected
 
     @pyt.mark.parametrize(
         'pattern, expected', [
@@ -61,7 +60,7 @@ class TestAliases:
     )
     @pyt.mark.asyncio
     async def test_find_file(self, pattern: str, expected: bool):
-        ret = await al.find_file(pattern)
+        ret = await ut.find_file(pattern)
         assert (ret is not None) == expected
 
     @pyt.mark.parametrize(
@@ -98,26 +97,26 @@ class TestAliases:
         ]
     )
     def test_unwrap_paragraphs(self, lines: list[str], expected: list[str]):
-        assert al.unwrap_paragraphs('\n'.join(lines)) == '\n'.join(expected)
+        assert ut.unwrap_paragraphs('\n'.join(lines)) == '\n'.join(expected)
 
     # ----------------------
     # 2. Functional Wrappers
     # ----------------------
     # @pyt.mark.parametrize('data, expected', [])
     # def test_build(self, data: str, expected: str):
-    #     assert al.build(data) == expected
+    #     assert ut.build(data) == expected
 
     # @pyt.mark.parametrize('data, expected', [])
     # def test_find(self, data: str, expected: str):
-    #     assert al.find(data) == expected
+    #     assert ut.find(data) == expected
 
     # @pyt.mark.parametrize('data, expected', [])
     # def test_find_key(self, data: str, expected: str):
-    #     assert al.find_key(data) == expected
+    #     assert ut.find_key(data) == expected
 
     # @pyt.mark.parametrize('data, expected', [])
     # def test_measure(self, data: str, expected: str):
-    #     assert al.measure(data) == expected
+    #     assert ut.measure(data) == expected
 
     @pyt.mark.parametrize(
         'func, data, expected', [
@@ -134,39 +133,39 @@ class TestAliases:
         ]
     )
     def test_val_map(self, func: Callable, data: Iterable, expected: dict):
-        assert al.val_map(func, data, drop=True) == expected
+        assert ut.val_map(func, data, drop=True) == expected
 
     # @pyt.mark.parametrize('data, expected', [])
     # def test_attr_map(self, data: str, expected: str):
-    #     assert al.attr_map(data) == expected
+    #     assert ut.attr_map(data) == expected
 
     # @pyt.mark.parametrize('data, expected', [])
     # def test_chain_map(self, data: str, expected: str):
-    #     assert al.chain_map(data) == expected
+    #     assert ut.chain_map(data) == expected
 
     # @pyt.mark.parametrize('data, expected', [])
     # def test_condense(self, data: str, expected: str):
-    #     assert al.condense(data) == expected
+    #     assert ut.condense(data) == expected
 
     # @pyt.mark.parametrize('data, expected', [])
     # def test_map_condense(self, data: str, expected: str):
-    #     assert al.map_condense(data) == expected
+    #     assert ut.map_condense(data) == expected
 
     # @pyt.mark.parametrize('data, expected', [])
     # def test_get_all(self, data: str, expected: str):
-    #     assert al.get_all(data) == expected
+    #     assert ut.get_all(data) == expected
 
     # @pyt.mark.parametrize('data, expected', [])
     # def test_get_any(self, data: str, expected: str):
-    #     assert al.get_any(data) == expected
+    #     assert ut.get_any(data) == expected
 
     # @pyt.mark.parametrize('data, expected', [])
     # def test_repeat_until_complete(self, data: str, expected: str):
-    #     assert al.repeat_until_complete(data) == expected
+    #     assert ut.repeat_until_complete(data) == expected
 
     # @pyt.mark.parametrize('data, expected', [])
     # def test_replace(self, data: str, expected: str):
-    #     assert al.replace(data) == expected
+    #     assert ut.replace(data) == expected
 
     # ---------------
     # Presence checks
@@ -192,8 +191,8 @@ class TestAliases:
     )
     def test_has_X(self, expected: tuple[int, int, int, int], data: Iterable, target: list[str]):
         assert (
-            al.all_has_all(data, *target), al.any_has_all(data, *target),
-            al.all_has_any(data, *target), al.any_has_any(data, *target)
+            ut.all_has_all(data, *target), ut.any_has_all(data, *target),
+            ut.all_has_any(data, *target), ut.any_has_any(data, *target)
         ) == tuple(map(bool, expected))
 
     @pyt.mark.parametrize(
@@ -204,7 +203,7 @@ class TestAliases:
         ]
     )
     def test_has_only(self, data: Iterable, target: str, expected: int):
-        assert al.has_only(data, target) == bool(expected)
+        assert ut.has_only(data, target) == bool(expected)
 
     @pyt.mark.parametrize(
         'data, target, expected', [
@@ -214,7 +213,7 @@ class TestAliases:
         ]
     )
     def test_has_none(self, data: Iterable, target: str, expected: int):
-        assert al.has_none(data, target) == bool(expected)
+        assert ut.has_none(data, target) == bool(expected)
 
     @pyt.mark.parametrize(
         'data, mask, expected', [
@@ -224,7 +223,7 @@ class TestAliases:
         ]
     )
     def test_drop_at(self, data: list, mask: list[int], expected: list):
-        assert al.drop_at(data, mask) == expected
+        assert ut.drop_at(data, mask) == expected
 
     @pyt.mark.parametrize(
         'data, expected', [
@@ -236,7 +235,7 @@ class TestAliases:
         ]
     )
     def test_shared_prefix(self, data: list[str], expected: str):
-        assert al.shared_prefix(*data) == expected
+        assert ut.shared_prefix(*data) == expected
 
     @pyt.mark.parametrize(
         'data, expected', [
@@ -248,26 +247,26 @@ class TestAliases:
         ]
     )
     def test_shared_suffix(self, data: list[str], expected: str):
-        assert al.shared_suffix(*data) == expected
+        assert ut.shared_suffix(*data) == expected
 
     # --------------------------
     # 3. Serialization Functions
     # --------------------------
     # @pyt.mark.parametrize('data, expected', [])
     # def test_regex_dict(self, data: str, expected: str):
-    #     assert al.regex_dict(data) == expected
+    #     assert ut.regex_dict(data) == expected
 
     # @pyt.mark.parametrize('data, expected', [])
     # def test_regex_array(self, data: str, expected: str):
-    #     assert al.regex_array(data) == expected
+    #     assert ut.regex_array(data) == expected
 
     # @pyt.mark.parametrize('data, expected', [])
     # def test_spaced_rgx(self, data: str, expected: str):
-    #     assert al.spaced_rgx(data) == expected
+    #     assert ut.spaced_rgx(data) == expected
 
     # @pyt.mark.parametrize('data, expected', [])
     # def test_multi_rgx(self, data: str, expected: str):
-    #     assert al.multi_rgx(data) == expected
+    #     assert ut.multi_rgx(data) == expected
 
     @pyt.mark.parametrize(
         'data, expected', [
@@ -278,7 +277,7 @@ class TestAliases:
         ]
     )
     def test_strip_quotes(self, data: str, expected: str):
-        assert al.strip_quotes(data) == expected
+        assert ut.strip_quotes(data) == expected
 
     @pyt.mark.parametrize(
         'text, expected', [
@@ -290,7 +289,7 @@ class TestAliases:
         ]
     )
     def test_clean_string(self, text: str, expected: str):
-        assert al.clean_string(text) == expected
+        assert ut.clean_string(text) == expected
 
     @pyt.mark.parametrize(
         'text, expected', [
@@ -305,26 +304,26 @@ class TestAliases:
         ]
     )
     def test_to_words(self, text: str, expected: list[str]):
-        assert al.to_words(text) == expected
+        assert ut.to_words(text) == expected
 
     # @pyt.mark.parametrize('data, expected', [])
     # def test_line_num(self, data: str, expected: str):
-    #     assert al.line_num(data) == expected
+    #     assert ut.line_num(data) == expected
 
     # ------------------
     # 4. Code Reflection
     # ------------------
     # @pyt.mark.parametrize('data, expected', [])
     # def test_instance_fields(self, data: str, expected: str):
-    #     assert al.instance_fields(data) == expected
+    #     assert ut.instance_fields(data) == expected
 
     # @pyt.mark.parametrize('data, expected', [])
     # def test_nested_replace(self, data: str, expected: str):
-    #     assert al.nested_replace(data) == expected
+    #     assert ut.nested_replace(data) == expected
 
     # @pyt.mark.parametrize('data, expected', [])
     # def test_parse_domain(self, data: str, expected: str):
-    #     assert al.parse_domain(data) == expected
+    #     assert ut.parse_domain(data) == expected
 
     # --------------------
     # 5. Semantic Coercion
@@ -353,7 +352,7 @@ class TestAliases:
         ]
     )
     def test_roman_to_decimal(self, roman: str, decimal: int):
-        assert al.roman_to_decimal(roman) == decimal
+        assert ut.roman_to_decimal(roman) == decimal
 
     @pyt.mark.parametrize(
         'decimal, roman', [
@@ -376,7 +375,7 @@ class TestAliases:
         ]
     )
     def test_decimal_to_roman(self, decimal: int, roman: str):
-        assert al.decimal_to_roman(decimal) == roman
+        assert ut.decimal_to_roman(decimal) == roman
 
     @pyt.mark.parametrize(
         'data, expected', [
@@ -390,4 +389,4 @@ class TestAliases:
         ]
     )
     def test_map_items(self, data: Mapping | Sequence, expected: list[tuple[Any, Any]]):
-        assert al.map_items(data) == expected
+        assert ut.map_items(data) == expected

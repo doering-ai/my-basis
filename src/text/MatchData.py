@@ -11,7 +11,7 @@ import pydantic as pyd
 from pydantic_core import core_schema
 
 ### INTERNAL
-from ..Predicate import Predicate
+from ..type import Predicate
 from .Span import Span
 
 ############

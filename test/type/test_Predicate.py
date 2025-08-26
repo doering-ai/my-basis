@@ -10,8 +10,8 @@ from collections import deque, defaultdict
 import pytest as pyt
 
 ### INTERNAL
-from my._010_types._1_dataclasses.Predicate import Predicate
-from my._010_types._1_dataclasses.text.Buffer import Buffer
+from my.type.Predicate import Predicate
+from my.text.Buffer import Buffer
 
 cls = Predicate
 

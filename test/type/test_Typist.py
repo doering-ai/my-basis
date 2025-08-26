@@ -27,8 +27,8 @@ import pytest as pyt
 import pydantic as pyd
 
 ### INTERNAL
-from my.bases.Typist import Typist, TypeArg, TimeType
-from my._010_types._1_dataclasses.text import Buffer, MatchData, Span
+from my.type import Typist, TypeArg, TimeType
+from my.text import Buffer, MatchData, Span
 
 ############
 ### DATA ###

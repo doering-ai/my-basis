@@ -3,20 +3,16 @@
 ############
 ### STANDARD
 from typing import ClassVar, Generator, Annotated
-from collections import defaultdict, UserDict, Counter
+from collections import defaultdict, UserDict
 from pathlib import Path
 import itertools as it
 import more_itertools as mi
-import regex as re
 
 ### EXTERNAL
-import logfire as fire
 import pydantic as pyd
 
 ### INTERNAL
-from my import Idx, ARCH, ROOT
-from ..bases import utils as ut
-from ..type import typist
+from ..base import utils as ut
 from ..text import Buffer, RegexStore
 from .Lang import Lang
 
@@ -51,7 +47,7 @@ class Section(UserDict[str, set[str]]):
         self.data[module] |= symset
 
 
-SectionField = Annotated[Section, al.pyd_schemify(Section)]
+SectionField = Annotated[Section, ut.pyd_schemify(Section)]
 
 
 ############
@@ -205,7 +201,7 @@ class Imports(pyd.BaseModel):
                 elif self.lang == Lang.TS and not module.startswith('@/'):
                     self.rename_internal(module, f'@/{module}')
 
-    def universalize(self, origin: Path) -> None:
+    def universalize(self, origin: Path, root: Directory) -> None:
         """
         Modify the internal imports, changing relative imports to absolute ones.
         """
@@ -255,14 +251,14 @@ class Imports(pyd.BaseModel):
     def sections(self) -> list[tuple[str, Section]]:
         return [(section, getattr(self, section)) for section in self.SECTIONS]
 
-    def copymask(self, variables: set[str], origin: File) -> 'Imports':
+    def copymask(self, variables: set[str], origin: File, root: Directory) -> 'Imports':
         """
         Given a set of variable names, returns a list of three dictionaries representing the
         imports needed to cover those variables, split into STANDARD, MODULAR, and LOCAL imports.
         Obviously, only imports used by this file can be copied.
 
         Args:
-            variables: The set of variable names to cover, e.g. "Buffer" or "al"
+            variables: The set of variable names to cover, e.g. "Buffer" or "ut"
             origin: The origin file or directory for relative imports, if applicable.
 
         Returns:
@@ -317,6 +313,6 @@ class Imports(pyd.BaseModel):
 
         # IV. Fix any relative module paths for local imports
         if self.lang == Lang.PY and new.internal and origin:
-            new.universalize(origin)
+            new.universalize(origin, root)
 
         return new

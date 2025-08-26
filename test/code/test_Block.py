@@ -7,19 +7,18 @@
 import pytest as pyt
 
 ### INTERNAL
-from my._010_types._0_enumerations import SrcLang
-from my._010_types._1_dataclasses.text import Buffer
-from my._010_types._1_dataclasses.src.SrcBlock import SrcBlock
+from my.text import Buffer
+from my.code import Lang, Block
 
-cls = SrcBlock
+cls = Block
 
 
 ############
 ### BODY ###
 ############
-class TestSrcBlock:
+class TestBlock:
     @pyt.fixture
-    def inst(self) -> SrcBlock:
+    def inst(self) -> Block:
         return cls()
 
     # -------------------
@@ -43,7 +42,7 @@ class TestSrcBlock:
         ('', '', ''),
         ('', '', ''),
     ])
-    def test_render_doc(self, text: str, lang: SrcLang, expected: str):
+    def test_render_doc(self, text: str, lang: Lang, expected: str):
         ret = cls._render_doc(text, lang)
         assert ret == expected
 
@@ -76,7 +75,7 @@ class TestSrcBlock:
             ('', 0, '', (0, 1)),
         ]
     )
-    def test_block_span(self, text: str, pos: int, lang: SrcLang, expected: tuple):
+    def test_block_span(self, text: str, pos: int, lang: Lang, expected: tuple):
         ret = cls._block_span(Buffer.new(text), pos, lang)
         assert ret == expected
 
@@ -92,14 +91,14 @@ class TestSrcBlock:
     # -------------------
     # `+` Primary Methods
     # -------------------
-    # SrcBlock._extract_args untested
+    # Block._extract_args untested
 
     @pyt.mark.parametrize('text, lang, expected', [
         ('', '', ''),
         ('', '', ''),
         ('', '', ''),
     ])
-    def test_extract_doc(self, text: str, lang: SrcLang, expected: str):
+    def test_extract_doc(self, text: str, lang: Lang, expected: str):
         ret = cls._extract_doc(Buffer.new(text), lang)
         assert ret == expected
 
@@ -143,7 +142,7 @@ class TestSrcBlock:
         ('', '', []),
         ('', '', []),
     ])
-    def test_extract_methods(self, block: str, lang: SrcLang, expected: list):
+    def test_extract_methods(self, block: str, lang: Lang, expected: list):
         ret = cls._extract_methods(Buffer.new(block), lang)
         assert ret == expected
 

@@ -9,13 +9,17 @@ from collections import deque
 import regex as re
 
 ### INTERNAL
-from my import DELIM
-
-Series = list | tuple | deque
-
 
 ############
 ### DATA ###
+############
+Series = list | tuple | deque
+
+DELIM = ' // '
+
+
+############
+### BODY ###
 ############
 class Span(tuple[int, int]):
     DELIM_RGX: ClassVar[re.Pattern] = re.compile(r' ?[-,\/]+ ?')

@@ -9,11 +9,10 @@ import textwrap
 import pydantic as pyd
 
 ### INTERNAL
-from my import aliases as al
-from my._010_types._0_enumerations import SrcLang
-from ..text.Buffer import Buffer
-from ..text.RegexStore import RegexStore
-from .SrcBlock import SrcBlock
+from ..base import utilities as ut
+from ..text import Buffer, RegexStore
+from .Lang import Lang
+from .Block import Block
 
 ############
 ### DATA ###
@@ -26,7 +25,7 @@ BufferField = pyd.Field(default_factory=Buffer.new)
 ############
 ### BODY ###
 ############
-class SrcElement(SrcBlock):
+class Element(Block):
     SECTIONS: ClassVar[dict[str, str]] = {
         '': 'members',
         '0': 'initial',
@@ -54,10 +53,10 @@ class SrcElement(SrcBlock):
         sig: str = '',
         name: str = '',
         code: str = '',
-        lang: SrcLang = SrcLang.PY,
+        lang: Lang = Lang.PY,
         **kwargs: Any,
     ) -> Self:
-        assert sig and code, 'SrcElement text cannot be empty.'
+        assert sig and code, 'Element text cannot be empty.'
         code = textwrap.dedent(code.strip('\n'))
 
         # I. Split up the class according to sections (if present)
@@ -83,13 +82,13 @@ class SrcElement(SrcBlock):
     # `-` Private Methods
     # -------------------
     @classmethod
-    def _render_header(cls, symbol: str, section: str, lang: SrcLang) -> str:
+    def _render_header(cls, symbol: str, section: str, lang: Lang) -> str:
         # Members section has no header
         if not symbol:
             return ''
 
         content = f'`{symbol}` {section.title()} Methods'
-        prefix = '# ' if lang == SrcLang.PY else '// '
+        prefix = '# ' if lang == Lang.PY else '// '
         sep = prefix + ("-" * len(content))
         return '\n'.join([sep, prefix + content, sep])
 
@@ -102,7 +101,7 @@ class SrcElement(SrcBlock):
             section = self.SECTIONS[symbol]
         else:
             section = section.lower()
-            key = al.find_key(self.SECTIONS, section)
+            key = ut.find_key(self.SECTIONS, section)
             assert key is not None, f'Invalid section {section}'
             symbol = key
 
@@ -127,14 +126,14 @@ class SrcElement(SrcBlock):
         code = '\n\n'.join(filter(bool, sections))
         return sig, code
 
-    def parse_methods(self) -> dict[str, list[SrcBlock]]:
+    def parse_methods(self) -> dict[str, list[Block]]:
         """
-        Returns a list of SrcBlock objects representing the methods in the specified section.
+        Returns a list of Block objects representing the methods in the specified section.
         If no section is specified, returns methods from all sections.
         """
         ret = {}
         for key, section in self.sections:
-            ret[key] = SrcBlock._extract_methods(section, self.lang)
+            ret[key] = Block._extract_methods(section, self.lang)
         return ret
 
     def parse_doc(self) -> dict[str, str]:

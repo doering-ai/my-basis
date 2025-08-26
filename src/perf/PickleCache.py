@@ -11,7 +11,7 @@ import pickle as pkl
 import pydantic as pyd
 
 # Internal imports
-from ..aliases import posix
+from ..base.utilities import posix
 
 ############
 ### BODY ###
@@ -44,7 +44,7 @@ class PickleCache(pyd.BaseModel, Generic[Key, Value]):
 
     async def read(self) -> dict[Key, Value]:
         """
-        Refresh this cache, reading from the API callback or from the filesystem if the in-memory 
+        Refresh this cache, reading from the API callback or from the filesystem if the in-memory
         data is stale or unpopulated.
         """
 

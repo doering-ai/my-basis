@@ -10,7 +10,7 @@ import functools as ft
 ### EXTERNAL
 
 ### INTERNAL
-from my import aliases as al
+from ..base import utils as ut
 
 SubType = TypeVar('SubType', bound='MyEnum')
 
@@ -25,7 +25,7 @@ class MyEnum(Enum):
         members = cls.__members__
 
         if type(value) is type(mi.first(members.values())):
-            if key := al.find_key(members, lambda v: v.value == value):
+            if key := ut.find_key(members, lambda v: v.value == value):
                 # IV. Find by value
                 return members[key]
 

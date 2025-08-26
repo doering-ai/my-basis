@@ -4,28 +4,25 @@
 ### STANDARD
 from typing import ClassVar
 from pathlib import Path
-from collections import Counter
 
 ### EXTERNAL
 import pydantic as pyd
 
 ### INTERNAL
-from my import Idx, aliases as al
-from my._010_types._0_enumerations import SrcLang
+from ..base import utilities as ut
 from ..text import Buffer
-from .SrcImports import SrcImports
-from .SrcBlock import SrcBlock
-from .SrcElement import SrcElement
+from .Lang import Lang
+from .Imports import Imports
+from .Block import Block
+from .Element import Element
 
 BufferField = pyd.Field(default_factory=Buffer.new)
-File = pyd.FilePath
-Directory = pyd.DirectoryPath
 
 
 ############
 ### BODY ###
 ############
-class SrcFile(SrcBlock):
+class File(Block):
     """
     Represents a parsed sourcecode file, either Python or Typescript.
     Done via string-parsing instead of direct reflection to
@@ -48,18 +45,18 @@ class SrcFile(SrcBlock):
     # `0` Initial Methods
     # -------------------
     @classmethod
-    def new(cls, path: Path | None = None, **kwargs) -> 'SrcFile':
+    def new(cls, path: Path | None = None, **kwargs) -> 'File':
         if path is None:
-            raise ValueError('A path must be provided to create a SrcFile.')
+            raise ValueError('A path must be provided to create a File.')
 
         # I. Populate the instance with info from a real file if there is one
         if path.exists():
-            al.validate_file(path)
+            ut.validate_file(path)
             text = path.read_text()
             if 'name' not in kwargs:
                 kwargs['name'] = path.stem
             if 'lang' not in kwargs:
-                kwargs['lang'] = SrcLang.read_path(path)
+                kwargs['lang'] = Lang.read_path(path)
             kwargs |= cls._delineate_file(text, kwargs['lang'])
 
         return cls(path=path, **kwargs)
@@ -80,7 +77,7 @@ class SrcFile(SrcBlock):
     # `-` Private Methods
     # -------------------
     @classmethod
-    def _delineate_file(cls, text: str, lang: SrcLang) -> dict[str, Buffer]:
+    def _delineate_file(cls, text: str, lang: Lang) -> dict[str, Buffer]:
         """
         Splits the given text into its 1-4 component sections if top-level headers are present.
         """
@@ -103,7 +100,7 @@ class SrcFile(SrcBlock):
 
     def _render_header(self, section: str) -> str:
         """ Renders commented-out top level header for the given section section. """
-        c = '#' if self.lang == SrcLang.PY else '/'
+        c = '#' if self.lang == Lang.PY else '/'
         sep = c * 12
         return '\n'.join([sep, f'{c*3} {section.upper()} {c*3}', sep])
 
@@ -127,17 +124,17 @@ class SrcFile(SrcBlock):
         """ Returns the four sections of the source buffer in order. """
         return {name: text for name in self.SECTIONS if str(text := getattr(self, name)).strip()}
 
-    def parse_imports(self) -> SrcImports:
-        return SrcImports.new(text=self.head or self.code, lang=self.lang)
+    def parse_imports(self) -> Imports:
+        return Imports.new(text=self.head or self.code, lang=self.lang)
 
-    def parse_methods(self) -> dict[str, list[SrcBlock]]:
+    def parse_methods(self) -> dict[str, list[Block]]:
         if elem := self.parse_element():
             return elem.parse_methods()
         elif self.code:
             return super().parse_methods()
         return dict()
 
-    def parse_element(self) -> SrcElement | None:
+    def parse_element(self) -> Element | None:
         """
         Seeks out and parses the "main" class of this file, which shares the same name as the file
         and is defined in the BODY section.
@@ -149,7 +146,7 @@ class SrcFile(SrcBlock):
                 b0, b1 = self._block_span(buf, s1, self.lang)
                 assert b0 != b1, f'Failed to identify block span for {self.name} @ {s1}'
 
-                return SrcElement.new(
+                return Element.new(
                     sig=buf[s0:s1],
                     code=buf[b0:b1],
                     name=self.name,
@@ -160,10 +157,3 @@ class SrcFile(SrcBlock):
 
     def __str__(self) -> str:
         return '\n\n\n'.join(filter(bool, map(self.render_section, self.SECTIONS)))
-
-    def count_edges(self) -> Counter[Idx]:
-        """
-        Counts the number of internal imports in the given file.
-        Returns a dictionary mapping the import name to the count.
-        """
-        return self.parse_imports().count_edges(self.path)

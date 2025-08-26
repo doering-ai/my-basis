@@ -10,6 +10,9 @@ from pathlib import Path
 ### INTERNAL
 from ..base.MyEnum import MyEnum
 
+############
+### DATA ###
+############
 ALIASES = dict(
     ts=['ts', 'tsx', 'js', 'jsx'],
     md=['md', 'my'],

@@ -26,6 +26,7 @@ dependencies    = [
     "pyyaml>=6.0.2",
     "regex>=2025.7.34",
     "requests>=2.32.5",
+    "srsly>=2.5.1",
     "types-python-dateutil>=2.9.0.20250822",
     "types-pyyaml>=6.0.12.20250822",
     "types-regex>=2025.7.34.20250809",

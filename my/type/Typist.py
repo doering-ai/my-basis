@@ -27,14 +27,14 @@ from datetime import date, datetime, time, timedelta, timezone
 from enum import Enum
 from copy import deepcopy
 import json
+import textwrap
 
 ### EXTERNAL
 import logfire as fire
 import pydantic as pyd
 import dateutil.parser
-
-## YAML
-import yaml
+import srsly  # type:ignore
+from srsly._yaml_api import CustomYaml  # type:ignore
 
 ### INTERNAL
 from ..base import utils as ut
@@ -60,6 +60,16 @@ TimeType = date | datetime | time | timedelta
 
 TypeArg = type | tuple[type, ...] | None
 ParsedType = tuple[type | None, TypeArg, TypeArg]
+
+# Misc aliases
+File = pyd.FilePath
+Directory = pyd.DirectoryPath
+
+yaml = CustomYaml()
+yaml.sort_base_mapping_type_on_output = False
+# yaml.width = 80
+# yaml.default_flow_style = True
+yaml.indent(mapping=4, sequence=6, offset=4)
 
 DEBUG = True
 
@@ -451,7 +461,7 @@ class Typist(pyd.BaseModel):
         return isinstance(tvar, UnionType | tuple) or getattr(tvar, '__name__', '') == 'Union'
 
     @staticmethod
-    def _read_file(file: str | bytes | pyd.FilePath | None) -> str:
+    def _read_file(file: str | bytes | File | None) -> str:
         """ Read a file and return its contents as a string. """
         if isinstance(file, bytes):
             return file.decode('utf-8')
@@ -821,7 +831,7 @@ class Typist(pyd.BaseModel):
 
         return data
 
-    def from_json(self, data: str | bytes | pyd.FilePath | None) -> dict:
+    def from_json(self, data: str | bytes | File | None) -> dict:
         data = self._read_file(data)
         try:
             return json.loads(data) or {}
@@ -829,33 +839,42 @@ class Typist(pyd.BaseModel):
             fire.error(f'Failed to parse JSON data: {data}')
             return {}
 
-    def from_yaml(self, data: str | bytes | pyd.FilePath | None) -> dict:
-        # I. Pre-parse data, extracting the text content of files
-        data = self._read_file(data)
-        # II. Strip yaml wrapping syntax if present
+    def from_yaml(self, data: str | bytes | File | None) -> dict:
+        if not data:
+            return {}
+        elif isinstance(data, Path):
+            ut.validate_file(data)
+            return srsly.read_yaml(data)
+        elif isinstance(data, bytes):
+            data = data.decode('utf-8')
+
+        # I. Strip yaml wrapping syntax if present
         if data.strip().startswith('```yaml'):
             data = '\n\n'.join(self.RGXS['yaml'].findall(data))
 
-        # III. Attempt to parse the YAML data
-        if data:
-            try:
-                return yaml.load(data, Loader=yaml.FullLoader)
-            except Exception:
-                pass
-        return {}
+        # II. Attempt to parse in-memory YAML strings
+        return srsly.yaml_loads(data)
 
     def to_yaml(
         self,
         data: Sequence | set | dict | pyd.BaseModel,
         fix: bool = True,
-        wrap: bool = False,
+        wrap: bool = False
     ) -> str:
+        # I. Serialize (containers-of-)complex objects to dictionaries
         obj = self.serialize(data)
-        text = yaml.dump(obj, sort_keys=False)
-        # if fix:
-        #     text = self.yamlfix(text, type(obj))
+
+        # II. Serialize w/ default params
+        text = yaml.dump(obj)
+
+        # III. If we printed a root array, de-intent it
+        if isinstance(data, Sequence | set) and text.startswith(' '):
+            text = textwrap.dedent(text)
+
+        # IV. If requested, wrap the result in markdown bactics
         if wrap:
             text = f'```yaml\n{text}\n```'
+
         return text
 
     # -------
@@ -891,26 +910,31 @@ class Typist(pyd.BaseModel):
         return ret if isinstance(ret, target) else None  # type:ignore[return-value]
 
     def flexcast(self, data: object, tvar: TypeArg) -> Any | None:
+        ret = None
         if data is None or tvar is None or not self._parseable(tvar):
             pass
         elif self._is_split(tvar):
-            # I. If we're given options, choose the most appropriate one
+            # I. If we're given options, try them all until one succeeds
             if args := tvar if isinstance(tvar, tuple) else getattr(tvar, '__args__', []):
                 is_optional = None in args
                 args = tuple(filter(self._parseable, args))
                 origin = type(data)
                 for option in sorted(args, key=lambda a: self._sorter(origin, a)):
                     try:
-                        if (ret := self.cast(data, option)) is not None:
-                            return ret
+                        ret = self.cast(data, option)
+                        if ret is not None:
+                            break
                     except Exception:
                         pass
                 if is_optional:
-                    return None
-        elif (ret := self.cast(data, tvar)) is not None:  # type:ignore
-            return ret
+                    return ret
+        else:
+            try:
+                ret = self.cast(data, tvar)  # type:ignore
+            except Exception:
+                pass
 
-        return data
+        return ret if ret is not None else data
 
     def cast_all(self, values: Iterable[Any], tvar: type[Value]) -> Iterator[Value]:
         for value in values:

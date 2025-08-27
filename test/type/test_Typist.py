@@ -356,11 +356,11 @@ class TestTypist:
                 [
                     'a: 1',
                     'list:',
-                    '  - 2',
-                    '  - b: 3',
-                    '    c:',
-                    '        d: 4',
-                    '  - 5',
+                    '    - 2',
+                    '    - b: 3',
+                    '      c:',
+                    '          d: 4',
+                    '    - 5',
                 ],
             ),
             ([dict(a=1, x=9)], ['- a: 1', '  x: 9']),
@@ -369,12 +369,12 @@ class TestTypist:
                 ['- a: 1', '  x: 9', '- b: 2', '  y: 8', '- c: 3', '  z: 7'],
             ),
             (['one', 'two', 'three'], ['- one', '- two', '- three']),
-            (['one', ['two', ['three']]], ['- one', '-   - two', '    -   - three']),
+            (['one', ['two', ['three']]], ['- one', '-     - two', '      -     - three']),
             ([1, Buffer.new('[two]'), 'three'], ['- 1', "- '[two]'", '- three']),
             ([dict(a=1, b=2), 'two', 3], ['- a: 1', '  b: 2', '- two', '- 3']),
             (
                 dict(one=1, two='two', three=['a', 'b', 'c']),
-                ['one: 1', 'two: two', 'three: [a, b, c]'],
+                ['one: 1', 'two: two', 'three:', '    - a', '    - b', '    - c'],
             ),
         ]
     )

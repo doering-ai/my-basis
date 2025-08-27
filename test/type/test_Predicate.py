@@ -355,11 +355,19 @@ class TestPredicate:
         'data, expected', [
             (
                 dict(k1=['A'], k2=['B', 'C']),
-                ['k1: A', 'k2: [B, C]'],
+                ['k1: A', 'k2:', '    - B', '    - C'],
             ),
             (
                 [('parent.child.grandchild', ['A']), ('numbers', ['5', '10', '15'])],
-                ['numbers: [5, 10, 15]', 'parent:', '    child:', '        grandchild: A'],
+                [
+                    'numbers:',
+                    '    - 5',
+                    '    - 10',
+                    '    - 15',
+                    'parent:',
+                    '    child:',
+                    '        grandchild: A',
+                ],
             ),
             (
                 dict(
@@ -367,7 +375,18 @@ class TestPredicate:
                     answers=['yes', 'True', 'N', 'false'],
                     n=['1000']
                 ),
-                ['answers: [true, true, false, false]', 'n: 1000', 'ratios: [0.5, 0.666, 1.0]'],
+                [
+                    'answers:',
+                    '    - true',
+                    '    - true',
+                    '    - false',
+                    '    - false',
+                    'n: 1000',
+                    'ratios:',
+                    '    - 0.5',
+                    '    - 0.666',
+                    '    - 1.0',
+                ],
             ),
         ]
     )

@@ -210,32 +210,6 @@ def validate_file(*paths: pyd.FilePath) -> bool:
     return True
 
 
-def validate_arch_dir(*paths: pyd.DirectoryPath) -> bool:
-    # I. Ensure they're all directories
-    validate_dir(*paths)
-
-    # II. Ensure they're all descended from the architectonic root
-    rootstr = str(ROOT)
-    pathstrs = [str(p.expanduser().resolve()) for p in paths]
-    invalid = [ps for ps in pathstrs if not ps.startswith(rootstr)]
-    assert not invalid, f'Invalid directory paths: {invalid}'
-
-    return True
-
-
-def validate_arch_file(*paths: pyd.FilePath) -> bool:
-    # I. Ensure they're all directories
-    validate_file(*paths)
-
-    # II. Ensure they're all descended from the architectonic root
-    rootstr = str(ROOT)
-    pathstrs = [str(p.expanduser().resolve()) for p in paths]
-    invalid = [ps for ps in pathstrs if not ps.startswith(rootstr)]
-    assert not invalid, f'Invalid directory paths: {invalid}'
-
-    return True
-
-
 async def find_file(pattern: str, root: pyd.DirectoryPath) -> Path | None:
     """
     Find a file matching the given pattern in the specified root directory.
@@ -969,7 +943,6 @@ def parse_domain(url: str, default: str = '') -> str:
 
 
 def import_module(file: pyd.FilePath, root: pyd.DirectoryPath) -> ModuleType:
-    validate_arch_file(file)
     pathstr = file.with_suffix('').relative_to(root).as_posix().replace('/', '.')
     return imp.import_module(pathstr)
 

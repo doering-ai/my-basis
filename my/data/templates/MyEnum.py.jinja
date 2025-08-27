@@ -1,0 +1,19 @@
+############
+### HEAD ###
+############
+
+# Standard imports
+from enum import Flag, auto
+
+# Modular imports
+
+# Local imports
+from {{ '.' * depth }}MyEnum import MyEnum
+
+############
+### BODY ###
+############
+class {{ name }}(MyEnum{% if flag %}, Flag{% endif %}):
+
+{{ content }}
+

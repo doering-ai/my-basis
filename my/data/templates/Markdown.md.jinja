@@ -1,0 +1,13 @@
+{% extends "document.md.jinja" %}
+{% block header %}{{ header }}{% endblock %}
+{% block prose %}{{ prose }}{% endblock %}
+{% block child_header %}{{ node.header }}{% endblock %}
+{% block child_content %}{{ node.prose }}{% endblock %}
+
+{% if notes %}
+## Notes
+
+```yaml
+{{notes}}
+```
+{% endif %}

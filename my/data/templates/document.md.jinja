@@ -1,0 +1,16 @@
+{% if level >= 1 %}
+{% block header %}{% endblock %}
+{% endif %}
+
+{% block prose %}{% endblock %}
+
+{%- for node in nodes recursive %}
+{% block child_header scoped %}{% endblock %}
+
+{% block child_content scoped %}{% endblock %}
+
+{% if node.nodes %}
+{{ loop(node.nodes) }}
+{% endif %}
+{%- endfor %}
+

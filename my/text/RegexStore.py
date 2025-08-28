@@ -24,6 +24,7 @@ from .Buffer import Buffer
 ### DATA ###
 ############
 DEBUG = False
+re.DEFAULT_VERSION = re.VERSION1
 
 # General type aliases
 Params = dict[str, str]

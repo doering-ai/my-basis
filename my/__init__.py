@@ -5,8 +5,11 @@ from .type import Typist, typist, Predicate, TypeArg, TimeType
 from .text import (
     Span, Buffer, MatchData, GroupKind, RegexStore, format_url, atom, COMMON_RGXS, Markdown
 )
-from .code import Lang, Imports, Block, Element, File
 from .perf import Cache, NestedCache, PickleCache
+
+import regex as re
+
+re.DEFAULT_VERSION = re.VERSION1
 
 ut = utils
 __all__ = [
@@ -34,13 +37,6 @@ __all__ = [
     "atom",
     "COMMON_RGXS",
     "Markdown",
-
-    # Code
-    "Lang",
-    "Imports",
-    "Block",
-    "Element",
-    "File",
 
     # Perf
     "Cache",

@@ -831,13 +831,27 @@ class Typist(pyd.BaseModel):
 
         return data
 
-    def from_json(self, data: str | bytes | File | None) -> dict:
-        data = self._read_file(data)
-        try:
-            return json.loads(data) or {}
-        except Exception:
-            fire.error(f'Failed to parse JSON data: {data}')
+    def from_file(self, file: File) -> dict:
+        if not file or not isinstance(file, Path) or not file.exists():
             return {}
+        elif file.suffix in ['.yml', '.yaml']:
+            return self.from_yaml(file)
+        elif file.suffix in ['.json']:
+            return self.from_json(file)
+        else:
+            fire.error(f'Unsupported file type: {file}')
+            return {}
+
+    def from_json(self, data: str | bytes | File | None) -> dict:
+        if not data:
+            return {}
+        elif isinstance(data, Path):
+            ut.validate_file(data)
+            return srsly.read_json(data)
+        elif isinstance(data, bytes):
+            data = data.decode('utf-8')
+
+        return srsly.json_loads(data)
 
     def from_yaml(self, data: str | bytes | File | None) -> dict:
         if not data:

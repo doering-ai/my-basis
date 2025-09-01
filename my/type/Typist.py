@@ -28,6 +28,7 @@ from enum import Enum
 from copy import deepcopy
 import json
 import textwrap
+import pickle
 
 ### EXTERNAL
 import logfire as fire
@@ -869,12 +870,21 @@ class Typist(pyd.BaseModel):
         # II. Attempt to parse in-memory YAML strings
         return srsly.yaml_loads(data)
 
-    def to_yaml(
-        self,
-        data: Sequence | set | dict | pyd.BaseModel,
-        fix: bool = True,
-        wrap: bool = False
-    ) -> str:
+    def to_file(self, data: Sequence | set | dict | pyd.BaseModel, file: File) -> None:
+        if not file:
+            return
+
+        file.parent.mkdir(parents=True, exist_ok=True)
+        if file.suffix in ['.yml', '.yaml']:
+            file.write_text(self.to_yaml(data))
+        elif file.suffix in ['.json']:
+            file.write_text(srsly.json_dumps(data))
+        elif file.suffix in ['.pkl']:
+            pickle.dump(data, file.open('wb'))
+        else:
+            fire.error(f'Unsupported file type: {file}')
+
+    def to_yaml(self, data: Sequence | set | dict | pyd.BaseModel, wrap: bool = False) -> str:
         # I. Serialize (containers-of-)complex objects to dictionaries
         obj = self.serialize(data)
 
@@ -885,10 +895,21 @@ class Typist(pyd.BaseModel):
         if isinstance(data, Sequence | set) and text.startswith(' '):
             text = textwrap.dedent(text)
 
-        # IV. If requested, wrap the result in markdown bactics
+        # IV. If requested, wrap in markdown bactics
         if wrap:
             text = f'```yaml\n{text}\n```'
+        return text
 
+    def to_json(self, data: Sequence | set | dict | pyd.BaseModel, wrap: bool = False) -> str:
+        # I. Serialize (containers-of-)complex objects to dictionaries
+        obj = self.serialize(data)
+
+        # II. Serialize w/ default params
+        text = srsly.json_dumps(obj, indent=4)
+
+        # III. If requested, wrap in markdown bactics
+        if wrap:
+            text = f'```json\n{text}\n```'
         return text
 
     # -------

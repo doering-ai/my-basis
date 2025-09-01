@@ -466,6 +466,7 @@ dependencies = [
     { name = "mypy" },
     { name = "opentelemetry-instrumentation-aiohttp-client" },
     { name = "opentelemetry-instrumentation-asgi" },
+    { name = "ovld" },
     { name = "pandas" },
     { name = "pandas-stubs" },
     { name = "pydantic" },
@@ -496,6 +497,7 @@ requires-dist = [
     { name = "mypy", specifier = ">=1.17.1" },
     { name = "opentelemetry-instrumentation-aiohttp-client", specifier = ">=0.57b0" },
     { name = "opentelemetry-instrumentation-asgi", specifier = ">=0.57b0" },
+    { name = "ovld", specifier = ">=0.5.12" },
     { name = "pandas", specifier = ">=2.3.2" },
     { name = "pandas-stubs", specifier = ">=2.3.0.250703" },
     { name = "pydantic", specifier = ">=2.11.7" },
@@ -751,6 +753,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/9b/1b/6229c45445e08e798fa825f5376f6d6a4211d29052a4088eed6d577fa653/opentelemetry_util_http-0.57b0.tar.gz", hash = "sha256:f7417595ead0eb42ed1863ec9b2f839fc740368cd7bbbfc1d0a47bc1ab0aba11", size = 9405, upload-time = "2025-07-29T15:43:19.916Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/0b/a6/b98d508d189b9c208f5978d0906141747d7e6df7c7cafec03657ed1ed559/opentelemetry_util_http-0.57b0-py3-none-any.whl", hash = "sha256:e54c0df5543951e471c3d694f85474977cd5765a3b7654398c83bab3d2ffb8e9", size = 7643, upload-time = "2025-07-29T15:42:41.744Z" },
+]
+
+[[package]]
+name = "ovld"
+version = "0.5.12"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/7d/2a/1967d22b5f2f5b1f6a3c2ab3e0b061fa4e3e054d9fbf1e56b057f8adef4b/ovld-0.5.12.tar.gz", hash = "sha256:60cdc9a73fe149d658231afe7db58d666bffb4e2d923598ffeebcd3b0ee35bee", size = 104881, upload-time = "2025-08-20T21:20:21.052Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d5/49/ec896811764f3ea11fda852639b320c0d4bc6ceeecc036e10e4d833cd69f/ovld-0.5.12-py3-none-any.whl", hash = "sha256:d6ab0c61b4066dea31314783f8c5f56c9d45d24d5112354367a80247354a5da3", size = 39719, upload-time = "2025-08-20T21:20:19.647Z" },
 ]
 
 [[package]]

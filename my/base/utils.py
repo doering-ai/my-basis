@@ -16,20 +16,22 @@ from typing import (
     Sequence,
     TypeVar,
 )
-from types import ModuleType
 from collections import Counter, deque
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from shutil import get_terminal_size
 from time import perf_counter_ns
+from types import ModuleType
 import contextlib as ctx
 import functools as ft
 import importlib as imp
 import importlib.metadata as impm
 import itertools as it
+import keyword
 import logging as lg
 import logging.handlers
 import os
+import socket
 import subprocess as sbp
 import sys
 import textwrap
@@ -75,220 +77,20 @@ Atomic = str | int | float | bool
 # -------------------
 # 1. System Utilities
 # -------------------
-def posix(timestamp: int | float | None = None) -> datetime:
-    if timestamp is None:
+def posix(val: int | float | datetime | None = None) -> datetime:
+    if val is None:
         return datetime.now(timezone.utc)
+    elif isinstance(val, datetime):
+        return val.astimezone(timezone.utc)
     else:
-        return datetime.fromtimestamp(timestamp, timezone.utc)
+        return datetime.fromtimestamp(val, timezone.utc)
 
 
-def _instrument(
-    func: Callable, counter: OpenTelemetryCounter | dict[str, int] | pd.Series
-) -> Callable:
-    @ft.wraps(func)
-    def wrapper(*args: Any, **kwargs: Any):
-        start = int(perf_counter_ns())
-        ret = func(*args, **kwargs)
-        _measure(func.__name__, counter, start)
-
-        return ret
-
-    @ft.wraps(func)
-    async def async_wrapper(*args: Any, **kwargs: Any):
-        start = int(perf_counter_ns())
-        ret = await func(*args, **kwargs)
-        _measure(func.__name__, counter, start)
-
-        return ret
-
-    return async_wrapper if aio.iscoroutinefunction(func) else wrapper
-
-
-@ctx.contextmanager
-def measure_context(name: str, counter: dict[str, int]):
-    start = perf_counter_ns()
-    yield
-    _measure(name, counter, start)
-
-
-def monitor(*args: Any, **kwargs: Any) -> Callable:
-    return fire.instrument(*args, extract_args=False, **kwargs)
-
-
-def _assemble_args(args: Iterable[Any]) -> Iterable[str]:
-    for arg in args:
-        if isinstance(arg, int | float):
-            yield f'{arg}'
-        else:
-            arg = str(arg)
-            yield f'"{arg}"' if '"' not in arg else f'{arg}'
-
-
-def _assemble_kwargs(kwargs: dict[str, Any], _ud: bool = False, _sd: bool = False) -> Iterable[str]:
-    for key, val in kwargs.items():
-        if '_' in key and not _ud:
-            key = key.replace('_', '-')
-        key = ('-' if _sd or len(key) == 1 else '--') + key
-        if isinstance(val, bool) and val:
-            yield key
-        elif isinstance(val, int | float):
-            yield f'{key} {val}'
-        else:
-            yield f'{key} "{val}"'
-
-
-def _assemble_command(
-    cmd: str,
-    *args: Any,
-    _final: bool = False,
-    _verbose: bool = False,
-    _single_dash: bool = False,
-    _underlines: bool = False,
-    _out: str = '',
-    _pipe: str = '',
-    **kwargs: Any,
-) -> str:
-    parts = [cmd]
-    if args or kwargs:
-        # I. Assemble the main parts of the command
-        positional = list(_assemble_args(args)) if args else []
-        keyword = list(_assemble_kwargs(kwargs, _underlines, _single_dash)) if kwargs else []
-
-        # II. Order the positional & keyword segments appropriately
-        parts.extend(it.chain(keyword, positional) if _final else it.chain(positional, keyword))
-
-    if _out:
-        parts.append(f'>> {_out}')
-    elif _pipe:
-        parts.append(f'| {_pipe}')
-
-    cmd = ' '.join(parts)
-    if _verbose:
-        print(cmd)
-    return cmd
-
-
-def command(cmd: str, *args: Any, **kwargs: Any) -> int:
-    cmd = _assemble_command(cmd, *args, **kwargs)
-    return os.system(cmd)
-
-
-async def run_command(cmd: str, *args: Any, **kwargs: Any) -> tuple[int, str, str]:
-    cmd = _assemble_command(cmd, *args, **kwargs)
-    subprocess = await aio.create_subprocess_shell(
-        cmd, stdout=aio.subprocess.PIPE, stderr=aio.subprocess.PIPE
-    )
-    stdout, stderr = await subprocess.communicate()
-
-    return (
-        subprocess.returncode or 0,
-        (stdout or b'').decode().strip(),
-        (stderr or b'').decode().strip(),
-    )
-
-
-def wrap(line: str, prefix: str = '', char: str = '-', width: int = 2) -> str:
-    n = (len(line) + 2 + 2 * width) if width else len(line)
-    wrapper = prefix + (char * n)
-    return '\n'.join([
-        '',
-        wrapper,
-        prefix + (f'{char*width} {line} {char*width}' if width else line),
-        wrapper,
-    ])
-
-
-def validate_dir(*paths: pyd.DirectoryPath) -> bool:
-    for path in paths:
-        assert path and path.exists() and path.is_dir(), f"Invalid directory: {path.as_posix()}"
-    return True
-
-
-def validate_file(*paths: pyd.FilePath) -> bool:
-    for path in paths:
-        assert path and path.exists() and path.is_file(), f"Invalid file: {path.as_posix()}"
-    return True
-
-
-async def find_file(pattern: str, root: pyd.DirectoryPath) -> Path | None:
-    """
-    Find a file matching the given pattern in the specified root directory.
-    Returns the first matching file or None if no match is found.
-    """
-    assert pattern, "Pattern must not be empty."
-    assert root.exists() and root.is_dir(), f"Invalid directory: {root.as_posix()}"
-    code, stdout, stderr = await run_command(
-        fr'find "{root}" -regex ".*\b{pattern}\b"',
-        _pipe=r'grep -v "node_modules|\.git|\.venv|build|prof"',
-    )
-    if code == 0 and stdout:
-        file = root / stdout.strip().splitlines()[0]
-        assert file.exists() and file.is_file()
-        return file
+def posix_since(val: int | float | datetime | None = None) -> timedelta:
+    if not val:
+        return timedelta(0)
     else:
-        return None
-
-
-async def find_files(*names: str, root: pyd.DirectoryPath) -> list[Path]:
-    ret: list[Path] = []
-    for name in names:
-        if not name:
-            pass
-        elif name[0] in '~/':
-            ret.append(Path(name).expanduser().resolve())
-        elif name.startswith('./'):
-            ret.append(root / name[2:])
-        else:
-            file = await find_file(name, root)
-            assert file is not None, f"File {name} not found in {root.as_posix()}"
-            ret.append(file)
-
-    assert all(file.exists() for file in ret)
-    return ret
-
-
-def indent(text: str, n: int = 4) -> str:
-    if not n:
-        return text
-    return textwrap.indent(text, ' ' * n)
-
-
-def unindent(text: str, n: int = 4) -> str:
-    """ Unindent each line in the given string or iterable of strings by n tabs. """
-    fn = ft.partial(re.compile(rf'^ {{1,{n * 4}}}').sub, '')
-    return '\n'.join(map(fn, text))
-
-
-STARTS_RGX = re.compile(r'(?m)^ ?[*](?: |$)')
-
-PROSE_LINE = re.compile(r' *[[:punct:]]*([[:alpha:]]|\d+[^\d.])')
-
-
-def unwrap_paragraphs(text: str) -> str:
-    text = textwrap.dedent(text.strip('\n'))
-    text = STARTS_RGX.sub('', text)
-    lines = text.splitlines()
-    prose_mask = [bool(PROSE_LINE.match(line)) for line in lines]
-
-    acc = lines[0].strip()
-    for (prev, prev_is_prose), (cur, cur_is_prose) in it.pairwise(zip(lines, prose_mask)):
-        if not (_stripped := cur.strip()):
-            acc += '\n'
-        elif prev_is_prose and cur_is_prose:
-            if prev.endswith('-') and _stripped[0].isalpha():
-                acc += _stripped
-            else:
-                acc += f' {_stripped}'
-        elif cur_is_prose:
-            acc += f'\n{_stripped}'
-        else:
-            acc += f'\n{cur}'
-
-    return acc
-
-
-def wrap_paragraphs(text: str, width: int = 100) -> str:
-    return textwrap.fill(text, width=width)
+        return posix() - posix(val)
 
 
 def get_terminal_width() -> int:
@@ -308,28 +110,6 @@ def get_package_name():
     package_name = current_module.__package__ or __name__
     root_package = package_name.split('.', 1)[0]
     return impm.packages_distributions().get(root_package, root_package)
-
-
-# def get_package_name():
-#     # Look for pyproject.toml starting from current directory
-#     file = None
-#     for parent in Path.cwd().parents:
-#         if (file := parent / "pyproject.toml").exists():
-#             break
-
-#     if file is not None:
-#         try:
-#             import tomllib  # Python 3.11+
-#             with open(file, "rb") as f:
-#                 pyproject_data = tomllib.load(f)
-#             return pyproject_data["tool"]["poetry"]["name"]
-#         except ImportError:
-#             if match := re.search(r'(?m)^name *= *["\'](.+?)["\'] *$', file.read_text()):
-#                 return match[1]
-#             else:
-#                 raise ValueError(f'Could not parse {file}')
-#     else:
-#         raise FileNotFoundError("Could not find pyproject.toml")
 
 
 def setup_py_logging(
@@ -509,6 +289,229 @@ def setup_warnings():
     warnings.filterwarnings("ignore", r'.*Valid config keys have changed')
     warnings.filterwarnings("ignore", r'.*pkg_resources is deprecated as an API')
     WARNINGS_SETUP = True
+
+
+def _instrument(
+    func: Callable, counter: OpenTelemetryCounter | dict[str, int] | pd.Series
+) -> Callable:
+    @ft.wraps(func)
+    def wrapper(*args: Any, **kwargs: Any):
+        start = int(perf_counter_ns())
+        ret = func(*args, **kwargs)
+        _measure(func.__name__, counter, start)
+
+        return ret
+
+    @ft.wraps(func)
+    async def async_wrapper(*args: Any, **kwargs: Any):
+        start = int(perf_counter_ns())
+        ret = await func(*args, **kwargs)
+        _measure(func.__name__, counter, start)
+
+        return ret
+
+    return async_wrapper if aio.iscoroutinefunction(func) else wrapper
+
+
+@ctx.contextmanager
+def measure_context(name: str, counter: dict[str, int]):
+    start = perf_counter_ns()
+    yield
+    _measure(name, counter, start)
+
+
+def monitor(*args: Any, **kwargs: Any) -> Callable:
+    return fire.instrument(*args, extract_args=False, **kwargs)
+
+
+def _assemble_args(args: Iterable[Any]) -> Iterable[str]:
+    for arg in args:
+        if isinstance(arg, int | float):
+            yield f'{arg}'
+        else:
+            arg = str(arg)
+            yield f'"{arg}"' if '"' not in arg else f'{arg}'
+
+
+def _assemble_kwargs(kwargs: dict[str, Any], _ud: bool = False, _sd: bool = False) -> Iterable[str]:
+    for key, val in kwargs.items():
+        if '_' in key and not _ud:
+            key = key.replace('_', '-')
+        key = ('-' if _sd or len(key) == 1 else '--') + key
+        if isinstance(val, bool) and val:
+            yield key
+        elif isinstance(val, int | float):
+            yield f'{key} {val}'
+        else:
+            yield f'{key} "{val}"'
+
+
+def _assemble_command(
+    cmd: str,
+    *args: Any,
+    _final: bool = False,
+    _verbose: bool = False,
+    _single_dash: bool = False,
+    _underlines: bool = False,
+    _out: str = '',
+    _pipe: str = '',
+    **kwargs: Any,
+) -> str:
+    parts = [cmd]
+    if args or kwargs:
+        # I. Assemble the main parts of the command
+        positional = list(_assemble_args(args)) if args else []
+        keyword = list(_assemble_kwargs(kwargs, _underlines, _single_dash)) if kwargs else []
+
+        # II. Order the positional & keyword segments appropriately
+        parts.extend(it.chain(keyword, positional) if _final else it.chain(positional, keyword))
+
+    if _out:
+        parts.append(f'>> {_out}')
+    elif _pipe:
+        parts.append(f'| {_pipe}')
+
+    cmd = ' '.join(parts)
+    if _verbose:
+        print(cmd)
+    return cmd
+
+
+def command(cmd: str, *args: Any, **kwargs: Any) -> tuple[int, str, str]:
+    cmd = _assemble_command(cmd, *args, **kwargs)
+    ret = sbp.run(cmd, capture_output=True, text=True)
+    return (
+        ret.returncode or 0,
+        (ret.stdout or '').strip(),
+        (ret.stderr or '').strip(),
+    )
+
+
+async def run_command(cmd: str, *args: Any, **kwargs: Any) -> tuple[int, str, str]:
+    cmd = _assemble_command(cmd, *args, **kwargs)
+    subprocess = await aio.create_subprocess_shell(
+        cmd, stdout=aio.subprocess.PIPE, stderr=aio.subprocess.PIPE
+    )
+    stdout, stderr = await subprocess.communicate()
+
+    return (
+        subprocess.returncode or 0,
+        (stdout or b'').decode().strip(),
+        (stderr or b'').decode().strip(),
+    )
+
+
+def wrap(line: str, prefix: str = '', char: str = '-', width: int = 2) -> str:
+    n = (len(line) + 2 + 2 * width) if width else len(line)
+    wrapper = prefix + (char * n)
+    return '\n'.join([
+        '',
+        wrapper,
+        prefix + (f'{char*width} {line} {char*width}' if width else line),
+        wrapper,
+    ])
+
+
+def validate_dir(*paths: pyd.DirectoryPath) -> bool:
+    for path in paths:
+        assert path and path.exists() and path.is_dir(), f"Invalid directory: {path.as_posix()}"
+    return True
+
+
+def validate_file(*paths: pyd.FilePath) -> bool:
+    for path in paths:
+        assert path and path.exists() and path.is_file(), f"Invalid file: {path.as_posix()}"
+    return True
+
+
+async def find_file(pattern: str, root: pyd.DirectoryPath) -> Path | None:
+    """
+    Find a file matching the given pattern in the specified root directory.
+    Returns the first matching file or None if no match is found.
+    """
+    assert pattern, "Pattern must not be empty."
+    assert root.exists() and root.is_dir(), f"Invalid directory: {root.as_posix()}"
+    code, stdout, stderr = await run_command(
+        fr'find "{root}" -regex ".*\b{pattern}\b"',
+        _pipe=r'grep -v "node_modules|\.git|\.venv|build|prof"',
+    )
+    if code == 0 and stdout:
+        file = root / stdout.strip().splitlines()[0]
+        assert file.exists() and file.is_file()
+        return file
+    else:
+        return None
+
+
+async def find_files(*names: str, root: pyd.DirectoryPath) -> list[Path]:
+    ret: list[Path] = []
+    for name in names:
+        if not name:
+            pass
+        elif name[0] in '~/':
+            ret.append(Path(name).expanduser().resolve())
+        elif name.startswith('./'):
+            ret.append(root / name[2:])
+        else:
+            file = await find_file(name, root)
+            assert file is not None, f"File {name} not found in {root.as_posix()}"
+            ret.append(file)
+
+    assert all(file.exists() for file in ret)
+    return ret
+
+
+def path_sub(path: Path, old: str, new: str) -> Path:
+    parts = path.parts
+    if old in parts:
+        i = parts.index(old)
+        return Path(*parts[:i], new, *parts[i + 1:])
+    else:
+        return path
+
+
+def indent(text: str, n: int = 4) -> str:
+    if not n:
+        return text
+    return textwrap.indent(text, ' ' * n)
+
+
+def unindent(text: str, n: int = 4) -> str:
+    """ Unindent each line in the given string or iterable of strings by n tabs. """
+    fn = ft.partial(re.compile(rf'^ {{1,{n * 4}}}').sub, '')
+    return '\n'.join(map(fn, text))
+
+
+STARTS_RGX = re.compile(r'(?m)^ ?[*](?: |$)')
+
+PROSE_LINE = re.compile(r' *[[:punct:]]*([[:alpha:]]|\d+[^\d.])')
+
+
+def unwrap_paragraphs(text: str) -> str:
+    text = textwrap.dedent(text.strip('\n'))
+    text = STARTS_RGX.sub('', text)
+    lines = text.splitlines()
+    prose_mask = [bool(PROSE_LINE.match(line)) for line in lines]
+
+    acc = lines[0].strip()
+    for (prev, prev_is_prose), (cur, cur_is_prose) in it.pairwise(zip(lines, prose_mask)):
+        if not (_stripped := cur.strip()):
+            acc += '\n'
+        elif prev_is_prose and cur_is_prose:
+            if prev.endswith('-') and _stripped[0].isalpha():
+                acc += _stripped
+            else:
+                acc += f' {_stripped}'
+        elif cur_is_prose:
+            acc += f'\n{_stripped}'
+        else:
+            acc += f'\n{cur}'
+
+    return acc
+
+
+def wrap_paragraphs(text: str, width: int = 100) -> str:
+    return textwrap.fill(text, width=width)
 
 
 # ----------------------
@@ -1048,3 +1051,98 @@ def pyd_schemify(tvar: type) -> pyd.GetPydanticSchema:
 
 Regex = Annotated[re.Pattern, pyd_schemify(re.Pattern)]
 PydDataFrame = Annotated[pd.DataFrame, pyd_schemify(pd.DataFrame)]
+
+
+# ------------------
+# 7. CLI interaction
+# ------------------
+def print_in_color(text: str) -> None:
+    # Use zsh to process the prompt expansion
+    code, stdout, stderr = command(f'zsh -c print -P "{text}"')
+    print(stdout)
+
+
+SINGULAR_MAP: list[tuple[str, Callable]] = [
+    # I. Singletons
+    (r'^(un|sub|self|meta)$', lambda t: t),
+    (r'^(nucleus|knowledge|nexus|network)$', lambda t: t),
+    (r'^(stratum|society|identity|geist)$', lambda t: t),
+
+    # II. Irregulars
+    (r'^(media|species|evidence|series|equipment)$', lambda t: t),
+    (r'^genera$', lambda t: 'genus'),
+    (r'^people$', lambda t: 'person'),
+    (r'^synopses$', lambda t: 'synopsis'),
+    (r'^(bu|ga|bia)sses$', lambda t: t[:-3]),
+
+    # III. Archaics
+    (r'(rt|d)ices$', lambda t: t[:-4] + 'ex'),
+    (r'(mena|mata)$', lambda t: t[:-1] + 'on'),
+    (r'(an?t|[xn]im|cul)a$', lambda t: t[:-1] + 'um'),
+    (r'theses$', lambda t: t[:-2] + 'is'),
+
+    # IV. Regulars
+    (r'ies$', lambda t: t[:-3] + 'y'),
+    (r'(canvas|[^oa]us|ss|x|[rt]ch)es$', lambda t: t[:-2]),
+    (r'(lea|li|el)ves$', lambda t: t[:-3] + 'f'),
+
+    # V. Base Case
+    (r's$', lambda t: t[:-1])
+]
+
+TS_KEYWORDS: list[str] = [
+    'break', 'case', 'catch', 'class', 'const', 'continue', 'debugger', 'default', 'delete', 'do',
+    'else', 'export', 'extends', 'false', 'finally', 'for', 'function', 'if', 'import', 'in',
+    'instanceof', 'new', 'null', 'return', 'super', 'switch', 'this', 'throw', 'true', 'try',
+    'typeof', 'var', 'void', 'while', 'with', 'let', 'static', 'yield', 'await', 'enum',
+    'implements', 'interface', 'package', 'private', 'protected', 'public'
+]
+
+
+def to_singular(plural: str) -> str:
+    plural = plural.lower()
+    assert is_valid_identifier(plural), f"Can't use reserved identifier: {plural}"
+    for regex, handler in SINGULAR_MAP:
+        if re.search(regex, plural):
+            singular = handler(plural)
+            assert len(singular) > 0, f"Empty singular form for {plural}"
+            assert is_valid_identifier(singular), f"Can't use reserved identifier: {singular}"
+            return singular
+
+    raise ValueError(f"Failed to convert {plural} to singular form.")
+
+
+def is_valid_identifier(name: str) -> bool:
+    w = name.lower()
+    return (not keyword.iskeyword(w) and w.isidentifier() and w not in TS_KEYWORDS)
+
+
+AUTO_CONFIRM: bool = False
+
+
+def auto_confirm() -> None:
+    global AUTO_CONFIRM
+    AUTO_CONFIRM = True
+
+
+def confirm(prompt: str, default_no: bool = False) -> bool:
+    if AUTO_CONFIRM:
+        return True
+    elif default_no:
+        return not input(f'{prompt} [y/N] ').lower().strip().startswith('y')
+    else:
+        return not input(f'{prompt} [Y/n] ').lower().strip().startswith('n')
+
+
+class Locality(pyd.BaseModel):
+    host: str
+    ip: pyd.IPvAnyAddress
+
+    @staticmethod
+    def build() -> "Locality":
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.settimeout(0)
+            s.connect(('8.8.8.8', 1))
+            ip = s.getsockname()[0]
+
+        return Locality(host=socket.gethostname(), ip=ip)

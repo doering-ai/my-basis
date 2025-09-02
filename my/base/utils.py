@@ -859,6 +859,18 @@ def line_num(article: str, pos: int | str) -> int:
         return article.count('\n', 0, article.index(pos)) + 1
 
 
+def fill_tree(tree: dict[T, C]) -> None:
+    for key, val in tree.items():
+        if isinstance(val, dict):
+            fill_tree(val)  # type: ignore
+        elif val is None:
+            tree[key] = {}  # type:ignore
+
+
+def tree_size(tree: dict) -> int:
+    return sum((tree_size(v) if isinstance(v, dict) else 1) for v in tree.values())
+
+
 # ------------------
 # 4. Code Reflection
 # ------------------

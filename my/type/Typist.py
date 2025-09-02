@@ -714,12 +714,16 @@ class Typist(pyd.BaseModel):
         Combines dictionaries, keeping the keys from the left-hand side and overwriting them
         with the values from the right-hand side.
         """
-        if copy:
+        if base is None:
+            base = {}
+        elif copy:
             base = deepcopy(base)
+
         # 0. Ensure that we have at least two dictionaries to merge
-        if not args:
+        _args = list(filter(bool, args))
+        if not _args:
             return base
-        other = args[0]
+        other, *rest = _args
 
         # I. Partition fields on the second dict based on presence in the base
         unique, shared = mi.partition(lambda item: item[0] in base, other.items())
@@ -740,8 +744,8 @@ class Typist(pyd.BaseModel):
             base[key] = value
 
         # IV. Recursively merge other models into the result if present
-        if len(args) > 1:
-            return self.assemble(base, *args[1:], copy=False)
+        if rest:
+            return self.assemble(base, *rest, copy=False)
         return base
 
     def distill(self, models: list[dict], exclude: set[str] = set()) -> dict:

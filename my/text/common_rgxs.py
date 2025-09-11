@@ -82,7 +82,7 @@ COMMON_RGXS = RegexStore.new(
     y=r'[01]?\d{3}|20[012]\d|\d\d',
     m=r'[01]?\d',
     d=r'[0123]?\d',
-    _date=r'(?P=y)[-/.](?P=m)(?:[-/.](?P=d))?',  # Preferred ymd only
+    _date=r'(?P=y)[-\/.](?P=m)(?:[-\/.](?P=d))?',  # Preferred ymd only
     _symbolic_date=(
         '|:', [
             r'(?P=y)[-/.](?P=m)(?:[-/.](?P=d))?',

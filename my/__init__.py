@@ -1,4 +1,4 @@
-from .base import constants, utils, google_utils
+from .base import constants, utils
 from .base.UniqueId import UniqueId
 from .base.MyEnum import MyEnum
 from .type import Typist, typist, Predicate, TypeArg, TimeType
@@ -6,6 +6,7 @@ from .text import (
     Span, Buffer, MatchData, GroupKind, RegexStore, format_url, atom, COMMON_RGXS, Markdown
 )
 from .perf import Cache, NestedCache, PickleCache
+from .apis import GoogleSheet
 
 import regex as re
 
@@ -18,7 +19,6 @@ __all__ = [
     "constants",
     "utils",
     "ut",
-    "google_utils",
     "UniqueId",
     "Uid",
     "MyEnum",
@@ -45,4 +45,7 @@ __all__ = [
     "Cache",
     "NestedCache",
     "PickleCache",
+
+    # APIs
+    "GoogleSheet",
 ]

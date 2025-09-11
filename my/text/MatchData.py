@@ -11,6 +11,7 @@ import pydantic as pyd
 from pydantic_core import core_schema
 
 ### INTERNAL
+from ..base import utils as ut
 from ..type import Predicate
 from .Span import Span
 
@@ -86,14 +87,10 @@ class MatchData(Predicate):
         """ Returns the number of characters matched. """
         return len(self.text)
 
-    def clear_cached_properties(self) -> None:
-        for attr in filter(lambda attr: hasattr(self, attr), self.CACHED_PROPERTIES):
-            delattr(self, attr)
-
     def set_to(self, other: 'MatchData | None') -> None:
         self.data = {key: [*values] for key, values in other.items()} if other else {}
         self.match = other.match if other is not None else None
-        self.clear_cached_properties()
+        ut.clear_cached_properties(self, *self.CACHED_PROPERTIES)
 
     def clear(self) -> None:
         self.set_to(None)

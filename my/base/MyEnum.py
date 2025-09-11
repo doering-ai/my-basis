@@ -8,6 +8,7 @@ import more_itertools as mi
 import functools as ft
 
 ### EXTERNAL
+import regex as re
 
 ### INTERNAL
 from ..base import utils as ut
@@ -25,24 +26,28 @@ class MyEnum(Enum):
         members = cls.__members__
 
         if type(value) is type(mi.first(members.values())):
+            # I. Immediate check against values (NOT keys, as below)
             if key := ut.find_key(members, lambda v: v.value == value):
-                # IV. Find by value
                 return members[key]
 
         if isinstance(value, str):
-            uval = value.upper()
+            # II. Check against key names
+            uval = value.upper().strip()
             if value.isdigit():
                 # 0. Cast numbers for int flags
                 value = int(value)
             elif uval in members:
                 # I. Find by name
                 return members[uval]
-            elif issubclass(cls, Flag) and '|' in value:
-                # II. Break down flags into a list
-                value = value.split('|')
+            elif key := ut.find_key(cls._aliases(), lambda rgx: bool(rgx.fullmatch(uval, re.I))):
+                # II. Find by alias
+                return members[key.upper()]
+            elif issubclass(cls, Flag) and '|' in uval:
+                # III. Break down flags into a list
+                value = uval.split('|')
 
         if isinstance(value, list):
-            # 0. Handle lists of values
+            # III. Handle lists of values
             assert issubclass(cls, Flag)
             values = [members.get(_v.strip().upper(), cls(0)) for _v in value]
             return cls(sum(val.value for val in values))
@@ -64,6 +69,9 @@ class MyEnum(Enum):
             ])
         else:
             return str(self)
+
+    def __str__(self) -> str:
+        return self.write()
 
     def __sub__(self: SubType, other: SubType) -> SubType:
         cls = self.__class__
@@ -103,3 +111,9 @@ class MyEnum(Enum):
             # Else find each of the members index in the overall ordering
             members = list(self.__class__)
             return members.index(self) < members.index(other)
+
+    @ft.lru_cache(maxsize=1)
+    @staticmethod
+    def _aliases() -> dict[str, re.Pattern]:
+        """ May be defined by implementations. """
+        return {}

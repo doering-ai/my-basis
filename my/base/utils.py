@@ -16,7 +16,7 @@ from typing import (
     Sequence,
     TypeVar,
 )
-from collections import Counter, deque
+from collections import Counter, deque, defaultdict
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from shutil import get_terminal_size
@@ -521,7 +521,7 @@ def build(val: Value, *functions: Callable[[Value], Value]) -> Value:
     return ft.reduce(lambda acc, fn: fn(acc), functions, val)
 
 
-def find(container: Iterable[Value], predicate: Callable[[Value], bool] | Value = bool) -> int:
+def find(container: Sequence[Value], predicate: Callable[[Value], bool] | Value = bool) -> int:
     predicate = predicate if callable(predicate) else predicate.__eq__
     return next(mi.locate(container, predicate), -1)
 
@@ -583,6 +583,11 @@ def condense(items: Iterable[T], pred: Callable[[T], bool] = bool) -> list[T]:
     return list(filter(pred, items))
 
 
+def partition(items: Iterable[T], pred: Callable[[T], bool]) -> tuple[list[T], list[T]]:
+    misses, hits = map(list, mi.partition(pred, items))
+    return misses, hits
+
+
 def multi_partition(items: Iterable[T], **preds: Callable[[T], object]) -> dict[str, list[T]]:
     assert 'rest' not in preds.keys(), 'Cannot use key "rest" in multi_partition()'
 
@@ -593,6 +598,11 @@ def multi_partition(items: Iterable[T], **preds: Callable[[T], object]) -> dict[
         if not ret['rest']:
             break
     return ret
+
+
+def bucket(items: Iterable[T], pred: Callable[[T], C]) -> dict[C, list[T]]:
+    buckets = mi.bucket(items, pred)
+    return defaultdict(list, {key: list(buckets[key]) for key in buckets})
 
 
 def map_condense(
@@ -859,16 +869,14 @@ def line_num(article: str, pos: int | str) -> int:
         return article.count('\n', 0, article.index(pos)) + 1
 
 
-def fill_tree(tree: dict[T, C]) -> None:
-    for key, val in tree.items():
-        if isinstance(val, dict):
-            fill_tree(val)  # type: ignore
-        elif val is None:
-            tree[key] = {}  # type:ignore
-
-
-def tree_size(tree: dict) -> int:
-    return sum((tree_size(v) if isinstance(v, dict) else 1) for v in tree.values())
+def parse_domain(url: str, default: str = '') -> str:
+    if url:
+        try:
+            if host := pyd.HttpUrl(url).host:
+                return host.replace('www.', '')
+        except Exception:
+            pass
+    return default
 
 
 # ------------------
@@ -947,19 +955,20 @@ def nested_replace(obj: Collection | pyd.BaseModel, old: Any, new: Any, depth: i
     return False
 
 
-def parse_domain(url: str, default: str = '') -> str:
-    if url:
-        try:
-            if host := pyd.HttpUrl(url).host:
-                return host.replace('www.', '')
-        except Exception:
-            pass
-    return default
-
-
 def import_module(file: pyd.FilePath, root: pyd.DirectoryPath) -> ModuleType:
     pathstr = file.with_suffix('').relative_to(root).as_posix().replace('/', '.')
     return imp.import_module(pathstr)
+
+
+def clear_cached_properties(inst: object, *properties: str) -> None:
+    if not properties and hasattr(inst, 'CACHED_PROPERTIES'):
+        properties = tuple(getattr(inst, 'CACHED_PROPERTIES'))
+
+    for prop in properties:
+        if prop in inst.__dict__:
+            del inst.__dict__[prop]
+    # for attr in filter(lambda attr: hasattr(inst, attr), properties):
+    #     delattr(inst, attr)
 
 
 # --------------------
@@ -1055,6 +1064,18 @@ def map_items(value: object) -> list[tuple[Any, Any]]:
     elif isinstance(value, Series) and all(isinstance(v, tuple) and len(v) == 2 for v in value):
         return list(value)
     return []
+
+
+def fill_tree(tree: dict[T, C]) -> None:
+    for key, val in tree.items():
+        if isinstance(val, dict):
+            fill_tree(val)  # type: ignore
+        elif val is None:
+            tree[key] = {}  # type:ignore
+
+
+def tree_size(tree: dict) -> int:
+    return sum((tree_size(v) if isinstance(v, dict) else 1) for v in tree.values())
 
 
 def pyd_schemify(tvar: type) -> pyd.GetPydanticSchema:

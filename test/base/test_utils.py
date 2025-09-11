@@ -15,7 +15,7 @@ from my import utils as ut
 ############
 ### BODY ###
 ############
-class TestAliases:
+class TestUtils:
     # -------------------
     # 1. System Utilities
     # -------------------

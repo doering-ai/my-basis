@@ -379,7 +379,7 @@ def _assemble_command(
 
 def command(cmd: str, *args: Any, **kwargs: Any) -> tuple[int, str, str]:
     cmd = _assemble_command(cmd, *args, **kwargs)
-    ret = sbp.run(cmd, capture_output=True, text=True)
+    ret = sbp.run(cmd, capture_output=True, text=True, shell=True)
     return (
         ret.returncode or 0,
         (ret.stdout or '').strip(),
@@ -390,7 +390,10 @@ def command(cmd: str, *args: Any, **kwargs: Any) -> tuple[int, str, str]:
 async def run_command(cmd: str, *args: Any, **kwargs: Any) -> tuple[int, str, str]:
     cmd = _assemble_command(cmd, *args, **kwargs)
     subprocess = await aio.create_subprocess_shell(
-        cmd, stdout=aio.subprocess.PIPE, stderr=aio.subprocess.PIPE
+        cmd,
+        stdout=aio.subprocess.PIPE,
+        stderr=aio.subprocess.PIPE,
+        shell=True,
     )
     stdout, stderr = await subprocess.communicate()
 

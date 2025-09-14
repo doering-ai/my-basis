@@ -23,38 +23,39 @@ SubType = TypeVar('SubType', bound='MyEnum')
 class MyEnum(Enum):
     @classmethod
     def read(cls: type[SubType], value: str | int | list) -> SubType:
+        if isinstance(value, cls):
+            return value
         members = cls.__members__
 
-        if type(value) is type(mi.first(members.values())):
-            # I. Immediate check against values (NOT keys, as below)
+        # I. Check against key names
+        if isinstance(value, str):
+            uval = value.upper().strip()
+            if value.isdigit():
+                # I.i. Cast numbers for int flags
+                value = int(value)
+            elif uval in members:
+                # I.ii. Find by name
+                return members[uval]
+            elif key := ut.find_key(cls._aliases(), lambda rgx: bool(rgx.fullmatch(uval))):
+                # I.iii. Find by alias
+                return members[key.upper()]
+            elif issubclass(cls, Flag) and '|' in uval:
+                # I.iv. Break down flags into a list
+                value = uval.split('|')
+
+        # II. Handle int flags
+        if isinstance(value, int) and issubclass(cls, Flag):
+            return cls(value)
+
+        # III. Immediate check against values (instead of keys)
+        if type(value) is type(mi.first(enum.value for enum in members.values())):
             if key := ut.find_key(members, lambda v: v.value == value):
                 return members[key]
 
-        if isinstance(value, str):
-            # II. Check against key names
-            uval = value.upper().strip()
-            if value.isdigit():
-                # 0. Cast numbers for int flags
-                value = int(value)
-            elif uval in members:
-                # I. Find by name
-                return members[uval]
-            elif key := ut.find_key(cls._aliases(), lambda rgx: bool(rgx.fullmatch(uval, re.I))):
-                # II. Find by alias
-                return members[key.upper()]
-            elif issubclass(cls, Flag) and '|' in uval:
-                # III. Break down flags into a list
-                value = uval.split('|')
-
+        # IV. Handle lists of values
         if isinstance(value, list):
-            # III. Handle lists of values
             assert issubclass(cls, Flag)
-            values = [members.get(_v.strip().upper(), cls(0)) for _v in value]
-            return cls(sum(val.value for val in values))
-
-        if isinstance(value, int) and issubclass(cls, Flag):
-            # III. Handle int flags
-            return cls(value)
+            return cls(sum(val.value for val in map(cls.read, value)))
 
         raise ValueError(f'Invalid {cls.__name__} value: {value}')
 

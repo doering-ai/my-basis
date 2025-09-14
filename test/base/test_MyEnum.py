@@ -2,13 +2,15 @@
 ### HEAD ###
 ############
 ### STANDARD
-from enum import Flag
+from enum import Flag, auto
+import functools as ft
+import regex as re
 
 ### EXTERNAL
 import pytest as pyt
 
 ### INTERNAL
-from my import MyEnum
+from my import ut, MyEnum
 
 
 ############
@@ -22,8 +24,8 @@ class Color(MyEnum):
 
 class Priority(MyEnum):
     LOW = "low"
-    MED = "med"
-    LRG = "LRG"
+    MED = "medium"
+    LRG = "large"
 
 
 class Status(MyEnum):
@@ -33,23 +35,26 @@ class Status(MyEnum):
 
 
 class Perm(MyEnum, Flag):
-    READ = 1
-    WRITE = 2
-    EXECUTE = 4
+    READ = auto()
+    WRITE = auto()
+    EXECUTE = auto()
 
 
 class CustomAliasEnum(MyEnum):
-    ALPHA = "a"
+    ALPHA = "alpha"
     BETA = "b"
     GAMMA = "g"
 
+    @ft.lru_cache(maxsize=1)
     @staticmethod
-    def _aliases():
-        import regex as re
-        return dict(
-            ALPHA=re.compile(r'(first|primary|alpha)', re.I),
-            BETA=re.compile(r'(second|secondary|beta)', re.I),
-            GAMMA=re.compile(r'(third|gamma)', re.I)
+    def _aliases() -> dict[str, re.Pattern]:
+        return ut.regex_dict(
+            dict(
+                alpha=r'first|primary|alpha',
+                beta=r'second|secondary|beta',
+                gamma=r'third|gamma',
+            ),
+            compile_function=lambda s: re.compile(s, re.I)
         )
 
 
@@ -71,12 +76,12 @@ class TestMyEnum:
 
             # String enums
             (Priority, "low", Priority.LOW),
-            (Priority, "med", Priority.MED),
-            (Priority, "LRG", Priority.LRG),
+            (Priority, "medium", Priority.MED),
+            (Priority, "large", Priority.LRG),
 
             # Case-insensitive string lookup
             (Priority, "LOW", Priority.LOW),
-            (Priority, "Med", Priority.MED),
+            (Priority, "MeD", Priority.MED),
             (Priority, " LRG ", Priority.LRG),
 
             # String representation of integers
@@ -160,15 +165,15 @@ class TestMyEnum:
         [
             # String-valued enums return their string value
             (Priority.LOW, "low"),
-            (Priority.MED, "med"),
-            (Priority.LRG, "LRG"),
+            (Priority.MED, "medium"),
+            (Priority.LRG, "large"),
 
             # Non-string enums return lowercase name
-            (Color.PINK, "PINK"),
-            (Color.CLAY, "CLAY"),
+            (Color.PINK, "pink"),
+            (Color.CLAY, "clay"),
             (Color.BLUE, "blue"),
             (Status.PEND, "pend"),
-            (Status.ACTV, "actV"),
+            (Status.ACTV, "actv"),
             (Status.COMP, "comp"),
         ]
     )
@@ -371,8 +376,8 @@ class TestMyEnum:
 
     def test_read_with_existing_enum_instance(self):
         # Test passing existing enum instance
-        red_instance = Color.PINK
-        assert Color.read(red_instance) == Color.PINK
+        inst = Color.PINK
+        assert Color.read(inst) == Color.PINK
 
     @pyt.mark.parametrize('empty_list', [
         [],

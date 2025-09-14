@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, ClassVar
 import os
 import functools as ft
+import itertools as it
 
 ### EXTERNAL
 from google.auth.transport.requests import Request
@@ -93,10 +94,12 @@ class GoogleSheet:
         header: bool = True,
         index: bool = False,
     ) -> list[list[str]]:
-        df = data.reset_index() if not index else data.copy()
+        df = data.copy().reset_index()
         values = df.fillna('').astype(str).values.tolist()
         if header:
             values = [df.columns.tolist()] + values
+        if not index:
+            values = [row[1:] for row in values]
         return values
 
     @staticmethod
@@ -112,7 +115,7 @@ class GoogleSheet:
         return df.replace('', np.nan).ffill()
 
     @staticmethod
-    def shape_to_range(height: int, width: int, start: str = 'A1') -> str:
+    def shape_to_range(shape: tuple[int, int], start: str = 'A1') -> str:
         def col_to_num(col: str) -> int:
             if not col:
                 return 1
@@ -128,9 +131,11 @@ class GoogleSheet:
                 col = chr(rem + ord('A')) + col
             return col
 
-        start_col = ''.join(filter(str.isalpha, start))
-        start_row = ''.join(filter(str.isdigit, start))
-        assert start_row.isdigit(), "Invalid start cell provided."
+        width, height = shape
+        start_col = ''.join(it.takewhile(str.isalpha, start))
+        start_row = start[len(start_col):]
+        assert start_col, f"Invalid start cell provided: {start}."
+        assert start_row.isdigit(), f"Invalid start cell provided: {start}"
 
         start_col_num = col_to_num(start_col)
         start_row_num = int(start_row)
@@ -139,7 +144,7 @@ class GoogleSheet:
         end_row_num = start_row_num + height - 1
 
         end_col = num_to_col(end_col_num)
-        return f"{start_col}{start_row}:{end_col}{end_row_num}"
+        return f"{start}:{end_col}{end_row_num}"
 
     # -------------------
     # `+` Primary Methods
@@ -170,28 +175,33 @@ class GoogleSheet:
         return fn(spreadsheetId=self.uid, **kwargs).execute()
 
     def auth(self) -> None:
+        """
+        https://googleapis.dev/python/google-auth/latest/reference/google.oauth2.credentials.html
+        """
         assert self.SCOPES, 'Must provide at least one scope to authenticate with Google APIs.'
         did_change = False
         gcreds_dir = MY_CREDS / 'google'
         gcreds_dir.mkdir(parents=True, exist_ok=True)
-
-        # Load locally-cached creds
+        creds_file = gcreds_dir / 'google_credentials.json'
         token_file = gcreds_dir / 'google_token.json'
+
+        # I. Load locally-cached creds
         if token_file.exists():
             creds = GoogleCredentials.from_authorized_user_file(token_file.as_posix(), self.SCOPES)
 
-        # Refresh token
-        if creds and creds.expired and creds.refresh_token:
-            try:
-                creds.refresh(Request())
-                did_change = True
-            except Exception:
-                fire.info("Failed to refresh credentials!")
-                creds = None
+            # II.Refresh token
+            if creds and creds.expired and creds.refresh_token:
+                try:
+                    creds.refresh(Request())
+                    did_change = True
+                except Exception:
+                    fire.info("Failed to refresh credentials!")
+                    creds = None
+        else:
+            creds = None
 
-        # Log in
+        # III. Log in
         if creds is None:
-            creds_file = gcreds_dir / 'google_credentials.json'
             flow = InstalledAppFlow.from_client_secrets_file(creds_file.as_posix(), self.SCOPES)
             creds = flow.run_local_server(port=0)
             did_change = True
@@ -199,9 +209,9 @@ class GoogleSheet:
         assert creds is not None, "Failed to authenticate with Google Sheets."
         assert creds.valid, "Invalid Google credentials."
 
-        # Save the credentials for the next run
+        # IV. Save the credentials for the next run
         if did_change:
-            typist.to_file(creds, token_file)
+            token_file.write_text(creds.to_json())
 
         self.gcreds = creds
 
@@ -279,23 +289,32 @@ class GoogleSheet:
         fire.info(f"Successfully updated range {response['updatedRange']}")
 
     def batch_write(self, **kwargs: DataFrame) -> None:
-        # I. Build the requests, adding on cell info where needed
         requests = []
-        for target, df in kwargs.items():
-            header = False
-            if not ut.has_any(target, '!', ':'):
-                h, w = df.shape
-                target += f'!{self.shape_to_range(h + 1, w)}'
-                header = True
-            elif 'A1' in target:
-                header = True
+        with fire.span(f'Writing {len(kwargs)} ranges to {self.name}...'):
+            # I. Build the requests, adding on cell info where needed
+            for target, df in kwargs.items():
+                header = False
+                index = False
+                if not ut.has_any(target, '!', ':'):
+                    h, w = df.shape
+                    target += f'!{self.shape_to_range((w+1, h+1))}'
+                    header = True
+                    index = True
+                elif 'A1' in target:
+                    header = True
+                    index = True
 
-            requests.append(dict(range=target, values=self.serialize_data(df, header=header)))
+                requests.append(
+                    dict(
+                        range=target,
+                        values=self.serialize_data(df, header=header, index=index),
+                    )
+                )
 
-        # II. Issue the batch request
-        response = self.exec('batchUpdate', body=dict(valueInputOption="RAW", data=requests))
-        for resp in response['responses']:
-            fire.info(f"Successfully updated range {resp['updatedRange']}")
+            # II. Issue the batch request
+            response = self.exec('batchUpdate', body=dict(valueInputOption="RAW", data=requests))
+            for resp in response['responses']:
+                fire.info(f"Successfully updated range {resp['updatedRange']}")
 
     def add_worksheets(self, *args: str, **kwargs: Any) -> None:
         worksheets = [
@@ -306,7 +325,7 @@ class GoogleSheet:
         response = self.genexec(
             'batchUpdate',
             body=dict(
-                data=[dict(addSheet=dict(properties=worksheet)) for worksheet in worksheets],
+                requests=[dict(addSheet=dict(properties=worksheet)) for worksheet in worksheets],
             )
         )
         self.worksheets = [

@@ -328,9 +328,10 @@ class GoogleSheet:
                 requests=[dict(addSheet=dict(properties=worksheet)) for worksheet in worksheets],
             )
         )
-        self.worksheets = [
-            reply['addSheet']['properties']['title'] for reply in response['replies']
-        ]
+        for reply in response['replies']:
+            name = reply['addSheet']['properties']['title']
+            if name not in self.worksheets:
+                self.worksheets.append(name)
 
         fire.info(f"Created {len(worksheets)} new worksheets in {self.name}")
 

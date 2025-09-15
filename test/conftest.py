@@ -5,7 +5,6 @@
 from typing import Callable
 from datetime import datetime
 from pathlib import Path
-import os
 
 ### EXTERNAL
 import pytest as pyt
@@ -13,15 +12,15 @@ import pydantic as pyd
 import regex as re
 
 ### INTERNAL
-from my.base import utils as ut
+from my import ut, env
 
 re.DEFAULT_VERSION = re.VERSION1
 
 ############
 ### DATA ###
 ############
-MY_LOGS = Path(os.environ.get('MY_LOGS', '~/local/logs')).expanduser().resolve()
-FIRE_TOKEN = os.environ.get('FIRE_TOKEN', '')
+MY_LOGS = env.path('MY_LOGS', '~/local/logs')
+FIRE_TOKEN = env.FIRE_TOKEN
 
 ############
 ### BODY ###

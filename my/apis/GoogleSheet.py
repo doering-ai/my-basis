@@ -2,9 +2,7 @@
 ### HEAD ###
 ############
 ### STANDARD
-from pathlib import Path
 from typing import Any, ClassVar
-import os
 import functools as ft
 import itertools as it
 
@@ -20,18 +18,15 @@ from ovld import ovld
 
 ### INTERNAL
 from ..base import utils as ut
-from ..type.Typist import typist
+from ..type import env
 
 DataFrame = pd.DataFrame
 
 ############
 ### DATA ###
 ############
-MY_CREDS = Path(os.environ.get('MY_CREDS', '~/my/.creds')).expanduser().resolve()
-MY_CREDS.mkdir(parents=True, exist_ok=True)
-
-MY_CACHE = Path(os.environ.get('MY_CACHE', '~/my/.cache')).expanduser().resolve()
-MY_CACHE.mkdir(parents=True, exist_ok=True)
+MY_CREDS = env.path('MY_CREDS', '~/my/.creds', mkdir=True)
+MY_CACHE = env.path('MY_CACHE', '~/my/.cache', mkdir=True)
 
 
 ############
@@ -149,23 +144,6 @@ class GoogleSheet:
     # -------------------
     # `+` Primary Methods
     # -------------------
-    @property
-    def is_connected(self) -> bool:
-        return bool(self.uid)
-
-    @ft.cached_property
-    def sheets(self) -> Any:
-        if self.gcreds is None:
-            self.auth()
-
-        ret = build("sheets", "v4", credentials=self.gcreds).spreadsheets()
-        assert ret is not None, "Failed to build Google Sheets API."
-        return ret
-
-    @ft.cached_property
-    def values(self) -> Any:
-        return self.sheets.values()
-
     def genexec(self, endpoint: str, **kwargs: Any) -> dict[str, Any]:
         fn = getattr(self.sheets, endpoint)
         return fn(spreadsheetId=self.uid, **kwargs).execute()
@@ -218,6 +196,23 @@ class GoogleSheet:
     # ------------------
     # `x` Public Methods
     # ------------------
+    @property
+    def is_connected(self) -> bool:
+        return bool(self.uid)
+
+    @ft.cached_property
+    def sheets(self) -> Any:
+        if self.gcreds is None:
+            self.auth()
+
+        ret = build("sheets", "v4", credentials=self.gcreds).spreadsheets()
+        assert ret is not None, "Failed to build Google Sheets API."
+        return ret
+
+    @ft.cached_property
+    def values(self) -> Any:
+        return self.sheets.values()
+
     def read(
         self,
         worksheet: str,

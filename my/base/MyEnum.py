@@ -2,7 +2,7 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import TypeVar
+from typing import TypeVar, Type
 from enum import Enum, Flag
 import more_itertools as mi
 import functools as ft
@@ -48,7 +48,7 @@ class MyEnum(Enum):
             return cls(value)
 
         # III. Immediate check against values (instead of keys)
-        if type(value) is type(mi.first(enum.value for enum in members.values())):
+        if type(value) is cls.vtype():
             if key := ut.find_key(members, lambda v: v.value == value):
                 return members[key]
 
@@ -118,3 +118,7 @@ class MyEnum(Enum):
     def _aliases() -> dict[str, re.Pattern]:
         """ May be defined by implementations. """
         return {}
+
+    @classmethod
+    def vtype(cls) -> Type:
+        return type(mi.first(enum.value for enum in cls.__members__.values()))

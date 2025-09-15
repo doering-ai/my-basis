@@ -34,7 +34,7 @@ class Environment(pyd.BaseModel):
     # -----------
     class PathEnv:
         def __getattr__(self, key: str) -> Path:
-            return Environment.path(key)
+            return Environment._path(key)
 
     @ft.cached_property
     def paths(self) -> 'Environment.PathEnv':
@@ -42,7 +42,7 @@ class Environment(pyd.BaseModel):
 
     @ft.lru_cache(maxsize=128)
     @staticmethod
-    def path(key: str, default: str, mkdir: bool = False) -> Path:
+    def _path(key: str, default: str = '', mkdir: bool = False) -> Path:
         val = Environment.get(key) or default
 
         for match in Environment.RGX.findall(val):
@@ -55,12 +55,15 @@ class Environment(pyd.BaseModel):
             ret.mkdir(parents=True, exist_ok=True)
         return ret
 
+    def path(self, key: str, default: str = '', mkdir: bool = False) -> Path:
+        return Environment._path(key, default, mkdir)
+
     # -----------
     # -- Flags --
     # -----------
     class FlagEnv:
         def __getattr__(self, key: str) -> int:
-            return Environment.flag(key)
+            return Environment._flag(key)
 
     @ft.cached_property
     def flags(self) -> 'Environment.FlagEnv':
@@ -68,7 +71,7 @@ class Environment(pyd.BaseModel):
 
     @ft.lru_cache(maxsize=128)
     @staticmethod
-    def flag(key: str, default: int = 0) -> int:
+    def _flag(key: str, default: int = 0) -> int:
         assert key, 'FlagEnv keys must be non-empty'
         assert key.isupper(), 'FlagEnv keys must be uppercase'
         val = Environment.get(key).lower()
@@ -79,6 +82,9 @@ class Environment(pyd.BaseModel):
             return 1
         else:
             return default
+
+    def flag(self, key: str, default: int = 0) -> int:
+        return Environment._flag(key, default)
 
 
 env = Environment()

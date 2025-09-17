@@ -22,12 +22,19 @@ class Environment(pyd.BaseModel):
     RGX: ClassVar[re.Pattern] = re.compile(r'\$[_\d[:upper:]]+\b|\${[_\d[:upper:]]+}')
 
     def __getattr__(self, key: str) -> str:
-        return self.get(key)
+        return Environment._get(key)
 
     @ft.lru_cache(maxsize=128)
     @staticmethod
-    def get(key: str, default: str = '') -> str:
+    def _get(key: str, default: str = '') -> str:
         return Environment.ENVIRON.get(key, default)
+
+    def get(self, key: str, default: str = '') -> str:
+        return Environment._get(key, default)
+
+    @ft.cached_property
+    def is_dev(self) -> bool:
+        return self.get('MY_MODE', 'dev').lower().startswith('dev')
 
     # -----------
     # -- Paths --
@@ -43,10 +50,10 @@ class Environment(pyd.BaseModel):
     @ft.lru_cache(maxsize=128)
     @staticmethod
     def _path(key: str, default: str = '', mkdir: bool = False) -> Path:
-        val = Environment.get(key) or default
+        val = Environment._get(key) or default
 
         for match in Environment.RGX.findall(val):
-            if subval := Environment.get(match.strip('{}$')):
+            if subval := Environment._get(match.strip('{}$')):
                 val = val.replace(match, subval)
 
         ret = Path(val).expanduser().resolve()
@@ -74,7 +81,7 @@ class Environment(pyd.BaseModel):
     def _flag(key: str, default: int = 0) -> int:
         assert key, 'FlagEnv keys must be non-empty'
         assert key.isupper(), 'FlagEnv keys must be uppercase'
-        val = Environment.get(key).lower()
+        val = Environment._get(key).lower()
 
         if val.isdigit():
             return int(val)

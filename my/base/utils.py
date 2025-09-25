@@ -29,6 +29,7 @@ import importlib.metadata as impm
 import itertools as it
 import keyword
 import logging as lg
+import logging.handlers as lgh
 import os
 import socket
 import subprocess as sbp
@@ -136,7 +137,7 @@ def setup_py_logging(
     file = logdir / _name_logfile(logger.name)
     assert not file.exists(), f'Log file {file} already exists.'
 
-    file_handler = lg.handlers.RotatingFileHandler(file, maxBytes=maxsize, backupCount=maxcount)
+    file_handler = lgh.RotatingFileHandler(file, maxBytes=maxsize, backupCount=maxcount)
     file_handler.setLevel(lg.DEBUG if is_dev else lg.INFO)
     file_handler.setFormatter(lg.Formatter('[%(asctime)s %(levelname)s] %(message)s'))
 
@@ -429,43 +430,6 @@ def validate_file(*paths: pyd.FilePath) -> bool:
     for path in paths:
         assert path and path.exists() and path.is_file(), f'Invalid file: {path.as_posix()}'
     return True
-
-
-async def find_file(pattern: str, root: pyd.DirectoryPath) -> Path | None:
-    """
-    Find a file matching the given pattern in the specified root directory.
-    Returns the first matching file or None if no match is found.
-    """
-    assert pattern, 'Pattern must not be empty.'
-    assert root.exists() and root.is_dir(), f'Invalid directory: {root.as_posix()}'
-    code, stdout, stderr = await run_command(
-        rf'find "{root}" -regex ".*\b{pattern}\b"',
-        _pipe=r'grep -v "node_modules|\.git|\.venv|build|prof"',
-    )
-    if code == 0 and stdout:
-        file = root / stdout.strip().splitlines()[0]
-        assert file.exists() and file.is_file()
-        return file
-    else:
-        return None
-
-
-async def find_files(*names: str, root: pyd.DirectoryPath) -> list[Path]:
-    ret: list[Path] = []
-    for name in names:
-        if not name:
-            pass
-        elif name[0] in '~/':
-            ret.append(Path(name).expanduser().resolve())
-        elif name.startswith('./'):
-            ret.append(root / name[2:])
-        else:
-            file = await find_file(name, root)
-            assert file is not None, f'File {name} not found in {root.as_posix()}'
-            ret.append(file)
-
-    assert all(file.exists() for file in ret)
-    return ret
 
 
 def path_sub(path: Path, old: str, new: str) -> Path:

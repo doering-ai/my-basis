@@ -52,19 +52,8 @@ class TestUtils:
     #     assert ut.validate_file(data) == expected
 
     @pyt.mark.parametrize(
-        'pattern, expected', [
-            (r'utils\.py', True),
-            (r'base/utils\.py', True),
-            (r'invalid/base/utils\.py', False),
-        ]
-    )
-    @pyt.mark.asyncio
-    async def test_find_file(self, pattern: str, expected: bool, root):
-        ret = await ut.find_file(pattern, root)
-        assert (ret is not None) == expected
-
-    @pyt.mark.parametrize(
-        'lines, expected', [
+        'lines, expected',
+        [
             (
                 ['welcome', 'to the ', 'club now', ''],
                 ['welcome to the club now'],
@@ -94,7 +83,7 @@ class TestUtils:
                     '    11. numbered child',
                 ],
             ),
-        ]
+        ],
     )
     def test_unwrap_paragraphs(self, lines: list[str], expected: list[str]):
         assert ut.unwrap_paragraphs('\n'.join(lines)) == '\n'.join(expected)
@@ -119,18 +108,15 @@ class TestUtils:
     #     assert ut.measure(data) == expected
 
     @pyt.mark.parametrize(
-        'func, data, expected', [
+        'func, data, expected',
+        [
             (lambda x: x, {}, {}),
             (lambda x: x**2, dict(a=1, b=2, c=3), dict(a=1, b=4, c=9)),
             (lambda x: x**2, [('a', 1), ('b', 2), ('c', 3)], dict(a=1, b=4, c=9)),
-            (lambda x: x**2, [1, 2, 3], {
-                1: 1,
-                2: 4,
-                3: 9
-            }),
+            (lambda x: x**2, [1, 2, 3], {1: 1, 2: 4, 3: 9}),
             (lambda x: x.upper(), deque(['abc', 'cde']), dict(abc='ABC', cde='CDE')),
             (lambda x: x * 0, ['abc', 'cde'], dict()),
-        ]
+        ],
     )
     def test_val_map(self, func: Callable, data: Iterable, expected: dict):
         assert ut.val_map(func, data, drop=True) == expected
@@ -180,71 +166,77 @@ class TestUtils:
             ((0, 1, 0, 1), ['abc', 'cde', 'cefg'], ['a']),
             ((0, 1, 1, 1), ['abc', 'cde', 'cefg'], ['a', 'c']),
             ((1, 1, 1, 1), ['abc', 'cde', 'cefg'], ['c']),
-
             # Test type flexibility
             ((0, 0, 0, 0), [dict(abc=1), dict(cde=2), dict(cefg=3)], ['a', 'z']),
             ((0, 0, 0, 1), [dict(abc=1), dict(cde=2), dict(cefg=3)], ['abc', 'yxz']),
             ((1, 1, 1, 1), [dict(a=1, b=2, c=3), dict(c=1, d=2, e=3)], ['c']),
             ((0, 0, 0, 0), [['abc'], ['cde'], ['cef']], ['c']),
             ((0, 1, 0, 1), [['abc'], ['cde'], ['cef']], ['abc']),
-        ]
+        ],
     )
-    def test_has_X(self, expected: tuple[int, int, int, int], data: Iterable, target: list[str]):
+    def test_has_x(self, expected: tuple[int, int, int, int], data: Iterable, target: list[str]):
         assert (
-            ut.all_has_all(data, *target), ut.any_has_all(data, *target),
-            ut.all_has_any(data, *target), ut.any_has_any(data, *target)
+            ut.all_has_all(data, *target),
+            ut.any_has_all(data, *target),
+            ut.all_has_any(data, *target),
+            ut.any_has_any(data, *target),
         ) == tuple(map(bool, expected))
 
     @pyt.mark.parametrize(
-        'data, target, expected', [
+        'data, target, expected',
+        [
             (dict(a=1, b=2, c=3), 'z', 0),
             (dict(a=1, b=2, c=3), 'a', 0),
             (dict(a=1), 'a', 1),
-        ]
+        ],
     )
     def test_has_only(self, data: Collection, target: str, expected: int):
         assert ut.has_only(data, target) == bool(expected)
 
     @pyt.mark.parametrize(
-        'data, target, expected', [
+        'data, target, expected',
+        [
             (dict(a=1, b=2, c=3), 'z', 1),
             (dict(a=1, b=2, c=3), 'a', 0),
             (dict(a=1), 'a', 0),
-        ]
+        ],
     )
     def test_has_none(self, data: Collection, target: str, expected: int):
         assert ut.has_none(data, target) == bool(expected)
 
     @pyt.mark.parametrize(
-        'data, mask, expected', [
+        'data, mask, expected',
+        [
             (['a', 'b', 'c'], [0, 1], ['c']),
             (['a', 'b', 'c'], [99], ['a', 'b', 'c']),
             ([], [99], []),
-        ]
+        ],
     )
     def test_drop_at(self, data: list, mask: list[int], expected: list):
         assert ut.drop_at(data, mask) == expected
 
     @pyt.mark.parametrize(
-        'data, expected', [
+        'data, expected',
+        [
             ([], ''),
             (['abc', ''], ''),
             (['abc', 'abZc'], 'ab'),
             (['abc', 'bdc'], ''),
             (['abc', 'abdc', 'a'], 'a'),
-        ]
+        ],
     )
     def test_shared_prefix(self, data: list[str], expected: str):
         assert ut.shared_prefix(*data) == expected
 
     @pyt.mark.parametrize(
-        'data, expected', [
+        'data, expected',
+        [
             ([], ''),
             (['abc', ''], ''),
             (['abc', 'aZbc'], 'bc'),
             (['abc', 'bdc'], 'c'),
             (['abc', 'aZbc', 'c'], 'c'),
-        ]
+        ],
     )
     def test_shared_suffix(self, data: list[str], expected: str):
         assert ut.shared_suffix(*data) == expected
@@ -269,39 +261,42 @@ class TestUtils:
     #     assert ut.multi_rgx(data) == expected
 
     @pyt.mark.parametrize(
-        'data, expected', [
-            (' "hello \'world\' " ', 'hello \'world\''),
+        'data, expected',
+        [
+            (' "hello \'world\' " ', "hello 'world'"),
             ('hello world', 'hello world'),
             ('" _**hello_world**_ "', 'hello_world'),
             ('hello world**', 'hello world**'),
-        ]
+        ],
     )
     def test_strip_quotes(self, data: str, expected: str):
         assert ut.strip_quotes(data) == expected
 
     @pyt.mark.parametrize(
-        'text, expected', [
+        'text, expected',
+        [
             (' a\nb\n ', 'a-b'),
             ('ABC:DEF', 'abc_def'),
             ('a bc : de f', 'a-bc_de-f'),
             ('a,bc : de.f', 'a_bc_def'),
             ('a bc (de f)', 'a-bc_de-f'),
-        ]
+        ],
     )
     def test_clean_string(self, text: str, expected: str):
         assert ut.clean_string(text) == expected
 
     @pyt.mark.parametrize(
-        'text, expected', [
+        'text, expected',
+        [
             ('A', ['A']),
             ('A B', ['A', 'B']),
-            ('A\'B', ['A', 'B']),
+            ("A'B", ['A', 'B']),
             ('A-B', ['A', 'B']),
             ('A_B', ['A_B']),
             ('', []),
             (',!', []),
             ('abc, cde. efg!', ['abc', 'cde', 'efg']),
-        ]
+        ],
     )
     def test_to_words(self, text: str, expected: list[str]):
         assert ut.to_words(text) == expected
@@ -329,7 +324,8 @@ class TestUtils:
     # 5. Semantic Coercion
     # --------------------
     @pyt.mark.parametrize(
-        'roman, decimal', [
+        'roman, decimal',
+        [
             ('I', 1),
             ('II', 2),
             ('III', 3),
@@ -349,13 +345,14 @@ class TestUtils:
             ('', 0),
             ('X: not a roman numeral', 0),
             ('X I', 0),
-        ]
+        ],
     )
     def test_roman_to_decimal(self, roman: str, decimal: int):
         assert ut.roman_to_decimal(roman) == decimal
 
     @pyt.mark.parametrize(
-        'decimal, roman', [
+        'decimal, roman',
+        [
             (1, 'I'),
             (2, 'II'),
             (3, 'III'),
@@ -372,13 +369,14 @@ class TestUtils:
             (111, 'CXI'),
             (1111, 'MCXI'),
             (999, 'CMXCIX'),
-        ]
+        ],
     )
     def test_decimal_to_roman(self, decimal: int, roman: str):
         assert ut.decimal_to_roman(decimal) == roman
 
     @pyt.mark.parametrize(
-        'data, expected', [
+        'data, expected',
+        [
             (dict(a=1, b=2, c=3), [('a', 1), ('b', 2), ('c', 3)]),
             ([('a', 1), ('b', 2), ('c', 3)], [('a', 1), ('b', 2), ('c', 3)]),
             (Counter(['a', 'b', 'b', 'c', 'c', 'c']), [('a', 1), ('b', 2), ('c', 3)]),
@@ -386,7 +384,7 @@ class TestUtils:
             (5, []),
             ([5], []),
             ((1, 2), []),
-        ]
+        ],
     )
     def test_map_items(self, data: Mapping | Sequence, expected: list[tuple[Any, Any]]):
         assert ut.map_items(data) == expected

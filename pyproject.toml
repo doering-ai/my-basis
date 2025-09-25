@@ -16,13 +16,13 @@ dependencies = [
     "logfire[system-metrics]>=4.3.5",
     "mdformat>=0.7.22",
     "more-itertools>=10.7.0",
-    "mypy>=1.17.1",
     "opentelemetry-instrumentation-aiohttp-client>=0.57b0",
     "opentelemetry-instrumentation-asgi>=0.57b0",
     "ovld>=0.5.12",
     "pandas>=2.3.2",
     "pandas-stubs>=2.3.0.250703",
     "pydantic>=2.11.7",
+    "pyright>=1.1.405",
     "pytest>=8.4.1",
     "pytest-asyncio>=1.1.0",
     "pytest-cov>=6.2.1",
@@ -43,9 +43,30 @@ dependencies = [
 # [project.scripts]
 
 [build-system]
-requires      = ["uv_build>=0.8.13,<0.9.0"]
+requires = ["uv_build>=0.8.13,<0.9.0"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]
 module-name = "my"
 module-root = ""
+
+[dependency-groups]
+dev = []
+
+# [tool.mypy]
+# mypy_path = "$MYPY_CONFIG_FILE_DIR/.venv"
+# # python_executable = "/Users/robbd/my/libs/basis/.venv/bin/python"
+# follow_imports = "normal"
+# cache_dir = ".mypy_cache"
+# sqlite_cache = true
+
+# show_error_codes = true
+# warn_unused_ignores = false
+# warn_unreachable = false
+# disable_error_code = ["unused-ignore", "redundant-cast"]
+# # no_warn_no_return = true
+# # exclude = ["tests/.*\\.py$", "migrations/.*\\.py$"]
+
+# # [[tool.mypy.overrides]]
+# # module = "tests.*"
+# # ignore_errors = true

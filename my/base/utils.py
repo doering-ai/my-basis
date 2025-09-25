@@ -29,7 +29,6 @@ import importlib.metadata as impm
 import itertools as it
 import keyword
 import logging as lg
-import logging.handlers
 import os
 import socket
 import subprocess as sbp
@@ -102,14 +101,17 @@ def terminal_linewrap(text: str, indent: int = 0) -> str:
 
 
 def _name_logfile(logger_name: str) -> str:
-    return f"{logger_name}_{posix().strftime('%y%m%d-%H%M%S')}.log"
+    return f'{logger_name}_{posix().strftime("%y%m%d-%H%M%S")}.log'
 
 
 def get_package_name():
     current_module = sys.modules[__name__]
     package_name = current_module.__package__ or __name__
     root_package = package_name.split('.', 1)[0]
-    return impm.packages_distributions().get(root_package, root_package)
+    ret = impm.packages_distributions().get(root_package, root_package)
+    if isinstance(ret, list):
+        ret = ret[0]
+    return ret
 
 
 def setup_py_logging(
@@ -132,7 +134,7 @@ def setup_py_logging(
 
     # I. Name and setup a new file in this dir
     file = logdir / _name_logfile(logger.name)
-    assert not file.exists(), f"Log file {file} already exists."
+    assert not file.exists(), f'Log file {file} already exists.'
 
     file_handler = lg.handlers.RotatingFileHandler(file, maxBytes=maxsize, backupCount=maxcount)
     file_handler.setLevel(lg.DEBUG if is_dev else lg.INFO)
@@ -146,7 +148,7 @@ def setup_py_logging(
         for handler in logger.handlers:
             app.logger.addHandler(handler)
         app.logger.setLevel(logger.level)
-        app.config["DEBUG"] = is_dev
+        app.config['DEBUG'] = is_dev
 
     return logger
 
@@ -159,7 +161,7 @@ def setup_fire_logging(
     app: Any | None = None,
     **kwargs: Any,
 ) -> None:
-    assert fire_token and package, "Tried to initialize fire logging w/o token or package."
+    assert fire_token and package, 'Tried to initialize fire logging w/o token or package.'
 
     try:
         name = impm.metadata(package)['Name']
@@ -173,15 +175,15 @@ def setup_fire_logging(
         token=fire_token,
         service_name=name,
         service_version=version,
-        environment="development" if is_dev else "production",
+        environment='development' if is_dev else 'production',
         send_to_logfire=not is_dev,
         scrubbing=False,
         inspect_arguments=True,
     )
     if is_dev:
         settings['console'] = fire.ConsoleOptions(
-            min_log_level="debug",
-            span_style="indented",
+            min_log_level='debug',
+            span_style='indented',
             show_project_link=False,
         )
     if kwargs:
@@ -249,7 +251,7 @@ def setup_logging(
             **fire_kwargs,
         )
     else:
-        logger.warning("No Fire token provided -- skipping logfire setup.")
+        logger.warning('No Fire token provided -- skipping logfire setup.')
 
     LOGGERS[package] = logger
     return logger
@@ -272,11 +274,11 @@ def setup_metrics(metrics: pyd.DirectoryPath, logger: lg.Logger):
 
     # II. Clear the metrics directory
     if not metrics.exists():
-        logger.info(f"Creating metrics directory at {metrics}.")
+        logger.info(f'Creating metrics directory at {metrics}.')
         metrics.mkdir(exist_ok=True, parents=True)
     elif files := list(metrics.iterdir()):
-        logger.info(f"Clearing {len(files)} files from {metrics}.")
-        sbp.run(f"rm -rf {metrics}/*")
+        logger.info(f'Clearing {len(files)} files from {metrics}.')
+        sbp.run(f'rm -rf {metrics}/*')
     METRICS_SETUP = True
 
 
@@ -285,9 +287,9 @@ def setup_warnings():
     if WARNINGS_SETUP:
         return
 
-    warnings.filterwarnings("ignore", r'.*Support for class-based (?:\S+ +)+is deprecated')
-    warnings.filterwarnings("ignore", r'.*Valid config keys have changed')
-    warnings.filterwarnings("ignore", r'.*pkg_resources is deprecated as an API')
+    warnings.filterwarnings('ignore', r'.*Support for class-based (?:\S+ +)+is deprecated')
+    warnings.filterwarnings('ignore', r'.*Valid config keys have changed')
+    warnings.filterwarnings('ignore', r'.*pkg_resources is deprecated as an API')
     WARNINGS_SETUP = True
 
 
@@ -407,23 +409,25 @@ async def run_command(cmd: str, *args: Any, **kwargs: Any) -> tuple[int, str, st
 def wrap(line: str, prefix: str = '', char: str = '-', width: int = 2) -> str:
     n = (len(line) + 2 + 2 * width) if width else len(line)
     wrapper = prefix + (char * n)
-    return '\n'.join([
-        '',
-        wrapper,
-        prefix + (f'{char*width} {line} {char*width}' if width else line),
-        wrapper,
-    ])
+    return '\n'.join(
+        [
+            '',
+            wrapper,
+            prefix + (f'{char * width} {line} {char * width}' if width else line),
+            wrapper,
+        ]
+    )
 
 
 def validate_dir(*paths: pyd.DirectoryPath) -> bool:
     for path in paths:
-        assert path and path.exists() and path.is_dir(), f"Invalid directory: {path.as_posix()}"
+        assert path and path.exists() and path.is_dir(), f'Invalid directory: {path.as_posix()}'
     return True
 
 
 def validate_file(*paths: pyd.FilePath) -> bool:
     for path in paths:
-        assert path and path.exists() and path.is_file(), f"Invalid file: {path.as_posix()}"
+        assert path and path.exists() and path.is_file(), f'Invalid file: {path.as_posix()}'
     return True
 
 
@@ -432,10 +436,10 @@ async def find_file(pattern: str, root: pyd.DirectoryPath) -> Path | None:
     Find a file matching the given pattern in the specified root directory.
     Returns the first matching file or None if no match is found.
     """
-    assert pattern, "Pattern must not be empty."
-    assert root.exists() and root.is_dir(), f"Invalid directory: {root.as_posix()}"
+    assert pattern, 'Pattern must not be empty.'
+    assert root.exists() and root.is_dir(), f'Invalid directory: {root.as_posix()}'
     code, stdout, stderr = await run_command(
-        fr'find "{root}" -regex ".*\b{pattern}\b"',
+        rf'find "{root}" -regex ".*\b{pattern}\b"',
         _pipe=r'grep -v "node_modules|\.git|\.venv|build|prof"',
     )
     if code == 0 and stdout:
@@ -457,7 +461,7 @@ async def find_files(*names: str, root: pyd.DirectoryPath) -> list[Path]:
             ret.append(root / name[2:])
         else:
             file = await find_file(name, root)
-            assert file is not None, f"File {name} not found in {root.as_posix()}"
+            assert file is not None, f'File {name} not found in {root.as_posix()}'
             ret.append(file)
 
     assert all(file.exists() for file in ret)
@@ -468,7 +472,7 @@ def path_sub(path: Path, old: str, new: str) -> Path:
     parts = path.parts
     if old in parts:
         i = parts.index(old)
-        return Path(*parts[:i], new, *parts[i + 1:])
+        return Path(*parts[:i], new, *parts[i + 1 :])
     else:
         return path
 
@@ -480,7 +484,7 @@ def indent(text: str, n: int = 4) -> str:
 
 
 def unindent(text: str, n: int = 4) -> str:
-    """ Unindent each line in the given string or iterable of strings by n tabs. """
+    """Unindent each line in the given string or iterable of strings by n tabs."""
     fn = ft.partial(re.compile(rf'^ {{1,{n * 4}}}').sub, '')
     return '\n'.join(map(fn, text))
 
@@ -497,7 +501,9 @@ def unwrap_paragraphs(text: str) -> str:
     prose_mask = [bool(PROSE_LINE.match(line)) for line in lines]
 
     acc = lines[0].strip()
-    for (prev, prev_is_prose), (cur, cur_is_prose) in it.pairwise(zip(lines, prose_mask)):
+    for (prev, prev_is_prose), (cur, cur_is_prose) in it.pairwise(
+        zip(lines, prose_mask, strict=True)
+    ):
         if not (_stripped := cur.strip()):
             acc += '\n'
         elif prev_is_prose and cur_is_prose:
@@ -532,7 +538,7 @@ def find(container: Sequence[Value], predicate: Callable[[Value], bool] | Value 
 def find_key(
     items: Mapping[Key, Value] | Iterable[tuple[Key, Value]],
     predicate: Callable[[Value], bool] | Value = bool,
-    default: Key | None = None
+    default: Key | None = None,
 ) -> Key | None:
     """
     Find the first key in the mapping for which the predicate returns True.
@@ -541,7 +547,7 @@ def find_key(
     predicate = predicate if callable(predicate) else predicate.__eq__
     return next(
         (key for key, value in map_items(items) if predicate(value)),  # type:ignore
-        default
+        default,
     )
 
 
@@ -558,7 +564,7 @@ def val_map(
     data: Mapping[Key, Value] | Iterable[tuple[Key, Value]] | Iterable[Key],
     drop: bool = False,
 ) -> dict[Key, T]:
-    """ Map a function over the values of a mapping or iterable, returning a new dictionary. """
+    """Map a function over the values of a mapping or iterable, returning a new dictionary."""
     if not data:
         return {}
     elif items := map_items(data):  # type:ignore
@@ -609,10 +615,9 @@ def bucket(items: Iterable[T], pred: Callable[[T], C]) -> dict[C, list[T]]:
 
 
 def map_condense(
-    items: Mapping[Key, Value] | Iterable[tuple[Key, Value]],
-    pred: Callable[[Value], bool] = bool
+    items: Mapping[Key, Value] | Iterable[tuple[Key, Value]], pred: Callable[[Value], bool] = bool
 ) -> Iterator[tuple[Key, Value]]:
-    """ Filter a mapping by a predicate function. """
+    """Filter a mapping by a predicate function."""
     yield from filter(lambda tup: pred(tup[1]), map_items(items))
 
 
@@ -625,20 +630,15 @@ def get_all(dictionary: dict[str, T], *args: str, mandatory: bool = False) -> di
 
 
 def get_any(
-    dictionary: dict[str, T],
-    *args: str,
-    default: T | None = None,
-    unique: bool = False
+    dictionary: dict[str, T], *args: str, default: T | None = None, unique: bool = False
 ) -> T | None:
     ret: dict[str, T] = {
-        key: dictionary[key]
-        for key in args
-        if dictionary.get(key, default) != default
+        key: dictionary[key] for key in args if dictionary.get(key, default) != default
     }
     if len(ret) == 0:
         return default
     if len(ret) > 1 and unique:
-        raise ValueError(f"Multiple keys found in dictionary: {ret.keys()}")
+        raise ValueError(f'Multiple keys found in dictionary: {ret.keys()}')
     else:
         return list(ret.values())[0]
 
@@ -765,7 +765,7 @@ def common_elements(lhs: Sequence[T] | set[T], rhs: Sequence[T] | set[T]) -> lis
         return list(set(lhs) & set(rhs))
     else:
         c0, c1 = Counter(lhs), Counter(rhs)
-        shared = (set(c0.keys()) & set(c1.keys()))
+        shared = set(c0.keys()) & set(c1.keys())
         return [val for val in shared for _ in range(min(c0[val], c1[val]))]
 
 
@@ -777,9 +777,11 @@ def next_in(container: Container[Value], items: Iterable[Value]) -> Value | None
 # 3. Serialization Functions
 # --------------------------
 def regex_dict(
-    dictionary: dict[T, str | tuple[str, ...] | Pattern] | dict[T, str] = {},
+    dictionary: dict[T, str | tuple[str, ...] | Pattern] | dict[T, str] | None = None,
     compile_function: Callable[..., Pattern] = re.compile,
 ) -> dict[T, Pattern]:
+    if dictionary is None:
+        dictionary = {}
     ret = {}
     for key, val in dictionary.items():
         if isinstance(val, Pattern):
@@ -808,8 +810,8 @@ def spaced_rgx(pattern: str) -> str:
 
 def multi_rgx(*rgxs: str | list[str], sep: str = r' ?', branching: bool = False) -> str:
     parts = [(rgx if isinstance(rgx, str) else sep.join(rgx)) for rgx in rgxs]
-    contents = r"|".join(parts)
-    return rf'(?{"|"if branching else ":"}{contents})'
+    contents = r'|'.join(parts)
+    return rf'(?{"|" if branching else ":"}{contents})'
 
 
 def strip_quotes(string: str) -> str:
@@ -922,7 +924,7 @@ def nested_replace(obj: Collection | pyd.BaseModel, old: Any, new: Any, depth: i
                 if isinstance(obj, list | deque):
                     obj[index] = new
                 elif isinstance(obj, tuple):
-                    obj = tuple(obj[:index] + (new, ) + obj[index + 1:])
+                    obj = tuple(obj[:index] + (new,) + obj[index + 1 :])
             else:
                 obj.remove(old)
                 obj.add(new)
@@ -952,7 +954,7 @@ def nested_replace(obj: Collection | pyd.BaseModel, old: Any, new: Any, depth: i
                 filter(
                     lambda val: val and isinstance(val, Collection | pyd.BaseModel),
                     next_iter,
-                )
+                ),
             )
         )
     return False
@@ -994,7 +996,7 @@ ROMAN_RGX = re.compile(r'(?i)(?:M{1,4}|CM|C?D|D?C{1,3}|XC|X?L|L?X{1,3}|IX|I?V|V?
 
 def decimal_to_roman(decimal: int) -> str:
     ans = ''
-    for i, (char, val) in enumerate(ROMAN_MAP.items()):
+    for char, val in ROMAN_MAP.items():
         while decimal >= val:
             ans += char
             decimal -= val
@@ -1009,7 +1011,7 @@ def decimal_to_roman(decimal: int) -> str:
         x0, x1 = match.span()
         half = ROMAN_ARR[d_idx - 1]
         if x0 > 0 and ans[x0 - 1] == half:
-            ans = ans[:x0 - 1] + char + ROMAN_ARR[d_idx - 2] + ans[x1:]
+            ans = ans[: x0 - 1] + char + ROMAN_ARR[d_idx - 2] + ans[x1:]
         else:
             ans = ans[:x0] + char + half + ans[x1:]
 
@@ -1050,7 +1052,7 @@ def format_amount(amount: int, unit: Literal['num', 'mem'] = 'num', width: int =
         suffix = str(BASELINES[index][1 if unit == 'num' else 2])
         content = round(amount / BASELINES[index][0])
         if width:
-            return f'{content:>{width - len(suffix)}.{width-3}f}{suffix}'
+            return f'{content:>{width - len(suffix)}.{width - 3}f}{suffix}'
         else:
             return f'{content}{suffix}'
     return f'{amount}'
@@ -1103,35 +1105,72 @@ SINGULAR_MAP: list[tuple[str, Callable]] = [
     (r'^(un|sub|self|meta)$', lambda t: t),
     (r'^(nucleus|knowledge|nexus|network)$', lambda t: t),
     (r'^(stratum|society|identity|geist)$', lambda t: t),
-
     # II. Irregulars
     (r'^(media|species|evidence|series|equipment)$', lambda t: t),
     (r'^genera$', lambda t: 'genus'),
     (r'^people$', lambda t: 'person'),
     (r'^synopses$', lambda t: 'synopsis'),
     (r'^(bu|ga|bia)sses$', lambda t: t[:-3]),
-
     # III. Archaics
     (r'(rt|d)ices$', lambda t: t[:-4] + 'ex'),
     (r'(mena|mata)$', lambda t: t[:-1] + 'on'),
     (r'(an?t|[xn]im|cul)a$', lambda t: t[:-1] + 'um'),
     (r'theses$', lambda t: t[:-2] + 'is'),
-
     # IV. Regulars
     (r'ies$', lambda t: t[:-3] + 'y'),
     (r'(canvas|[^oa]us|ss|x|[rt]ch)es$', lambda t: t[:-2]),
     (r'(lea|li|el)ves$', lambda t: t[:-3] + 'f'),
-
     # V. Base Case
-    (r's$', lambda t: t[:-1])
+    (r's$', lambda t: t[:-1]),
 ]
 
 TS_KEYWORDS: list[str] = [
-    'break', 'case', 'catch', 'class', 'const', 'continue', 'debugger', 'default', 'delete', 'do',
-    'else', 'export', 'extends', 'false', 'finally', 'for', 'function', 'if', 'import', 'in',
-    'instanceof', 'new', 'null', 'return', 'super', 'switch', 'this', 'throw', 'true', 'try',
-    'typeof', 'var', 'void', 'while', 'with', 'let', 'static', 'yield', 'await', 'enum',
-    'implements', 'interface', 'package', 'private', 'protected', 'public'
+    'break',
+    'case',
+    'catch',
+    'class',
+    'const',
+    'continue',
+    'debugger',
+    'default',
+    'delete',
+    'do',
+    'else',
+    'export',
+    'extends',
+    'false',
+    'finally',
+    'for',
+    'function',
+    'if',
+    'import',
+    'in',
+    'instanceof',
+    'new',
+    'null',
+    'return',
+    'super',
+    'switch',
+    'this',
+    'throw',
+    'true',
+    'try',
+    'typeof',
+    'var',
+    'void',
+    'while',
+    'with',
+    'let',
+    'static',
+    'yield',
+    'await',
+    'enum',
+    'implements',
+    'interface',
+    'package',
+    'private',
+    'protected',
+    'public',
 ]
 
 
@@ -1141,16 +1180,16 @@ def to_singular(plural: str) -> str:
     for regex, handler in SINGULAR_MAP:
         if re.search(regex, plural):
             singular = handler(plural)
-            assert len(singular) > 0, f"Empty singular form for {plural}"
+            assert len(singular) > 0, f'Empty singular form for {plural}'
             assert is_valid_identifier(singular), f"Can't use reserved identifier: {singular}"
             return singular
 
-    raise ValueError(f"Failed to convert {plural} to singular form.")
+    raise ValueError(f'Failed to convert {plural} to singular form.')
 
 
 def is_valid_identifier(name: str) -> bool:
     w = name.lower()
-    return (not keyword.iskeyword(w) and w.isidentifier() and w not in TS_KEYWORDS)
+    return not keyword.iskeyword(w) and w.isidentifier() and w not in TS_KEYWORDS
 
 
 AUTO_CONFIRM: bool = False
@@ -1175,7 +1214,7 @@ class Locality(pyd.BaseModel):
     ip: pyd.IPvAnyAddress
 
     @staticmethod
-    def build() -> "Locality":
+    def build() -> 'Locality':
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             s.settimeout(0)
             s.connect(('8.8.8.8', 1))

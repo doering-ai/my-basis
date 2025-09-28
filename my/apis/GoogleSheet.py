@@ -8,13 +8,13 @@ import itertools as it
 
 ### EXTERNAL
 from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials as GoogleCredentials
-from google_auth_oauthlib.flow import InstalledAppFlow  # type: ignore[import-untyped]
-from googleapiclient.discovery import build  # type: ignore[import-untyped]
+from google.oauth2.credentials import Credentials as OAuthCredentials
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
+from google.auth.external_account_authorized_user import Credentials as TokenCredentials
 import logfire as fire
 import pandas as pd
 import numpy as np
-from ovld import ovld
 
 ### INTERNAL
 from ..base import utils as ut
@@ -42,12 +42,12 @@ class GoogleSheet:
     worksheets: list[str] = []
 
     # Connection objects
-    gcreds: GoogleCredentials | None = None
+    gcreds: OAuthCredentials | TokenCredentials | None = None
 
     # -------------------
     # `0` Initial Methods
     # -------------------
-    def __new__(cls, *args, **kwargs):
+    def __new__(cls):
         if cls.INST is None:
             cls.INST = super().__new__(cls)
         return cls.INST
@@ -78,7 +78,7 @@ class GoogleSheet:
         self.name = ''
         self.worksheets = []
 
-        fire.info("Closed Google Sheets connection.")
+        fire.info('Closed Google Sheets connection.')
 
     # -------------------
     # `-` Private Methods
@@ -98,16 +98,20 @@ class GoogleSheet:
         return values
 
     @staticmethod
-    def deserialize_data(
-        values: list[list],
-        header: bool = True,
-        index: str = '',
-    ) -> DataFrame:
-        df = DataFrame(values[1:], columns=values[0]) if header else DataFrame(values)
+    def deserialize_data(values: list[list], header: bool = True, index: str = '') -> DataFrame:
+        if not any(values):
+            return DataFrame()
+        if header:
+            head, *rest = values
+            if len(head) < (width := max(map(len, rest)) if rest else 0):
+                head = [*head, *([f'Column {i + 1}' for i in range(len(head), width)])]
+            df = DataFrame(rest, columns=head)
+        else:
+            df = DataFrame(values)
 
         if index:
             df.set_index(index, inplace=True)
-        return df.replace('', np.nan).ffill()
+        return df.fillna('').ffill()
 
     @staticmethod
     def shape_to_range(shape: tuple[int, int], start: str = 'A1') -> str:
@@ -128,9 +132,9 @@ class GoogleSheet:
 
         width, height = shape
         start_col = ''.join(it.takewhile(str.isalpha, start))
-        start_row = start[len(start_col):]
-        assert start_col, f"Invalid start cell provided: {start}."
-        assert start_row.isdigit(), f"Invalid start cell provided: {start}"
+        start_row = start[len(start_col) :]
+        assert start_col, f'Invalid start cell provided: {start}.'
+        assert start_row.isdigit(), f'Invalid start cell provided: {start}'
 
         start_col_num = col_to_num(start_col)
         start_row_num = int(start_row)
@@ -139,7 +143,7 @@ class GoogleSheet:
         end_row_num = start_row_num + height - 1
 
         end_col = num_to_col(end_col_num)
-        return f"{start}:{end_col}{end_row_num}"
+        return f'{start}:{end_col}{end_row_num}'
 
     # -------------------
     # `+` Primary Methods
@@ -165,7 +169,7 @@ class GoogleSheet:
 
         # I. Load locally-cached creds
         if token_file.exists():
-            creds = GoogleCredentials.from_authorized_user_file(token_file.as_posix(), self.SCOPES)
+            creds = OAuthCredentials.from_authorized_user_file(token_file.as_posix(), self.SCOPES)
 
             # II.Refresh token
             if creds and creds.expired and creds.refresh_token:
@@ -173,7 +177,7 @@ class GoogleSheet:
                     creds.refresh(Request())
                     did_change = True
                 except Exception:
-                    fire.info("Failed to refresh credentials!")
+                    fire.info('Failed to refresh credentials!')
                     creds = None
         else:
             creds = None
@@ -184,8 +188,8 @@ class GoogleSheet:
             creds = flow.run_local_server(port=0)
             did_change = True
 
-        assert creds is not None, "Failed to authenticate with Google Sheets."
-        assert creds.valid, "Invalid Google credentials."
+        assert creds is not None, 'Failed to authenticate with Google Sheets.'
+        assert creds.valid, 'Invalid Google credentials.'
 
         # IV. Save the credentials for the next run
         if did_change:
@@ -205,8 +209,8 @@ class GoogleSheet:
         if self.gcreds is None:
             self.auth()
 
-        ret = build("sheets", "v4", credentials=self.gcreds).spreadsheets()
-        assert ret is not None, "Failed to build Google Sheets API."
+        ret = build('sheets', 'v4', credentials=self.gcreds).spreadsheets()
+        assert ret is not None, 'Failed to build Google Sheets API.'
         return ret
 
     @ft.cached_property
@@ -232,17 +236,16 @@ class GoogleSheet:
         Returns:
             A pandas DataFrame with the worksheet data.
         """
-        response = self.exec('get', range=f"{worksheet}!{cells}")
+        response = self.exec('get', range=f'{worksheet}!{cells}')
         return self.deserialize_data(response['values'], header=header, index=index)
 
     def batch_read(self, *args: str, **kwargs: dict[str, Any]) -> dict[str, DataFrame]:
         # I. Issue the request
         n_args = len(args)
         keys = [*args, *kwargs.keys()]
-        response = self.exec(
-            'batchGet',
-            ranges=[(f'{key}!A1:Z' if not ut.has_any(key, '!', ':') else key) for key in keys]
-        )
+        ranges = [(f'{key}!A1:Z' if not ut.has_any(key, '!', ':') else key) for key in keys]
+        response = self.exec('batchGet', ranges=ranges)
+        assert response and 'valueRanges' in response, 'Invalid GoogleSheets response'
 
         # II. Parse the responses in turn
         ret = dict()
@@ -254,34 +257,34 @@ class GoogleSheet:
         if ut.all_has_all(ret.keys(), '!'):
             worksheets = [key.split('!', 1)[0] for key in ret.keys()]
             if len(set(worksheets)) == len(worksheets):
-                ret = {worksheet: val for worksheet, val in zip(worksheets, ret.values())}
+                ret = dict(zip(worksheets, ret.values(), strict=False))
 
         return ret
 
-    @ovld
-    def clear(self, worksheet: str, cells: str):
-        self.exec('clear', range=f'{worksheet}!{cells}')
-        fire.info(f"Successfully cleared range {worksheet}!{cells}")
-
-    @clear.register
-    def clear_batch(self, worksheeets: list[str], cells: list[str]):
-        assert worksheeets and cells, "Must provide at least one worksheeets and cell range."
-        assert len(worksheeets) == len(cells), "Unequal worksheet:cell lists given."
-        self.clear_ranges([f"{ws}!{cs}" for ws, cs in zip(worksheeets, cells)])
-
-    @clear.register
-    def clear_ranges(self, ranges: list[str], *args: Any):
-        response = self.exec('batchClear', body=dict(ranges=ranges))
-        fire.info(f"Successfully cleared ranges {response['clearedRanges']}.")
+    def clear(self, worksheet: list[str] | str, cells: list[str] | str = ''):
+        if isinstance(worksheet, str):
+            assert isinstance(cells, str)
+            self.exec('clear', range=f'{worksheet}!{cells}')
+            fire.info(f'Successfully cleared range {worksheet}!{cells}')
+        else:
+            if cells:
+                assert isinstance(cells, list)
+                assert worksheet and cells, 'Must provide at least one worksheeets and cell range.'
+                assert len(worksheet) == len(cells), 'Unequal worksheet:cell lists given.'
+                ranges = [f'{ws}!{cs}' for ws, cs in zip(worksheet, cells, strict=True)]
+            else:
+                ranges = worksheet
+            response = self.exec('batchClear', body=dict(ranges=ranges))
+            fire.info(f'Successfully cleared ranges {response["clearedRanges"]}.')
 
     def write(self, worksheet: str, data: DataFrame, cells: str = 'A1:Z', **kwargs) -> None:
         response = self.exec(
             'update',
-            range=f"{worksheet}!{cells}",
-            valueInputOption="RAW",
+            range=f'{worksheet}!{cells}',
+            valueInputOption='RAW',
             body={'values': self.serialize_data(data, **kwargs)},
         )
-        fire.info(f"Successfully updated range {response['updatedRange']}")
+        fire.info(f'Successfully updated range {response["updatedRange"]}')
 
     def batch_write(self, **kwargs: DataFrame) -> None:
         requests = []
@@ -292,7 +295,7 @@ class GoogleSheet:
                 index = False
                 if not ut.has_any(target, '!', ':'):
                     h, w = df.shape
-                    target += f'!{self.shape_to_range((w+1, h+1))}'
+                    target += f'!{self.shape_to_range((w + 1, h + 1))}'
                     header = True
                     index = True
                 elif 'A1' in target:
@@ -307,9 +310,9 @@ class GoogleSheet:
                 )
 
             # II. Issue the batch request
-            response = self.exec('batchUpdate', body=dict(valueInputOption="RAW", data=requests))
+            response = self.exec('batchUpdate', body=dict(valueInputOption='RAW', data=requests))
             for resp in response['responses']:
-                fire.info(f"Successfully updated range {resp['updatedRange']}")
+                fire.info(f'Successfully updated range {resp["updatedRange"]}')
 
     def add_worksheets(self, *args: str, **kwargs: Any) -> None:
         worksheets = [
@@ -321,14 +324,14 @@ class GoogleSheet:
             'batchUpdate',
             body=dict(
                 requests=[dict(addSheet=dict(properties=worksheet)) for worksheet in worksheets],
-            )
+            ),
         )
         for reply in response['replies']:
             name = reply['addSheet']['properties']['title']
             if name not in self.worksheets:
                 self.worksheets.append(name)
 
-        fire.info(f"Created {len(worksheets)} new worksheets in {self.name}")
+        fire.info(f'Created {len(worksheets)} new worksheets in {self.name}')
 
 
 gsheet = GoogleSheet()

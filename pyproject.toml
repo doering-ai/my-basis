@@ -9,6 +9,7 @@ dependencies = [
     "aiohttp>=3.12.15",
     "better-exceptions>=0.3.3",
     "coverage>=7.10.5",
+    "dotenv>=0.9.9",
     "google-api-python-client>=2.179.0",
     "google-auth-httplib2>=0.2.0",
     "google-auth-oauthlib>=1.2.2",

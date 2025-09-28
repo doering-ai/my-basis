@@ -10,6 +10,7 @@ import os
 
 ### EXTERNAL
 import pydantic as pyd
+import dotenv
 
 ### INTERNAL
 
@@ -94,4 +95,5 @@ class Environment(pyd.BaseModel):
         return Environment._flag(key, default)
 
 
+dotenv.load_dotenv()
 env = Environment()

@@ -1140,20 +1140,20 @@ TS_KEYWORDS: list[str] = [
 
 def to_singular(plural: str) -> str:
     plural = plural.lower()
-    assert is_valid_identifier(plural), f"Can't use reserved identifier: {plural}"
     for regex, handler in SINGULAR_MAP:
         if re.search(regex, plural):
             singular = handler(plural)
             assert len(singular) > 0, f'Empty singular form for {plural}'
-            assert is_valid_identifier(singular), f"Can't use reserved identifier: {singular}"
             return singular
 
     raise ValueError(f'Failed to convert {plural} to singular form.')
 
 
-def is_valid_identifier(name: str) -> bool:
-    w = name.lower()
-    return not keyword.iskeyword(w) and w.isidentifier() and w not in TS_KEYWORDS
+def validate_identifier(*symbols: str) -> None:
+    for sym in symbols:
+        assert not keyword.iskeyword(sym), f'Symbol {sym} is invalid (Python keyword)'
+        assert sym.isidentifier(), f'Symbol {sym} is invalid (not a valid python identifier)'
+        assert sym not in TS_KEYWORDS, f'Symbol {sym} is invalid (TypeScript keyword)'
 
 
 AUTO_CONFIRM: bool = False

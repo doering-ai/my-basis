@@ -851,7 +851,7 @@ def parse_domain(url: str, default: str = '') -> str:
 # ------------------
 # 4. Code Reflection
 # ------------------
-@ft.lru_cache(maxsize=1024)
+# @ft.lru_cache(maxsize=1024)
 def instance_fields(cls: type[pyd.BaseModel]) -> dict[str, type]:
     return {
         field: info.annotation
@@ -1028,8 +1028,8 @@ def format_amount(amount: int, unit: Literal['num', 'mem'] = 'num', width: int =
 def map_items(value: object) -> list[tuple[Any, Any]]:
     if not value:
         pass
-    elif hasattr(value, 'items') and callable(value.items):
-        return list(value.items())
+    elif (fn := getattr(value, 'items', None)) and callable(fn):
+        return list(fn())  # type:ignore
     elif isinstance(value, Series) and all(isinstance(v, tuple) and len(v) == 2 for v in value):
         return list(value)
     return []
@@ -1059,9 +1059,9 @@ PydDataFrame = Annotated[pd.DataFrame, pyd_schemify(pd.DataFrame)]
 # 7. CLI interaction
 # ------------------
 def print_in_color(text: str) -> None:
-    # Use zsh to process the prompt expansion
-    code, stdout, stderr = command(f'zsh -c print -P "{text}"')
-    print(stdout)
+    """Use zsh to process the prompt expansion."""
+    ret = sbp.run(f'zsh -c \'print -P "{text}"\'', capture_output=True, text=True, shell=True)
+    print((ret.stdout or '').strip('\n'))
 
 
 SINGULAR_MAP: list[tuple[str, Callable]] = [

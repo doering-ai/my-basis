@@ -23,7 +23,7 @@ Value = TypeVar('Value')
 
 class PickleCache(pyd.BaseModel, Generic[Key, Value]):
     file: Path
-    func: Callable[[], Coroutine[None, None, dict[Key, Value]]]
+    func: Callable[[], Coroutine[None, None, dict[Key, Value]]] | None = None
     data: dict[Key, Value] = {}
     ttl: timedelta = timedelta(days=1)
 
@@ -59,7 +59,7 @@ class PickleCache(pyd.BaseModel, Generic[Key, Value]):
             if self.last_write:
                 self.data = pkl.loads(self.file.read_bytes())
                 self.last_read = posix()
-        else:
+        elif self.func is not None:
             # III. Fetch anew and cache
             self.data = await self.func()
             self.write()

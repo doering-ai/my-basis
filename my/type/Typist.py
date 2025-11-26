@@ -6,6 +6,7 @@ from typing import (
     Any,
     ClassVar,
     Collection,
+    Callable,
     Iterable,
     Iterator,
     Literal,
@@ -26,9 +27,10 @@ import more_itertools as mi
 from datetime import date, datetime, time, timedelta, timezone
 from enum import Enum
 from copy import deepcopy
-import json
 import textwrap
 import pickle
+import inspect
+import contextlib as ctx
 
 ### EXTERNAL
 import logfire as fire
@@ -203,7 +205,7 @@ class Typist(pyd.BaseModel):
         if origin == tvar:
             return -99
 
-        for t0, t1 in filter(all, zip(*map(self.parse, (origin, tvar)))):
+        for t0, t1 in filter(all, zip(*map(self.parse, (origin, tvar)), strict=True)):
             ret -= 1
             if self.match(t0, t1):
                 ret -= 2
@@ -229,13 +231,16 @@ class Typist(pyd.BaseModel):
             # III. The lengths must match exactly
             return False
 
-        return all(it.starmap(isinstance, zip(value, args)))
+        return all(it.starmap(isinstance, zip(value, args, strict=True)))
 
     def _cast(self, data: object, target: type, ktype: TypeArg, vtype: TypeArg) -> Any:
         # 0. Pick one value out of series data, if configured to
-        if issubclass(target, Atomic | TimeType) and isinstance(data, Series):
-            if self.firsts or (self.atomics and len(data) == 1):
-                data = mi.first(data)
+        if (
+            issubclass(target, Atomic | TimeType)
+            and isinstance(data, Series)
+            and (self.firsts or (self.atomics and len(data) == 1))
+        ):
+            data = mi.first(data)
 
         # I. Cast atomics
         if issubclass(target, Atomic):
@@ -341,22 +346,83 @@ class Typist(pyd.BaseModel):
 
         return ''
 
+    def _accepts(self, sig: Callable | inspect.Signature, value: object) -> bool | str | None:
+        """Inspect a function"""
+        # I. Coerce to signature if needed
+        if not isinstance(sig, inspect.Signature):
+            assert callable(sig), f'Invalid function provided: {sig}'
+            sig = inspect.signature(sig)
+
+        # II. Walk through params until we find missing required params, or a matching valid one
+        ret = None
+        for i, (name, param) in enumerate(sig.parameters.items()):
+            # II.i. Determine param kind, and skip variable ones (*args & **kwargs)
+            is_pos = param.kind in {param.POSITIONAL_ONLY, param.POSITIONAL_OR_KEYWORD}
+            is_kwd = param.kind in {param.KEYWORD_ONLY, param.POSITIONAL_OR_KEYWORD}
+            if not is_pos or is_kwd:
+                continue
+
+            # II.ii. Flag the first match, or return false if a required param is missing
+            has_default = param.default is not inspect.Parameter.empty
+            if ret is None and self.check(value, param.annotation):
+                if is_kwd:
+                    ret = name
+                elif is_pos:
+                    if i == 0:
+                        ret = True
+                    elif not has_default:
+                        return False
+            elif not has_default:
+                return False
+
+        return ret
+
+    def _accepts_kwargs(self, sig: Callable | inspect.Signature) -> bool:
+        # I. Coerce to signature if needed
+        if not isinstance(sig, inspect.Signature):
+            assert callable(sig), f'Invalid function provided: {sig}'
+            sig = inspect.signature(sig)
+
+        # II. Check for **kwargs param
+        return inspect.Parameter.VAR_KEYWORD in {p.kind for p in sig.parameters.values()}
+
+    def flex_call(self, func: Callable, value: object) -> tuple[bool, Any]:
+        """Attempt to call a function with the given value."""
+        sig = inspect.signature(func)
+        slot = self._accepts(sig, value)
+        if isinstance(slot, bool):
+            return slot, (func(value) if slot else None)
+        elif isinstance(slot, str):
+            return True, func(**{slot: value})
+        elif self._accepts_kwargs(sig) and (items := ut.map_items(value)):
+            return True, func(**dict(items))
+
+        return False, None
+
     def _cast_to_model(self, data: object, target: type[pyd.BaseModel]) -> object:
         if hasattr(target, 'new') and callable(target.new):
-            # I. Shortcut to the "new" function, assuming it's ready to handle a basic data arg
-            return target.new(data)
-        elif items := ut.map_items(data):
+            # I. First, try to use the semi-standard `new()` method if available
+            success, ret = self.flex_call(target.new, data)
+            if success:
+                return ret
+
+        if items := ut.map_items(data):
             # II. Else, cast all the data and then pass it in to the normal pydantic constructor
             return target(**self._cast_model_members(items, target))
+
         return data
 
     def _cast_to_enum(self, data: object, target: type[Enum]) -> object:
-        if hasattr(target, 'read'):
-            return target.read(data)
-        elif isinstance(data, str):
-            return target.__members__.get(data.upper(), data)
+        if hasattr(target, 'read') and callable(target.read):
+            success, ret = self.flex_call(target.read, data)
+            if success:
+                return ret
         elif isinstance(data, int):
             return target(data)
+        elif isinstance(data, str):
+            return (
+                target(int(data)) if data.isdigit() else target.__members__.get(data.upper(), data)
+            )
         return data
 
     def _cast_to_time(self, data: object, target: type[TimeType]) -> TimeType | None:
@@ -428,7 +494,13 @@ class Typist(pyd.BaseModel):
         # III. Handle maps
         if items := ut.map_items(data):
             keys, values = mi.unzip(items)
-            return dict(zip(self.flexcast_all(keys, ktype), self.flexcast_all(values, vtype)))
+            return dict(
+                zip(
+                    self.flexcast_all(keys, ktype),
+                    self.flexcast_all(values, vtype),
+                    strict=True,
+                )
+            )
         elif issubclass(target, Counter) and isinstance(data, Series) and ktype:
             return self.flexcast_all(data, ktype)
 
@@ -456,7 +528,9 @@ class Typist(pyd.BaseModel):
         # II. Perform the actual casting
         if issubclass(target, tuple) and isinstance(ktype, tuple):
             assert len(data) == len(ktype), f'Cannot cast {data} to tuple {target}.'
-            return tuple(self.flexcast(item, itype) for item, itype in zip(data, ktype))
+            return tuple(
+                self.flexcast(item, itype) for item, itype in zip(data, ktype, strict=True)
+            )
         elif vtype:
             return self.flexcast_all(data, vtype)
         return data
@@ -631,14 +705,14 @@ class Typist(pyd.BaseModel):
             values = list(values)
 
         target_names = [
-            ut.find_key(self.DESERIALIZE_RGXS, lambda rgx: bool(rgx.fullmatch(val)))
+            next((name for name, rgx in self.DESERIALIZE_RGXS.items() if rgx.fullmatch(val)), None)
             for val in values
         ]
         if any(target_names):
             targets = [self.ATOMIC_TYPES.get(name, None) if name else None for name in target_names]
             return [
                 self._cast(val, target, None, None) if target else val
-                for val, target in zip(values, targets)
+                for val, target in zip(values, targets, strict=True)
             ]
         else:
             return values
@@ -646,9 +720,15 @@ class Typist(pyd.BaseModel):
     def normalize_text(
         self,
         text: str,
-        text_map: dict[str, str] = {},
-        code_map: dict[str, str] = {},
+        text_map: dict[str, str] | None = None,
+        code_map: dict[str, str] | None = None,
     ) -> str:
+        # Cleanup mutable args
+        if text_map is None:
+            text_map = {}
+        if code_map is None:
+            code_map = {}
+
         # Perform manual replacements of abnormal characters
         for old, new in text_map.items():
             text = text.replace(old, new)
@@ -694,7 +774,9 @@ class Typist(pyd.BaseModel):
         # II. Check structures
         if isinstance(data, tuple) and ktype and isinstance(ktype, tuple):
             # IV. Handle heterogenous tuple types
-            return (len(data) == len(ktype)) and all(it.starmap(isinstance, zip(data, ktype)))
+            return (len(data) == len(ktype)) and all(
+                it.starmap(isinstance, zip(data, ktype, strict=True))
+            )
         elif ktype and vtype and (items := ut.map_items(data)):  # type: ignore
             # V. Handle maps
             keys, values = mi.unzip(items)
@@ -765,17 +847,17 @@ class Typist(pyd.BaseModel):
             return self.assemble(base, *rest, copy=False)
         return base
 
-    def distill(self, models: list[dict], exclude: set[str] = set()) -> dict:
+    def distill(self, models: list[dict], exclude: set[str] | None = None) -> dict:
         """
-        Finds and removes all the key/val pairs that are common to all the given models, returning them
-        as a new partial model.
+        Finds and removes all the key/val pairs that are common to all the given models, returning
+        them as a new partial model.
         """
         assert len(models) > 1, f'At least two models are required to distill, got {len(models)}.'
 
         base, *rest = models
         distillate: dict = {}
         for key in set(base.keys()):
-            if key in exclude or not ut.all_has_all(rest, key):
+            if (exclude and key in exclude) or not ut.all_has_all(rest, key):
                 continue
 
             _type = type(base[key])
@@ -869,18 +951,18 @@ class Typist(pyd.BaseModel):
             return {}
         elif isinstance(data, Path):
             ut.validate_file(data)
-            return srsly.read_json(data)
+            return srsly.read_json(data)  # ty: ignore
         elif isinstance(data, bytes):
             data = data.decode('utf-8')
 
-        return srsly.json_loads(data)
+        return srsly.json_loads(data)  # ty: ignore
 
     def from_yaml(self, data: str | bytes | File | None) -> dict:
         if not data:
             return {}
         elif isinstance(data, Path):
             ut.validate_file(data)
-            return srsly.read_yaml(data)
+            return srsly.read_yaml(data)  # ty: ignore
         elif isinstance(data, bytes):
             data = data.decode('utf-8')
 
@@ -889,7 +971,7 @@ class Typist(pyd.BaseModel):
             data = '\n\n'.join(self.RGXS['yaml'].findall(data))
 
         # II. Attempt to parse in-memory YAML strings
-        return srsly.yaml_loads(data)
+        return srsly.yaml_loads(data)  # ty: ignore
 
     def to_file(self, data: Sequence | set | dict | pyd.BaseModel, file: File) -> None:
         if not file:
@@ -899,7 +981,7 @@ class Typist(pyd.BaseModel):
         if file.suffix in ['.yml', '.yaml']:
             file.write_text(self.to_yaml(data))
         elif file.suffix in ['.json']:
-            file.write_text(srsly.json_dumps(data))
+            file.write_text(self.to_json(data))
         elif file.suffix in ['.pkl']:
             pickle.dump(data, file.open('wb'))
         else:
@@ -942,7 +1024,7 @@ class Typist(pyd.BaseModel):
             return None
         elif self.check(data, tvar):
             # I. Return the data as-is if it already matches the target type
-            return data
+            return data  # type:ignore[return-value]
 
         # II. Return a no-op for unparseable targets
         target, ktype, vtype = self.parse(tvar)
@@ -951,7 +1033,7 @@ class Typist(pyd.BaseModel):
 
         # III. When given abstract classes, arbitrarily choose a concrete type
         elif target in [abc.Mapping, Mapping]:
-            if isinstance(data, Mapping) and (_t := self.parse(type(data))[0]):
+            if isinstance(data, Mapping) and (_t := self.parse(type(data))[0]):  # noqa: SIM108
                 target = _t
             else:
                 target = dict
@@ -985,10 +1067,8 @@ class Typist(pyd.BaseModel):
                 if is_optional:
                     return ret
         else:
-            try:
+            with ctx.suppress(Exception):
                 ret = self.cast(data, tvar)  # type:ignore
-            except Exception:
-                pass
 
         return ret if ret is not None else data
 

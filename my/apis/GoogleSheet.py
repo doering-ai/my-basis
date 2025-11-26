@@ -14,7 +14,6 @@ from googleapiclient.discovery import build
 from google.auth.external_account_authorized_user import Credentials as TokenCredentials
 import logfire as fire
 import pandas as pd
-import numpy as np
 
 ### INTERNAL
 from ..base import utils as ut

@@ -301,7 +301,7 @@ def _instrument(
     def wrapper(*args: Any, **kwargs: Any):
         start = int(perf_counter_ns())
         ret = func(*args, **kwargs)
-        _measure(func.__name__, counter, start)
+        _measure(getattr(func, '__name__', 'unknown'), counter, start)
 
         return ret
 
@@ -309,7 +309,7 @@ def _instrument(
     async def async_wrapper(*args: Any, **kwargs: Any):
         start = int(perf_counter_ns())
         ret = await func(*args, **kwargs)
-        _measure(func.__name__, counter, start)
+        _measure(getattr(func, '__name__', 'unknown'), counter, start)
 
         return ret
 
@@ -901,7 +901,7 @@ def nested_replace(obj: Collection | pyd.BaseModel, old: Any, new: Any, depth: i
             obj[key] = new  # type:ignore
             return True
         else:
-            next_iter = list(obj.values())
+            next_iter = list(obj.values())  # ty: ignore[invalid-assignment]
 
     elif isinstance(obj, pyd.BaseModel):
         attrs = attr_map(obj, instance_fields(type(obj)).keys())
@@ -1031,7 +1031,7 @@ def map_items(value: object) -> list[tuple[Any, Any]]:
     elif (fn := getattr(value, 'items', None)) and callable(fn):
         return list(fn())  # type:ignore
     elif isinstance(value, Series) and all(isinstance(v, tuple) and len(v) == 2 for v in value):
-        return list(value)
+        return list(value)  # type: ignore
     return []
 
 

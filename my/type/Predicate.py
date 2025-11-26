@@ -141,7 +141,7 @@ class Predicate(pyd.BaseModel):
                 ret[field] = cls._abbreviate(values)
             else:
                 # II. Decast simple, atomic types (i.e. int, float, and bool)
-                if ut.any_has_any(values, '\n'):
+                if ut.any_has_any(values, '\n'):  # type: ignore
                     values = list(map(cls._escape, values))
                 _vals = typist.flex_deserialize(values)
 
@@ -329,7 +329,7 @@ class Predicate(pyd.BaseModel):
             return obj in self.data
         elif isinstance(obj, Series) and typist.all_are(obj, str):
             # II. Check for a collection of keys
-            return self.has_all(*obj)
+            return self.has_all(*obj)  # type: ignore
         else:
             # III. Check for key: value pairs (NOT paying attention to value ordering)
             other = Predicate.new(obj, duplicates=self.duplicates)

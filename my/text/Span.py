@@ -30,13 +30,13 @@ class Span(tuple[int, int]):
 
         if isinstance(arg0, Series):
             # I. Handle tuple input
-            assert len(arg0) == 2, "Tuple must have exactly 2 elements"
+            assert len(arg0) == 2, 'Tuple must have exactly 2 elements'
             x0, x1 = int(arg0[0]), int(arg0[1])
 
         elif isinstance(arg0, str):
             # II. Handle string input with delimiters
             parts = cls.DELIM_RGX.split(arg0)
-            assert 0 < len(parts) <= 2, f"Cannot parse span from string: {arg0}"
+            assert 0 < len(parts) <= 2, f'Cannot parse span from string: {arg0}'
             if len(parts) == 2:
                 x0, x1 = int(parts[0]), int(parts[1])
             else:
@@ -50,10 +50,10 @@ class Span(tuple[int, int]):
             # IV. Handle numeric input with second argument
             x0, x1 = int(arg0), int(arg1)
         else:
-            assert False, "Must provide either a tuple/string or two numeric arguments"
+            raise ValueError('Must provide either a tuple/string or two numeric arguments')
 
         # Create and return the tuple
-        assert x0 <= x1, f"Invalid span: {x0} > {x1}"
+        assert x0 <= x1, f'Invalid span: {x0} > {x1}'
         return super().__new__(cls, (x0, x1))
 
     @property
@@ -64,7 +64,7 @@ class Span(tuple[int, int]):
         return f'Span({self[0]}, {self[1]})'
 
     def __lt__(self, other: object) -> bool:
-        if isinstance(other, tuple) and len(other) == 2:
+        if isinstance(other, tuple) and len(other) == 2 and isinstance(other[0], int):
             return self[0] < other[0]
         return False
 
@@ -80,7 +80,7 @@ class Span(tuple[int, int]):
         elif p0 == p1 - 1:
             return f'{p0}'
         else:
-            return f'{p0}-{p1-1}'
+            return f'{p0}-{p1 - 1}'
 
     def __bool__(self) -> bool:
         return self[0] != self[1]
@@ -88,17 +88,17 @@ class Span(tuple[int, int]):
     def __hash__(self) -> int:
         return hash(self[0]) ^ hash(self[1])
 
-    def __contains__(self, item: object) -> bool:
+    def __contains__(self, value: object) -> bool:
         p0, p1 = self
         if p0 == p1:
             return False
-        elif isinstance(item, int):
-            return self[0] <= item < self[1]
-        elif isinstance(item, tuple) and len(item) == 2:
-            i0, i1 = item
-            return p0 < i1 and i0 < p1
-        else:
-            return False
+        elif isinstance(value, int):
+            return self[0] <= value < self[1]
+        elif isinstance(value, tuple) and len(value) == 2:
+            i0, i1 = value
+            if isinstance(i0, int) and isinstance(i1, int):
+                return p0 < i1 and i0 < p1
+        return False
 
     def intersects(self, other: 'Span|tuple[int, int]') -> bool:
         return other in self
@@ -107,16 +107,17 @@ class Span(tuple[int, int]):
         if isinstance(other, int):
             return Span((self[0] + other, self[1] + other))
         if isinstance(other, (tuple, list)) and len(other) == 2:
-            return Span((self[0] + other[0], self[1] + other[1]))
-        else:
-            return self
+            o0, o1 = other
+            if isinstance(o0, int) and isinstance(o1, int):
+                return Span((self[0] + o0, self[1] + o1))
+        return self
 
     @staticmethod
     def serialize(*args: 'Span|tuple[int, int]') -> str:
         return DELIM.join(map(str, args))
 
     @classmethod
-    def parse(cls, text: str) -> "Span":
+    def parse(cls, text: str) -> 'Span':
         segments = cls.DELIM_RGX.split(text)
         if len(segments) == 2 and all(map(str.isdigit, segments)):
             # Account for ommitted digits (e.g. 432-33, or even 432-3)
@@ -140,7 +141,7 @@ class Span(tuple[int, int]):
         return Span(min(self[0], other[0]), max(self[1], other[1]))
 
     @classmethod
-    def merge(cls, *args: "tuple[int, int]|Span") -> list['Span']:
+    def merge(cls, *args: 'tuple[int, int]|Span') -> list['Span']:
         spans = list(sorted(set(map(Span, args))))
         i = 0
         while i < len(spans) - 1:

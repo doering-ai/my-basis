@@ -49,7 +49,7 @@ class EnumSetType(sa.TypeDecorator, Generic[E]):
     def load_dialect_impl(self, dialect):
         return dialect.type_descriptor(psql.ARRAY(sa.String(64)))
 
-    def bind_expression(self, bindvalue):
+    def bind_expression(self, bindvalue):  # type: ignore
         """Ensure proper casting when binding values."""
         return sa.cast(bindvalue, self)
 

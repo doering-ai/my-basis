@@ -4,7 +4,16 @@
 ### STANDARD
 from collections import deque
 from typing import (
-    Iterable, Iterator, Literal, ClassVar, Any, Callable, Generator, TypeVar, Mapping, Self
+    Iterable,
+    Iterator,
+    Literal,
+    ClassVar,
+    Any,
+    Callable,
+    Generator,
+    TypeVar,
+    Mapping,
+    Self,
 )
 import functools as ft
 import itertools as it
@@ -29,6 +38,9 @@ from .ParseData import ParseData
 DEBUG = False
 re.DEFAULT_VERSION = re.VERSION1
 
+NO_KIND = GroupKind(0)
+NO_FLAG = RegexFlag(0)
+
 # General type aliases
 Params = dict[str, str]
 Captures = dict[str, list[str]]
@@ -46,14 +58,18 @@ RgxParser = (
     | Callable[[str], dict[str, str] | str]  # 3rd case: combo of above two
 )
 
-RgxTup = tuple[str, "RgxList"] | tuple[str, str, "RgxList", str]
-RgxList = Iterable["RgxVal"]
+RgxTup = tuple[str, 'RgxList'] | tuple[str, str, 'RgxList', str]
+RgxList = Iterable['RgxVal']
 RgxVal = str | RgxList | RgxTup | Pattern | dict
 RgxDef = (
-    str | tuple[str, RgxParser]  # Raw/simple content
-    | RgxTup | tuple[RgxTup, RgxParser]  # Single piece of uncompiled content
-    | RgxList | tuple[RgxList, RgxParser]  # Series of uncompiled content
-    | Pattern | tuple[Pattern, RgxParser]  # Compiled content
+    str
+    | tuple[str, RgxParser]  # Raw/simple content
+    | RgxTup
+    | tuple[RgxTup, RgxParser]  # Single piece of uncompiled content
+    | RgxList
+    | tuple[RgxList, RgxParser]  # Series of uncompiled content
+    | Pattern
+    | tuple[Pattern, RgxParser]  # Compiled content
 )
 
 # A buffer built to hold Regex patterns
@@ -80,19 +96,24 @@ class RegexStore(pyd.BaseModel, arbitrary_types_allowed=True):
     NO_ESC: ClassVar[str] = NO_ESC
     RGXS: ClassVar[dict[str, Pattern]] = ut.regex_dict(
         dict(
-            struct_mark=''.join([
-                r'(?P<divis><\|>|\||\[.*?\])?',
-                r'(?P<group>[:>&|]|<?[=!]|P<\w+>)?',
-                rf'{FLAGS}?(?P<quant>{QUANT})',
-            ]),
+            struct_mark=''.join(
+                [
+                    r'(?P<divis><\|>|\||\[.*?\])?',
+                    r'(?P<group>[:>&|]|<?[=!]|P<\w+>)?',
+                    rf'{FLAGS}?(?P<quant>{QUANT})',
+                ]
+            ),
             set=NO_ESC + ut.multi_rgx(r'(?P<start>\[)', rf'(?P<end>\]{QUANT})'),
-            group=NO_ESC + ut.multi_rgx(
+            group=NO_ESC
+            + ut.multi_rgx(
                 rf'(?P<start>\((?:\?(?>[:>&|]|<?[=!]|P[=<]|{FLAGS}:)?)?)',
                 rf'(?P<end>\){QUANT})',
             ),
             inline_flags=rf'{NO_ESC}\(\?{FLAGS}:',
-            atom=NO_ESC + ut.multi_rgx(
-                r'\\' + ut.multi_rgx(
+            atom=NO_ESC
+            + ut.multi_rgx(
+                r'\\'
+                + ut.multi_rgx(
                     r'\d+|g<\d+>',
                     r'L<\w+>',
                     r'[Pp]\{[[:alpha:]]+\}',
@@ -100,7 +121,8 @@ class RegexStore(pyd.BaseModel, arbitrary_types_allowed=True):
                 ),
                 r'(?<!\[)\[(?s:[^\\\[\]]+|\\.|\[.+?\])*\](?!\])',
                 r'[^\\]',
-            ) + QUANT,
+            )
+            + QUANT,
             quant=NO_ESC + r'(?:\?|(?:[*+]|\{\d+(?:,\d*)?\})[?+]?)$',
             set_operator=rf'^\[?(?:\^|[^\[].*?{NO_ESC}(?>--?|~~|&&|\|\|))',
             special_characters=NO_ESC + r'([+*?()|.^$])',
@@ -141,14 +163,18 @@ class RegexStore(pyd.BaseModel, arbitrary_types_allowed=True):
     @classmethod
     def new(
         cls,
-        options: dict[str, Any] = dict(),
-        imports: list[tuple['RegexStore', Iterable[str]]] = [],
+        options: dict[str, Any] | None = None,
+        imports: list[tuple['RegexStore', Iterable[str]]] | None = None,
         **params: RgxDef | Any,
     ) -> Self:
         """
         Create a new RegexStore, populating internal fields appropriately by transforming the
         given inputs. All extra/dynamic params are interpreted as patterns.
         """
+        if options is None:
+            options = {}
+        if imports is None:
+            imports = []
         store = cls(**options)
 
         for source, names in imports:
@@ -257,11 +283,13 @@ class RegexStore(pyd.BaseModel, arbitrary_types_allowed=True):
                 if cls._is_group(atom) and ('|' in atom or len(atom) > 48):
                     kind, start, flags, body, quant = cls._parse_group(atom)
                     line.append(
-                        '\n'.join([
-                            f'{start}{"(?"+flags+")" if flags else ""}',
-                            cls._tree_print(body, depth + 1),
-                            f'{indent}){quant}',
-                        ])
+                        '\n'.join(
+                            [
+                                f'{start}{"(?" + flags + ")" if flags else ""}',
+                                cls._tree_print(body, depth + 1),
+                                f'{indent}){quant}',
+                            ]
+                        )
                     )
                 else:
                     line.append(atom)
@@ -271,7 +299,7 @@ class RegexStore(pyd.BaseModel, arbitrary_types_allowed=True):
     def tree_print(self, pattern: str | Pattern | Buffer, print_head: bool = True) -> str:
         text = self.sanitize_pattern(pattern)
         *head_arr, body = text.split('\n)(', 1)
-        body = body[body.index('>') + 1:-1]
+        body = body[body.index('>') + 1 : -1]
         ret = self._tree_print(body)
         return f'{head_arr[0]}\n){ret}' if print_head and head_arr else ret
 
@@ -308,7 +336,7 @@ class RegexStore(pyd.BaseModel, arbitrary_types_allowed=True):
             group = '|'
         elif sep == '<|>' and not group:
             group = '>'
-        elif len(sep) >= 2 and sep[0] == '[' and sep[-1] == ']':
+        elif len(sep) >= 2 and sep[0] == '[' and sep[-1] == ']':  # type: ignore
             sep = sep[1:-1]
         elif not sep:
             sep = self.separator
@@ -327,12 +355,12 @@ class RegexStore(pyd.BaseModel, arbitrary_types_allowed=True):
     def parse_group_kind(cls, group: str) -> GroupKind:
         return next(
             (kind for prefix, kind in reversed(GROUP_KIND_MAP.items()) if group.startswith(prefix)),
-            GroupKind(0)
+            GroupKind(0),
         )
 
     @classmethod
     def set_iterator(cls, text: Buffer | str | list[str]) -> Iterator[tuple[Span, str, str]]:
-        """ Returns: [span, body, quant] """
+        """Returns: [span, body, quant]"""
         if isinstance(text, list):
             text = ''.join(text)
         if isinstance(text, str):
@@ -345,7 +373,7 @@ class RegexStore(pyd.BaseModel, arbitrary_types_allowed=True):
     def group_iterator(
         cls,
         text: Buffer | str | list[str],
-        mask: GroupKind = GroupKind(0),
+        mask: GroupKind = NO_KIND,
         mode: Literal['all', 'roots', 'leaves'] = 'all',
     ) -> Iterator[tuple[Span, GroupKind, str, str, str]]:
         # Cast the input text to a charset-ignoring buffer
@@ -363,14 +391,15 @@ class RegexStore(pyd.BaseModel, arbitrary_types_allowed=True):
 
             if kind in GroupKind._NAMED:
                 name = body.split('>', 1)[0]
-                body = body[len(name) + 1:]
+                body = body[len(name) + 1 :]
             else:
                 name = ''
             yield span, kind, name, body, end[1:]
 
-    def _validate_params(self, patterns: str | Iterable[str],
-                         text: str | Buffer) -> tuple[Iterable[str], str]:
-        """ Validate the usual public paramaters, returning a guaranteed Buffer. """
+    def _validate_params(
+        self, patterns: str | Iterable[str], text: str | Buffer
+    ) -> tuple[Iterable[str], str]:
+        """Validate the usual public paramaters, returning a guaranteed Buffer."""
         if isinstance(patterns, str):
             patterns = [patterns]
         assert ut.has_all(self.patterns, *patterns), f'Unknown pattern(s): {patterns}'
@@ -379,7 +408,9 @@ class RegexStore(pyd.BaseModel, arbitrary_types_allowed=True):
     @staticmethod
     def _validate_tuple(data: tuple, types: tuple[type, ...]) -> None:
         assert len(data) == len(types), f'Invalid tuple: {data}'
-        assert all(isinstance(v, t) for v, t in zip(data, types)), f'Invalid tuple: {data}'
+        assert all(isinstance(v, t) for v, t in zip(data, types, strict=True)), (
+            f'Invalid tuple: {data}'
+        )
 
     @staticmethod
     def _greatest_common_prefix(*args: Atoms) -> Atoms:
@@ -430,14 +461,14 @@ class RegexStore(pyd.BaseModel, arbitrary_types_allowed=True):
                 _q = cls._quantify(atom)
                 if _q == '?':
                     inferred_optional = True
-                    branches[i] = (atom[:-1], )
+                    branches[i] = (atom[:-1],)
                 elif quantity in ('', '?'):
                     if _q.startswith('{0'):
                         inferred_optional = True
-                        branches[i] = (atom[:-len(_q)] + '{1' + _q[2:], )
+                        branches[i] = (atom[: -len(_q)] + '{1' + _q[2:],)
                     elif _q.startswith('*'):
                         inferred_optional = True
-                        branches[i] = (atom[:-len(_q)] + f'+{_q[1:]}', )
+                        branches[i] = (atom[: -len(_q)] + f'+{_q[1:]}',)
             else:
                 # I.iii. Look for a copy of this branch w/ a prefix
                 candidates = [
@@ -482,7 +513,7 @@ class RegexStore(pyd.BaseModel, arbitrary_types_allowed=True):
         if any(
             atom[0] == '[' or cls._is_quantified(atom) or cls._is_complex_group(atom)
             for branch in branches
-            for atom in (branch if has_suffix else (branch[0], ))
+            for atom in (branch if has_suffix else (branch[0],))
         ):
             return ':'
         return '>'
@@ -508,17 +539,17 @@ class RegexStore(pyd.BaseModel, arbitrary_types_allowed=True):
             set_chars = [
                 _atom for _set in sets for _atoms in cls.split_set(_set) for _atom in _atoms
             ]
-            set_body = ''.join(sorted(set([*set_chars, *chars])))
+            set_body = ''.join(sorted({*set_chars, *chars}))
             branches.insert(0, f'[{set_body}]')
 
         # III. Render the resulting set alternated w/ the complex branches
-        return cls._render_branches([(b, ) for b in branches], has_suffix, quantity)
+        return cls._render_branches([(b,) for b in branches], has_suffix, quantity)
 
     @classmethod
     def _group_by_prefix(cls, branches: Branches) -> Generator[Branches, None, None]:
         yield from map(
             list,
-            mi.split_when(branches, lambda lhs, rhs: not cls._greatest_common_prefix(lhs, rhs))
+            mi.split_when(branches, lambda lhs, rhs: not cls._greatest_common_prefix(lhs, rhs)),
         )
 
     @staticmethod
@@ -530,9 +561,8 @@ class RegexStore(pyd.BaseModel, arbitrary_types_allowed=True):
         yield from map(
             list,
             mi.split_when(
-                blocks,
-                lambda *args: not cls._greatest_common_suffix(*map(cls._block_suffix, args))
-            )
+                blocks, lambda *args: not cls._greatest_common_suffix(*map(cls._block_suffix, args))
+            ),
         )
 
     @classmethod
@@ -548,11 +578,11 @@ class RegexStore(pyd.BaseModel, arbitrary_types_allowed=True):
 
         # II. Check for a shared suffix
         if suffix := cls._greatest_common_suffix(*block):
-            block = [branch[:-len(suffix)] for branch in block]
+            block = [branch[: -len(suffix)] for branch in block]
 
         # III. Recursively construct children branches
         content = cls.construct_tree(block, has_suffix=bool(suffix))
-        return (prefix, (content, ), suffix)
+        return (prefix, (content,), suffix)
 
     @classmethod
     def _render_blocks(cls, section: list[Block]) -> Atoms:
@@ -565,8 +595,9 @@ class RegexStore(pyd.BaseModel, arbitrary_types_allowed=True):
         # II. When adjacent blocks share (part of) their suffixes, handle here
         shared_suffix = cls._greatest_common_suffix(*map(cls._block_suffix, section))
         assert shared_suffix, f'Somehow collected multiple no-suffix sections: {section}'
-        branches = [(prefix + body + suffix)[:-len(shared_suffix)]
-                    for prefix, body, suffix in section]
+        branches = [
+            (prefix + body + suffix)[: -len(shared_suffix)] for prefix, body, suffix in section
+        ]
 
         # III. Render the final result with the suffix at the end
         return (cls._render_branches(branches, True), *shared_suffix)
@@ -609,11 +640,10 @@ class RegexStore(pyd.BaseModel, arbitrary_types_allowed=True):
     @ft.lru_cache(maxsize=64)
     def _is_simple(cls, atom: str) -> bool:
         # Don't include groups or quantified values
-        return (
-            len(atom) > 0 and not (
-                cls._is_group(atom) or cls._is_quantified(atom) or
-                (atom[0] == '[' and not cls._is_simple_set(atom))
-            )
+        return len(atom) > 0 and not (
+            cls._is_group(atom)
+            or cls._is_quantified(atom)
+            or (atom[0] == '[' and not cls._is_simple_set(atom))
         )
 
     @classmethod
@@ -625,9 +655,8 @@ class RegexStore(pyd.BaseModel, arbitrary_types_allowed=True):
 
     @classmethod
     def _quantify(cls, atom: str) -> str:
-        if cls._is_atomic(atom) and len(atom) >= 2:
-            if match := cls.RGXS['quant'].search(atom):
-                return match[0]
+        if cls._is_atomic(atom) and len(atom) >= 2 and (match := cls.RGXS['quant'].search(atom)):
+            return match[0]
         return ''
 
     @classmethod
@@ -656,20 +685,21 @@ class RegexStore(pyd.BaseModel, arbitrary_types_allowed=True):
 
     @classmethod
     def split_group(cls, grp_atom: Atom, recursive: bool = False) -> tuple[Atoms, ...]:
-        branches: tuple[Atoms, ...] = ((grp_atom, ), )
+        branches: tuple[Atoms, ...] = ((grp_atom,),)
         if cls._is_group(grp_atom):
             kind, start, flags, body, quant = cls._parse_group(grp_atom)
 
             if kind in GroupKind._SPLITTABLE and quant in ('', '?'):
                 branches = cls._atomic_split(body, recursive)
                 if quant == '?':
-                    branches = (tuple(), ) + branches
+                    branches = (tuple(),) + branches
                 if flags:
-                    flag_group = (f'(?{flags})', )
-                    branches = tuple((flag_group + branch) if branch else branch
-                                     for branch in branches)
+                    flag_group = (f'(?{flags})',)
+                    branches = tuple(
+                        (flag_group + branch) if branch else branch for branch in branches
+                    )
             elif quant == '?':
-                branches = (tuple(), (grp_atom[:-1], ))
+                branches = (tuple(), (grp_atom[:-1],))
 
         return branches
 
@@ -678,9 +708,9 @@ class RegexStore(pyd.BaseModel, arbitrary_types_allowed=True):
     def split_set(cls, set_atom: Atom) -> tuple[Atoms, ...]:
         is_simple, body, quant = cls._parse_set(set_atom)
         if not is_simple or quant not in ('', '?'):
-            return ((set_atom, ), )
+            return ((set_atom,),)
 
-        branches = tuple((atom, ) for atom in cls.atomize(body, escape=True))
+        branches = tuple((atom,) for atom in cls.atomize(body, escape=True))
         return (tuple(), *branches) if quant == '?' else branches
 
     @classmethod
@@ -690,16 +720,13 @@ class RegexStore(pyd.BaseModel, arbitrary_types_allowed=True):
         elif cls._is_simple_set(atom):
             return cls.split_set(atom)
         elif cls._is_optional(atom):
-            return (tuple(), (atom[:-1], ))
+            return (tuple(), (atom[:-1],))
         else:
-            return ((atom, ), )
+            return ((atom,),)
 
     @classmethod
     def _atomic_split(
-        cls,
-        pattern: str | Atoms | list[str],
-        recursive: bool = False,
-        max_split: int = 4
+        cls, pattern: str | Atoms | list[str], recursive: bool = False, max_split: int = 4
     ) -> tuple[Atoms, ...]:
         # 0. Handle edge cases and different call formats
         if not pattern:
@@ -727,12 +754,15 @@ class RegexStore(pyd.BaseModel, arbitrary_types_allowed=True):
                         branch_list.append(branches)
                         n_split += 1
                     else:
-                        branch_list.append(((atom, ), ))
+                        branch_list.append(((atom,),))
 
                 if n_split:
-                    blocks.extend([
-                        tuple(mi.collapse(permutation)) for permutation in it.product(*branch_list)
-                    ])
+                    blocks.extend(
+                        [
+                            tuple(mi.collapse(permutation))
+                            for permutation in it.product(*branch_list)
+                        ]
+                    )
                     continue
 
             # I.ii. Otherwise, just return this block as one branch
@@ -758,7 +788,7 @@ class RegexStore(pyd.BaseModel, arbitrary_types_allowed=True):
         span, kind, cname, body, quant = ret
         assert span == (0, len(atom)), f'Invalid atom: {atom}'
 
-        start = atom[:atom.index(body)]
+        start = atom[: atom.index(body)]
 
         # II. Expand out inline flags
         flags = ''
@@ -865,7 +895,7 @@ class RegexStore(pyd.BaseModel, arbitrary_types_allowed=True):
         elif isinstance(data, str):
             if self.force_named_groups and '(' in data:
                 buf = RgxBuf(data)
-                for (x0, x1), *_ in self.group_iterator(buf, mask=GroupKind.POSIT):
+                for (x0, _), *_ in self.group_iterator(buf, mask=GroupKind.POSIT):
                     buf.replace((x0, x0 + 1), '(?:')
                 data = str(buf)
             if self.formatter:
@@ -879,7 +909,7 @@ class RegexStore(pyd.BaseModel, arbitrary_types_allowed=True):
             if sep is None:
                 sep = self.separator
             elif sep == '<|>':
-                unique_segments = list(set(self.compose(item, sep='|') for item in data))
+                unique_segments = list({self.compose(item, sep='|') for item in data})
                 branches = list(self._atomic_split(unique_segments, recursive=True))
                 return self.construct_tree(branches)
 
@@ -887,11 +917,11 @@ class RegexStore(pyd.BaseModel, arbitrary_types_allowed=True):
 
         # II. Handle the main/complex case: a tuple describing a group
         elif isinstance(data, tuple):
-            return self.compose_tuple(*self._parse_tuple(data, self.formatter))
+            return self.compose_tuple(*self._parse_tuple(data, self.formatter))  # type: ignore
 
         # III. Special case: an explicitly-specified tuple (likely by a .yaml file)
         elif isinstance(data, dict):
-            tup = (data['mark'], data.get('pre', ''), data['body'], data.get('suf', ''))
+            tup = (data['mark'], data.get('pre', ''), data['body'], data.get('suf', ''))  # type: ignore
             return self.compose_tuple(*self._parse_tuple(tup, self.formatter))
 
         else:
@@ -908,11 +938,10 @@ class RegexStore(pyd.BaseModel, arbitrary_types_allowed=True):
         for _, kind, cname, _, _ in self.group_iterator(text, mask=GroupKind._NAMED):
             if kind == GroupKind.PARAM:
                 local_groups.add(cname)
-            elif kind == GroupKind.INVOC:
+            elif kind == GroupKind.INVOC and cname != name:
                 # Intentional reference to a defined subroutine
-                if cname != name:
-                    assert cname in self.definitions, f'Unknown group invoked: {cname}'
-                    groups_used.add(cname)
+                assert cname in self.definitions, f'Unknown group invoked: {cname}'
+                groups_used.add(cname)
 
         # III. Recursively fetch dependencies for the used groups
         groups_used = self.find_all_invocations(groups_used)
@@ -924,14 +953,14 @@ class RegexStore(pyd.BaseModel, arbitrary_types_allowed=True):
 
     def render_definitions(self, *definitions: str) -> str:
         """
-        Order and serialize the passed definitions, ensuring any references to other definitions are resolved
-        thanks to the implicit ordering of the dict at creation-time.
+        Order and serialize the passed definitions, ensuring any references to other definitions are
+        resolved thanks to the implicit ordering of the dict at creation-time.
         """
         if not definitions:
             return ''
-        assert all(
-            name in self.definitions for name in definitions
-        ), f'Unknown definitions passed: {definitions}'
+        assert all(name in self.definitions for name in definitions), (
+            f'Unknown definitions passed: {definitions}'
+        )
 
         # Render in the order of definition above, not in the order passed in
         data = [(name, rgx) for name, rgx in self.definitions.items() if name in definitions]
@@ -942,7 +971,7 @@ class RegexStore(pyd.BaseModel, arbitrary_types_allowed=True):
         name: str,
         val: RgxVal,
         parser: RgxParser | None = None,
-        flags: RegexFlag = RegexFlag(0)
+        flags: RegexFlag = NO_FLAG,
     ) -> None:
         assert name not in self.definitions, f'Duplicate definition: {name}'
 
@@ -985,10 +1014,12 @@ class RegexStore(pyd.BaseModel, arbitrary_types_allowed=True):
 
         # Check if we removed an actually useful bracket above, and add it back in if so
         if values and self.autostrip_brackets:
-            steps = [(i, val, *brs)
-                     for i, val in enumerate(values)
-                     for brs in [('(', ')'), ('[', ']')]
-                     if any(map(val.__contains__, brs))]
+            steps = [
+                (i, val, brs[0], brs[1])
+                for i, val in enumerate(values)
+                for brs in [('(', ')'), ('[', ']')]
+                if any(map(val.__contains__, brs))
+            ]
             for i, value, lb, rb in steps:
                 if (ln := value.count(lb)) != (rn := value.count(rb)):
                     values[i] = f'{value}{rb}' if ln > rn else f'{lb}{value}'
@@ -1031,9 +1062,9 @@ class RegexStore(pyd.BaseModel, arbitrary_types_allowed=True):
                 pd.set_field(field)
 
                 if isinstance(parser, str):
-                    pd.interleave(pd.field, parser, list(zip(pd.start, pd.value)))
+                    pd.interleave(pd.field, parser, list(zip(pd.start, pd.value, strict=True)))
                 elif isinstance(parser, dict):
-                    pd.apply_dict_parser(parser, self.patterns[field])
+                    pd.apply_dict_parser(parser, self.patterns[field])  # type: ignore
                 else:
                     pd.apply_func_parser(parser)
             captures = pd.captures
@@ -1125,7 +1156,7 @@ class RegexStore(pyd.BaseModel, arbitrary_types_allowed=True):
                     pd.captures[field] = values
                     pd.starts[field] = starts
                 else:
-                    pd.interleave('', field, list(zip(starts, values)))
+                    pd.interleave('', field, list(zip(starts, values, strict=True)))
 
         return MatchData(data=pd.captures)
 
@@ -1184,8 +1215,9 @@ class RegexStore(pyd.BaseModel, arbitrary_types_allowed=True):
 
         self[router] = ('<|>', p0, list(items.values()), s0)
 
-        routes = [(i, rgx if isinstance(rgx, list) else [rgx])
-                  for i, rgx in enumerate(items.values())]
+        routes = [
+            (i, rgx if isinstance(rgx, list) else [rgx]) for i, rgx in enumerate(items.values())
+        ]
         self[f'{router}_router'] = ('|:', p1, [(f'<|>P<rt_{i}>', rgx) for i, rgx in routes], s1)
 
     def route_match(self, router: str, text: str | MatchData) -> str:

@@ -55,12 +55,14 @@ class ParseData(pyd.BaseModel):
     def apply_dict_parser(self, parser: dict[str, str], rgx: Pattern) -> None:
         matches = [MatchData(match=match) for match in map(rgx.fullmatch, self.value)]
         trips: list[tuple[str, int, str]] = []
-        trips = list((key, start + rel_start, value)
-                     for start, data in zip(self.start, matches)
-                     for key, values in data.items()
-                     for rel_start, value in zip(data.starts(key), values))
+        trips = [
+            (key, start + rel_start, value)
+            for start, data in zip(self.start, matches, strict=True)
+            for key, values in data.items()
+            for rel_start, value in zip(data.starts(key), values, strict=True)
+        ]
 
-        affected_fields = (set(parser.keys()) & {key for key, _, _ in trips})
+        affected_fields = set(parser.keys()) & {key for key, _, _ in trips}
         for dest in affected_fields:
             src = parser[dest]
             self.interleave(src, dest, [t[1:] for t in trips if t[0] == src])
@@ -70,7 +72,7 @@ class ParseData(pyd.BaseModel):
         if isinstance(results[0], dict):
             # I. A regex function that returns new captures
             dict_results: list[dict[str, str]] = results  # type: ignore
-            pairs = list(zip(self.start, dict_results))
+            pairs = list(zip(self.start, dict_results, strict=True))
 
             affected_fields = {key for result in dict_results for key in result.keys()}
             src = self.field if self.field not in affected_fields else ''
@@ -94,7 +96,9 @@ class ParseData(pyd.BaseModel):
         if src and src[0] != '_' and src in self.captures:
             _starts = [start for start, _ in effects]
             src_updates = [
-                tup for tup in zip(self.starts[src], self.captures[src]) if tup[0] not in _starts
+                tup
+                for tup in zip(self.starts[src], self.captures[src], strict=True)
+                if tup[0] not in _starts
             ]
             if src_updates:
                 self.starts[src] = [start for start, _ in src_updates]
@@ -105,7 +109,7 @@ class ParseData(pyd.BaseModel):
 
         # II. Add existing values into the mix, and sort
         if dest in self.captures:
-            effects = sorted([*zip(self.starts[dest], self.captures[dest]), *effects])
+            effects = sorted([*zip(self.starts[dest], self.captures[dest], strict=True), *effects])
 
         # III. Replace the values with the new ones
         self.starts[dest] = [start for start, _ in effects]

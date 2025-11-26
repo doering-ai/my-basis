@@ -86,14 +86,20 @@ class FileCache(Generic[T]):
                 index[child.stem] = set(self.NAME_RGX.findall(child.read_text()))
 
     def _get_item(self, group: str, prefix: str, filename: str) -> dict[str, T] | None:
-        if ((group in self.items) and (prefix in self.items[group])
-            and (filename in self.items[group][prefix])):
+        if (
+            (group in self.items)
+            and (prefix in self.items[group])
+            and (filename in self.items[group][prefix])
+        ):
             return self.items[group][prefix][filename]
         return None
 
     def _get_file(self, group: str, prefix: str, filename: str) -> set[str] | None:
-        if ((group in self.files) and (prefix in self.files[group])
-            and (filename in self.files[group][prefix])):
+        if (
+            (group in self.files)
+            and (prefix in self.files[group])
+            and (filename in self.files[group][prefix])
+        ):
             return self.files[group][prefix][filename]
         return None
 
@@ -197,7 +203,7 @@ class FileCache(Generic[T]):
         path = '/'.join([group, *prefix, filename])
         self.writer(path, data)
 
-        self.files[group][prefix][filename] = set(t[-1] for t in map(self.splitter, data.keys()))
+        self.files[group][prefix][filename] = {t[-1] for t in map(self.splitter, data.keys())}
         self.fsize += len(data)
 
     # ------------------
@@ -205,9 +211,8 @@ class FileCache(Generic[T]):
     # ------------------
     def read(self, group: str, name: str) -> T | None:
         filename = self.splitter(name)[0]
-        if items := self.read_file(group, filename):
-            if name in items:
-                return items[name]
+        if (items := self.read_file(group, filename)) and name in items:
+            return items[name]
         return None
 
     def write(self, group: str, name: str, item: T) -> None:
@@ -252,7 +257,7 @@ class FileCache(Generic[T]):
                 return
 
             for file, items in item_iter:
-                if (file_rgx.search(file) or any(map(name_rgx.search, items.keys()))):
+                if file_rgx.search(file) or any(map(name_rgx.search, items.keys())):
                     yield from items.values()
 
         elif mode == 'files' and group in self.files:
@@ -264,7 +269,7 @@ class FileCache(Generic[T]):
                 return
 
             for file, names in file_iter:
-                if (file_rgx.search(file) or any(map(name_rgx.search, names))):
+                if file_rgx.search(file) or any(map(name_rgx.search, names)):
                     if file_items := self.read_file(group, file, prefix):
                         yield from file_items.values()
                     break

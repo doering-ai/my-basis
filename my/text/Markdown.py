@@ -29,8 +29,9 @@ SubType = TypeVar('SubType', bound='Markdown')
 class Markdown(pyd.BaseModel):
     TEMPLATE: ClassVar[str] = 'Markdown.md.jinja'
     RGXS: ClassVar[RegexStore] = RegexStore.new(
-        options=dict(separator=r' *\n+', ),
-
+        options=dict(
+            separator=r' *\n+',
+        ),
         # Components
         marks=r'(?m)^#{1,6} +',
         idx=r'(?<=## `)[\dA-Za-z]+\b',
@@ -38,7 +39,6 @@ class Markdown(pyd.BaseModel):
         tags=(r'`(?P=idx)?(?P=tag)*` +', lambda s: s.strip('` ')),
         title=(r'(?m)[^\n]+$', str.strip),
         prose=r'(?sm)^.+?$',
-
         # Patterns
         header=r'(?P=marks)(?P=tags)?(?P=title)',
         document=[
@@ -61,6 +61,7 @@ class Markdown(pyd.BaseModel):
     nodes: list['Markdown'] = []
 
     buffer_factory: Callable[..., Buffer] = pyd.Field(default=BUFFER_FACTORY, exclude=True)
+
     # -------------------
     # `0` Initial Methods
     # -------------------
@@ -101,11 +102,14 @@ class Markdown(pyd.BaseModel):
 
         for i, node in enumerate(nodes):
             if isinstance(node, dict):
-                node_data = dict(
-                    level=level + 1,
-                    idx=idx + cls._num_to_digit(i),
-                    prose=buffer_factory(nodes[i].pop('prose', ''))
-                ) | nodes[i]
+                node_data = (
+                    dict(
+                        level=level + 1,
+                        idx=idx + cls._num_to_digit(i),
+                        prose=buffer_factory(nodes[i].pop('prose', '')),
+                    )
+                    | nodes[i]
+                )
                 nodes[i] = Markdown.new(**node_data)
             elif isinstance(node, Markdown):
                 node.level = level + 1
@@ -137,7 +141,7 @@ class Markdown(pyd.BaseModel):
             header=self.header,
             prose=self.prose,
             nodes=[node.model_dump() for node in self.nodes],
-            notes=typist.to_yaml(self.notes)
+            notes=typist.to_yaml(self.notes),
         )
         return ret
 
@@ -147,7 +151,7 @@ class Markdown(pyd.BaseModel):
 
     @staticmethod
     def _num_to_digit(num: int | str) -> str:
-        """ Transforms a number [0, 61] into a single digit, 0-9, then A-Z, then a-z. """
+        """Transforms a number [0, 61] into a single digit, 0-9, then A-Z, then a-z."""
         if isinstance(num, str):
             if len(num) == 1:
                 return num
@@ -164,7 +168,7 @@ class Markdown(pyd.BaseModel):
 
     @staticmethod
     def _digit_to_num(digit: str) -> int:
-        """ Transforms a single digit, 0-9, then a-z, then A-Z, into a number [0, 61]. """
+        """Transforms a single digit, 0-9, then a-z, then A-Z, into a number [0, 61]."""
         if digit.isdigit():
             return int(digit)
         elif 'A' <= digit <= 'Z':
@@ -192,7 +196,7 @@ class Markdown(pyd.BaseModel):
             elif not target.startswith(origin):
                 logfire.error(f'{origin} is not an ancestor of {target}')
                 return []
-            digits = list(map(cls._digit_to_num, target[len(origin):]))
+            digits = list(map(cls._digit_to_num, target[len(origin) :]))
         else:
             digits = target
 
@@ -221,10 +225,10 @@ class Markdown(pyd.BaseModel):
             child = nodes.popleft()
             if descendants := cls._stack_nodes(nodes, child.level):
                 # Don't normally parse Notes nodes that are parseable as yaml data
-                if note_idx := ut.find(descendants, lambda n: n.title == 'Notes'):
-                    if note_data := descendants[note_idx].from_yaml():
-                        descendants.pop(note_idx)
-                        child.notes = note_data
+                note_idx = ut.find(descendants, lambda n: n.title == 'Notes')
+                if note_idx and (note_data := descendants[note_idx].from_yaml()):
+                    descendants.pop(note_idx)
+                    child.notes = note_data
                 child.nodes = descendants
             ret.append(child)
 
@@ -239,7 +243,7 @@ class Markdown(pyd.BaseModel):
         asc: bool = False,
         max_d: int = -1,
     ) -> Iterator['Markdown']:
-        """ A depth-first walk of the document tree. """
+        """A depth-first walk of the document tree."""
 
         # I. Yield the root by default
         if not skip_self:
@@ -260,7 +264,7 @@ class Markdown(pyd.BaseModel):
                 yield from self.nodes[i].walk(True, asc, new_depth)
 
             # II.ii. Update the index only if the caller (likely) modified what's ahead
-            if (delta > 0 if asc else delta < 0):
+            if delta > 0 if asc else delta < 0:
                 i += delta
 
             # II.iii. Advance to the next node according to direction
@@ -325,11 +329,12 @@ class Markdown(pyd.BaseModel):
             filter(
                 lambda node: node and node.title.lower() == title,
                 self.walk(False, asc, max_d),
-            ), None
+            ),
+            None,
         )
 
     def get_path(
-        self, *, path: list[int] = [], asc: bool = False, max_d: int = -1
+        self, *, path: list[int] | None = None, asc: bool = False, max_d: int = -1
     ) -> 'Markdown | None':
         if not self.nodes or not max_d or not path:
             return None
@@ -384,7 +389,7 @@ class Markdown(pyd.BaseModel):
         return '\n\n'.join(parts).strip()
 
     @classmethod
-    def parse(cls, text: str | Buffer, base_level: int = 0) -> list["Markdown"]:
+    def parse(cls, text: str | Buffer, base_level: int = 0) -> list['Markdown']:
         """
         Parses a document into one or more markdown objects, each of depth 1.
         """
@@ -393,12 +398,12 @@ class Markdown(pyd.BaseModel):
                 # Data
                 title=match.at('title'),
                 prose=match.at('prose'),
-
                 # Metadata
                 level=len(match.at('marks')),
                 tags=match.get('tag'),
                 idx=match.at('idx'),
-            ) for match in Markdown.RGXS.finditer('node', text)
+            )
+            for match in Markdown.RGXS.finditer('node', text)
         )
         return cls._stack_nodes(nodes, level=base_level)
 
@@ -407,7 +412,7 @@ class Markdown(pyd.BaseModel):
 
     def reparse_prose(self) -> None:
         if first_node := Markdown.RGXS.search('node', self.prose):
-            node_text = self.prose[first_node.start:]
+            node_text = self.prose[first_node.start :]
             self.prose.drop((first_node.start, len(self.prose)))
             self.add_node(Markdown.parse(node_text, base_level=1), left=True)
 

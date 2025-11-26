@@ -13,6 +13,7 @@ import regex as re
 from regex import Match, Pattern
 import logfire
 import numpy as np
+import numpy.typing as npt
 
 ### INTERNAL
 from ..base import utils as ut
@@ -23,8 +24,11 @@ from .Span import Span
 ############
 Pair = tuple[Span, Span]
 
-SpanArray = np.ndarray  # Shape: (n, 2) where n is number of spans
-PairArray = np.ndarray  # Shape: (m, 2, 2) where m is number of pairs
+# Shape: (n, 2) where n is number of spans
+SpanArray = npt.NDArray[np.int_]
+
+# Shape: (m, 2, 2) where m is number of pairs
+PairArray = npt.NDArray[np.int_]
 
 
 def no_spans() -> SpanArray:
@@ -55,7 +59,7 @@ class Buffer(pyd.BaseModel):
     text: list[str] = ['']
     uid: str = ''  # optional
 
-    fences: Annotated[SpanArray, ut.pyd_schemify(SpanArray)] = pyd.Field(default_factory=no_spans)
+    fences: Annotated[SpanArray, ut.pyd_schemify(np.ndarray)] = pyd.Field(default_factory=no_spans)
     fence_rgxs: list[str] = []
     fence_rgx: ut.Regex | None = pyd.Field(default=None, exclude=True)
 
@@ -80,7 +84,7 @@ class Buffer(pyd.BaseModel):
         return self.text[0]
 
     @classmethod
-    def new(cls, text: 'list[str] | str | Buffer | None' = None, **kwargs) -> "Buffer":
+    def new(cls, text: 'list[str] | str | Buffer | None' = None, **kwargs) -> 'Buffer':
         if kwargs.pop('no_fence', '') or 'fence_rgxs' not in kwargs:
             kwargs['fence_rgxs'] = []
 
@@ -119,7 +123,7 @@ class Buffer(pyd.BaseModel):
     def __bool__(self) -> bool:
         return len(self.text[0]) > 0
 
-    def __add__(self, other: "Buffer | str") -> "Buffer":
+    def __add__(self, other: 'Buffer | str') -> 'Buffer':
         if isinstance(other, Buffer):
             return Buffer(text=[self.text[0] + other.text[0]])
         elif isinstance(other, str):
@@ -127,7 +131,7 @@ class Buffer(pyd.BaseModel):
         else:
             raise TypeError(f'Cannot concatenate Buffer with {type(other)}')
 
-    def __iadd__(self, other: "Buffer | str") -> "Buffer":
+    def __iadd__(self, other: 'Buffer | str') -> 'Buffer':
         if isinstance(other, Buffer):
             self.text[0] += other.text[0]
         elif isinstance(other, str):
@@ -208,22 +212,24 @@ class Buffer(pyd.BaseModel):
         n = len(char)
         x0, x1 = span
         if n == 1:
-            pre = char if (x0 > 0 and not test.fullmatch(self[x0 - 1:x0])) else ''
-            post = char if (x1 < len(self) and not test.fullmatch(self[x1:x1 + 1])) else ''
+            pre = char if (x0 > 0 and not test.fullmatch(self[x0 - 1 : x0])) else ''
+            post = char if (x1 < len(self) and not test.fullmatch(self[x1 : x1 + 1])) else ''
         elif n > 1:
             pre, post = '', ''
             if x0 > 0:
-                _text = self[max(x0 - n, 0):x0]
-                pre = char[len(ut.shared_suffix(char, _text)):]
+                _text = self[max(x0 - n, 0) : x0]
+                pre = char[len(ut.shared_suffix(char, _text)) :]
             if x1 < len(self):
-                _text = self[x1:min(x1 + n, len(self))]
-                post = char[:n - len(ut.shared_prefix(char, _text))]
+                _text = self[x1 : min(x1 + n, len(self))]
+                post = char[: n - len(ut.shared_prefix(char, _text))]
 
-        newtext = ''.join([
-            pre,
-            text if isinstance(text, str) else char.join(text),
-            post,
-        ])
+        newtext = ''.join(
+            [
+                pre,
+                text if isinstance(text, str) else char.join(text),
+                post,
+            ]
+        )
         self._replace_span(span, newtext, **kwargs)
 
     def _replace_span(self, old: Span | tuple[int, int], new_text: str, diff: int = 0) -> None:
@@ -316,8 +322,11 @@ class Buffer(pyd.BaseModel):
         return (spans + offset) if spans.size > 0 else no_spans()
 
     @staticmethod
-    def split_spans(source: SpanArray | list[Span], ref_span: Span,
-                    delta: int) -> tuple[SpanArray, SpanArray]:
+    def split_spans(
+        source: SpanArray | list[Span],
+        ref_span: Span,
+        delta: int,
+    ) -> tuple[SpanArray, SpanArray]:
         """
         Split spans into those that come before the reference span and those after, applying a
         shift to the latter array
@@ -394,7 +403,7 @@ class Buffer(pyd.BaseModel):
         rgx: Pattern,
         mode: Literal['all', 'roots', 'leaves'] = 'all',
         b0: int = 0,
-        b1: int = -1
+        b1: int = -1,
     ) -> Iterator[Pair]:
         # II. Use a stack of "start" ranges to find matching pairs
         starts: deque[Span] = deque()
@@ -428,8 +437,9 @@ class Buffer(pyd.BaseModel):
                 if DEBUG:
                     print(f'ERROR -- unmatched ENDS for\n"""\n{self.text[0]}\n""":')
 
-                assert len(starts) != 0, \
-                    f'Encountered unmatched end: "...{self.slice(max(0, s0-48), pos)}"'
+                assert len(starts) != 0, (
+                    f'Encountered unmatched end: "...{self.slice(max(0, s0 - 48), pos)}"'
+                )
             else:
                 # An end -- pop the most recent start from the stack to match
                 start, end = (starts.pop(), span)
@@ -447,12 +457,13 @@ class Buffer(pyd.BaseModel):
             if DEBUG:
                 print(f'ERROR -- unmatched starts for\n"""\n{self.text[0]}\n""":')
                 for s0, s1 in starts:
-                    print(f'\t@`{s0}`: "{self[s0:s1+48]}..."')
+                    print(f'\t@`{s0}`: "{self[s0 : s1 + 48]}..."')
                 print('')
                 assert len(starts) == 0
             s0, s1 = starts[0]
-            assert len(starts) == 0, \
-                f'Left {len(starts)} unmatched starts, e.g. "{self[s0:s1 + 20]}..."'
+            assert len(starts) == 0, (
+                f'Left {len(starts)} unmatched starts, e.g. "{self[s0 : s1 + 20]}..."'
+            )
 
     def find_pair_match(
         self,
@@ -480,8 +491,7 @@ class Buffer(pyd.BaseModel):
         b0: int = 0,
         b1: int = -1,
     ) -> Iterator[tuple[Span, str, str, str]]:
-        """
-        """
+        """ """
         yield from map(self.yield_pair, self.raw_pair_iterator(rgx, mode, b0, b1))
 
     def rgx_iterator(
@@ -546,7 +556,7 @@ class Buffer(pyd.BaseModel):
         return self
 
     def linespan(self, pos: int) -> Span:
-        """ Find the start and end of the line on which pos sits. """
+        """Find the start and end of the line on which pos sits."""
         assert 0 <= pos < len(self), f'Position {pos} is out of bounds'
         text = self.text[0]
         start = text.rfind('\n', 0, pos + 1) + 1

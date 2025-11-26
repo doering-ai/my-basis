@@ -99,9 +99,6 @@ class NestedCache(pyd.BaseModel, Generic[Keys, Value]):
                     return ret
         return 0
 
-    def __del__(self, keys: list | tuple) -> None:
-        self.delete(keys)
-
     def __len__(self) -> int:
         return self.size
 
@@ -114,11 +111,11 @@ class NestedCache(pyd.BaseModel, Generic[Keys, Value]):
     def items(self) -> Iterator[tuple[Keys, Value]]:
         if self.depth == 1:
             for key, val in self.data.items():
-                yield (key, ), val  # type: ignore
+                yield (key,), val  # type: ignore
         else:
             for key, child in self.children.items():
                 for keys, val in child.items():
-                    yield tuple([key, *keys]), val  # type: ignore
+                    yield (key, *keys), val  # type: ignore
 
     def keys(self) -> Iterator[Keys]:
         yield from (key for key, _ in self.items())
@@ -135,7 +132,7 @@ class NestedCache(pyd.BaseModel, Generic[Keys, Value]):
 
         else:
             count = 0
-            for key, child in self.children.items():
+            for _, child in self.children.items():
                 if not child:
                     continue
                 target = round((child.size / self.size) * n)

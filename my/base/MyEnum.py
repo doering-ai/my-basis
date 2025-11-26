@@ -2,7 +2,7 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import TypeVar, Type
+from typing import Self, Type
 from enum import Enum, Flag
 import more_itertools as mi
 import functools as ft
@@ -13,8 +13,6 @@ import regex as re
 ### INTERNAL
 from ..base import utils as ut
 
-SubType = TypeVar('SubType', bound='MyEnum')
-
 
 ############
 ### DATA ###
@@ -22,7 +20,7 @@ SubType = TypeVar('SubType', bound='MyEnum')
 @ft.total_ordering
 class MyEnum(Enum):
     @classmethod
-    def read(cls: type[SubType], value: str | int | list) -> SubType:
+    def read(cls, value: str | int | list) -> Self:
         if isinstance(value, cls):
             return value
         members = cls.__members__
@@ -48,9 +46,8 @@ class MyEnum(Enum):
             return cls(value)
 
         # III. Immediate check against values (instead of keys)
-        if type(value) is cls.vtype():
-            if key := ut.find_key(members, lambda v: v.value == value):
-                return members[key]
+        if type(value) is cls.vtype() and (key := ut.find_key(members, lambda v: v.value == value)):
+            return members[key]
 
         # IV. Handle lists of values
         if isinstance(value, list):
@@ -65,46 +62,53 @@ class MyEnum(Enum):
         elif self.name:
             return self.name.lower()
         elif isinstance(self, Flag):
-            return '|'.join([
-                flag.name for flag in type(self) if flag.name and self.value & flag.value
-            ])
+            return '|'.join(
+                [flag.name for flag in type(self) if flag.name and self.value & flag.value]
+            )
         else:
             return str(self)
 
     def __str__(self) -> str:
         return self.write()
 
-    def __sub__(self: SubType, other: SubType) -> SubType:
+    def __sub__(self, other: Self | str | int | list) -> Self:
         cls = self.__class__
         if issubclass(cls, Flag) and isinstance(other, cls):
             return self & ~other  # type: ignore
-        return self.__class__(self.value - other.value)
 
-    def __isub__(self: SubType, other: SubType) -> SubType:
-        return self - other
+        if not isinstance(other, cls):
+            other = cls.read(other)
+        return cls(self.value - other.value)  # type: ignore
 
-    def __add__(self: SubType, other: SubType) -> SubType:
+    def __isub__(self, other: Self | str | int | list) -> Self:
+        return self - other  # type: ignore
+
+    def __add__(self, other: Self | str | int | list) -> Self:
         cls = self.__class__
         if issubclass(cls, Flag) and isinstance(other, cls):
             return self | other  # type:ignore
-        return self.__class__(self.value + other.value)
+        return cls(self.value + other.value)  # type: ignore
 
-    def __iadd__(self: SubType, other: SubType) -> SubType:
-        return self + other
+    def __iadd__(self, other: Self | str | int | list) -> Self:
+        return self + other  # type: ignore
 
     @property
-    def parts(self: SubType) -> list[SubType]:
+    def parts(self) -> list[Self]:
         if not isinstance(self, Flag):
             return [self]
         else:
             return list(self) or []
 
     @property
-    def base(self: SubType) -> SubType:
-        """ Returns the base part of the enumeration, if applicable. """
+    def base(self) -> Self:
+        """Returns the base part of the enumeration, if applicable."""
         return parts[0] if (parts := self.parts) else self
 
-    def __lt__(self: SubType, other: SubType) -> bool:
+    def __lt__(self, other: Self | str | int | list) -> bool:
+        cls = self.__class__
+        if not isinstance(other, cls):
+            other = cls.read(other)
+
         lhs = self.base
         if isinstance(lhs.value, int | float):
             return lhs.value < other.base.value
@@ -116,7 +120,7 @@ class MyEnum(Enum):
     @ft.lru_cache(maxsize=1)
     @staticmethod
     def _aliases() -> dict[str, re.Pattern]:
-        """ May be defined by implementations. """
+        """May be defined by implementations."""
         return {}
 
     @classmethod

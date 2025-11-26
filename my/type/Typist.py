@@ -82,12 +82,26 @@ class Typist(pyd.BaseModel):
     # Static Global Members
     ### Types
     SPECIAL_TYPES: ClassVar[tuple[str, ...]] = (
-        "Any", "object", "NoReturn", "TypeGuard", "Concatenate", "Callable", "Coroutine",
-        "Generator", "NoneType"
+        'Any',
+        'object',
+        'NoReturn',
+        'TypeGuard',
+        'Concatenate',
+        'Callable',
+        'Coroutine',
+        'Generator',
+        'NoneType',
     )
     WRAPPER_TYPES: ClassVar[tuple[str, ...]] = (
-        'Literal', 'Union', 'Annotated', 'Final', 'ClassVar', 'TypeAlias', 'Generic', 'Protocol',
-        'Optional'
+        'Literal',
+        'Union',
+        'Annotated',
+        'Final',
+        'ClassVar',
+        'TypeAlias',
+        'Generic',
+        'Protocol',
+        'Optional',
     )
 
     ### RGXS (can't use RegexStore since they depend on this class)
@@ -99,12 +113,12 @@ class Typist(pyd.BaseModel):
             bool=r'(?i:true|y(?:es)?|no?|false)',
             bool_true=r'(?i:true|y(?:es)?)',
             datetime=r'\d\d(?:\d\d)?[-./]\d\d[-./]\d\d(?:\D\d\d:\d\d:\d\d(?:\.\d+)?)?',
-
             # Others
             splitter=r' *(?:[,]|\/\/) *',
             no_space_splitter=r'(?<=\w)[.:](?=\w)',
             yaml=r'(?sm)^```yaml *\n(?P<content>.+?)\n``` *$',
-            timedelta=r'(?i)' + ut.multi_rgx(
+            timedelta=r'(?i)'
+            + ut.multi_rgx(
                 r'(?P<weeks>\d+) ?(?:w|weeks?)(?![a-z])',
                 r'(?P<days>\d+) ?(?:d|days?)(?![a-z])',
                 r'(?P<hours>\d+) ?(?:h|hours?)(?![a-z])',
@@ -178,8 +192,9 @@ class Typist(pyd.BaseModel):
             ),
         )
 
-    def _cast_model_members(self, items: Iterable[tuple[Any, Any]],
-                            target: type[pyd.BaseModel]) -> dict[str, Any]:
+    def _cast_model_members(
+        self, items: Iterable[tuple[Any, Any]], target: type[pyd.BaseModel]
+    ) -> dict[str, Any]:
         annotations = ut.instance_aliases(target)
         return {key: typist.flexcast(val, annotations.get(key, None)) for key, val in items}
 
@@ -345,7 +360,7 @@ class Typist(pyd.BaseModel):
         return data
 
     def _cast_to_time(self, data: object, target: type[TimeType]) -> TimeType | None:
-        """ Convert a string or number to a datetime or timedelta object, if possible. """
+        """Convert a string or number to a datetime or timedelta object, if possible."""
         if not isinstance(data, Atomic):
             data = str(data)
         # 0. Clean data
@@ -396,8 +411,10 @@ class Typist(pyd.BaseModel):
                 elif target is date:
                     return date.fromordinal(int(data))
                 elif target is time:
-                    return datetime.fromtimestamp(data, tz=timezone.utc).time().replace(
-                        tzinfo=timezone.utc
+                    return (
+                        datetime.fromtimestamp(data, tz=timezone.utc)
+                        .time()
+                        .replace(tzinfo=timezone.utc)
                     )
                 else:
                     return timedelta(seconds=data)
@@ -423,7 +440,7 @@ class Typist(pyd.BaseModel):
     def _cast_to_series(
         self, data: object, target: type[Series], ktype: TypeArg, vtype: TypeArg
     ) -> object:
-        """ Handle series (lists, tuples, deques, and sets) """
+        """Handle series (lists, tuples, deques, and sets)"""
         # I. Prepare the data
         if isinstance(data, str) and self.splits:
             if '.' in data and not ut.has_any(data, ' ', ','):
@@ -463,7 +480,7 @@ class Typist(pyd.BaseModel):
 
     @staticmethod
     def _read_file(file: str | bytes | File | None) -> str:
-        """ Read a file and return its contents as a string. """
+        """Read a file and return its contents as a string."""
         if isinstance(file, bytes):
             return file.decode('utf-8')
         elif isinstance(file, Path):
@@ -554,7 +571,7 @@ class Typist(pyd.BaseModel):
 
     @staticmethod
     def match(t0: TypeArg, t1: TypeArg, recurse: bool = False) -> TypeGuard[T]:
-        """ Check if two types are equivelent. """
+        """Check if two types are equivelent."""
         if t0 is Any or t0 is None or t1 is Any or t1 is None:
             return True
 
@@ -678,7 +695,7 @@ class Typist(pyd.BaseModel):
         if isinstance(data, tuple) and ktype and isinstance(ktype, tuple):
             # IV. Handle heterogenous tuple types
             return (len(data) == len(ktype)) and all(it.starmap(isinstance, zip(data, ktype)))
-        elif ktype and vtype and (items := ut.map_items(data)):  #type: ignore
+        elif ktype and vtype and (items := ut.map_items(data)):  # type: ignore
             # V. Handle maps
             keys, values = mi.unzip(items)
             return self.all_are(keys, ktype) and self.all_are(values, vtype)
@@ -693,16 +710,16 @@ class Typist(pyd.BaseModel):
         iterable: Iterable,
         tvar: type[T] | tuple[type[T], ...],
     ) -> TypeGuard[Iterable[T]]:
-        """ Check if all values in an iterable match a type variable. """
+        """Check if all values in an iterable match a type variable."""
         return all(self.check(value, tvar) for value in list(iterable))
 
     def any_are(self, iterable: Iterable, tvar: type[T]) -> TypeGuard[Iterable[T]]:
-        """ Check if any value in an iterable matches a type variable. """
+        """Check if any value in an iterable matches a type variable."""
         return any(self.check(value, tvar) for value in list(iterable))
 
     @staticmethod
     def type_partition(container: Iterable, t0: type[C], t1: type[T]) -> tuple[list[C], list[T]]:
-        return tuple( #  type:ignore
+        return tuple(  #  type:ignore
             map(list, mi.partition(lambda x: isinstance(x, type), container))
         )
 
@@ -799,7 +816,7 @@ class Typist(pyd.BaseModel):
     # Serializing Data
     # --------------
     def serialize(self, data: object, **kwargs) -> Any:
-        """ Recursively transform the given object into serialization-ready, standardized types. """
+        """Recursively transform the given object into serialization-ready, standardized types."""
         # I. Immediately return atomic values as-is
         if isinstance(data, Atomic):
             return data
@@ -836,7 +853,7 @@ class Typist(pyd.BaseModel):
 
         return data
 
-    def from_file(self, file: File) -> dict:
+    def from_file(self, file: File | None) -> dict:
         if not file or not isinstance(file, Path) or not file.exists():
             return {}
         elif file.suffix in ['.yml', '.yaml']:
@@ -986,7 +1003,7 @@ class Typist(pyd.BaseModel):
                 yield result
 
     def setattr(self, obj: pyd.BaseModel, key: str, value: Any, tvar: TypeArg = None) -> bool:
-        """ Set an attribute on an object, casting it to the appropriate type if necessary. """
+        """Set an attribute on an object, casting it to the appropriate type if necessary."""
         # I. Infer the type to cast to, when possible
         if tvar is None:
             tvar = ut.instance_fields(type(obj)).get(key, None)
@@ -1015,5 +1032,5 @@ class AutocastModel(pyd.BaseModel):
 
     @pyd.model_serializer(mode='wrap')
     def _auto_serialize(self, handler) -> dict[str, Any]:
-        """ Serialize the Issue instance to a dictionary. """
+        """Serialize the Issue instance to a dictionary."""
         return typist.serialize(handler(self))

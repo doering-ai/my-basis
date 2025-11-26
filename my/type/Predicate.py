@@ -59,6 +59,18 @@ class Predicate(pyd.BaseModel):
     # -------------------
     # `0` Initial Methods
     # -------------------
+    @classmethod
+    def new(cls: type[SubType], data: Any | None = None, **kwargs) -> SubType:
+        """
+        Create a new Predicate instance from the given data, which can be a dictionary, a list of
+        tuples, or another Predicate.
+        """
+        if isinstance(data, cls):
+            return data.model_copy(deep=True, update=kwargs)
+        elif data is None:
+            data = {}
+        return cls(data=data, **kwargs)
+
     @pyd.model_validator(mode='before')
     @classmethod
     def _validate_data(cls, kwargs: dict[str, Any]) -> dict[str, Any]:
@@ -71,7 +83,8 @@ class Predicate(pyd.BaseModel):
                     # II.i. Parse JSON objects
                     items = ut.map_items(_json)
                 elif (
-                    isinstance(data, Series) and typist.all_are(data, str)
+                    isinstance(data, Series)
+                    and typist.all_are(data, str)
                     and ut.all_has_all(data, ':')
                 ):
                     if all(text.startswith('{') and text.endswith('}') for text in data):
@@ -90,22 +103,37 @@ class Predicate(pyd.BaseModel):
         kwargs['data'] = {field: val for field, val in cast_items if bool(field and val)}
         return kwargs
 
-    @classmethod
-    def new(cls: type[SubType], data: Any = {}, **kwargs) -> SubType:
-        """
-        Create a new Predicate instance from the given data, which can be a dictionary, a list of
-        tuples, or another Predicate.
-        """
-        if isinstance(data, cls):
-            return data.model_copy(deep=True, update=kwargs)
-        return cls(data=data, **kwargs)
+    @pyd.model_serializer
+    def serialize(
+        self, fields: Iterable[str] | None = None, tvar: type[T] | None = None
+    ) -> T | dict:
+        """Cast data to one of a few supported types."""
+        fields = fields if fields is not None else self.keys()
+        source = {field: self[field] for field in sorted(fields) if field in self}
+
+        # I. Handle the nocast and empty cases
+        if not source or tvar is None:
+            return source
+
+        # II. Handle trivial casting targets
+        if tvar is str:
+            return json.dumps(source, ensure_ascii=True).replace('\n', ' ')  # type:ignore
+        elif tvar == list[str]:
+            return [
+                f'"{field}": {json.dumps(val, ensure_ascii=True)}' for field, val in source.items()
+            ]  # type:ignore
+        elif tvar is Predicate:
+            return Predicate.new(source)  # type:ignore
+
+        # III. Cast data to the requested type
+        return self._serialize_cast(source, tvar)
 
     # -------------------
     # `-` Private Methods
     # -------------------
     @classmethod
     def _abbreviate(cls, data: Mapping[str, list[str] | dict]) -> dict[str, Any]:
-        """ Find one-element arrays and simplify them to just be strings. """
+        """Find one-element arrays and simplify them to just be strings."""
         ret: dict[str, Any] = {}
         for field, values in data.items():
             if isinstance(values, Mapping):
@@ -126,61 +154,46 @@ class Predicate(pyd.BaseModel):
     def _escape(text: str) -> str:
         return NEWLINE_RGX.sub(r'\\n', text)
 
-    @pyd.model_serializer
-    def serialize(
-        self, fields: Iterable[str] | None = None, tvar: type[T] | None = None
-    ) -> T | dict:
-        """ Cast data to one of a few supported types. """
-        fields = fields if fields is not None else self.keys()
-        source = {field: self[field] for field in sorted(fields) if field in self}
-
-        # 0. Edge cases
-        if not source:
-            return {}
-        elif tvar is str:
-            return json.dumps(source, ensure_ascii=True).replace('\n', ' ')  # type:ignore
-        elif tvar == list[str]:
-            return [
-                f'"{field}": {json.dumps(val, ensure_ascii=True)}' for field, val in source.items()
-            ]  # type:ignore
-        elif tvar is Predicate:
-            return Predicate.new(source)  # type:ignore
-
-        # I. Cast the keys and values appropriately
-        tvar, ktype, vtype = typist.parse(tvar)
+    def _serialize_cast(self, source: dict[str, list[str]], req_tvar: type[T] | None = None) -> T:
+        """
+        Serialize a dictionary structure, casting keys and values to the requested types.
+        """
+        # II. Cast the keys and values appropriately
+        tvar, ktype, vtype = typist.parse(req_tvar)
         if ktype is str:
             ktype = None
         ret: dict = {}
+
         if (
-            ktype or (vtype and not typist.match(vtype, Mapping))
+            ktype
+            or (vtype and not typist.match(vtype, Mapping))
             or not ut.any_has_any(source.keys(), '.')
         ):
-            # II. Skip nesting if the types or values don't permit it
+            # III. Skip nesting if the types or values don't permit it
             ret = dict(
                 zip(
                     typist.flexcast_all(source.keys(), ktype),
                     typist.flexcast_all(source.values(), vtype),
+                    strict=False,
                 )
             )
         else:
-            # III. Separate out and handle nested fields
+            # IV. Separate out and handle nested fields
             leaves, nodes = map(list, mi.partition(lambda item: '.' in item[0], source.items()))
             if leaves:
-                # III.i. Handle leaves as above, without casting keys
+                # IV.i. Handle leaves as above, without casting keys
                 ret = {field: typist.flexcast(vals, vtype) for field, vals in leaves}
 
             if nodes:
-                # III.ii. Group into nested dictionaries based on the first key
+                # IV.ii. Group into nested dictionaries based on the first key
                 node_items = list(sorted((tuple(key.split('.')), values) for key, values in nodes))
                 ret |= self._serialize_nested(node_items, vtype)
 
-        # IV. Wrap the final product in the requested final type, if present
+        # V. Wrap the final product in the requested final type, if present
         return typist.flexcast(ret, tvar) if tvar else ret  # type:ignore
 
     def _serialize_nested(
-        self,
-        node_items: list[tuple[tuple[str, ...], list[str]]],
-        tvar: TypeArg = None
+        self, node_items: list[tuple[tuple[str, ...], list[str]]], tvar: TypeArg = None
     ) -> dict[str, Any]:
         """
         Serialize a nested dictionary structure, casting keys and values to the requested types.
@@ -188,7 +201,7 @@ class Predicate(pyd.BaseModel):
         ret: dict[str, Any] = {}
         for base, _items in it.groupby(node_items, key=lambda item: item[0][0]):
             items = [(key[1:], vals) for key, vals in _items]
-            lens = set(len(key) for key, _ in items)
+            lens = {len(key) for key, _ in items}
             assert 0 not in lens, f'Found empty keys in {items=}'
 
             if lens == {1}:
@@ -210,7 +223,7 @@ class Predicate(pyd.BaseModel):
     @classmethod
     def cast_to_str(cls, val: Any) -> str:
         if val is None:
-            return ""
+            return ''
         elif isinstance(val, str):
             ret = val
         elif hasattr(val, '__str__'):
@@ -220,7 +233,7 @@ class Predicate(pyd.BaseModel):
         elif hasattr(val, 'to_string'):
             ret = val.to_string()
         else:
-            logfire.error(f"Passed non-serializable value `{val}` of type {type(val)}")
+            logfire.error(f'Passed non-serializable value `{val}` of type {type(val)}')
             return 'ERROR'
         return ret
 
@@ -250,10 +263,12 @@ class Predicate(pyd.BaseModel):
                 self.data[key].extend(val)
 
     @classmethod
-    def cast(cls,
-             field: str,
-             val: Any,
-             duplicates: bool = False) -> Iterator[tuple[str, list[str]]]:
+    def cast(
+        cls,
+        field: str,
+        val: Any,
+        duplicates: bool = False,
+    ) -> Iterator[tuple[str, list[str]]]:
         if isinstance(val, Mapping | Predicate):
             yield from cls.import_map(val, field, duplicates)
         else:
@@ -262,7 +277,7 @@ class Predicate(pyd.BaseModel):
     @classmethod
     def import_map(
         cls,
-        data: "Mapping|Predicate",
+        data: 'Mapping|Predicate',
         parent: str = '',
         duplicates: bool = False,
     ) -> Iterator[tuple[str, list[str]]]:
@@ -285,7 +300,7 @@ class Predicate(pyd.BaseModel):
         return self.to_yaml()
 
     def __repr__(self) -> str:
-        return f"{self._abbreviate(self.data)}"
+        return f'{self._abbreviate(self.data)}'
 
     def __getitem__(self, field: str) -> list[str]:
         """
@@ -344,7 +359,8 @@ class Predicate(pyd.BaseModel):
                 return False
 
         if (
-            len(self) != len(rhs) or set(self.keys()) != set(rhs.keys())
+            len(self) != len(rhs)
+            or set(self.keys()) != set(rhs.keys())
             or any(len(self[field]) != len(rhs[field]) for field in self.keys())
         ):
             return False
@@ -444,16 +460,20 @@ class Predicate(pyd.BaseModel):
     def items(self) -> list[tuple[str, list[str]]]:
         return list(self.data.items())
 
-    def get(self, field, default=[]) -> list[str]:
+    def get(self, field: str, default: list[str] | None = None) -> list[str]:
+        if default is None:
+            default = []
         return self.data.get(field, default)
 
-    def pop(self, field: str, default=[]) -> list[str]:
+    def pop(self, field: str, default: list[str] | None = None) -> list[str]:
+        if default is None:
+            default = []
         return self.data.pop(field, default)
 
     def at(self, field: str, default: str = '') -> str:
         if field in self:
             for i, val in enumerate(reversed(self.data[field])):
-                if val and not any(pval.endswith(val) for pval in self.data[field][:i - 1]):
+                if val and not any(pval.endswith(val) for pval in self.data[field][: i - 1]):
                     return val
 
         return default

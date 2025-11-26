@@ -132,8 +132,8 @@ class Environment(pyd.BaseModel):
     def is_dev(self) -> bool:
         return self.get('MY_MODE', 'dev').lower().startswith('dev')
 
-    def __contains__(self, key: str) -> bool:
-        return key in Environment.ENVIRON
+    def __contains__(self, key: object) -> bool:
+        return isinstance(key, str) and key in Environment.ENVIRON
 
     @staticmethod
     def is_valid_name(key: str) -> bool:

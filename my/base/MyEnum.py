@@ -20,7 +20,7 @@ from ..base import utils as ut
 @ft.total_ordering
 class MyEnum(Enum):
     @classmethod
-    def read(cls, value: str | int | list) -> Self:
+    def read(cls, value: str | int | list | Self) -> Self:
         if isinstance(value, cls):
             return value
         members = cls.__members__

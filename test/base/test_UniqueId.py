@@ -18,23 +18,23 @@ from my import UniqueId
 
 class TestUniqueId:
     @pyt.mark.parametrize(
-        "uid_str,expected",
+        'uid_str,expected',
         [
-            ("12345678-1234-1234-1234-123456789012", True),
-            ("abcdef12-3456-7890-abcd-ef1234567890", True),
-            ("ABCDEF12-3456-7890-ABCD-EF1234567890", True),
-            ("00000000-0000-0000-0000-000000000000", True),
-            ("ffffffff-ffff-ffff-ffff-ffffffffffff", True),
+            ('12345678-1234-1234-1234-123456789012', True),
+            ('abcdef12-3456-7890-abcd-ef1234567890', True),
+            ('ABCDEF12-3456-7890-ABCD-EF1234567890', True),
+            ('00000000-0000-0000-0000-000000000000', True),
+            ('ffffffff-ffff-ffff-ffff-ffffffffffff', True),
             # Invalid formats
-            ("12345678-1234-1234-1234-12345678901", False),  # Too short
-            ("12345678-1234-1234-1234-1234567890123", False),  # Too long
-            ("12345678-1234-1234-1234", False),  # Missing segments
-            ("12345678-1234-1234-1234-123456789012-", False),  # Extra hyphen
-            ("12345678_1234_1234_1234_123456789012", False),  # Wrong separator
-            ("12345678-1234-1234-1234-12345678901g", False),  # Invalid hex character
-            ("", False),  # Empty string
-            ("not-a-uuid", False),  # Completely invalid
-        ]
+            ('12345678-1234-1234-1234-12345678901', False),  # Too short
+            ('12345678-1234-1234-1234-1234567890123', False),  # Too long
+            ('12345678-1234-1234-1234', False),  # Missing segments
+            ('12345678-1234-1234-1234-123456789012-', False),  # Extra hyphen
+            ('12345678_1234_1234_1234_123456789012', False),  # Wrong separator
+            ('12345678-1234-1234-1234-12345678901g', False),  # Invalid hex character
+            ('', False),  # Empty string
+            ('not-a-uuid', False),  # Completely invalid
+        ],
     )
     def test_validate_uid(self, uid_str: str, expected: bool):
         """Test UUID validation with various valid and invalid formats."""
@@ -59,13 +59,16 @@ class TestUniqueId:
         assert uid != uid2
 
     @pyt.mark.parametrize(
-        "uid1,uid2,expected",
+        'uid1,uid2,expected',
         [
-            ("12345678-1234-1234-1234-123456789012", "12345678-1234-1234-1234-123456789012", True),
-            ("12345678-1234-1234-1234-123456789012", "12345678-1234-1234-1234-123456789013", False),
-            ("abcdef12-3456-7890-abcd-ef1234567890", "ABCDEF12-3456-7890-ABCD-EF1234567890",
-             True),  # Case insensitive
-        ]
+            ('12345678-1234-1234-1234-123456789012', '12345678-1234-1234-1234-123456789012', True),
+            ('12345678-1234-1234-1234-123456789012', '12345678-1234-1234-1234-123456789013', False),
+            (
+                'abcdef12-3456-7890-abcd-ef1234567890',
+                'ABCDEF12-3456-7890-ABCD-EF1234567890',
+                True,
+            ),  # Case insensitive
+        ],
     )
     def test_equality_with_unique_id(self, uid1: str, uid2: str, expected: bool):
         """Test equality comparison between UniqueId instances."""
@@ -75,14 +78,14 @@ class TestUniqueId:
         assert (u2 == u1) == expected  # Test symmetry
 
     @pyt.mark.parametrize(
-        "uid_str,other,expected",
+        'uid_str,other,expected',
         [
-            ("12345678-1234-1234-1234-123456789012", "12345678-1234-1234-1234-123456789012", True),
-            ("12345678-1234-1234-1234-123456789012", "12345678-1234-1234-1234-123456789013", False),
-            ("12345678-1234-1234-1234-123456789012", 12345678, False),  # int comparison
-            ("12345678-1234-1234-1234-123456789012", None, False),  # None comparison
-            ("12345678-1234-1234-1234-123456789012", [], False),  # List comparison
-        ]
+            ('12345678-1234-1234-1234-123456789012', '12345678-1234-1234-1234-123456789012', True),
+            ('12345678-1234-1234-1234-123456789012', '12345678-1234-1234-1234-123456789013', False),
+            ('12345678-1234-1234-1234-123456789012', 12345678, False),  # int comparison
+            ('12345678-1234-1234-1234-123456789012', None, False),  # None comparison
+            ('12345678-1234-1234-1234-123456789012', [], False),  # List comparison
+        ],
     )
     def test_equality_with_other_types(self, uid_str: str, other, expected: bool):
         """Test equality comparison with strings and other types."""
@@ -90,13 +93,14 @@ class TestUniqueId:
         assert (uid == other) == expected
 
     @pyt.mark.parametrize(
-        "uid1,uid2,expected", [
-            ("00000000-0000-0000-0000-000000000000", "00000000-0000-0000-0000-000000000001", True),
-            ("00000000-0000-0000-0000-000000000001", "00000000-0000-0000-0000-000000000000", False),
-            ("12345678-1234-1234-1234-123456789012", "12345678-1234-1234-1234-123456789013", True),
-            ("abcdef12-3456-7890-abcd-ef1234567890", "abcdef12-3456-7890-abcd-ef1234567891", True),
-            ("12345678-1234-1234-1234-123456789012", "12345678-1234-1234-1234-123456789012", False),
-        ]
+        'uid1,uid2,expected',
+        [
+            ('00000000-0000-0000-0000-000000000000', '00000000-0000-0000-0000-000000000001', True),
+            ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000000', False),
+            ('12345678-1234-1234-1234-123456789012', '12345678-1234-1234-1234-123456789013', True),
+            ('abcdef12-3456-7890-abcd-ef1234567890', 'abcdef12-3456-7890-abcd-ef1234567891', True),
+            ('12345678-1234-1234-1234-123456789012', '12345678-1234-1234-1234-123456789012', False),
+        ],
     )
     def test_less_than_comparison(self, uid1: str, uid2: str, expected: bool):
         """Test less than comparison between UniqueId instances and strings."""
@@ -109,7 +113,7 @@ class TestUniqueId:
 
     def test_hash_consistency(self):
         """Test that hash values are consistent and equal for equal objects."""
-        uid_str = "12345678-1234-1234-1234-123456789012"
+        uid_str = '12345678-1234-1234-1234-123456789012'
         uid1 = UniqueId(uid_str)
         uid2 = UniqueId(uid_str)
 
@@ -125,31 +129,32 @@ class TestUniqueId:
 
     def test_string_representation(self):
         """Test string and repr methods."""
-        uid_str = "12345678-1234-1234-1234-123456789012"
+        uid_str = '12345678-1234-1234-1234-123456789012'
         uid = UniqueId(uid_str)
 
         assert str(uid) == uid_str
         assert repr(uid) == uid_str
 
     @pyt.mark.parametrize(
-        "text,expected", [
-            ("", ""),
-            ("No UIDs here", "No UIDs here"),
-            ("Line with UID: 12345678-1234-1234-1234-123456789012", ""),
+        'text,expected',
+        [
+            ('', ''),
+            ('No UIDs here', 'No UIDs here'),
+            ('Line with UID: 12345678-1234-1234-1234-123456789012', ''),
             (
-                "First line\nLine with UID: 12345678-1234-1234-1234-123456789012\nLast line",
-                "First line\nLast line"
+                'First line\nLine with UID: 12345678-1234-1234-1234-123456789012\nLast line',
+                'First line\nLast line',
             ),
             (
-                "Multiple\nLines with: 12345678-1234-1234-1234-123456789012\nAnd another: abcdef12-3456-7890-abcd-ef1234567890\nClean line",
-                "Multiple\nClean line"
+                'Multiple\nLines with: 12345678-1234-1234-1234-123456789012\nAnd another: abcdef12-3456-7890-abcd-ef1234567890\nClean line',  # noqa: E501
+                'Multiple\nClean line',
             ),
-            ("UUID at start: 12345678-1234-1234-1234-123456789012", ""),
+            ('UUID at start: 12345678-1234-1234-1234-123456789012', ''),
             (
-                "Some text before\n12345678-1234-1234-1234-123456789012 UUID in middle\nAfter",
-                "Some text before\nAfter"
+                'Some text before\n12345678-1234-1234-1234-123456789012 UUID in middle\nAfter',
+                'Some text before\nAfter',
             ),
-        ]
+        ],
     )
     def test_remove_uids(self, text: str, expected: str):
         """Test removal of lines containing UIDs from text."""
@@ -159,14 +164,16 @@ class TestUniqueId:
 
     def test_remove_uids_preserves_non_uid_lines(self):
         """Test that remove_uids preserves lines without UIDs."""
-        text = '\n'.join([
-            'Line 1',
-            'Line 2',
-            'Line with UUID: 12345678-1234-1234-1234-123456789012',
-            'Line 4',
-            'Another UUID line: abcdef12-3456-7890-abcd-ef1234567890',
-            'Line 6',
-        ])
+        text = '\n'.join(
+            [
+                'Line 1',
+                'Line 2',
+                'Line with UUID: 12345678-1234-1234-1234-123456789012',
+                'Line 4',
+                'Another UUID line: abcdef12-3456-7890-abcd-ef1234567890',
+                'Line 6',
+            ]
+        )
 
         expected = '\n'.join(['Line 1', 'Line 2', 'Line 4', 'Line 6'])
 

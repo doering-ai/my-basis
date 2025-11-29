@@ -37,49 +37,52 @@ class TestPredicate:
     # Initialization & Validation
     # --------------------
     @pyt.mark.parametrize(
-        'field, val, expected', [
+        'field, val, expected',
+        [
             ('k1', 'A', dict(k1=['A'])),
             ('k1', ['A', 'B'], dict(k1=['A', 'B'])),
             ('k1', ['A', 'B', 'B'], dict(k1=['A', 'B', 'B'])),
-            ('k1.child', 'val', dict([('k1.child', ['val'])])),
-            ('parent.child.grandchild', ['A'], dict([('parent.child.grandchild', ['A'])])),
-        ]
+            ('k1.child', 'val', {'k1.child': ['val']}),
+            ('parent.child.grandchild', ['A'], {'parent.child.grandchild': ['A']}),
+        ],
     )
     def test_cast(self, field: str, val: Any, expected: dict[str, list[str]]):
         result = dict(cls.cast(field, val, duplicates=True))
         assert result == expected
 
     @pyt.mark.parametrize(
-        'data, expected', [
+        'data, expected',
+        [
             (dict(k1='A'), dict(k1=['A'])),
             (dict(k1=['A', 'B']), dict(k1=['A', 'B'])),
             ([('k1', ['A', 'B'])], dict(k1=['A', 'B'])),
             ([('k1', 'A')], dict(k1=['A'])),
             (
                 dict(parent=dict(k1='A', child=dict(grandchild='B'))),
-                dict([('parent.k1', ['A']), ('parent.child.grandchild', ['B'])]),
+                {'parent.k1': ['A'], 'parent.child.grandchild': ['B']},
             ),
             ({}, {}),
             (cls.new(dict(k1=['A'])), dict(k1=['A'])),
             ('{"k1": "A", "k2": "B"}', dict(k1=['A'], k2=['B'])),
             (['{"k1": "A", "k2": "B"}'], dict(k1=['A'], k2=['B'])),
             (['"k1": "A"', '"k2": "B"'], dict(k1=['A'], k2=['B'])),
-            ([('parent.child.grandchild', ['A']), ('numbers', ['5', '10', '15'])], {
-                'parent.child.grandchild': ['A'],
-                'numbers': ['5', '10', '15']
-            }),
-        ]
+            (
+                [('parent.child.grandchild', ['A']), ('numbers', ['5', '10', '15'])],
+                {'parent.child.grandchild': ['A'], 'numbers': ['5', '10', '15']},
+            ),
+        ],
     )
     def test_new(self, data: Any, expected: dict[str, list[str]]):
         result = cls.new(data)
         assert result.data == expected
 
     @pyt.mark.parametrize(
-        'data', [
+        'data',
+        [
             dict(k1=['A', 'B']),
             [('k1', ['A', 'B'])],
             dict(parent=dict(child='val')),
-        ]
+        ],
     )
     def test_init_success(self, data):
         pred = cls.new(data)
@@ -95,12 +98,13 @@ class TestPredicate:
         assert pred['k3'] == []
 
     @pyt.mark.parametrize(
-        'key, val, expected', [
+        'key, val, expected',
+        [
             ('k1', 'val', dict(k1=['val'])),
             ('k1', ['A', 'B'], dict(k1=['A', 'B'])),
-            ('k1', dict(child='val'), dict([('k1.child', ['val'])])),
+            ('k1', dict(child='val'), {'k1.child': ['val']}),
             ('existing', 'new_val', dict(existing=['new_val'])),
-        ]
+        ],
     )
     def test_setitem(self, key: str, val: Any, expected: dict):
         pred = cls.new(self.SAMPLES['basic'])
@@ -121,7 +125,6 @@ class TestPredicate:
             (SAMPLES['basic'], 'nonexistent', False),
             (SAMPLES['basic'], ('k1', 'k2'), True),
             (SAMPLES['basic'], ('k1', 'k2', 'k3'), False),
-
             # Slot Presence
             (SAMPLES['basic'], dict(k1=['A']), True),
             (SAMPLES['basic'], dict(k1=['A', 'B']), True),
@@ -129,25 +132,27 @@ class TestPredicate:
             (SAMPLES['basic'], dict(k1=['A', 'B', 'B']), True),  # no dupes yet
             (SAMPLES['basic'], dict(k1=['A', 'B', 'C']), False),
             (SAMPLES['basic'], dict(K1=['A']), False),  # case sensitivity
-        ]
+        ],
     )
     def test_contains(self, lhs: dict | Predicate, rhs: object, expected: bool):
         pred = cls.new(lhs, duplicates=False)
         assert (rhs in pred) == expected
 
     @pyt.mark.parametrize(
-        'lhs, rhs, expected', [
+        'lhs, rhs, expected',
+        [
             (dict(k1=['A']), dict(k1=['A', 'A']), False),
             (SAMPLES['basic'], dict(k1=['B', 'B', 'A']), False),
             (SAMPLES['dupes'], dict(k1=['B', 'B', 'A']), True),
-        ]
+        ],
     )
     def test_contains__duplicates(self, lhs: dict, rhs: object, expected: bool):
         pred = cls.new(lhs, duplicates=True)
         assert (rhs in pred) == expected
 
     @pyt.mark.parametrize(
-        'lhs, rhs, expected', [
+        'lhs, rhs, expected',
+        [
             (SAMPLES['basic'], SAMPLES['basic'], True),
             (SAMPLES['basic'], [('k1', ['A', 'B']), ('k2', 'C')], True),
             (SAMPLES['basic'], 5, False),
@@ -159,28 +164,30 @@ class TestPredicate:
                 dict(answers=[True, True, False, False], n=[1000], ratios=[0.5, 0.666, 1.0]),
                 True,
             ),
-        ]
+        ],
     )
     def test_eq(self, lhs: Any, rhs: Any, expected: bool):
         pred = cls.new(lhs, duplicates=True)
         assert (pred == rhs) == expected
 
     @pyt.mark.parametrize(
-        'data, expected', [
+        'data, expected',
+        [
             (SAMPLES['basic'], (2, 3)),
             (SAMPLES['dupes'], (2, 6)),
             (SAMPLES['nests'], (3, 4)),
             ({}, (0, 0)),
-        ]
+        ],
     )
     def test_len_and_size(self, data: Any, expected: tuple[int, int]):
         pred = cls.new(data, duplicates=True)
         assert (len(pred), pred.size) == expected
 
     @pyt.mark.parametrize(
-        'data, expected', [
+        'data, expected',
+        [
             (SAMPLES['basic'], [('k1', ['A', 'B']), ('k2', ['C'])]),
-        ]
+        ],
     )
     def test_getters(self, data: Any, expected: list[tuple[str, list[str]]]):
         pred = cls.new(data)
@@ -190,11 +197,12 @@ class TestPredicate:
         # assert pred.values() == values
 
     @pyt.mark.parametrize(
-        'key, default, expected', [
+        'key, default, expected',
+        [
             ('k1', [], ['A', 'B']),
             ('nonexistent', ['default'], ['default']),
             ('k2', [], ['C']),
-        ]
+        ],
     )
     def test_get(self, key: str, default: list, expected: list):
         pred = cls.new(self.SAMPLES['basic'])
@@ -204,7 +212,8 @@ class TestPredicate:
     # Operations
     # ----------
     @pyt.mark.parametrize(
-        'lhs, rhs, expected', [
+        'lhs, rhs, expected',
+        [
             (dict(k1=['A']), dict(k2=['B']), dict(k1=['A'], k2=['B'])),
             (dict(k1=['A']), dict(k1=['B']), dict(k1=['A', 'B'])),
             (
@@ -214,7 +223,7 @@ class TestPredicate:
             ),
             (dict(), dict(k1=['A']), dict(k1=['A'])),
             (dict(k1=['A']), dict(), dict(k1=['A'])),
-        ]
+        ],
     )
     def test_add(self, lhs: Any, rhs: Any, expected: dict):
         pred0, pred1 = cls.new(lhs), cls.new(rhs)
@@ -226,26 +235,28 @@ class TestPredicate:
         assert pred1.data == rhs
 
     @pyt.mark.parametrize(
-        'lhs, rhs, expected', [
+        'lhs, rhs, expected',
+        [
             (dict(k1=['A']), dict(k2=['B']), dict(k1=['A'], k2=['B'])),
             (dict(k1=['A']), dict(k1=['B']), dict(k1=['B'])),
             (dict(k1=['A', 'B']), dict(k1=['B', 'C']), dict(k1=['B', 'C'])),
             (dict(), dict(k1=['A']), dict(k1=['A'])),
             (dict(k1=['A']), dict(), dict(k1=['A'])),
-        ]
+        ],
     )
     def test_or(self, lhs: Any, rhs: Any, expected: dict):
         pred0, pred1 = cls.new(lhs), cls.new(rhs)
         assert pred0 | pred1 == expected
 
     @pyt.mark.parametrize(
-        'lhs, rhs, expected', [
+        'lhs, rhs, expected',
+        [
             (dict(k1=['A']), dict(k2=['B']), dict(k1=['A'])),
             (dict(k1=['A']), dict(k1=['A']), dict()),
             (dict(k1=['A', 'B']), dict(k1=['B', 'C']), dict(k1=['A'])),
             ({}, dict(k1=['A']), dict()),
             (dict(k1=['A']), {}, dict(k1=['A'])),
-        ]
+        ],
     )
     def test_sub(self, lhs: Any, rhs: Any, expected: dict):
         pred0, pred1 = cls.new(lhs), cls.new(rhs)
@@ -258,7 +269,7 @@ class TestPredicate:
             (dict(k1=['A'], k2=['B']), dict(k1=['A']), dict(k1=['A'])),
             (dict(k1=['A']), dict(k2=['B']), {}),  # no overlap
             (dict(k1=['A', 'B']), dict(k1=['A', 'B', 'C']), dict(k1=['A', 'B'])),
-        ]
+        ],
     )
     def test_and(self, lhs: dict, rhs: dict, expected: dict):
         pred1 = cls.new(lhs)
@@ -270,12 +281,13 @@ class TestPredicate:
     # Export & Serialization
     # ----------------------
     @pyt.mark.parametrize(
-        'data, dupes, expected', [
+        'data, dupes, expected',
+        [
             (dict(), True, []),
             (SAMPLES['dupes'], False, [('k1', ['A', 'B']), ('k2', ['C', 'D'])]),
             (SAMPLES['dupes'], True, [('k1', ['A', 'B', 'B']), ('k2', ['C', 'D', 'C'])]),
             (SAMPLES['nests'], False, [('root.c1', ['A']), ('root.c2', ['B', 'C']), ('k1', ['D'])]),
-        ]
+        ],
     )
     def test_import_map(
         self, data: dict | Predicate, dupes: bool, expected: list[tuple[str, list[str]]]
@@ -294,7 +306,6 @@ class TestPredicate:
             (SAMPLES['basic'], list[str], ['"k1": ["A", "B"]', '"k2": ["C"]']),
             (SAMPLES['basic'], str, '{"k1": ["A", "B"], "k2": ["C"]}'),
             (SAMPLES['basic'], list[int], [('k1', ['A', 'B']), ('k2', ['C'])]),
-
             # Known Classes
             (dict(k1=['1', '2']), dict[str, deque[int]], dict(k1=deque([1, 2]))),
             (
@@ -302,37 +313,33 @@ class TestPredicate:
                 defaultdict[str, list[int]],
                 defaultdict(list, dict(k1=[1, 2, 3], k2=[4, 5, 6])),
             ),
-
             # Complex nests
             (
-                dict([('a.b.c', ['55']), ('aa', ['66'])]),
+                {'a.b.c': ['55'], 'aa': ['66']},
                 None,
                 dict(a=dict(b=dict(c=['55'])), aa=['66']),
             ),
             (
-                dict([('a.b.c', ['55']), ('aa', ['66'])]),
+                {'a.b.c': ['55'], 'aa': ['66']},
                 Mapping[str, list[int] | Mapping],
                 dict(a=dict(b=dict(c=[55])), aa=[66]),
             ),
             (
-                dict([('a.b.c', ['55']), ('aa', ['66'])]),
+                {'a.b.c': ['55'], 'aa': ['66']},
                 Mapping[str, list[int] | Mapping[str, list[int] | Mapping]],
                 dict(a=dict(b=dict(c=[55])), aa=[66]),
             ),
             (
-                dict([('a.b.c', ['55']), ('aa', ['66'])]),
+                {'a.b.c': ['55'], 'aa': ['66']},
                 Mapping[str, int],
-                {
-                    'a.b.c': 55,
-                    'aa': 66
-                },
+                {'a.b.c': 55, 'aa': 66},
             ),
             (
-                dict([('a.b.c', ['55']), ('aa', ['66'])]),
+                {'a.b.c': ['55'], 'aa': ['66']},
                 Mapping[tuple[str, ...], list[int]],
-                dict([(('a', 'b', 'c'), [55]), (('aa', ), [66])]),
+                {('a', 'b', 'c'): [55], ('aa',): [66]},
             ),
-        ]
+        ],
     )
     def test_serialize(self, data: dict[str, list[str]], typevar: type | None, expected: Any):
         pred = cls.new(data)
@@ -340,19 +347,21 @@ class TestPredicate:
         assert result == expected
 
     @pyt.mark.parametrize(
-        'text, expected', [
+        'text, expected',
+        [
             ('simple text', 'simple text'),
             ('text\nwith\nnewlines', 'text\\nwith\\nnewlines'),
             ('no newlines', 'no newlines'),
             ('multiple\n\nnewlines\n', 'multiple\\n\\nnewlines\\n'),
             ('', ''),
-        ]
+        ],
     )
     def test_escape(self, text: str, expected: str):
         assert cls._escape(text) == expected
 
     @pyt.mark.parametrize(
-        'data, expected', [
+        'data, expected',
+        [
             (
                 dict(k1=['A'], k2=['B', 'C']),
                 ['k1: A', 'k2:', '    - B', '    - C'],
@@ -373,7 +382,7 @@ class TestPredicate:
                 dict(
                     ratios=['0.5', '0.666', '1.0000'],
                     answers=['yes', 'True', 'N', 'false'],
-                    n=['1000']
+                    n=['1000'],
                 ),
                 [
                     'answers:',
@@ -388,7 +397,7 @@ class TestPredicate:
                     '    - 1.0',
                 ],
             ),
-        ]
+        ],
     )
     def test_to_and_from_yaml(self, data: Any, expected: list[str]):
         # I. Test to_yaml

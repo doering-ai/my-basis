@@ -23,9 +23,9 @@ class Color(MyEnum):
 
 
 class Priority(MyEnum):
-    LOW = "low"
-    MED = "medium"
-    LRG = "large"
+    LOW = 'low'
+    MED = 'medium'
+    LRG = 'large'
 
 
 class Status(MyEnum):
@@ -41,9 +41,9 @@ class Perm(MyEnum, Flag):
 
 
 class CustomAliasEnum(MyEnum):
-    ALPHA = "alpha"
-    BETA = "b"
-    GAMMA = "g"
+    ALPHA = 'alpha'
+    BETA = 'b'
+    GAMMA = 'g'
 
     @ft.lru_cache(maxsize=1)
     @staticmethod
@@ -54,7 +54,7 @@ class CustomAliasEnum(MyEnum):
                 beta=r'second|secondary|beta',
                 gamma=r'third|gamma',
             ),
-            compile_function=lambda s: re.compile(s, re.I)
+            compile_function=lambda s: re.compile(s, re.I),
         )
 
 
@@ -62,7 +62,6 @@ class CustomAliasEnum(MyEnum):
 ### BODY ###
 ############
 class TestMyEnum:
-
     # ---------
     # 1. READ()
     # ---------
@@ -73,27 +72,23 @@ class TestMyEnum:
             (Color, 1, Color.PINK),
             (Color, 2, Color.CLAY),
             (Color, 3, Color.BLUE),
-
             # String enums
-            (Priority, "low", Priority.LOW),
-            (Priority, "medium", Priority.MED),
-            (Priority, "large", Priority.LRG),
-
+            (Priority, 'low', Priority.LOW),
+            (Priority, 'medium', Priority.MED),
+            (Priority, 'large', Priority.LRG),
             # Case-insensitive string lookup
-            (Priority, "LOW", Priority.LOW),
-            (Priority, "MeD", Priority.MED),
-            (Priority, " LRG ", Priority.LRG),
-
+            (Priority, 'LOW', Priority.LOW),
+            (Priority, 'MeD', Priority.MED),
+            (Priority, ' LRG ', Priority.LRG),
             # String representation of integers
-            (Status, "10", Status.PEND),
-            (Status, "20", Status.ACTV),
-            (Status, "30", Status.COMP),
-
+            (Status, '10', Status.PEND),
+            (Status, '20', Status.ACTV),
+            (Status, '30', Status.COMP),
             # Name-based lookup
-            (Color, "PINK", Color.PINK),
-            (Color, "CLAY", Color.CLAY),
-            (Color, "Blue", Color.BLUE),
-        ]
+            (Color, 'PINK', Color.PINK),
+            (Color, 'CLAY', Color.CLAY),
+            (Color, 'Blue', Color.BLUE),
+        ],
     )
     def test_read(self, cls, value, expected):
         assert cls.read(value) == expected
@@ -105,56 +100,54 @@ class TestMyEnum:
             (Perm, 1, Perm.READ),
             (Perm, 2, Perm.WRITE),
             (Perm, 4, Perm.EXECUTE),
-
             # Flag enum combinations
             (Perm, 3, Perm.READ | Perm.WRITE),
             (Perm, 5, Perm.READ | Perm.EXECUTE),
             (Perm, 7, Perm.READ | Perm.WRITE | Perm.EXECUTE),
-
             # String representations
-            (Perm, "READ", Perm.READ),
-            (Perm, "1", Perm.READ),
-
+            (Perm, 'READ', Perm.READ),
+            (Perm, '1', Perm.READ),
             # List-based flag combinations
-            (Perm, ["READ", "WRITE"], Perm.READ | Perm.WRITE),
-            (Perm, ["read", "execute"], Perm.READ | Perm.EXECUTE),
-            (Perm, ["1", "4"], Perm.READ | Perm.EXECUTE),
-
+            (Perm, ['READ', 'WRITE'], Perm.READ | Perm.WRITE),
+            (Perm, ['read', 'execute'], Perm.READ | Perm.EXECUTE),
+            (Perm, ['1', '4'], Perm.READ | Perm.EXECUTE),
             # Pipe-separated strings
-            (Perm, "READ|WRITE", Perm.READ | Perm.WRITE),
-            (Perm, "read|write|execute", Perm.READ | Perm.WRITE | Perm.EXECUTE),
-        ]
+            (Perm, 'READ|WRITE', Perm.READ | Perm.WRITE),
+            (Perm, 'read|write|execute', Perm.READ | Perm.WRITE | Perm.EXECUTE),
+        ],
     )
     def test_read__flag(self, cls, value, expected):
         assert cls.read(value) == expected
 
     @pyt.mark.parametrize(
-        'value, expected', [
-            ("first", CustomAliasEnum.ALPHA),
-            ("PRIMARY", CustomAliasEnum.ALPHA),
-            ("alpha", CustomAliasEnum.ALPHA),
-            ("Second", CustomAliasEnum.BETA),
-            ("secondary", CustomAliasEnum.BETA),
-            ("BETA", CustomAliasEnum.BETA),
-            ("third", CustomAliasEnum.GAMMA),
-            ("Gamma", CustomAliasEnum.GAMMA),
-        ]
+        'value, expected',
+        [
+            ('first', CustomAliasEnum.ALPHA),
+            ('PRIMARY', CustomAliasEnum.ALPHA),
+            ('alpha', CustomAliasEnum.ALPHA),
+            ('Second', CustomAliasEnum.BETA),
+            ('secondary', CustomAliasEnum.BETA),
+            ('BETA', CustomAliasEnum.BETA),
+            ('third', CustomAliasEnum.GAMMA),
+            ('Gamma', CustomAliasEnum.GAMMA),
+        ],
     )
     def test_read__aliases(self, value, expected):
         assert CustomAliasEnum.read(value) == expected
 
     @pyt.mark.parametrize(
-        'cls, value', [
-            (Color, "invalid"),
+        'cls, value',
+        [
+            (Color, 'invalid'),
             (Color, 99),
-            (Priority, "unknown"),
-            (Status, "not_a_status"),
-            (Perm, "invalid_permission"),
-            (CustomAliasEnum, "not_an_alias"),
-        ]
+            (Priority, 'unknown'),
+            (Status, 'not_a_status'),
+            (Perm, 'invalid_permission'),
+            (CustomAliasEnum, 'not_an_alias'),
+        ],
     )
     def test_read__invalid(self, cls, value):
-        with pyt.raises(ValueError, match=f"Invalid {cls.__name__} value"):
+        with pyt.raises(ValueError, match=f'Invalid {cls.__name__} value'):
             cls.read(value)
 
     # ----------------
@@ -164,33 +157,33 @@ class TestMyEnum:
         'enum_value, expected',
         [
             # String-valued enums return their string value
-            (Priority.LOW, "low"),
-            (Priority.MED, "medium"),
-            (Priority.LRG, "large"),
-
+            (Priority.LOW, 'low'),
+            (Priority.MED, 'medium'),
+            (Priority.LRG, 'large'),
             # Non-string enums return lowercase name
-            (Color.PINK, "pink"),
-            (Color.CLAY, "clay"),
-            (Color.BLUE, "blue"),
-            (Status.PEND, "pend"),
-            (Status.ACTV, "actv"),
-            (Status.COMP, "comp"),
-        ]
+            (Color.PINK, 'pink'),
+            (Color.CLAY, 'clay'),
+            (Color.BLUE, 'blue'),
+            (Status.PEND, 'pend'),
+            (Status.ACTV, 'actv'),
+            (Status.COMP, 'comp'),
+        ],
     )
     def test__write(self, enum_value, expected):
         assert enum_value.write() == expected
         assert str(enum_value) == expected
 
     @pyt.mark.parametrize(
-        'enum_value, expected', [
-            (Perm.READ, "read"),
-            (Perm.WRITE, "write"),
-            (Perm.EXECUTE, "execute"),
-            (Perm.READ | Perm.WRITE, "read|write"),
-            (Perm.READ | Perm.EXECUTE, "read|execute"),
-            (Perm.WRITE | Perm.EXECUTE, "write|execute"),
-            (Perm.READ | Perm.WRITE | Perm.EXECUTE, "read|write|execute"),
-        ]
+        'enum_value, expected',
+        [
+            (Perm.READ, 'read'),
+            (Perm.WRITE, 'write'),
+            (Perm.EXECUTE, 'execute'),
+            (Perm.READ | Perm.WRITE, 'read|write'),
+            (Perm.READ | Perm.EXECUTE, 'read|execute'),
+            (Perm.WRITE | Perm.EXECUTE, 'write|execute'),
+            (Perm.READ | Perm.WRITE | Perm.EXECUTE, 'read|write|execute'),
+        ],
     )
     def test_write__flag(self, enum_value, expected):
         result = enum_value.write()
@@ -206,7 +199,7 @@ class TestMyEnum:
             # Basic integer arithmetic
             (Color.PINK, Color.CLAY, Color.BLUE),  # 1 + 2 = 3
             (Status.PEND, Status.ACTV, Status.COMP),  # 10 + 20 = 30
-        ]
+        ],
     )
     def test_add(self, left, right, expected):
         assert left + right == expected
@@ -221,7 +214,7 @@ class TestMyEnum:
         [
             (Color.BLUE, Color.CLAY, Color.PINK),  # 3 - 2 = 1
             (Status.COMP, Status.ACTV, Status.PEND),  # 30 - 20 = 10
-        ]
+        ],
     )
     def test_sub(self, left, right, expected):
         assert left - right == expected
@@ -237,7 +230,7 @@ class TestMyEnum:
             # Flag addition (bitwise OR)
             (Perm.READ, Perm.WRITE, Perm.READ | Perm.WRITE),
             (Perm.READ | Perm.WRITE, Perm.EXECUTE, Perm.READ | Perm.WRITE | Perm.EXECUTE),
-        ]
+        ],
     )
     def test_add__flag(self, left, right, expected):
         assert left + right == expected
@@ -252,7 +245,7 @@ class TestMyEnum:
             # Flag subtraction (bitwise AND NOT)
             (Perm.READ | Perm.WRITE, Perm.WRITE, Perm.READ),
             (Perm.READ | Perm.WRITE | Perm.EXECUTE, Perm.WRITE, Perm.READ | Perm.EXECUTE),
-        ]
+        ],
     )
     def test_sub__flag(self, left, right, expected):
         assert left - right == expected
@@ -268,12 +261,11 @@ class TestMyEnum:
             (Color.PINK, Color.CLAY, True),  # 1 < 2
             (Color.CLAY, Color.PINK, False),  # 2 < 1
             (Color.PINK, Color.PINK, False),  # 1 < 1
-
             # Based on definition order for same values
             (Status.PEND, Status.ACTV, True),  # 10 < 20
             (Status.ACTV, Status.COMP, True),  # 20 < 30
             (Status.COMP, Status.PEND, False),  # 30 < 10
-        ]
+        ],
     )
     def test_eq(self, left, right, expected):
         assert (left < right) == expected
@@ -282,13 +274,14 @@ class TestMyEnum:
         assert (left >= right) == (not expected or left == right)
 
     @pyt.mark.parametrize(
-        'enum_list, expected_order', [
+        'enum_list, expected_order',
+        [
             ([Color.BLUE, Color.PINK, Color.CLAY], [Color.PINK, Color.CLAY, Color.BLUE]),
             (
                 [Status.COMP, Status.PEND, Status.ACTV],
                 [Status.PEND, Status.ACTV, Status.COMP],
             ),
-        ]
+        ],
     )
     def test_lt(self, enum_list, expected_order):
         assert sorted(enum_list) == expected_order
@@ -303,17 +296,15 @@ class TestMyEnum:
             (Color.PINK, [Color.PINK]),
             (Priority.LOW, [Priority.LOW]),
             (Status.PEND, [Status.PEND]),
-
             # Single flag values
             (Perm.READ, [Perm.READ]),
             (Perm.WRITE, [Perm.WRITE]),
             (Perm.EXECUTE, [Perm.EXECUTE]),
-
             # Combined flag values
             (Perm.READ | Perm.WRITE, [Perm.READ, Perm.WRITE]),
             (Perm.READ | Perm.EXECUTE, [Perm.READ, Perm.EXECUTE]),
             (Perm.READ | Perm.WRITE | Perm.EXECUTE, [Perm.READ, Perm.WRITE, Perm.EXECUTE]),
-        ]
+        ],
     )
     def test_parts_property(self, enum_value, expected):
         parts = enum_value.parts
@@ -326,13 +317,12 @@ class TestMyEnum:
             (Color.PINK, Color.PINK),
             (Priority.LOW, Priority.LOW),
             (Status.PEND, Status.PEND),
-
             # Flag enums return first part
             (Perm.READ, Perm.READ),
             (Perm.READ | Perm.WRITE, Perm.READ),
             (Perm.WRITE | Perm.EXECUTE, Perm.WRITE),
             (Perm.READ | Perm.WRITE | Perm.EXECUTE, Perm.READ),
-        ]
+        ],
     )
     def test_base_property(self, enum_value, expected_base):
         assert enum_value.base == expected_base
@@ -344,7 +334,7 @@ class TestMyEnum:
         empty_permission = Perm(0)
         assert empty_permission.parts == []
         assert empty_permission.base == empty_permission
-        assert str(empty_permission) == ""
+        assert str(empty_permission) == ''
 
     def test_aliases_cache(self):
         # Test that _aliases() is cached
@@ -355,10 +345,7 @@ class TestMyEnum:
     @pyt.mark.parametrize('enum_cls', [Color, Priority, Status, Perm, CustomAliasEnum])
     def test_total_ordering(self, enum_cls):
         # Test that all comparison operations work
-        if enum_cls == Perm:
-            vals = [Perm.READ, Perm.WRITE, Perm.EXECUTE]
-        else:
-            vals = list(enum_cls)
+        vals = [Perm.READ, Perm.WRITE, Perm.EXECUTE] if enum_cls == Perm else list(enum_cls)
 
         if len(vals) >= 2:
             a, b = vals[0], vals[1]
@@ -379,9 +366,12 @@ class TestMyEnum:
         inst = Color.PINK
         assert Color.read(inst) == Color.PINK
 
-    @pyt.mark.parametrize('empty_list', [
-        [],
-    ])
+    @pyt.mark.parametrize(
+        'empty_list',
+        [
+            [],
+        ],
+    )
     def test_read_empty_list_flag(self, empty_list):
         # Empty list should create a zero-value flag
         result = Perm.read(empty_list)

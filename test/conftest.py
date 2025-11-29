@@ -19,8 +19,7 @@ re.DEFAULT_VERSION = re.VERSION1
 ############
 ### DATA ###
 ############
-MY_LOGS = env.path('MY_LOGS', '~/local/logs')
-FIRE_TOKEN = env.FIRE_TOKEN
+MY_LOGS = env.path('MY_LOGS', '~/local/logs', mkdir=True)
 
 ############
 ### BODY ###
@@ -29,7 +28,7 @@ ut.setup_logging(
     package='my',
     is_dev=True,
     logdir=MY_LOGS,
-    fire_token=FIRE_TOKEN,
+    fire_token=env.FIRE_TOKEN,
 )
 
 
@@ -45,9 +44,10 @@ def root() -> pyd.DirectoryPath:
 #     return path
 
 
-@pyt.fixture(scope='function')
+@pyt.fixture
 def mock_posix(monkeypatch) -> Callable[[], datetime]:
-    """ Set al.posix() to always return a `datetime(2025-01-01)` object when called. """
+    """Set al.posix() to always return a `datetime(2025-01-01)` object when called."""
+
     def mocked() -> datetime:
         return datetime(2025, 1, 1)
 

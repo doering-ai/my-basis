@@ -90,7 +90,7 @@ class Environment(pyd.BaseModel):
 
         ret = Path(val).expanduser().resolve()
 
-        if mkdir:
+        if mkdir and val:
             ret.mkdir(parents=True, exist_ok=True)
         return ret
 

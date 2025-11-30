@@ -1,123 +1,150 @@
-# Python
-scratch.py
-scratch.my
-scratch.md
-*.pyc
-*.pyo
-*.pyd
-*.py[cod]
-*$py.class
-/prof/
-tmp/
-
-# Distribution / packaging
-.Python
-env/
+###################
+### `I` GENERAL ###
+###################
+# Environment Variables & Secrets
 .env
-build/
-develop-eggs/
+.envrc
+.venv
+.env.*
+!.env.example
+
+# Dev Artifacts
+/scratch.*
+/tmp/
+.cache/
+local_cache/
+
+# Logs & Errors
+/logs/
+/prof/
+/out/
+*.log*
+*.error*
+*.pid
+*.pid.lock
+
+# Packaging & Publishing
 dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
 sdist/
-var/
-wheels/
-pip-wheel-metadata/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
 
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-.hypothesis/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# IPython
-profile_default/
-ipython_config.py
-
-# Pyenv
-.python-version
-
-# Spyder project settings
-.spyderproject
-.spyproject
-
-# Rope project settings
-.ropeproject
-
-# mkdocs documentation
-/site
-
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# pytest
-.pytest_cache
-
-# Pyre type checker
-.pyre/
-
-# IDE - VS Code
-.vscode/
-*.code-workspace
-
-# IDE - JetBrains products (PyCharm, WebStorm, etc.)
-.idea/
-
-# OS - MacOS
-.DS_Store
+###################
+### `II` PYTHON ###
+###################
+# Compilation
+*.py.class
+*.pyc
+*.pyd
+*.pyo
+.so
 __pycache__
 
-.credentials.json
-credentials.json
-.token.json
-token.json
-.cache/
+# Testing & Typing
+.dmypy.json
+.mypy_cache/
+.pyre/
+.pytest_cache/
+.ruff_cache/
+dmypy.json
 
-# dependencies
-node_modules/
-package-lock.json
-yarn.lock
-*.tsbuildinfo
-.pnp/
-.pnp.js
-.env
+# Dependencies
+.python-version
+.venv/
+venv/
+env/
+/.pypirc
+
+# Notebooks
+.ipynb_checkpoints
+ipython_config.py
+profile_default/
+
+# Documentation
+_build/
+
+# Publishing
+*.egg
+*.egg-info/
+.eggs/
+build/
+develop-eggs/
+eggs/
+pip-wheel-metadata/
+share/python-wheels/
+wheels/
+
+# Misc / Unknown
+.installed.cfg
+.Python
+/.streamlit/secrets.toml
+__pypackages__/
+downloads/
+lib/
+lib64/
+MANIFEST
+parts/
+var/
+
+
+########################
+### `III` TYPESCRIPT ###
+########################
+# Packaging
+*.pem
+.next/
+.vercel
+/out/
+build/
 next-env.d.ts
 
-# testing
+# Dependencies
+.npm
+.nuxt
+node_modules/
+package-lock.json
+web_modules/
+yarn.lock
+
+# Packaging
+*.tsbuildinfo
+.pnp.*
+.pnp/
+
+# Other Frameworks
+.firebase/
+.nyc_output
+.output
+.parcel-cache
+.serverless/
+.stylelintcache
+.svelte-kit/
+.temp
+
+#########################
+### `IV` ENVIRONMENTS ###
+#########################
+# IDEs
+*.code-workspace
+.idea/
+.spyderproject
+.spyproject
+.vscode/
+
+# Operating Systems 
+.DS_Store
+
+#################
+### `V` OTHER ###
+#################
+*.cover
+.coverage
+.coverage.*
+coverage.xml
 coverage/
+lib-cov
 
-# production
-build/
-.next/
-out/
-*.pem
-.vercel
-
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-local_cache/
-google_token.json
-cur_article.md
+.hypothesis/
+.nox/
+.ropeproject
+.tox/
+htmlcov/
+nosetests.xml

@@ -16,8 +16,8 @@ import logfire as fire
 import pandas as pd
 
 ### INTERNAL
-from ..base import utils as ut
-from ..type import env
+from ..utils import ut
+from ..types import env
 
 DataFrame = pd.DataFrame
 

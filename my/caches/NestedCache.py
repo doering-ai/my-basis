@@ -2,7 +2,7 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import TypeVar, Generic, Hashable, Iterator
+from typing import Generic, Hashable, Iterator
 import functools as ft
 import more_itertools as mi
 
@@ -10,14 +10,7 @@ import more_itertools as mi
 import pydantic as pyd
 
 ### INTERNAL
-
-############
-### DATA ###
-############
-# Specific type helpers
-Key = TypeVar('Key', bound=Hashable)
-Keys = TypeVar('Keys', bound=tuple)
-Value = TypeVar('Value')
+from ..infra import Keys, Value
 
 
 ############

@@ -13,54 +13,40 @@ from typing import (
     Mapping,
     Sequence,
     TypeGuard,
-    TypeVar,
     Hashable,
 )
-from pathlib import Path
 from collections import Counter, deque
-import collections.abc as abc
-from types import UnionType
-import regex as re
-import functools as ft
-import itertools as it
-import more_itertools as mi
+from copy import deepcopy
 from datetime import date, datetime, time, timedelta, timezone
 from enum import Enum
-from copy import deepcopy
-import textwrap
-import pickle
-import inspect
+from pathlib import Path
+from types import UnionType
+import collections.abc as abc
 import contextlib as ctx
+import functools as ft
+import inspect
+import itertools as it
+import more_itertools as mi
+import pickle
+import regex as re
+import textwrap
 
 ### EXTERNAL
+import dateutil.parser
 import logfire as fire
 import pydantic as pyd
-import dateutil.parser
 import srsly  # type:ignore
 from srsly._yaml_api import CustomYaml  # type:ignore
 
 ### INTERNAL
-from ..base import utils as ut
-from ..perf import Cache, NestedCache
+from ..infra import T, C, Value, Series, Atomic, TimeType
+from ..utils import ut
+from ..caches import Cache, NestedCache
 
 ############
 ### DATA ###
 ############
-# Initialize generic type variable
-T = TypeVar('T')
-C = TypeVar('C')
-
-# Specific type helpers
-Key = TypeVar('Key')
-Value = TypeVar('Value')
-
 # Type Aliases
-Series = list | tuple | set | deque
-MapItems = list[tuple] | tuple[tuple] | deque[tuple] | set[tuple]
-Atomic = str | int | float | bool
-AtomicType = type[str] | type[int] | type[float] | type[bool]
-TimeType = date | datetime | time | timedelta
-
 TypeArg = type | tuple[type, ...] | None
 ParsedType = tuple[type | None, TypeArg, TypeArg]
 
@@ -68,21 +54,13 @@ ParsedType = tuple[type | None, TypeArg, TypeArg]
 File = pyd.FilePath
 Directory = pyd.DirectoryPath
 
-yaml = CustomYaml()
-yaml.sort_base_mapping_type_on_output = False
-# yaml.width = 80
-# yaml.default_flow_style = True
-yaml.indent(mapping=4, sequence=6, offset=4)
-
-DEBUG = True
-
 
 ############
 ### BODY ###
 ############
 class Typist(pyd.BaseModel):
     # Static Global Members
-    ### Types
+    ### Metatypes
     SPECIAL_TYPES: ClassVar[tuple[str, ...]] = (
         'Any',
         'object',
@@ -105,8 +83,15 @@ class Typist(pyd.BaseModel):
         'Protocol',
         'Optional',
     )
+    ATOMIC_TYPES: ClassVar[dict[str, type]] = dict(
+        int=int,
+        float=float,
+        bool=bool,
+        str=str,
+        datetime=datetime,
+    )
 
-    ### RGXS (can't use RegexStore since they depend on this class)
+    ### Regexes (can't use RegexStore because it depends on this class)
     RGXS: ClassVar[dict[str, re.Pattern]] = ut.regex_dict(
         dict(
             # Types
@@ -141,13 +126,9 @@ class Typist(pyd.BaseModel):
         bool=RGXS['bool'],
         datetime=RGXS['datetime'],
     )
-    ATOMIC_TYPES: ClassVar[dict[str, type]] = dict(
-        int=int,
-        float=float,
-        bool=bool,
-        str=str,
-        datetime=datetime,
-    )
+
+    # YAML Config
+    YAML_CONFIG: ClassVar[CustomYaml] = CustomYaml()
 
     # Dynamic Global Members
     PARSE_CACHE: ClassVar[Cache[str, ParsedType]] = Cache()
@@ -163,8 +144,10 @@ class Typist(pyd.BaseModel):
     # -------------------
     @classmethod
     def setup(cls) -> None:
-        if getattr(cls, 'YAML_CONFIG', None):
-            return
+        cls.YAML_CONFIG.indent(mapping=4, sequence=6, offset=4)
+        cls.YAML_CONFIG.sort_base_mapping_type_on_output = False
+        # yaml.width = 80
+        # yaml.default_flow_style = True
 
     def __repr__(self) -> str:
         return f'Typist(atomics={self.atomics}, firsts={self.firsts}, splits={self.splits})'
@@ -193,12 +176,6 @@ class Typist(pyd.BaseModel):
                 for arg in getattr(typevar, '__args__', [])
             ),
         )
-
-    def _cast_model_members(
-        self, items: Iterable[tuple[Any, Any]], target: type[pyd.BaseModel]
-    ) -> dict[str, Any]:
-        annotations = ut.instance_aliases(target)
-        return {key: typist.flexcast(val, annotations.get(key, None)) for key, val in items}
 
     def _sorter(self, origin: type, tvar: TypeArg) -> int:
         ret = 10
@@ -233,6 +210,75 @@ class Typist(pyd.BaseModel):
 
         return all(it.starmap(isinstance, zip(value, args, strict=True)))
 
+    @staticmethod
+    def _is_split(tvar: TypeArg) -> TypeGuard[tuple | UnionType | type]:
+        return isinstance(tvar, UnionType | tuple) or getattr(tvar, '__name__', '') == 'Union'
+
+    @staticmethod
+    def _read_file(file: str | bytes | File | None) -> str:
+        """Read a file and return its contents as a string."""
+        if isinstance(file, bytes):
+            return file.decode('utf-8')
+        elif isinstance(file, Path):
+            ut.validate_file(file)
+            return file.read_text()
+        elif not file:
+            return ''
+        else:
+            return str(file)
+
+    @staticmethod
+    def _decompose_union(tvar: TypeArg) -> tuple[type | None, ...]:
+        if isinstance(tvar, tuple):
+            return tvar
+        elif isinstance(tvar, UnionType) or getattr(tvar, '__name__', '') == 'Union':
+            return tuple(getattr(tvar, '__args__', []))
+        else:
+            return tuple()
+
+    # ----------------------
+    # FUNCTION INTROSPECTION
+    # ----------------------
+    def _accepts(self, sig: Callable | inspect.Signature, value: object) -> bool | str | None:
+        """Inspect a function"""
+        # I. Coerce to signature if needed
+        if not isinstance(sig, inspect.Signature):
+            assert callable(sig), f'Invalid function provided: {sig}'
+            sig = inspect.signature(sig)
+
+        # II. Walk through params until we find missing required params, or a matching valid one
+        ret = None
+        for i, (name, param) in enumerate(sig.parameters.items()):
+            # II.i. Determine param kind, and skip variable ones (*args & **kwargs)
+            is_pos = param.kind in {param.POSITIONAL_ONLY, param.POSITIONAL_OR_KEYWORD}
+            is_kwd = param.kind in {param.KEYWORD_ONLY, param.POSITIONAL_OR_KEYWORD}
+            if not is_pos or is_kwd:
+                continue
+
+            # II.ii. Flag the first match, or return false if a required param is missing
+            has_default = param.default is not inspect.Parameter.empty
+            if ret is None and self.check(value, param.annotation):
+                if is_kwd:
+                    ret = name
+                elif is_pos:
+                    if i == 0:
+                        ret = True
+                    elif not has_default:
+                        return False
+            elif not has_default:
+                return False
+
+        return ret
+
+    def _accepts_kwargs(self, sig: Callable | inspect.Signature) -> bool:
+        # I. Coerce to signature if needed
+        if not isinstance(sig, inspect.Signature):
+            assert callable(sig), f'Invalid function provided: {sig}'
+            sig = inspect.signature(sig)
+
+        # II. Check for **kwargs param
+        return inspect.Parameter.VAR_KEYWORD in {p.kind for p in sig.parameters.values()}
+
     def _cast(self, data: object, target: type, ktype: TypeArg, vtype: TypeArg) -> Any:
         # 0. Pick one value out of series data, if configured to
         if (
@@ -264,10 +310,8 @@ class Typist(pyd.BaseModel):
         if not isinstance(data, target):
             try:
                 data = target(data)  # type:ignore
-            except Exception as e:
+            except Exception:
                 fire.error(f'Failed to convert {data} (type={type(data)}) to type={target}')
-                if DEBUG:
-                    print(e)
                 raise
         return data
 
@@ -345,59 +389,6 @@ class Typist(pyd.BaseModel):
                 return data.total_seconds() > 0
 
         return ''
-
-    def _accepts(self, sig: Callable | inspect.Signature, value: object) -> bool | str | None:
-        """Inspect a function"""
-        # I. Coerce to signature if needed
-        if not isinstance(sig, inspect.Signature):
-            assert callable(sig), f'Invalid function provided: {sig}'
-            sig = inspect.signature(sig)
-
-        # II. Walk through params until we find missing required params, or a matching valid one
-        ret = None
-        for i, (name, param) in enumerate(sig.parameters.items()):
-            # II.i. Determine param kind, and skip variable ones (*args & **kwargs)
-            is_pos = param.kind in {param.POSITIONAL_ONLY, param.POSITIONAL_OR_KEYWORD}
-            is_kwd = param.kind in {param.KEYWORD_ONLY, param.POSITIONAL_OR_KEYWORD}
-            if not is_pos or is_kwd:
-                continue
-
-            # II.ii. Flag the first match, or return false if a required param is missing
-            has_default = param.default is not inspect.Parameter.empty
-            if ret is None and self.check(value, param.annotation):
-                if is_kwd:
-                    ret = name
-                elif is_pos:
-                    if i == 0:
-                        ret = True
-                    elif not has_default:
-                        return False
-            elif not has_default:
-                return False
-
-        return ret
-
-    def _accepts_kwargs(self, sig: Callable | inspect.Signature) -> bool:
-        # I. Coerce to signature if needed
-        if not isinstance(sig, inspect.Signature):
-            assert callable(sig), f'Invalid function provided: {sig}'
-            sig = inspect.signature(sig)
-
-        # II. Check for **kwargs param
-        return inspect.Parameter.VAR_KEYWORD in {p.kind for p in sig.parameters.values()}
-
-    def flex_call(self, func: Callable, value: object) -> tuple[bool, Any]:
-        """Attempt to call a function with the given value."""
-        sig = inspect.signature(func)
-        slot = self._accepts(sig, value)
-        if isinstance(slot, bool):
-            return slot, (func(value) if slot else None)
-        elif isinstance(slot, str):
-            return True, func(**{slot: value})
-        elif self._accepts_kwargs(sig) and (items := ut.map_items(value)):
-            return True, func(**dict(items))
-
-        return False, None
 
     def _cast_to_model(self, data: object, target: type[pyd.BaseModel]) -> object:
         if hasattr(target, 'new') and callable(target.new):
@@ -489,7 +480,11 @@ class Typist(pyd.BaseModel):
         return None
 
     def _cast_to_map(
-        self, data: object, target: type[Mapping], ktype: TypeArg, vtype: TypeArg
+        self,
+        data: object,
+        target: type[Mapping],
+        ktype: TypeArg,
+        vtype: TypeArg,
     ) -> object:
         # III. Handle maps
         if items := ut.map_items(data):
@@ -535,42 +530,19 @@ class Typist(pyd.BaseModel):
             return self.flexcast_all(data, vtype)
         return data
 
-    # @classmethod
-    # def yamlfix(cls, text: str, src_type: type | None = None) -> str:
-    #     """ Fix the YAML code to ensure it is properly formatted. """
-    #     # I. Do the actual fixing based on our pyproject.toml settings
-    #     text = fix_code(text, config=cls.YAML_CONFIG).strip('\n')
-
-    #     # II. Fix odd bug where root-level lists have extra indentation
-    #     if src_type and issubclass(src_type, list) and '\n' in text:
-    #         lines = text.splitlines()
-    #         if all(line.startswith('  ') for line in lines[1:]):
-    #             text = '\n'.join([lines[0]] + [line[2:] for line in lines[1:]])
-    #     return text
-
     @staticmethod
-    def _is_split(tvar: TypeArg) -> TypeGuard[tuple | UnionType | type]:
-        return isinstance(tvar, UnionType | tuple) or getattr(tvar, '__name__', '') == 'Union'
-
-    @staticmethod
-    def _read_file(file: str | bytes | File | None) -> str:
-        """Read a file and return its contents as a string."""
-        if isinstance(file, bytes):
-            return file.decode('utf-8')
-        elif isinstance(file, Path):
-            ut.validate_file(file)
-            return file.read_text()
-        elif not file:
-            return ''
-        else:
-            return str(file)
+    def _cast_model_members(
+        items: Iterable[tuple[Any, Any]],
+        target: type[pyd.BaseModel],
+    ) -> dict[str, Any]:
+        annotations = ut.instance_aliases(target)
+        return {key: typist.flexcast(val, annotations.get(key, None)) for key, val in items}
 
     # -------------------
     # `+` Primary Methods
     # -------------------
-    @staticmethod
-    def parse(typevar: TypeArg) -> ParsedType:
-        cls = Typist
+    @classmethod
+    def parse(cls, typevar: TypeArg) -> ParsedType:
         fullname = str(typevar)
         if cached := cls.PARSE_CACHE[fullname]:
             return cached
@@ -635,17 +607,8 @@ class Typist(pyd.BaseModel):
         return ret
 
     @staticmethod
-    def _decompose_union(tvar: TypeArg) -> tuple[type | None, ...]:
-        if isinstance(tvar, tuple):
-            return tvar
-        elif isinstance(tvar, UnionType) or getattr(tvar, '__name__', '') == 'Union':
-            return tuple(getattr(tvar, '__args__', []))
-        else:
-            return tuple()
-
-    @staticmethod
     def match(t0: TypeArg, t1: TypeArg, recurse: bool = False) -> TypeGuard[T]:
-        """Check if two types are equivelent."""
+        """Check if two types are equivalent."""
         if t0 is Any or t0 is None or t1 is Any or t1 is None:
             return True
 
@@ -752,9 +715,26 @@ class Typist(pyd.BaseModel):
 
         return text
 
+    def flex_call(self, func: Callable, value: object) -> tuple[bool, Any]:
+        """Attempt to call a function with the given value."""
+        sig = inspect.signature(func)
+        slot = self._accepts(sig, value)
+        if isinstance(slot, bool):
+            return slot, (func(value) if slot else None)
+        elif isinstance(slot, str):
+            return True, func(**{slot: value})
+        elif self._accepts_kwargs(sig) and (items := ut.map_items(value)):
+            return True, func(**dict(items))
+
+        return False, None
+
     # ------------------
     # `x` Public Methods
     # ------------------
+
+    # ---------------
+    # TYPE COMPARISON
+    # ---------------
     def check(self, data: object, tvar: type[T] | tuple[type[T], ...]) -> TypeGuard[T]:
         """
         Check if a data matches a type variable, recursively checking the values of containers.
@@ -805,9 +785,9 @@ class Typist(pyd.BaseModel):
             map(list, mi.partition(lambda x: isinstance(x, type), container))
         )
 
-    # -----------------------
-    # Distilling and Merging
-    # -----------------------
+    # -------------------
+    # DATA TRANSFORMATION
+    # -------------------
     def assemble(self, base: dict, *args: dict, copy: bool = True) -> dict:
         """
         Combines dictionaries, keeping the keys from the left-hand side and overwriting them
@@ -894,9 +874,9 @@ class Typist(pyd.BaseModel):
         # V. If there's existing data, add it to the result before returning
         return distillate
 
-    # --------------
-    # Serializing Data
-    # --------------
+    # -------------
+    # SERIALIZATION
+    # -------------
     def serialize(self, data: object, **kwargs) -> Any:
         """Recursively transform the given object into serialization-ready, standardized types."""
         # I. Immediately return atomic values as-is
@@ -935,6 +915,9 @@ class Typist(pyd.BaseModel):
 
         return data
 
+    # --------------
+    # FILESYSTEM I/O
+    # --------------
     def from_file(self, file: File | None) -> dict:
         if not file or not isinstance(file, Path) or not file.exists():
             return {}
@@ -992,7 +975,7 @@ class Typist(pyd.BaseModel):
         obj = self.serialize(data)
 
         # II. Serialize w/ default params
-        text = yaml.dump(obj)
+        text = self.YAML_CONFIG.dump(obj)
 
         # III. If we printed a root array, de-intent it
         if isinstance(data, Sequence | set) and text.startswith(' '):
@@ -1015,9 +998,9 @@ class Typist(pyd.BaseModel):
             text = f'```json\n{text}\n```'
         return text
 
-    # -------
-    # Casting
-    # -------
+    # -------------
+    # TYPE COERCION
+    # -------------
     def cast(self, data: object, tvar: type[Value]) -> Value | None:
         if data is None or tvar is None or not self._parseable(tvar):
             # 0. Return null if the target is invalid
@@ -1102,15 +1085,3 @@ class Typist(pyd.BaseModel):
 
 Typist.setup()
 typist = Typist(atomics=True, splits=True)
-
-
-class AutocastModel(pyd.BaseModel):
-    @pyd.model_validator(mode='before')
-    @classmethod
-    def _auto_validate(cls, data: dict) -> dict:
-        return typist._cast_model_members(data.items(), cls)
-
-    @pyd.model_serializer(mode='wrap')
-    def _auto_serialize(self, handler) -> dict[str, Any]:
-        """Serialize the Issue instance to a dictionary."""
-        return typist.serialize(handler(self))

@@ -11,7 +11,7 @@ import functools as ft
 import regex as re
 
 ### INTERNAL
-from ..base import utils as ut
+from ..utils import ut
 
 
 ############

@@ -2,8 +2,8 @@
 ### HEAD ###
 ############
 ### STANDARD
-from collections import Counter, deque
-from typing import ClassVar, Iterable, Iterator, Mapping, TypeVar, Any, Self
+from collections import Counter
+from typing import ClassVar, Iterable, Iterator, Mapping, Any, Self
 import regex as re
 import itertools as it
 import more_itertools as mi
@@ -14,34 +14,26 @@ import logfire
 import json
 
 ### INTERNAL
-from ..base import utils as ut
-from .Typist import Typist, TypeArg
+from ..infra import T, Series
+from ..utils import ut
+from ..typing import Typist, TypeArg
 
 typist = Typist(firsts=True, splits=True)
-
-############
-### DATA ###
-############
-NEWLINE_RGX = re.compile(r'\n')
-NONWORD_RGX = re.compile(r'\W+')
-PERIOD_RGX = re.compile(r' *\. *')
-COLON_RGX = re.compile(r' *: *')
-COMMA_RGX = re.compile(r' *, *')
-
-SplitItems = list[tuple[tuple[str, ...], list[str]]]
-
-T = TypeVar('T')
-Map = TypeVar('Map')
-Key = TypeVar('Key')
-Value = TypeVar('Value')
-
-Series = list | tuple | set | deque
 
 
 ############
 ### BODY ###
 ############
 class Predicate(pyd.BaseModel):
+    RGXS: ClassVar[dict[str, re.Pattern]] = ut.regex_dict(
+        dict(
+            newline=r'\n',
+            nonword=r'\W+',
+            period=r' *\. *',
+            colon=r' *: *',
+            comma=r' *, *',
+        )
+    )
     DECAST_TYPES: ClassVar[tuple[type, ...]] = (str, int, float, bool, bytes)
 
     data: dict[str, list[str]] = {}
@@ -144,7 +136,7 @@ class Predicate(pyd.BaseModel):
 
     @staticmethod
     def _escape(text: str) -> str:
-        return NEWLINE_RGX.sub(r'\\n', text)
+        return Predicate.RGXS['newline'].sub(r'\\n', text)
 
     def _serialize_cast(self, source: dict[str, list[str]], req_tvar: type[T] | None = None) -> T:
         """

@@ -67,4 +67,4 @@ module-name = "my"
 module-root = ""
 
 [tool.ty.src]
-exclude = ["my/data/"]
+exclude = ["my/templates/"]

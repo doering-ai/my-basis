@@ -3,19 +3,12 @@
 ############
 ### STANDARD
 from typing import ClassVar
-from collections import deque
 
 ### EXTERNAL
 import regex as re
 
 ### INTERNAL
-
-############
-### DATA ###
-############
-Series = list | tuple | deque
-
-DELIM = ' // '
+from ..infra import Series, DELIM
 
 
 ############
@@ -31,6 +24,7 @@ class Span(tuple[int, int]):
         if isinstance(arg0, Series):
             # I. Handle tuple input
             assert len(arg0) == 2, 'Tuple must have exactly 2 elements'
+            assert not isinstance(arg0, set), 'Tuple cannot be a set'
             x0, x1 = int(arg0[0]), int(arg0[1])
 
         elif isinstance(arg0, str):

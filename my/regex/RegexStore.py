@@ -2,34 +2,22 @@
 ### HEAD ###
 ############
 ### STANDARD
+from typing import Iterable, Iterator, Literal, ClassVar, Any, Callable, Generator, Mapping, Self
 from collections import deque
-from typing import (
-    Iterable,
-    Iterator,
-    Literal,
-    ClassVar,
-    Any,
-    Callable,
-    Generator,
-    TypeVar,
-    Mapping,
-    Self,
-)
 import functools as ft
 import itertools as it
+
+### EXTERNAL
 import more_itertools as mi
+import pydantic as pyd
 import regex as re
 from regex import Match, Pattern, RegexFlag
 
-### EXTERNAL
-import pydantic as pyd
-
 ### INTERNAL
-from ..base import utils as ut
-from .Span import Span
-from .Buffer import Buffer
-from .MatchData import MatchData
+from ..utils import ut
+from ..types import Span, Buffer
 from .GroupKind import GroupKind, GROUP_KIND_MAP
+from .MatchData import MatchData
 from .ParseData import ParseData
 
 ############
@@ -44,7 +32,6 @@ NO_FLAG = RegexFlag(0)
 # General type aliases
 Params = dict[str, str]
 Captures = dict[str, list[str]]
-T = TypeVar('T')
 
 # Regex-specific type aliases
 Atom = str

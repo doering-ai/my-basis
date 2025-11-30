@@ -2,6 +2,7 @@
 ### `I` GENERAL ###
 ###################
 # Environment Variables & Secrets
+
 .env
 .envrc
 .venv
@@ -148,3 +149,6 @@ lib-cov
 .tox/
 htmlcov/
 nosetests.xml
+
+# SublimeText
+Preferences.sublime-settings

@@ -11,11 +11,13 @@ class Utils(IterUtils, TextUtils, SystemUtils, SemanticUtils, SyntaxUtils, CodeU
 
 
 ut = Utils
+utils = Utils
 
 
 __all__ = [
     'Utils',
     'ut',
+    'utils',
     'IterUtils',
     'iut',
     'TextUtils',

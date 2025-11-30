@@ -2,22 +2,19 @@
 ### HEAD ###
 ############
 # Standard imports
-from typing import TypeVar, Generic, Hashable
+from typing import Generic
 import more_itertools as mi
 
 # External imports
 import pydantic as pyd
 
 # Internal imports
+from ..infra import Key, Value
+
 
 ############
 ### BODY ###
 ############
-# Specific type helpers
-Key = TypeVar('Key', bound=Hashable)
-Value = TypeVar('Value')
-
-
 class Cache(pyd.BaseModel, Generic[Key, Value]):
     data: dict[Key, Value] = {}
     maxsize: int = pyd.Field(default=2**12, gt=0)  # 4096

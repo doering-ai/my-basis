@@ -11,7 +11,7 @@ import pickle as pkl
 import pydantic as pyd
 
 # Internal imports
-from ..base.utils import posix
+from ..utils import ut
 
 ############
 ### BODY ###
@@ -27,8 +27,8 @@ class PickleCache(pyd.BaseModel, Generic[Key, Value]):
     data: dict[Key, Value] = {}
     ttl: timedelta = timedelta(days=1)
 
-    last_read: datetime = pyd.Field(default_factory=lambda: posix(0), exclude=True)
-    last_write: datetime = pyd.Field(default_factory=lambda: posix(0), exclude=True)
+    last_read: datetime = pyd.Field(default_factory=lambda: ut.posix(0), exclude=True)
+    last_write: datetime = pyd.Field(default_factory=lambda: ut.posix(0), exclude=True)
 
     @pyd.model_validator(mode='after')
     def _build(self) -> 'PickleCache':
@@ -58,7 +58,7 @@ class PickleCache(pyd.BaseModel, Generic[Key, Value]):
             self.last_write = datetime.fromtimestamp(mtime)
             if self.last_write:
                 self.data = pkl.loads(self.file.read_bytes())
-                self.last_read = posix()
+                self.last_read = ut.posix()
         elif self.func is not None:
             # III. Fetch anew and cache
             self.data = await self.func()
@@ -69,7 +69,7 @@ class PickleCache(pyd.BaseModel, Generic[Key, Value]):
     def write(self) -> None:
         with open(self.file, 'wb') as ptr:
             pkl.dump(self.data, ptr)
-        self.last_read = self.last_write = posix()
+        self.last_read = self.last_write = ut.posix()
 
     def __getitem__(self, key: Key) -> Value:
         return self.data[key]

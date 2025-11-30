@@ -7,20 +7,19 @@ from collections import deque, defaultdict
 import regex as re
 import functools as ft
 from pathlib import Path
-from typing import Iterator, ClassVar, Callable, TypeVar, Generic, Literal
+from typing import Iterator, ClassVar, Callable, Generic, Literal
 
 ### EXTERNAL
 import pydantic as pyd
 import logfire
 
 ### INTERNAL
+from ..infra import T
+
 
 ############
 ### BODY ###
 ############
-T = TypeVar('T')
-
-
 class FileCache(Generic[T]):
     MAX_CACHE: ClassVar[int] = 2**16  # 64K
     NAME_RGX: ClassVar[re.Pattern] = re.compile(

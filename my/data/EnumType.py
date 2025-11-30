@@ -9,7 +9,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql as psql
 
 ### INTERNAL
-from ..base.MyEnum import MyEnum
+from ..types.MyEnum import MyEnum
 
 ############
 ### DATA ###

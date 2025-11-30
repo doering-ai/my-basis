@@ -12,10 +12,11 @@ import mdformat
 import logfire
 
 ### INTERNAL
-from ..base import utils as ut, constants
-from ..type import typist, Predicate
-from .Buffer import Buffer
-from .RegexStore import RegexStore
+from ..infra import get_template
+from ..utils import ut
+from ..typing import typist
+from ..types import Buffer, Predicate
+from ..regex import RegexStore
 
 ############
 ### DATA ###
@@ -432,7 +433,7 @@ class Markdown(pyd.BaseModel):
         if strip_notes and 'notes' in data:
             del data['notes']
 
-        body = constants.get_template(self.TEMPLATE).render(data)
+        body = get_template(self.TEMPLATE).render(data)
         if fix:
             body = mdformat.text(body)
         return body

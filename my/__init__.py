@@ -1,4 +1,15 @@
-from .base import constants, utils
+# ./utils/ <- NONE
+#   ./caches/ <- utils
+#       ./typing/ <- utils, caches
+#           ./types/ <- utils, typing
+#               ./text/ <-
+#               ./regex/ <- utils, types, text
+#               ./data/ <- types
+#               ./apis/ <- utils, types
+#               ./files/ <- utils, typing, types, regex, text
+
+
+from .utils import utils
 from .base.UniqueId import UniqueId
 from .base.MyEnum import MyEnum
 from .type import Typist, typist, TypeArg, TimeType, Environment, env, Predicate
@@ -25,39 +36,35 @@ ut = utils
 Uid = UniqueId
 __all__ = [
     # Base
-    "constants",
-    "utils",
-    "ut",
-    "UniqueId",
-    "Uid",
-    "MyEnum",
-
+    'constants',
+    'utils',
+    'ut',
+    'UniqueId',
+    'Uid',
+    'MyEnum',
     # Type
-    "Typist",
-    "typist",
-    "TypeArg",
-    "TimeType",
-    "Environment",
-    "env",
-    "Predicate",
-
+    'Typist',
+    'typist',
+    'TypeArg',
+    'TimeType',
+    'Environment',
+    'env',
+    'Predicate',
     # Text
-    "Span",
-    "Buffer",
-    "MatchData",
-    "GroupKind",
-    "RegexStore",
-    "RgxVal",
-    "format_url",
-    "atom",
-    "COMMON_RGXS",
-    "Markdown",
-
+    'Span',
+    'Buffer',
+    'MatchData',
+    'GroupKind',
+    'RegexStore',
+    'RgxVal',
+    'format_url',
+    'atom',
+    'COMMON_RGXS',
+    'Markdown',
     # Perf
-    "Cache",
-    "NestedCache",
-    "PickleCache",
-
+    'Cache',
+    'NestedCache',
+    'PickleCache',
     # APIs
-    "GoogleSheet",
+    'GoogleSheet',
 ]

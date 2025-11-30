@@ -8,10 +8,11 @@ import itertools as it
 import regex as re
 
 ### INTERNAL
-from ..base import utils as ut
-from .Buffer import Buffer
+from ..utils import ut
+from ..types import Buffer
+from .GroupKind import GroupKind
 from .MatchData import MatchData
-from .RegexStore import RegexStore, GroupKind
+from .RegexStore import RegexStore
 
 
 ############
@@ -34,11 +35,13 @@ def curate_rgx(
     rgx_snippet = store.sanitize_pattern(snippet)
     invocations = store.parse_invocations(rgx_snippet)
 
-    return '\n'.join([
-        r'(?(DEFINE)',
-        *[definitions[group] for group in invocations],
-        rf')(?m)^{rgx_snippet}',
-    ])
+    return '\n'.join(
+        [
+            r'(?(DEFINE)',
+            *[definitions[group] for group in invocations],
+            rf')(?m)^{rgx_snippet}',
+        ]
+    )
 
 
 def debug_failed_match(store: RegexStore, name: str, rgx: str, text: Buffer) -> list[str]:
@@ -74,34 +77,40 @@ def debug_failed_match(store: RegexStore, name: str, rgx: str, text: Buffer) -> 
     # III. Exit early if we completely failed or completely succeeded
     out_rgx = store.sanitize_pattern(head + body_rgx)
     if n == 0:
-        output.extend([
-            f'Returned FAILED MATCH (n={n}) for entire RGX:',
-            out_rgx,
-            '',
-        ])
+        output.extend(
+            [
+                f'Returned FAILED MATCH (n={n}) for entire RGX:',
+                out_rgx,
+                '',
+            ]
+        )
         remaining_text = str(text)
     elif n == len(atoms):
-        output.extend([
-            'Returned UNEXPECTED MATCH for RGX:',
-            '',
-            out_rgx,
-            '',
-            '...returning:',
-            '',
-            f'\t{data}',
-        ])
+        output.extend(
+            [
+                'Returned UNEXPECTED MATCH for RGX:',
+                '',
+                out_rgx,
+                '',
+                '...returning:',
+                '',
+                f'\t{data}',
+            ]
+        )
         if data.end < len(text):
             output.extend(['Unmatched text:', text.slice(data.end, len(text))])
         return output
     else:
-        output.extend([
-            f'Returned PARTIAL MATCH up to clause {n}, returning data:',
-            f'\t{data}',
-        ])
+        output.extend(
+            [
+                f'Returned PARTIAL MATCH up to clause {n}, returning data:',
+                f'\t{data}',
+            ]
+        )
         remaining_text = str(text.slice(data.end, len(text)))
 
     # IV. Return just the clauses that we think failed
-    head_buf = Buffer.new(head[len('(?(DEFINE)'):-1], fence_rgxs=['arrays'])
+    head_buf = Buffer.new(head[len('(?(DEFINE)') : -1], fence_rgxs=['arrays'])
     definitions = {
         name: head_buf.slice(*span)
         for span, _, name, _, _ in cls.group_iterator(head_buf, mask=GroupKind.PARAM, mode='roots')
@@ -110,17 +119,19 @@ def debug_failed_match(store: RegexStore, name: str, rgx: str, text: Buffer) -> 
     if not curated_rgx:
         output.extend(['Failed to curate RGX:', '', out_rgx])
     else:
-        output.extend([
-            '-' * 80,
-            'This test RGX:',
-            '',
-            curated_rgx,
-            '',
-            '...needs to match this remaining text:',
-            '',
-            remaining_text,
-            '-' * 80,
-        ])
+        output.extend(
+            [
+                '-' * 80,
+                'This test RGX:',
+                '',
+                curated_rgx,
+                '',
+                '...needs to match this remaining text:',
+                '',
+                remaining_text,
+                '-' * 80,
+            ]
+        )
 
     return output
 
@@ -140,50 +151,58 @@ def debug_regex(
     status = str(int(matched)) + str(int(expected))
     rgxs_str = '\n\n'.join(map(store.sanitize_pattern, names))
     if status == '11':
-        output.extend([
-            f'RGX `{_name}` returned INCORRECT results for text:',
-            '',
-            text,
-            '',
-            '...VIA PATTERN:',
-            '',
-            rgxs_str,
-            '',
-        ])
+        output.extend(
+            [
+                f'RGX `{_name}` returned INCORRECT results for text:',
+                '',
+                text,
+                '',
+                '...VIA PATTERN:',
+                '',
+                rgxs_str,
+                '',
+            ]
+        )
 
     elif status == '10':
-        output.extend([
-            f'RGX `{_name}` returned UNEXPECTED success for text:',
-            '',
-            text,
-            '',
-            '...VIA PATTERN:',
-            '',
-            rgxs_str,
-            '',
-        ])
+        output.extend(
+            [
+                f'RGX `{_name}` returned UNEXPECTED success for text:',
+                '',
+                text,
+                '',
+                '...VIA PATTERN:',
+                '',
+                rgxs_str,
+                '',
+            ]
+        )
 
     elif status == '01':
-        output.extend([
-            f'RGX `{_name}` returned FAILURE to match text:',
-            '',
-            text,
-            '',
-            '...VIA PATTERN:',
-            '',
-            rgxs_str,
-            '',
-        ])
+        output.extend(
+            [
+                f'RGX `{_name}` returned FAILURE to match text:',
+                '',
+                text,
+                '',
+                '...VIA PATTERN:',
+                '',
+                rgxs_str,
+                '',
+            ]
+        )
         buf = Buffer.new(text, fence_rgxs=['arrays'])
         for i, name in enumerate(names):
             if len(names) > 1:
                 header = f'## `{i}` output for {name.upper()} ##'
-                output.extend([
-                    '',
-                    '#' * len(header),
-                    header,
-                    '#' * len(header),
-                ])
+                output.extend(
+                    [
+                        '',
+                        '#' * len(header),
+                        header,
+                        '#' * len(header),
+                    ]
+                )
 
             rgx = store[name].pattern
             output.extend(debug_failed_match(store, name, rgx, buf))

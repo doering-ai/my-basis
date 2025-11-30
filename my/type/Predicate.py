@@ -3,14 +3,7 @@
 ############
 ### STANDARD
 from collections import Counter, deque
-from typing import (
-    ClassVar,
-    Iterable,
-    Iterator,
-    Mapping,
-    TypeVar,
-    Any,
-)
+from typing import ClassVar, Iterable, Iterator, Mapping, TypeVar, Any, Self
 import regex as re
 import itertools as it
 import more_itertools as mi
@@ -41,7 +34,6 @@ T = TypeVar('T')
 Map = TypeVar('Map')
 Key = TypeVar('Key')
 Value = TypeVar('Value')
-SubType = TypeVar('SubType', bound='Predicate')
 
 Series = list | tuple | set | deque
 
@@ -60,9 +52,9 @@ class Predicate(pyd.BaseModel):
     # `0` Initial Methods
     # -------------------
     @classmethod
-    def new(cls: type[SubType], data: Any | None = None, **kwargs) -> SubType:
+    def new(cls, data: Any | None = None, **kwargs) -> Self:
         """
-        Create a new Predicate instance from the given data, which can be a dictionary, a list of
+        Create a new Predicate instance. from the given data, which can be a dictionary, a list of
         tuples, or another Predicate.
         """
         if isinstance(data, cls):
@@ -374,17 +366,17 @@ class Predicate(pyd.BaseModel):
     def __ne__(self, other: object) -> bool:
         return not (self == other)
 
-    def __iadd__(self: SubType, other: object) -> SubType:
+    def __iadd__(self, other: object) -> Self:
         for field, value in ut.map_items(other):
             self.write(field, value, overwrite=False)
         return self
 
-    def __ior__(self: SubType, other: object) -> SubType:
+    def __ior__(self, other: object) -> Self:
         for field, value in ut.map_items(other):
             self.write(field, value, overwrite=True)
         return self
 
-    def __iand__(self: SubType, other: object) -> SubType:
+    def __iand__(self, other: object) -> Self:
         filter_items = Predicate.new(other, duplicates=self.duplicates).items()
         self.data = {
             field: ut.common_elements(self[field], values)
@@ -393,7 +385,7 @@ class Predicate(pyd.BaseModel):
         }
         return self
 
-    def __isub__(self: SubType, other: object) -> SubType:
+    def __isub__(self, other: object) -> Self:
         if not other:
             pass
         elif isinstance(other, Series) and typist.all_are(other, str):
@@ -409,22 +401,22 @@ class Predicate(pyd.BaseModel):
             raise TypeError(f'Cannot subtract {type(other)} from Predicate')
         return self
 
-    def __add__(self: SubType, other: object) -> SubType:
+    def __add__(self, other: object) -> Self:
         ret = self.model_copy(deep=True)
         ret += other
         return ret
 
-    def __or__(self: SubType, other: object) -> SubType:
+    def __or__(self, other: object) -> Self:
         ret = self.model_copy(deep=True)
         ret |= other
         return ret
 
-    def __and__(self: SubType, other: object) -> SubType:
+    def __and__(self, other: object) -> Self:
         ret = self.model_copy(deep=True)
         ret &= other
         return ret
 
-    def __sub__(self: SubType, other: object) -> SubType:
+    def __sub__(self, other: object) -> Self:
         ret = self.model_copy(deep=True)
         ret -= other
         return ret

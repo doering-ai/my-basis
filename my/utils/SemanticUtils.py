@@ -9,7 +9,7 @@ import keyword
 import regex as re
 
 ### INTERNAL
-from .IterUtils import iut
+from .IterUtils import iter_utils
 
 
 ############
@@ -89,7 +89,7 @@ class SemanticUtils:
 
     @classmethod
     def format_amount(cls, amount: int, unit: Literal['num', 'mem'] = 'num', width: int = 0) -> str:
-        index = iut.find(cls.BASELINES, lambda trip: amount >= trip[0])
+        index = iter_utils.find(cls.BASELINES, lambda trip: amount >= trip[0])
         if index > -1:
             suffix = str(cls.BASELINES[index][1 if unit == 'num' else 2])
             content = round(amount / cls.BASELINES[index][0])
@@ -197,4 +197,4 @@ class SemanticUtils:
             assert sym not in cls.TS_KEYWORDS, f'Symbol {sym} is invalid (TypeScript keyword)'
 
 
-mut = SemanticUtils
+semantic_utils = SemanticUtils

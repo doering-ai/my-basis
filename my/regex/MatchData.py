@@ -17,7 +17,7 @@ from ..types import Span, Predicate
 ### BODY ###
 ############
 class MatchData(Predicate):
-    match: ut.AnnotatedMatch | None = None
+    match: ut.MatchField | None = None
     duplicates: bool = True
 
     # -------------------

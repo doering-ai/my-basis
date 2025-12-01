@@ -18,7 +18,7 @@ import pydantic as pyd
 
 ### INTERNAL
 from ..infra import Series
-from .IterUtils import iut
+from .IterUtils import iter_utils
 
 
 ############
@@ -77,15 +77,15 @@ class CodeUtils:
                 next_iter = obj
 
         elif isinstance(obj, Mapping):
-            if key := iut.find_key(obj, old):
+            if key := iter_utils.find_key(obj, old):
                 obj[key] = new  # type:ignore
                 return True
             else:
                 next_iter = list(obj.values())  # ty: ignore[invalid-assignment]
 
         elif isinstance(obj, pyd.BaseModel):
-            attrs = iut.attr_map(obj, cls.instance_fields(type(obj)).keys())
-            if field := iut.find_key(attrs, old):
+            attrs = iter_utils.attr_map(obj, cls.instance_fields(type(obj)).keys())
+            if field := iter_utils.find_key(attrs, old):
                 setattr(obj, field, new)
                 return True
             else:
@@ -122,4 +122,4 @@ class CodeUtils:
         #     delattr(inst, attr)
 
 
-cut = CodeUtils
+code_utils = CodeUtils

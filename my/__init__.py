@@ -11,20 +11,20 @@
 from .infra import T, C, Key, Keys, Value, Atomic, Series, MapItems, AtomicType, TimeType
 from .utils import (
     Utils,
-    utils,
     ut,
+    utils,
     IterUtils,
-    iut,
+    iter_utils,
     TextUtils,
-    tut,
+    text_utils,
     SystemUtils,
-    sut,
+    system_utils,
     SemanticUtils,
-    mut,
+    semantic_utils,
     SyntaxUtils,
-    nut,
+    syntax_utils,
     CodeUtils,
-    cut,
+    code_utils,
 )
 from .caches import Cache, NestedCache, PickleCache, FileCache
 from .typing import Typist, typist, TypeArg, AutocastModel
@@ -47,10 +47,6 @@ from .regex import (
 )
 from .files import Markdown
 
-import regex as re
-
-re.DEFAULT_VERSION = re.VERSION1
-
 __all__ = [
     # infra.py
     'T',
@@ -68,17 +64,17 @@ __all__ = [
     'ut',
     'utils',
     'IterUtils',
-    'iut',
+    'iter_utils',
     'TextUtils',
-    'tut',
+    'text_utils',
     'SystemUtils',
-    'sut',
+    'system_utils',
     'SemanticUtils',
-    'mut',
+    'semantic_utils',
     'SyntaxUtils',
-    'nut',
+    'syntax_utils',
     'CodeUtils',
-    'cut',
+    'code_utils',
     # /caches/
     'Cache',
     'NestedCache',

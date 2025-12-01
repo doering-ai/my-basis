@@ -38,11 +38,11 @@ class SyntaxUtils:
         return pyd.GetPydanticSchema(lambda _, __: pyd_schema.is_instance_schema(cls=tvar))
 
     # Regex
-    AnnotatedRegex = Annotated[re.Pattern, pyd_schemify(re.Pattern)]
-    AnnotatedMatch = Annotated[re.Match, pyd_schemify(re.Match)]
+    RegexField = Annotated[re.Pattern, pyd_schemify(re.Pattern)]
+    MatchField = Annotated[re.Match, pyd_schemify(re.Match)]
 
     # Pandas
-    AnnotatedDataFrame = Annotated[pd.DataFrame, pyd_schemify(pd.DataFrame)]
+    DataFrameField = Annotated[pd.DataFrame, pyd_schemify(pd.DataFrame)]
 
 
-nut = SyntaxUtils
+syntax_utils = SyntaxUtils

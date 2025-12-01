@@ -27,7 +27,7 @@ import pandas as pd
 import pydantic as pyd
 
 ### INTERNAL
-from .TextUtils import tut
+from .TextUtils import text_utils
 
 
 ############
@@ -176,7 +176,9 @@ class SystemUtils:
 
     @classmethod
     def terminal_linewrap(cls, text: str, indent: int = 0) -> str:
-        return textwrap.fill(tut.unwrap_paragraphs(text), width=cls.get_terminal_width() - indent)
+        return textwrap.fill(
+            text_utils.unwrap_paragraphs(text), width=cls.get_terminal_width() - indent
+        )
 
     @staticmethod
     def auto_confirm() -> None:
@@ -433,4 +435,4 @@ class SystemUtils:
         print((ret.stdout or '').strip('\n'))
 
 
-sut = SystemUtils
+system_utils = SystemUtils

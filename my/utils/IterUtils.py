@@ -257,4 +257,4 @@ class IterUtils:
         return [item for i, item in enumerate(data) if i not in mask]
 
 
-iut = IterUtils
+iter_utils = IterUtils

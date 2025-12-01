@@ -1,9 +1,9 @@
-from .IterUtils import IterUtils, iut
-from .SyntaxUtils import SyntaxUtils, nut
-from .SemanticUtils import SemanticUtils, mut  # USES: iter
-from .TextUtils import TextUtils, tut  # USES: iter
-from .CodeUtils import CodeUtils, cut  # USES: iter
-from .SystemUtils import SystemUtils, sut  # USES: text
+from .IterUtils import IterUtils, iter_utils
+from .SyntaxUtils import SyntaxUtils, syntax_utils
+from .SemanticUtils import SemanticUtils, semantic_utils  # USES: iter
+from .TextUtils import TextUtils, text_utils  # USES: iter
+from .CodeUtils import CodeUtils, code_utils  # USES: iter
+from .SystemUtils import SystemUtils, system_utils  # USES: text
 
 
 class Utils(IterUtils, TextUtils, SystemUtils, SemanticUtils, SyntaxUtils, CodeUtils):
@@ -19,15 +19,15 @@ __all__ = [
     'ut',
     'utils',
     'IterUtils',
-    'iut',
+    'iter_utils',
     'TextUtils',
-    'tut',
+    'text_utils',
     'SystemUtils',
-    'sut',
+    'system_utils',
     'SemanticUtils',
-    'mut',
+    'semantic_utils',
     'SyntaxUtils',
-    'nut',
+    'syntax_utils',
     'CodeUtils',
-    'cut',
+    'code_utils',
 ]

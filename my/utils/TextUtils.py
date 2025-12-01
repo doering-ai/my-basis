@@ -15,7 +15,7 @@ import pydantic as pyd
 
 ### INTERNAL
 from ..infra import T
-from .IterUtils import iut
+from .IterUtils import iter_utils
 
 
 ############
@@ -183,7 +183,7 @@ class TextUtils:
 
     @classmethod
     def clean_string(cls, string: str, case: Literal['lower', 'none', 'upper'] = 'lower') -> str:
-        ret = iut.build(string, unidecode, str.strip, cls._clean_nonwords)
+        ret = iter_utils.build(string, unidecode, str.strip, cls._clean_nonwords)
         if case == 'lower':
             return ret.lower()
         elif case == 'upper':
@@ -228,4 +228,4 @@ TextUtils.RGXS = TextUtils.regex_dict(
     )
 )
 
-tut = TextUtils
+text_utils = TextUtils

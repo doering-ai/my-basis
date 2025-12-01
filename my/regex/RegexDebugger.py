@@ -3,6 +3,7 @@
 ############
 ### STANDARD
 import itertools as it
+from typing import Self
 
 ### EXTERNAL
 import regex as re
@@ -18,9 +19,19 @@ from .RegexStore import RegexStore
 ############
 ### BODY ###
 ############
-class RegexDebugger:
-    def curate(
-        store: RegexStore,
+class RegexDebugger(RegexStore):
+    # -------------------
+    # `0` Initial Methods
+    # -------------------
+    @classmethod
+    def new_debugger(cls, store: RegexStore) -> Self:
+        return cls.model_construct(**store.model_dump())
+
+    # -------------------
+    # `-` Private Methods
+    # -------------------
+    def _curate(
+        self,
         atoms: tuple[str, ...],
         atom_ends: list[int],
         failed_idx: int,
@@ -29,12 +40,12 @@ class RegexDebugger:
         remaining_text: str,
     ) -> str:
         x0 = x1 = failed_idx
-        while x0 > 0 and ut.has_any(store._quantify(atoms[x0 - 1]), '?', '*'):
+        while x0 > 0 and ut.has_any(self._quantify(atoms[x0 - 1]), '?', '*'):
             x0 -= 1
 
         snippet = body.slice(atom_ends[x0 - 1] if x0 else 0, atom_ends[x1])
-        rgx_snippet = store.sanitize_pattern(snippet)
-        invocations = store.parse_invocations(rgx_snippet)
+        rgx_snippet = self.sanitize(snippet)
+        invocations = self.parse_invocations(rgx_snippet)
 
         return '\n'.join(
             [
@@ -44,20 +55,23 @@ class RegexDebugger:
             ]
         )
 
-    def debug_failed_match(store: RegexStore, name: str, rgx: str, text: Buffer) -> list[str]:
-        cls = RegexStore
+    # -------------------
+    # `+` Primary Methods
+    # -------------------
+    def debug_failed_match(self, name: str, text: Buffer) -> list[str]:
         output = []
 
         # I. Split the regex up by the root-level groups present
+        rgx = self.patterns[name]
         head, body_rgx = rgx.split(f'(?P<{name}>', 1)
         body_rgx = body_rgx[:-1]
         body = Buffer.new(body_rgx, fence_rgxs=['arrays'])
-        atoms = cls.atomize(str(body))
-        while len(atoms) == 1 and cls._is_group(atoms[0]):
-            kind, start, flags, group_body, quant = cls._parse_group(atoms[0])
-            if kind in GroupKind._SIMPLE and quant == '' and not cls._is_split(group_body):
+        atoms = self.atomize(str(body))
+        while len(atoms) == 1 and self._is_group(atoms[0]):
+            kind, start, flags, group_body, quant = self._parse_group(atoms[0])
+            if kind in GroupKind._SIMPLE and quant == '' and not self._is_split(group_body):
                 body.set(group_body)
-                atoms = cls.atomize(group_body)
+                atoms = self.atomize(group_body)
             else:
                 break
         atom_ends = list(it.accumulate(map(len, atoms)))
@@ -66,16 +80,15 @@ class RegexDebugger:
         n = 0
         data: MatchData = MatchData()
         for end in atom_ends:
-            rgx = head + body[:end]
-            match = text.match(re.compile(rgx))
+            match = text.match(re.compile(head + body[:end]))
             if match is not None:
-                data = store.parse(match)
+                data = self.parse(match)
                 n += 1
             else:
                 break
 
         # III. Exit early if we completely failed or completely succeeded
-        out_rgx = store.sanitize_pattern(head + body_rgx)
+        out_rgx = self.sanitize(head + body_rgx)
         if n == 0:
             output.extend(
                 [
@@ -113,11 +126,11 @@ class RegexDebugger:
         head_buf = Buffer.new(head[len('(?(DEFINE)') : -1], fence_rgxs=['arrays'])
         definitions = {
             name: head_buf.slice(*span)
-            for span, _, name, _, _ in cls.group_iterator(
+            for span, _, name, _, _ in self.group_iterator(
                 head_buf, mask=GroupKind.PARAM, mode='roots'
             )
         }
-        curated_rgx = cls.curate(store, atoms, atom_ends, n, body, definitions, remaining_text)
+        curated_rgx = self._curate(atoms, atom_ends, n, body, definitions, remaining_text)
         if not curated_rgx:
             output.extend(['Failed to curate RGX:', '', out_rgx])
         else:
@@ -137,8 +150,11 @@ class RegexDebugger:
 
         return output
 
-    def debug_regex(
-        store: RegexStore,
+    # ------------------
+    # `x` Public Methods
+    # ------------------
+    def debug(
+        self,
         names: list[str],
         text: str,
         matched: bool,
@@ -150,7 +166,7 @@ class RegexDebugger:
         output: list[str] = []
 
         status = str(int(matched)) + str(int(expected))
-        rgxs_str = '\n\n'.join(map(store.sanitize_pattern, names))
+        rgxs_str = '\n\n'.join(map(self.sanitize, names))
         if status == '11':
             output.extend(
                 [
@@ -205,8 +221,7 @@ class RegexDebugger:
                         ]
                     )
 
-                rgx = store[name].pattern
-                output.extend(debug_failed_match(store, name, rgx, buf))
+                output.extend(self.debug_failed_match(name, buf))
         else:
             raise ValueError('No match, when we expected none -- why call debug_regex_test()?')
 

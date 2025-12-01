@@ -1,7 +1,7 @@
 from .MatchData import MatchData
 from .GroupKind import GroupKind
 from .RegexStore import RegexStore, RgxParser, RgxTup, RgxList, RgxVal, RgxDef
-from .common_rgxs import format_url, atom, COMMON_RGXS
+from .common import format_url, atom, COMMON_RGXS
 from .RegexDebugger import RegexDebugger
 
 __all__ = [

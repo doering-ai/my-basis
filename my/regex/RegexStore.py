@@ -73,14 +73,8 @@ QUANT = r'(?>[*+]|\{\d+(?:,\d*)?\})?[?+]?'
 ############
 ### BODY ###
 ############
-class RegexStore(pyd.BaseModel, arbitrary_types_allowed=True):
-    #####################
-    ## 0- Static Types ##
-    #####################
-    ##################
-    ## 0+ Regex Map ##
-    ##################
-    NO_ESC: ClassVar[str] = NO_ESC
+class RegexStore(pyd.BaseModel):
+    # Meta Regexes
     RGXS: ClassVar[dict[str, Pattern]] = ut.regex_dict(
         dict(
             struct_mark=''.join(
@@ -116,9 +110,6 @@ class RegexStore(pyd.BaseModel, arbitrary_types_allowed=True):
         )
     )
 
-    ####################
-    ## 0x Base Fields ##
-    ####################
     # Uncompiled strings, ready for reuse
     definitions: dict[str, str] = {}
 
@@ -218,7 +209,7 @@ class RegexStore(pyd.BaseModel, arbitrary_types_allowed=True):
         # Pull out the parser, if present
         val: RgxVal
         if isinstance(param, tuple) and len(param) == 2 and not isinstance(param[1], (list, tuple)):
-            val, parser = param
+            val, parser = param  # type: ignore
         else:
             val = param
             parser = None
@@ -245,20 +236,6 @@ class RegexStore(pyd.BaseModel, arbitrary_types_allowed=True):
     # -------------------
     # `-` Private Methods
     # -------------------
-    def sanitize_pattern(self, pattern: str | Pattern | Buffer) -> str:
-        if isinstance(pattern, Pattern):
-            pattern = pattern.pattern
-        elif isinstance(pattern, Buffer):
-            pattern = str(pattern)
-        elif pattern in self.patterns:
-            pattern = self.patterns[pattern].pattern
-        assert isinstance(pattern, str)
-
-        return ut.replace(
-            pattern,
-            (self.RGXS['inline_flags'], r'(?:(?\1)'),
-        )
-
     @classmethod
     def _tree_print(cls, text: str, depth: int = 0) -> str:
         indent = '\t' * depth
@@ -284,7 +261,7 @@ class RegexStore(pyd.BaseModel, arbitrary_types_allowed=True):
         return indent + f'|\n{indent}'.join(branches)
 
     def tree_print(self, pattern: str | Pattern | Buffer, print_head: bool = True) -> str:
-        text = self.sanitize_pattern(pattern)
+        text = self.sanitize(pattern)
         *head_arr, body = text.split('\n)(', 1)
         body = body[body.index('>') + 1 : -1]
         ret = self._tree_print(body)
@@ -1011,6 +988,20 @@ class RegexStore(pyd.BaseModel, arbitrary_types_allowed=True):
                 if (ln := value.count(lb)) != (rn := value.count(rb)):
                     values[i] = f'{value}{rb}' if ln > rn else f'{lb}{value}'
         return values
+
+    def sanitize(self, pattern: str | Pattern | Buffer) -> str:
+        if isinstance(pattern, Pattern):
+            pattern = pattern.pattern
+        elif isinstance(pattern, Buffer):
+            pattern = str(pattern)
+        elif pattern in self.patterns:
+            pattern = self.patterns[pattern].pattern
+        assert isinstance(pattern, str)
+
+        return ut.replace(
+            pattern,
+            (self.RGXS['inline_flags'], r'(?:(?\1)'),
+        )
 
     # ------------------
     # `x` Public Methods

@@ -30,12 +30,19 @@ class SyntaxUtils:
     def tree_size(cls, tree: object) -> int:
         return sum(map(cls.tree_size, tree.values())) if isinstance(tree, dict) else 1
 
+    # ---------------
+    # Type Annotation
+    # ---------------
     @staticmethod
     def pyd_schemify(tvar: type) -> pyd.GetPydanticSchema:
         return pyd.GetPydanticSchema(lambda _, __: pyd_schema.is_instance_schema(cls=tvar))
 
-    Regex = Annotated[re.Pattern, pyd_schemify(re.Pattern)]
-    PydDataFrame = Annotated[pd.DataFrame, pyd_schemify(pd.DataFrame)]
+    # Regex
+    AnnotatedRegex = Annotated[re.Pattern, pyd_schemify(re.Pattern)]
+    AnnotatedMatch = Annotated[re.Match, pyd_schemify(re.Match)]
+
+    # Pandas
+    AnnotatedDataFrame = Annotated[pd.DataFrame, pyd_schemify(pd.DataFrame)]
 
 
 nut = SyntaxUtils

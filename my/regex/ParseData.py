@@ -11,19 +11,13 @@ import pydantic as pyd
 ### INTERNAL
 from .MatchData import MatchData
 
-############
-### DATA ###
-############
-Params = dict[str, str]
-Captures = dict[str, list[str]]
-
 
 ############
 ### BODY ###
 ############
 class ParseData(pyd.BaseModel):
     # Dynamic values
-    captures: Captures = {}
+    captures: dict[str, list[str]] = {}
     starts: dict[str, list[int]] = {}
 
     # Per-field cache values
@@ -31,27 +25,17 @@ class ParseData(pyd.BaseModel):
     value: list[str] = []
     start: list[int] = []
 
-    def __contains__(self, field: str) -> bool:
-        return field in self.captures and field in self.starts
+    # -------------------
+    # `0` Initial Methods
+    # -------------------
 
-    def __len__(self) -> int:
-        return len(self.captures)
+    # -------------------
+    # `-` Private Methods
+    # -------------------
 
-    def items(self) -> list[tuple[str, tuple[list[int], list[str]]]]:
-        return [(key, (self.starts[key], captures)) for key, captures in self.captures.items()]
-
-    def keys(self) -> list[str]:
-        return list(self.captures.keys())
-
-    def values(self) -> list[tuple[list[int], list[str]]]:
-        return [tup for key, tup in self.items()]
-
-    def set_field(self, field: str) -> None:
-        assert field in self, f'Invalid field: {field}'
-        self.field = field
-        self.value = self.captures.pop(field)
-        self.start = self.starts.pop(field)
-
+    # -------------------
+    # `+` Primary Methods
+    # -------------------
     def apply_dict_parser(self, parser: dict[str, str], rgx: Pattern) -> None:
         matches = [MatchData(match=match) for match in map(rgx.fullmatch, self.value)]
         trips: list[tuple[str, int, str]] = []
@@ -77,12 +61,11 @@ class ParseData(pyd.BaseModel):
             affected_fields = {key for result in dict_results for key in result.keys()}
             src = self.field if self.field not in affected_fields else ''
 
-            # Handle by field instead of by result
             for dest in affected_fields:
                 effects = [(start, result[dest]) for start, result in pairs if dest in result]
                 self.interleave(src, dest, effects)
         else:
-            # III. A simple substring function that just returns a new value for this name
+            # II. A simple substring function that just returns a new value for this name
             str_results: list[str] = results  # type: ignore
             self.starts[self.field] = self.start
             self.captures[self.field] = str_results
@@ -114,3 +97,27 @@ class ParseData(pyd.BaseModel):
         # III. Replace the values with the new ones
         self.starts[dest] = [start for start, _ in effects]
         self.captures[dest] = [val for _, val in effects]
+
+    # ------------------
+    # `x` Public Methods
+    # ------------------
+    def __contains__(self, field: str) -> bool:
+        return field in self.captures and field in self.starts
+
+    def __len__(self) -> int:
+        return len(self.captures)
+
+    def items(self) -> list[tuple[str, tuple[list[int], list[str]]]]:
+        return [(key, (self.starts[key], captures)) for key, captures in self.captures.items()]
+
+    def keys(self) -> list[str]:
+        return list(self.captures.keys())
+
+    def values(self) -> list[tuple[list[int], list[str]]]:
+        return [tup for key, tup in self.items()]
+
+    def set_field(self, field: str) -> None:
+        assert field in self, f'Invalid field: {field}'
+        self.field = field
+        self.value = self.captures.pop(field)
+        self.start = self.starts.pop(field)

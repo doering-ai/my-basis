@@ -2,34 +2,27 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import ClassVar, Annotated, Any
-from regex import Match
+from typing import ClassVar, Any
 import functools as ft
 
 ### EXTERNAL
 import pydantic as pyd
-from pydantic_core import core_schema
 
 ### INTERNAL
 from ..utils import ut
 from ..types import Span, Predicate
-
-############
-### DATA ###
-############
-Slots = dict[str, list[str]]
-
-_MatchSchema = pyd.GetPydanticSchema(lambda a, b: core_schema.is_instance_schema(cls=Match))
-PydanticMatch = Annotated[Match, _MatchSchema]
 
 
 ############
 ### BODY ###
 ############
 class MatchData(Predicate):
-    match: PydanticMatch | None = None
+    match: ut.AnnotatedMatch | None = None
     duplicates: bool = True
 
+    # -------------------
+    # `0` Initial Methods
+    # -------------------
     @pyd.model_validator(mode='before')
     @classmethod
     def _validate_match_data(cls, kwargs: dict[str, Any]) -> dict[str, Any]:
@@ -39,23 +32,13 @@ class MatchData(Predicate):
             kwargs['duplicates'] = True
         return kwargs
 
-    def __repr__(self) -> str:
-        if self.match is not None:
-            return f'MatchData("{self.text}" -> {self.data})'
-        else:
-            return f'MatchData({self.data})'
+    # -------------------
+    # `-` Private Methods
+    # -------------------
 
-    def print(self, indent: str = '') -> None:
-        width = min(max(map(len, self.keys())), 48)
-        print(
-            '\n'.join(
-                [
-                    f'{indent}{key:>{width}}: {values[0] if len(values) == 1 else values}'
-                    for key, values in self.items()
-                ]
-            )
-        )
-
+    # -------------------
+    # `+` Primary Methods
+    # -------------------
     CACHED_PROPERTIES: ClassVar[set[str]] = {'data', 'span', 'start', 'end', 'text', 'size'}
 
     @ft.cached_property
@@ -87,6 +70,26 @@ class MatchData(Predicate):
     def size(self) -> int:
         """Returns the number of characters matched."""
         return len(self.text)
+
+    # ------------------
+    # `x` Public Methods
+    # ------------------
+    def __repr__(self) -> str:
+        if self.match is not None:
+            return f'MatchData("{self.text}" -> {self.data})'
+        else:
+            return f'MatchData({self.data})'
+
+    def print(self, indent: str = '') -> None:
+        width = min(max(map(len, self.keys())), 48)
+        print(
+            '\n'.join(
+                [
+                    f'{indent}{key:>{width}}: {values[0] if len(values) == 1 else values}'
+                    for key, values in self.items()
+                ]
+            )
+        )
 
     def set_to(self, other: 'MatchData | None') -> None:
         self.data = {key: [*values] for key, values in other.items()} if other else {}

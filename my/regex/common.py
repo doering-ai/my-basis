@@ -10,7 +10,7 @@ from .RegexStore import RegexStore, RgxVal
 
 
 ############
-### DATA ###
+### BODY ###
 ############
 def format_url(target: str) -> str:
     return COMMON_RGXS['url_detritus'].sub('', target).strip('/. ')
@@ -47,6 +47,9 @@ def atom(*contents: RgxVal) -> RgxVal:
         raise ValueError(f'Invalid content: {content}')
 
 
+############
+### DATA ###
+############
 COMMON_RGXS = RegexStore.new(
     options=dict(
         separator='',

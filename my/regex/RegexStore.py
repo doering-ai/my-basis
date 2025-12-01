@@ -74,6 +74,23 @@ QUANT = r'(?>[*+]|\{\d+(?:,\d*)?\})?[?+]?'
 ### BODY ###
 ############
 class RegexStore(pyd.BaseModel):
+    """
+    A powerful regex pattern management system with composition and parsing capabilities.
+
+    RegexStore provides a comprehensive framework for defining, composing, and applying
+    complex regex patterns. It supports:
+    - Hierarchical pattern composition from simple building blocks
+    - Named group management and subroutine invocation
+    - Custom parsing functions for match results
+    - Pattern optimization and tree construction
+    - Router trees for pattern classification
+
+    Patterns can be defined using a flexible DSL that supports:
+    - String literals and pre-compiled patterns
+    - Lists for sequential composition
+    - Tuples for group creation with custom separators
+    - Recursive pattern references via named groups
+    """
     # Meta Regexes
     RGXS: ClassVar[dict[str, Pattern]] = ut.regex_dict(
         dict(
@@ -261,6 +278,16 @@ class RegexStore(pyd.BaseModel):
         return indent + f'|\n{indent}'.join(branches)
 
     def tree_print(self, pattern: str | Pattern | Buffer, print_head: bool = True) -> str:
+        """
+        Pretty-print a regex pattern as an indented tree structure.
+
+        Args:
+            pattern: Pattern to print (string, compiled Pattern, or Buffer).
+            print_head: Whether to include the pattern header in output.
+
+        Returns:
+            Multi-line string representation with indentation showing nesting.
+        """
         text = self.sanitize(pattern)
         *head_arr, body = text.split('\n)(', 1)
         body = body[body.index('>') + 1 : -1]
@@ -268,6 +295,15 @@ class RegexStore(pyd.BaseModel):
         return f'{head_arr[0]}\n){ret}' if print_head and head_arr else ret
 
     def find_all_invocations(self, groups_used: set[str]) -> set[str]:
+        """
+        Recursively find all groups invoked by the given set of groups.
+
+        Args:
+            groups_used: Initial set of group names to analyze.
+
+        Returns:
+            Complete set of all groups transitively invoked by the initial set.
+        """
         buffer = RgxBuf()
         new_groups: set[str] = set()
         for existing_group in groups_used:
@@ -283,9 +319,20 @@ class RegexStore(pyd.BaseModel):
 
     def _parse_mark(self, mark: str) -> tuple[GroupKind, str, str, str]:
         """
-        Parse a mark string into a pair of strings representing:
-            a) the actual, final regex mark to use at the start of it, and
-            b) separator to use inside this group
+        Parse a custom mark string into regex group components.
+
+        Processes mark syntax like '|:', '[]:', '<|>', and flag specifiers to determine
+        the type of regex group to create, the opening syntax, separator, and quantifier.
+
+        Args:
+            mark: Custom mark string using the store's DSL syntax.
+
+        Returns:
+            Tuple of (kind, start, separator, quantifier) where:
+            - kind: GroupKind enum value
+            - start: Opening group syntax (e.g., '(?:', '(?>')
+            - separator: String to join children (defaults to self.separator)
+            - quantifier: Quantifier string (e.g., '?', '+', '*')
         """
         mark = mark.strip()
         match = self.RGXS['struct_mark'].fullmatch(mark)
@@ -317,6 +364,15 @@ class RegexStore(pyd.BaseModel):
 
     @classmethod
     def parse_group_kind(cls, group: str) -> GroupKind:
+        """
+        Determine the GroupKind of a regex group from its opening syntax.
+
+        Args:
+            group: The opening part of a regex group (e.g., '(?:', '(?=', '(?>').
+
+        Returns:
+            The corresponding GroupKind enum value, or GroupKind(0) if no match.
+        """
         return next(
             (kind for prefix, kind in reversed(GROUP_KIND_MAP.items()) if group.startswith(prefix)),
             GroupKind(0),
@@ -324,7 +380,15 @@ class RegexStore(pyd.BaseModel):
 
     @classmethod
     def set_iterator(cls, text: Buffer | str | list[str]) -> Iterator[tuple[Span, str, str]]:
-        """Returns: [span, body, quant]"""
+        """
+        Iterate over all character sets in the text.
+
+        Args:
+            text: Text to search for character sets.
+
+        Yields:
+            Tuples of (span, body, quantifier) for each character set found.
+        """
         if isinstance(text, list):
             text = ''.join(text)
         if isinstance(text, str):
@@ -340,6 +404,18 @@ class RegexStore(pyd.BaseModel):
         mask: GroupKind = NO_KIND,
         mode: Literal['all', 'roots', 'leaves'] = 'all',
     ) -> Iterator[tuple[Span, GroupKind, str, str, str]]:
+        """
+        Iterate over regex groups in the text.
+
+        Args:
+            text: Text to search for groups (automatically converted to Buffer).
+            mask: Optional GroupKind filter to yield only matching group types.
+            mode: Iteration mode - 'all' for all groups, 'roots' for top-level only,
+                  'leaves' for innermost only.
+
+        Yields:
+            Tuples of (span, kind, name, body, quantifier) for each group found.
+        """
         # Cast the input text to a charset-ignoring buffer
         if isinstance(text, list):
             text = RgxBuf(''.join(text))
@@ -568,6 +644,19 @@ class RegexStore(pyd.BaseModel):
 
     @classmethod
     def construct_tree(cls, branches: Branches, has_suffix: bool = False) -> str:
+        """
+        Construct an optimized regex from branches by factoring common prefixes and suffixes.
+
+        This method builds an efficient regex pattern by identifying and extracting common
+        prefixes and suffixes from multiple branches, minimizing redundancy in the result.
+
+        Args:
+            branches: Tuple of atom sequences representing alternative branches.
+            has_suffix: Whether parent context implies a shared suffix exists.
+
+        Returns:
+            Optimized regex string with factored common elements.
+        """
         # 0. Sort and de-dupe
         branches = list(sorted(set(branches)))
 
@@ -803,6 +892,16 @@ class RegexStore(pyd.BaseModel):
     @classmethod
     @ft.lru_cache(maxsize=64)
     def atomize(cls, pattern: str, escape: bool = False) -> Atoms:
+        """
+        Break a regex pattern into its atomic components.
+
+        Args:
+            pattern: Regex pattern string to atomize.
+            escape: Whether to escape special regex characters.
+
+        Returns:
+            Tuple of atomic regex components (characters, groups, character sets, etc.).
+        """
         if escape:
             pattern = cls.RGXS['special_characters'].sub(r'\\\1', pattern)
         return tuple(cls.atomize_iter(pattern))
@@ -820,6 +919,18 @@ class RegexStore(pyd.BaseModel):
             sections.pop(i)
 
     def compose_tuple(self, mark: str, children: RgxList, pre: str = '', suf: str = '') -> str:
+        """
+        Compose a regex group from a mark, children, and optional prefix/suffix.
+
+        Args:
+            mark: Custom mark syntax defining group type and separator.
+            children: List of child regex values to compose.
+            pre: Optional prefix string to prepend inside the group.
+            suf: Optional suffix string to append inside the group.
+
+        Returns:
+            Complete regex group string with composed children.
+        """
         # 0. For subroutine marks, wrap all children
         if '&' in mark:
             assert all(isinstance(child, str) for child in children)
@@ -892,6 +1003,22 @@ class RegexStore(pyd.BaseModel):
             raise ValueError(f'Invalid data type: {type(data)}')
 
     def clean(self, name: str, text: Buffer) -> set[str]:
+        """
+        Clean and validate a regex pattern, identifying all group dependencies.
+
+        Normalizes group invocation syntax and validates that local group names don't
+        conflict with predefined subroutine names.
+
+        Args:
+            name: Name of the pattern being cleaned.
+            text: Buffer containing the pattern text.
+
+        Returns:
+            Set of all group names invoked by this pattern.
+
+        Raises:
+            AssertionError: If local group names conflict with predefined groups.
+        """
         # I. Replace the convenience syntax with the actual, ugly syntax
         text.replace('(?P=', '(?&')
 
@@ -917,8 +1044,19 @@ class RegexStore(pyd.BaseModel):
 
     def render_definitions(self, *definitions: str) -> str:
         """
-        Order and serialize the passed definitions, ensuring any references to other definitions are
-        resolved thanks to the implicit ordering of the dict at creation-time.
+        Serialize definitions into a DEFINE block for regex compilation.
+
+        Orders and serializes the specified definitions as a (?(DEFINE)...) block,
+        ensuring references to other definitions are resolved in definition order.
+
+        Args:
+            *definitions: Names of definitions to include in the DEFINE block.
+
+        Returns:
+            String containing the DEFINE block, or empty string if no definitions.
+
+        Raises:
+            AssertionError: If any definition name is not found in the store.
         """
         if not definitions:
             return ''
@@ -937,6 +1075,22 @@ class RegexStore(pyd.BaseModel):
         parser: RgxParser | None = None,
         flags: RegexFlag = NO_FLAG,
     ) -> None:
+        """
+        Define a new named regex pattern in the store.
+
+        Composes the pattern from the given value, cleans and validates it, compiles it
+        with any necessary definitions, and stores it along with an optional parser.
+
+        Args:
+            name: Unique name for this pattern.
+            val: Regex value to compose (string, list, tuple, or Pattern).
+            parser: Optional function to parse match results.
+            flags: Optional regex flags to apply during compilation.
+
+        Raises:
+            AssertionError: If name is already defined.
+            Exception: If pattern composition or compilation fails.
+        """
         assert name not in self.definitions, f'Duplicate definition: {name}'
 
         try:
@@ -972,6 +1126,15 @@ class RegexStore(pyd.BaseModel):
         _str = self.definitions[name]
 
     def autostrip(self, values: list[str] | str) -> list[str]:
+        """
+        Strip configured characters from values and fix broken brackets.
+
+        Args:
+            values: Single string or list of strings to strip.
+
+        Returns:
+            List of stripped strings with bracket balancing corrected.
+        """
         if not isinstance(values, list):
             values = [values]
         values = list(filter(len, map(self.strip, values)))
@@ -990,6 +1153,15 @@ class RegexStore(pyd.BaseModel):
         return values
 
     def sanitize(self, pattern: str | Pattern | Buffer) -> str:
+        """
+        Sanitize a pattern by normalizing inline flag syntax.
+
+        Args:
+            pattern: Pattern to sanitize (string, Pattern, Buffer, or pattern name).
+
+        Returns:
+            Sanitized pattern string with normalized flag syntax.
+        """
         if isinstance(pattern, Pattern):
             pattern = pattern.pattern
         elif isinstance(pattern, Buffer):
@@ -1016,6 +1188,15 @@ class RegexStore(pyd.BaseModel):
         return list(self.patterns.items())
 
     def read_match(self, match: Match) -> tuple[Params, Captures]:
+        """
+        Extract and autostrip all captured groups from a match object.
+
+        Args:
+            match: Regex match object to read.
+
+        Returns:
+            Tuple of (params dict with last values, captures dict with all values).
+        """
         data, captures = {}, {}
         if match is not None and (src := match.capturesdict().items()):
             items = [(key, stripped) for key, vals in src if (stripped := self.autostrip(vals))]
@@ -1027,7 +1208,17 @@ class RegexStore(pyd.BaseModel):
 
     def parse(self, match: Match | None, pattern_name: str = '') -> MatchData:
         """
-        Read the given match object, applying any relevant parsers automatically.
+        Parse a match object, applying registered parsers and cleaning results.
+
+        Reads the match, applies any parsers registered for captured groups, removes
+        hidden fields (those starting with '_'), and returns a clean MatchData object.
+
+        Args:
+            match: Match object to parse, or None for empty MatchData.
+            pattern_name: Optional name of the pattern that produced this match.
+
+        Returns:
+            MatchData object with parsed captures and optional match reference.
         """
         # I. Read the match object, dropping any empty values
         if match is None:
@@ -1072,18 +1263,59 @@ class RegexStore(pyd.BaseModel):
         return MatchData()
 
     def match(self, names: str | Iterable[str], text: str | Buffer) -> MatchData:
+        """
+        Match one of the named patterns against text from the beginning.
+
+        Args:
+            names: Pattern name or list of pattern names to try.
+            text: Text to match against.
+
+        Returns:
+            MatchData from first successful match, or empty MatchData if none match.
+        """
         names, text = self._validate_params(names, text)
         return self._autoparse('match', names, text)
 
     def fullmatch(self, names: str | Iterable[str], text: str | Buffer) -> MatchData:
+        """
+        Match one of the named patterns against the entire text.
+
+        Args:
+            names: Pattern name or list of pattern names to try.
+            text: Text to match against.
+
+        Returns:
+            MatchData from first successful fullmatch, or empty MatchData if none match.
+        """
         names, text = self._validate_params(names, text)
         return self._autoparse('fullmatch', names, text)
 
     def search(self, names: str | Iterable[str], text: str | Buffer) -> MatchData:
+        """
+        Search for one of the named patterns anywhere in text.
+
+        Args:
+            names: Pattern name or list of pattern names to try.
+            text: Text to search.
+
+        Returns:
+            MatchData from first successful search, or empty MatchData if none found.
+        """
         names, text = self._validate_params(names, text)
         return self._autoparse('search', names, text)
 
     def finditer(self, name: str, text: str | Buffer, **kwargs) -> Iterator[MatchData]:
+        """
+        Find all non-overlapping matches of the pattern in text.
+
+        Args:
+            name: Pattern name to search for.
+            text: Text to search (string or Buffer).
+            **kwargs: Optional arguments passed to Buffer.rgx_iterator().
+
+        Yields:
+            MatchData objects for each match found.
+        """
         rgx = self.patterns[name]
         parse = ft.partial(self.parse, pattern_name=name)
         if isinstance(text, Buffer):
@@ -1093,6 +1325,17 @@ class RegexStore(pyd.BaseModel):
             yield from map(parse, rgx.finditer(text))
 
     def findall(self, name: str, text: str | Buffer, **kwargs) -> list[MatchData]:
+        """
+        Find all non-overlapping matches of the pattern in text.
+
+        Args:
+            name: Pattern name to search for.
+            text: Text to search (string or Buffer).
+            **kwargs: Optional arguments passed to Buffer.rgx_iterator().
+
+        Returns:
+            List of MatchData objects for all matches found.
+        """
         return list(self.finditer(name, text, **kwargs))
 
     def fullsplit(
@@ -1101,6 +1344,18 @@ class RegexStore(pyd.BaseModel):
         text: str | Buffer,
         collapse: bool = False,
     ) -> tuple[list[str], list[str]]:
+        """
+        Split text by matches, returning both delimiters and sections.
+
+        Args:
+            name: Pattern name to split on.
+            text: Text to split.
+            collapse: Whether to collapse empty sections into adjacent delimiters.
+
+        Returns:
+            Tuple of (delimiters, sections) where delimiters[0] is always empty and
+            the lists interleave: section[0], delim[1], section[1], delim[2], etc.
+        """
         _, text = self._validate_params(name, text)
         delims, sections = [], []
         if matches := list(self.finditer(name, text)):
@@ -1123,6 +1378,19 @@ class RegexStore(pyd.BaseModel):
         return delims, sections
 
     def polymatch(self, name: str, text: str | Buffer) -> MatchData:
+        """
+        Find all matches and merge their captures into a single MatchData.
+
+        Unlike findall which returns separate MatchData objects, this merges all
+        captures from all matches into one result, preserving order by start position.
+
+        Args:
+            name: Pattern name to search for.
+            text: Text to search (automatically converted to Buffer).
+
+        Returns:
+            Single MatchData with all captures from all matches merged.
+        """
         pd = ParseData()
         if isinstance(text, str):
             text = RgxBuf(text)
@@ -1141,6 +1409,15 @@ class RegexStore(pyd.BaseModel):
     # Utility functions
     # -----------------
     def parse_invocations(self, text: str) -> set[str]:
+        """
+        Find all group invocations in text and transitively expand dependencies.
+
+        Args:
+            text: Regex pattern text to analyze.
+
+        Returns:
+            Set of all group names invoked directly or indirectly.
+        """
         invocations = {name for _, _, name, _, _ in self.group_iterator(text, mask=GroupKind.INVOC)}
         return self.find_all_invocations(invocations)
 
@@ -1149,6 +1426,16 @@ class RegexStore(pyd.BaseModel):
         name: str,
         func: Literal['match', 'fullmatch', 'search', 'polymatch'] = 'match',
     ) -> Callable[[str | Buffer], MatchData]:
+        """
+        Create a partially applied matching function for a pattern.
+
+        Args:
+            name: Pattern name to use.
+            func: Matching function name ('match', 'fullmatch', 'search', or 'polymatch').
+
+        Returns:
+            Function that takes text and returns MatchData using the specified pattern.
+        """
         return ft.partial(getattr(self, func), name)
 
     def apply(
@@ -1157,6 +1444,17 @@ class RegexStore(pyd.BaseModel):
         texts: Iterable[str],
         func: Literal['match', 'fullmatch', 'search', 'polymatch'] = 'match',
     ) -> Iterable[MatchData]:
+        """
+        Apply a pattern to multiple texts.
+
+        Args:
+            name: Pattern name to use.
+            texts: Iterable of text strings to match against.
+            func: Matching function to use ('match', 'fullmatch', 'search', or 'polymatch').
+
+        Yields:
+            MatchData objects for each text in order.
+        """
         yield from map(self.partial(name, func), texts)
 
     def filter(
@@ -1165,6 +1463,17 @@ class RegexStore(pyd.BaseModel):
         texts: Iterable[str],
         func: Literal['match', 'fullmatch', 'search', 'polymatch'] = 'match',
     ) -> Iterable[str]:
+        """
+        Filter texts by whether they match a pattern.
+
+        Args:
+            name: Pattern name to test against.
+            texts: Iterable of text strings to filter.
+            func: Matching function to use ('match', 'fullmatch', 'search', or 'polymatch').
+
+        Yields:
+            Only those texts that successfully match the pattern.
+        """
         fn = self.partial(name, func)
         yield from filter(lambda text: bool(fn(text)), texts)
 
@@ -1172,8 +1481,18 @@ class RegexStore(pyd.BaseModel):
     # -----------------
     def define_router_tree(self, router: str, items: Mapping[str, RgxVal], **kwargs: str) -> None:
         """
-        Define a router tree with the given name and items, using the given prefixes and suffixes.
-        This is a convenience method for building a router tree.
+        Define a router pattern that classifies text into named categories.
+
+        Creates two patterns: one optimized router (<router>) and one with route tracking
+        (<router>_router) that captures which category matched.
+
+        Args:
+            router: Base name for the router patterns.
+            items: Mapping of category names to their regex patterns.
+            **kwargs: Optional 'prefix'/'suffix' or 'p0'/'p1'/'s0'/'s1' for wrapping patterns.
+
+        Raises:
+            AssertionError: If router name is already defined.
         """
         assert router not in self.routers, f'Duplicate router name: {router}'
         items = {k: v for k, v in items.items() if v}
@@ -1199,6 +1518,19 @@ class RegexStore(pyd.BaseModel):
         self[f'{router}_router'] = ('|:', p1, [(f'<|>P<rt_{i}>', rgx) for i, rgx in routes], s1)
 
     def route_match(self, router: str, text: str | MatchData) -> str:
+        """
+        Determine which category a text matches in a router tree.
+
+        Args:
+            router: Name of router pattern to use.
+            text: Text to classify, or MatchData from previous match.
+
+        Returns:
+            Name of the matching category, or empty string if no match.
+
+        Raises:
+            AssertionError: If router name is not found.
+        """
         assert router in self.routers, f'Unknown router: {router}'
         if isinstance(text, MatchData):
             text = text.text
@@ -1210,6 +1542,19 @@ class RegexStore(pyd.BaseModel):
         return ''
 
     def expand_match(self, router: str, text: str | MatchData) -> str:
+        """
+        Match text against a router and expand using the matched category's format.
+
+        Args:
+            router: Name of router pattern to use.
+            text: Text to match and expand, or MatchData from previous match.
+
+        Returns:
+            Expanded string using the matched category name as format string.
+
+        Raises:
+            AssertionError: If router name is not found or match object is invalid.
+        """
         assert router in self.routers, f'Unknown router: {router}'
         if isinstance(text, MatchData):
             text = text.text

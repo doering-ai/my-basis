@@ -22,6 +22,16 @@ Value = TypeVar('Value')
 
 
 class PickleCache(pyd.BaseModel, Generic[Key, Value]):
+    """
+    Persistent cache backed by pickle files with TTL-based invalidation.
+
+    Supports three data sources with fallback hierarchy:
+    1. In-memory data (fastest, if fresh)
+    2. Pickle file on disk (if within TTL)
+    3. Async callback function (if provided, refreshes cache)
+
+    Data is automatically written to disk when refreshed from callback.
+    """
     file: Path
     func: Callable[[], Coroutine[None, None, dict[Key, Value]]] | None = None
     data: dict[Key, Value] = {}
@@ -44,8 +54,15 @@ class PickleCache(pyd.BaseModel, Generic[Key, Value]):
 
     async def read(self) -> dict[Key, Value]:
         """
-        Refresh this cache, reading from the API callback or from the filesystem if the in-memory
-        data is stale or unpopulated.
+        Refresh cache data, checking memory, disk, and callback in order.
+
+        Falls back through data sources:
+        1. Returns in-memory data if recent (within TTL)
+        2. Loads from pickle file if it exists and is fresh
+        3. Calls async func if provided and caches result
+
+        Returns:
+            Dictionary of cached data.
         """
 
         cutoff = datetime.now() - self.ttl
@@ -67,6 +84,7 @@ class PickleCache(pyd.BaseModel, Generic[Key, Value]):
         return self.data
 
     def write(self) -> None:
+        """Write current data to pickle file and update timestamps."""
         with open(self.file, 'wb') as ptr:
             pkl.dump(self.data, ptr)
         self.last_read = self.last_write = ut.posix()

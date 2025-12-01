@@ -35,6 +35,17 @@ class SemanticUtils:
 
     @classmethod
     def decimal_to_roman(cls, decimal: int) -> str:
+        """
+        Convert decimal integer to Roman numeral notation.
+
+        Handles subtractive notation (e.g., IV, IX, XL, XC, CD, CM).
+
+        Args:
+            decimal: Integer to convert (typically 1-3999).
+
+        Returns:
+            Roman numeral string representation.
+        """
         ans = ''
         for char, val in cls.ROMAN_MAP.items():
             while decimal >= val:
@@ -59,6 +70,17 @@ class SemanticUtils:
 
     @classmethod
     def roman_to_decimal(cls, roman: str) -> int:
+        """
+        Convert Roman numeral notation to decimal integer.
+
+        Validates format and handles subtractive notation.
+
+        Args:
+            roman: Roman numeral string (case-insensitive).
+
+        Returns:
+            Decimal integer value, or 0 if invalid format.
+        """
         ans = 0
         last_index = 0
         for match in cls.ROMAN_RGX.finditer(roman):
@@ -89,6 +111,17 @@ class SemanticUtils:
 
     @classmethod
     def format_amount(cls, amount: int, unit: Literal['num', 'mem'] = 'num', width: int = 0) -> str:
+        """
+        Format large numbers with SI suffixes (K, M, B) or memory units (KB, MB, GB).
+
+        Args:
+            amount: Number to format.
+            unit: Format type - 'num' for numeric (K/M/B) or 'mem' for memory (KB/MB/GB).
+            width: Fixed width for formatting (default: 0 for no fixed width).
+
+        Returns:
+            Formatted string with appropriate suffix.
+        """
         index = iter_utils.find(cls.BASELINES, lambda trip: amount >= trip[0])
         if index > -1:
             suffix = str(cls.BASELINES[index][1 if unit == 'num' else 2])
@@ -128,6 +161,21 @@ class SemanticUtils:
 
     @classmethod
     def to_singular(cls, plural: str) -> str:
+        """
+        Convert plural English word to singular form.
+
+        Handles regular plurals, irregulars, and archaic forms.
+
+        Args:
+            plural: Plural word to convert (case-insensitive).
+
+        Returns:
+            Singular form of the word.
+
+        Raises:
+            ValueError: If no singularization rule matches.
+            AssertionError: If result is empty string.
+        """
         plural = plural.lower()
         for regex, handler in cls.SINGULAR_MAP:
             if re.search(regex, plural):
@@ -191,6 +239,15 @@ class SemanticUtils:
 
     @classmethod
     def validate_identifier(cls, *symbols: str) -> None:
+        """
+        Validate that symbols are valid identifiers in Python and TypeScript.
+
+        Args:
+            *symbols: Symbol names to validate.
+
+        Raises:
+            AssertionError: If any symbol is a keyword or invalid identifier.
+        """
         for sym in symbols:
             assert not keyword.iskeyword(sym), f'Symbol {sym} is invalid (Python keyword)'
             assert sym.isidentifier(), f'Symbol {sym} is invalid (not a valid python identifier)'

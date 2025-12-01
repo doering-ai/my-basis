@@ -39,6 +39,15 @@ class SystemUtils:
     # ---------------
     @classmethod
     def posix(cls, val: int | float | datetime | None = None) -> datetime:
+        """
+        Convert a timestamp or datetime to UTC datetime.
+
+        Args:
+            val: Unix timestamp (int/float), datetime object, or None for current time.
+
+        Returns:
+            Timezone-aware datetime in UTC.
+        """
         if val is None:
             return datetime.now(timezone.utc)
         elif isinstance(val, datetime):
@@ -48,6 +57,15 @@ class SystemUtils:
 
     @classmethod
     def posix_since(cls, val: int | float | datetime | None = None) -> timedelta:
+        """
+        Calculate time elapsed since a given timestamp.
+
+        Args:
+            val: Unix timestamp (int/float), datetime object, or None.
+
+        Returns:
+            Timedelta representing elapsed time, or zero if val is falsy.
+        """
         if not val:
             return timedelta(0)
         else:
@@ -58,18 +76,53 @@ class SystemUtils:
     # --------------
     @classmethod
     def validate_dir(cls, *paths: pyd.DirectoryPath) -> bool:
+        """
+        Validate that all provided paths are existing directories.
+
+        Args:
+            *paths: One or more directory paths to validate.
+
+        Returns:
+            True if all paths are valid directories.
+
+        Raises:
+            AssertionError: If any path is invalid or not a directory.
+        """
         for path in paths:
             assert path and path.exists() and path.is_dir(), f'Invalid directory: {path.as_posix()}'
         return True
 
     @classmethod
     def validate_file(cls, *paths: pyd.FilePath) -> bool:
+        """
+        Validate that all provided paths are existing files.
+
+        Args:
+            *paths: One or more file paths to validate.
+
+        Returns:
+            True if all paths are valid files.
+
+        Raises:
+            AssertionError: If any path is invalid or not a file.
+        """
         for path in paths:
             assert path and path.exists() and path.is_file(), f'Invalid file: {path.as_posix()}'
         return True
 
     @classmethod
     def path_sub(cls, path: Path, old: str, new: str) -> Path:
+        """
+        Substitute a path component with a new value.
+
+        Args:
+            path: Path object to modify.
+            old: Path component to replace.
+            new: Replacement path component.
+
+        Returns:
+            New Path with substitution applied, or original if old not found.
+        """
         parts = path.parts
         if old in parts:
             i = parts.index(old)
@@ -87,6 +140,15 @@ class SystemUtils:
 
     @classmethod
     def _assemble_args(cls, args: Iterable[Any]) -> Iterable[str]:
+        """
+        Convert positional arguments to shell-safe strings.
+
+        Args:
+            args: Iterable of arguments to convert.
+
+        Yields:
+            String representations with appropriate quoting.
+        """
         for arg in args:
             if isinstance(arg, int | float):
                 yield f'{arg}'
@@ -98,6 +160,17 @@ class SystemUtils:
     def _assemble_kwargs(
         cls, kwargs: dict[str, Any], _ud: bool = False, _sd: bool = False
     ) -> Iterable[str]:
+        """
+        Convert keyword arguments to shell command flags.
+
+        Args:
+            kwargs: Dictionary of keyword arguments.
+            _ud: If True, preserve underscores in keys (default: False).
+            _sd: If True, use single dashes for all flags (default: False).
+
+        Yields:
+            Formatted command-line flags (e.g., '--key value', '-k').
+        """
         for key, val in kwargs.items():
             if '_' in key and not _ud:
                 key = key.replace('_', '-')
@@ -122,6 +195,23 @@ class SystemUtils:
         _pipe: str = '',
         **kwargs: Any,
     ) -> str:
+        """
+        Assemble a complete shell command from components.
+
+        Args:
+            cmd: Base command name.
+            *args: Positional arguments.
+            _final: If True, place kwargs after positional args (default: False).
+            _verbose: If True, print the command before returning (default: False).
+            _single_dash: If True, use single dashes for flags (default: False).
+            _underlines: If True, preserve underscores in flag names (default: False).
+            _out: If provided, append redirect to this file.
+            _pipe: If provided, append pipe to this command.
+            **kwargs: Keyword arguments converted to flags.
+
+        Returns:
+            Complete shell command string.
+        """
         parts = [cmd]
         if args or kwargs:
             # I. Assemble the main parts of the command
@@ -145,6 +235,17 @@ class SystemUtils:
 
     @classmethod
     def command(cls, cmd: str, *args: Any, **kwargs: Any) -> tuple[int, str, str]:
+        """
+        Execute a shell command synchronously.
+
+        Args:
+            cmd: Base command to execute.
+            *args: Positional arguments.
+            **kwargs: Keyword arguments (converted to flags).
+
+        Returns:
+            Tuple of (return_code, stdout, stderr).
+        """
         cmd = cls._assemble_command(cmd, *args, **kwargs)
         ret = sbp.run(cmd, capture_output=True, text=True, shell=True)
         return (
@@ -155,6 +256,17 @@ class SystemUtils:
 
     @classmethod
     async def run_command(cls, cmd: str, *args: Any, **kwargs: Any) -> tuple[int, str, str]:
+        """
+        Execute a shell command asynchronously.
+
+        Args:
+            cmd: Base command to execute.
+            *args: Positional arguments.
+            **kwargs: Keyword arguments (converted to flags).
+
+        Returns:
+            Tuple of (return_code, stdout, stderr).
+        """
         cmd = cls._assemble_command(cmd, *args, **kwargs)
         subprocess = await aio.create_subprocess_shell(
             cmd,
@@ -172,20 +284,47 @@ class SystemUtils:
 
     @classmethod
     def get_terminal_width(cls) -> int:
+        """
+        Get the current terminal width in characters.
+
+        Returns:
+            Terminal width (defaults to 100 if unavailable).
+        """
         return get_terminal_size((100, 100))[0]
 
     @classmethod
     def terminal_linewrap(cls, text: str, indent: int = 0) -> str:
+        """
+        Wrap text to fit within terminal width.
+
+        Args:
+            text: Text to wrap.
+            indent: Number of characters to reserve for indentation (default: 0).
+
+        Returns:
+            Text wrapped to terminal width minus indent.
+        """
         return textwrap.fill(
             text_utils.unwrap_paragraphs(text), width=cls.get_terminal_width() - indent
         )
 
     @staticmethod
     def auto_confirm() -> None:
+        """Enable auto-confirmation mode for all confirmation prompts."""
         SystemUtils.AUTO_CONFIRM = True
 
     @staticmethod
     def confirm(prompt: str, default_no: bool = False) -> bool:
+        """
+        Prompt user for confirmation with y/n input.
+
+        Args:
+            prompt: Question to display to user.
+            default_no: If True, default to 'no' (default: False defaults to 'yes').
+
+        Returns:
+            True if user confirms, False otherwise. Always True if auto-confirm enabled.
+        """
         if SystemUtils.AUTO_CONFIRM:
             return True
         elif default_no:
@@ -207,6 +346,21 @@ class SystemUtils:
         maxsize: int = 2**26,  # 64 MB
         maxcount: int = 2**10,  # 1024 backups
     ) -> lg.Logger:
+        """
+        Configure Python file-based logging with rotation.
+
+        Args:
+            logdir: Directory for log files.
+            is_dev: If True, use DEBUG level; otherwise INFO.
+            package: Package name for logger identification.
+            logger: Existing logger to configure, or None to create new.
+            app: Optional ASGI app to register logger with.
+            maxsize: Maximum log file size in bytes (default: 64 MB).
+            maxcount: Maximum number of backup files (default: 1024).
+
+        Returns:
+            Configured Logger instance.
+        """
         # I. Validate log directory and logging object
         cls.validate_dir(logdir)
         if logger is None:
@@ -246,6 +400,20 @@ class SystemUtils:
         app: Any | None = None,
         **kwargs: Any,
     ) -> None:
+        """
+        Configure Logfire observability and logging.
+
+        Args:
+            fire_token: Logfire API token.
+            package: Package name for service identification.
+            logger: Logger to attach Logfire handler to.
+            is_dev: If True, use development mode with console output (default: True).
+            app: Optional ASGI app to instrument.
+            **kwargs: Additional configuration options for Logfire.
+
+        Raises:
+            AssertionError: If fire_token or package is missing.
+        """
         assert fire_token and package, 'Tried to initialize fire logging w/o token or package.'
 
         try:
@@ -293,9 +461,13 @@ class SystemUtils:
             app.asgi_app = fire.instrument_asgi(app.asgi_app)  # type:ignore
 
     @classmethod
-    def get_package_name(
-        cls,
-    ):
+    def get_package_name(cls) -> str:
+        """
+        Retrieve the current package name from metadata.
+
+        Returns:
+            Package name as string, derived from module metadata.
+        """
         current_module = sys.modules[__name__]
         package_name = current_module.__package__ or __name__
         root_package = package_name.split('.', 1)[0]
@@ -317,6 +489,23 @@ class SystemUtils:
         maxcount: int = 2**10,  # 1024 backups
         **fire_kwargs: Any,
     ) -> lg.Logger:
+        """
+        Configure comprehensive logging (Python file logging + Logfire).
+
+        Args:
+            logdir: Directory for log files.
+            is_dev: If True, use development mode with DEBUG level.
+            fire_token: Logfire API token (empty string to skip Logfire).
+            package: Package name (auto-detected if empty).
+            logger: Existing logger to configure, or None to create new.
+            app: Optional ASGI app to instrument.
+            maxsize: Maximum log file size in bytes (default: 64 MB).
+            maxcount: Maximum number of backup files (default: 1024).
+            **fire_kwargs: Additional Logfire configuration options.
+
+        Returns:
+            Configured Logger instance (cached per package).
+        """
         if not package:
             package = cls.get_package_name()
 
@@ -350,6 +539,12 @@ class SystemUtils:
 
     @staticmethod
     def setup_warnings():
+        """
+        Configure warning filters to suppress common deprecation warnings.
+
+        Filters out warnings for class-based config, config key changes, and
+        pkg_resources deprecation. Only runs once per session.
+        """
         if SystemUtils.WARNINGS_SETUP:
             return
 
@@ -364,8 +559,14 @@ class SystemUtils:
     @classmethod
     def setup_metrics(cls, metrics: pyd.DirectoryPath, logger: lg.Logger):
         """
-        Perform the necessary setup for Prometheus metrics, including ensuring the metrics
-        directory is present and empty.
+        Perform setup for Prometheus metrics, ensuring directory exists and is empty.
+
+        Args:
+            metrics: Directory for Prometheus multiprocess metrics.
+            logger: Logger for recording setup actions.
+
+        Raises:
+            AssertionError: If PROMETHEUS_MULTIPROC_DIR not set or mismatches metrics path.
         """
         if SystemUtils.METRICS_SETUP:
             return
@@ -389,6 +590,14 @@ class SystemUtils:
     def _measure(
         cls, name: str, counter: OpenTelemetryCounter | dict[str, int] | pd.Series, start: int
     ):
+        """
+        Record elapsed time in milliseconds to a counter.
+
+        Args:
+            name: Metric name (used for dict/Series counters).
+            counter: Counter object (OpenTelemetry, dict, or pandas Series).
+            start: Start time from perf_counter_ns().
+        """
         if dur_ms := (perf_counter_ns() - start) // 1_000_000:
             if isinstance(counter, OpenTelemetryCounter):
                 counter.add(dur_ms)
@@ -399,6 +608,16 @@ class SystemUtils:
     def _instrument(
         cls, func: Callable, counter: OpenTelemetryCounter | dict[str, int] | pd.Series
     ) -> Callable:
+        """
+        Wrap a function to automatically measure and record execution time.
+
+        Args:
+            func: Function to instrument (sync or async).
+            counter: Counter to record timing metrics.
+
+        Returns:
+            Wrapped function that measures execution time.
+        """
         @ft.wraps(func)
         def wrapper(*args: Any, **kwargs: Any):
             start = int(perf_counter_ns())
@@ -420,17 +639,45 @@ class SystemUtils:
     @ctx.contextmanager
     @classmethod
     def measure_context(cls, name: str, counter: dict[str, int]):
+        """
+        Context manager to measure execution time of a code block.
+
+        Args:
+            name: Metric name for recording.
+            counter: Dictionary counter to record elapsed time.
+
+        Yields:
+            None (timing measured around context block).
+        """
         start = perf_counter_ns()
         yield
         cls._measure(name, counter, start)
 
     @classmethod
     def monitor(cls, *args: Any, **kwargs: Any) -> Callable:
+        """
+        Create a Logfire instrumentation decorator for a function.
+
+        Args:
+            *args: Positional arguments for fire.instrument().
+            **kwargs: Keyword arguments for fire.instrument().
+
+        Returns:
+            Decorator that instruments function with Logfire monitoring.
+        """
         return fire.instrument(*args, extract_args=False, **kwargs)
 
     @classmethod
     def print_in_color(cls, text: str) -> None:
-        """Use zsh to process the prompt expansion."""
+        """
+        Print colored text using zsh prompt expansion.
+
+        Args:
+            text: Text with zsh color codes to print.
+
+        Note:
+            Requires zsh to be available in the system PATH.
+        """
         ret = sbp.run(f'zsh -c \'print -P "{text}"\'', capture_output=True, text=True, shell=True)
         print((ret.stdout or '').strip('\n'))
 

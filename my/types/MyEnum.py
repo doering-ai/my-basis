@@ -19,8 +19,33 @@ from ..utils import ut
 ############
 @ft.total_ordering
 class MyEnum(Enum):
+    """
+    Enhanced Enum base class with flexible parsing, arithmetic, and comparison.
+
+    Supports reading values from strings (including aliases), integers, and lists.
+    Provides arithmetic operations for numeric enums and bitwise operations for Flags.
+    Implements total ordering and string conversion with configurable aliases.
+    """
     @classmethod
     def read(cls, value: str | int | list | Self) -> Self:
+        """
+        Parse a value into an enum member.
+
+        Supports multiple input formats:
+        - Enum member: Returns as-is
+        - String: Matches by name, alias, or numeric string
+        - Integer: For Flag enums, creates by value
+        - List: For Flag enums, combines multiple values
+
+        Args:
+            value: Value to parse into enum member.
+
+        Returns:
+            Corresponding enum member.
+
+        Raises:
+            ValueError: If value cannot be parsed.
+        """
         if isinstance(value, cls):
             return value
         members = cls.__members__
@@ -57,6 +82,12 @@ class MyEnum(Enum):
         raise ValueError(f'Invalid {cls.__name__} value: {value}')
 
     def write(self) -> str:
+        """
+        Convert enum member to string representation.
+
+        Returns:
+            String value, lowercase name, or pipe-separated flags for Flag enums.
+        """
         if self.value and isinstance(self.value, str):
             return self.value
         elif self.name:
@@ -101,7 +132,12 @@ class MyEnum(Enum):
 
     @property
     def base(self) -> Self:
-        """Returns the base part of the enumeration, if applicable."""
+        """
+        Return the first/primary part of a Flag enum, or self for regular enums.
+
+        Returns:
+            First flag component or self.
+        """
         return parts[0] if (parts := self.parts) else self
 
     def __lt__(self, other: Self | str | int | list) -> bool:
@@ -120,9 +156,22 @@ class MyEnum(Enum):
     @ft.lru_cache(maxsize=1)
     @staticmethod
     def _aliases() -> dict[str, re.Pattern]:
-        """May be defined by implementations."""
+        """
+        Define regex patterns for parsing aliases.
+
+        Override in subclasses to provide custom alias matching.
+
+        Returns:
+            Dict mapping member names to alias regex patterns.
+        """
         return {}
 
     @classmethod
     def vtype(cls) -> Type:
+        """
+        Get the type of enum values.
+
+        Returns:
+            Type of the first enum member's value.
+        """
         return type(mi.first(enum.value for enum in cls.__members__.values()))

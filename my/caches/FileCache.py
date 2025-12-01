@@ -21,6 +21,18 @@ from ..infra import T
 ### BODY ###
 ############
 class FileCache(Generic[T]):
+    """
+    Two-level file-backed cache with in-memory LRU and on-disk persistence.
+
+    Organizes items into a directory structure: group/prefix/filename where prefix
+    is derived from filename. Maintains separate indices for in-memory (hot) items
+    and on-disk (cold) files. Automatically prunes memory cache and writes to disk
+    when size limits are exceeded.
+
+    Structure:
+    - items: In-memory cache of deserialized data
+    - files: Index of on-disk files with their contained item names
+    """
     MAX_CACHE: ClassVar[int] = 2**16  # 64K
     NAME_RGX: ClassVar[re.Pattern] = re.compile(
         r'[\'"]?'.join([r'(?m)^', r'[[:lower:]][-_[:lower:]]++', r':(?:$| \{)'])
@@ -109,6 +121,15 @@ class FileCache(Generic[T]):
     # `+` Primary Methods
     # -------------------
     def prune(self, n: int = 0):
+        """
+        Write oldest items to disk and remove from memory cache.
+
+        Proportionally prunes from each group based on its size relative to total.
+        Items are written to disk before removal from memory.
+
+        Args:
+            n: Number of items to prune (default: half of max_size).
+        """
         # Setup buffers
         prefixes: deque[str] = deque()
         filenames: deque[str] = deque()
@@ -151,6 +172,14 @@ class FileCache(Generic[T]):
             self.isize -= count
 
     def cache(self, group: str, filename: str, data: dict[str, T]) -> None:
+        """
+        Add or update items in the cache.
+
+        Args:
+            group: Category/namespace for the items.
+            filename: File identifier (prefix derived automatically).
+            data: Dictionary of items to cache.
+        """
         prefix = self._prefix(filename)
         if indexed := self._get_item(group, prefix, filename):
             del self.items[group][prefix][filename]
@@ -165,6 +194,17 @@ class FileCache(Generic[T]):
             self.prune()
 
     def read_file(self, group: str, filename: str, prefix: str = '') -> dict[str, T] | None:
+        """
+        Read all items from a file, loading from disk if needed.
+
+        Args:
+            group: Category/namespace.
+            filename: File identifier.
+            prefix: Optional prefix override (auto-derived if empty).
+
+        Returns:
+            Dictionary of items, or None if file doesn't exist.
+        """
         prefix = prefix or self._prefix(filename)
         if items := self._get_item(group, prefix, filename):
             cache = self.items[group][prefix]
@@ -189,7 +229,15 @@ class FileCache(Generic[T]):
 
     def write_file(self, group: str, filename: str, data: dict[str, T]) -> None:
         """
-        Writes data to disk, removing it from the cache if present.
+        Write data directly to disk, merging with any cached data.
+
+        Combines data with any existing cached items for this file before writing.
+        Removes the file from memory cache and adds to disk index.
+
+        Args:
+            group: Category/namespace.
+            filename: File identifier.
+            data: Dictionary of items to write.
         """
         prefix = self._prefix(filename)
         if cached := self._get_item(group, prefix, filename):
@@ -209,12 +257,30 @@ class FileCache(Generic[T]):
     # `x` Public Methods
     # ------------------
     def read(self, group: str, name: str) -> T | None:
+        """
+        Read a single item by name.
+
+        Args:
+            group: Category/namespace.
+            name: Item identifier (filename derived via splitter).
+
+        Returns:
+            The item, or None if not found.
+        """
         filename = self.splitter(name)[0]
         if (items := self.read_file(group, filename)) and name in items:
             return items[name]
         return None
 
     def write(self, group: str, name: str, item: T) -> None:
+        """
+        Write a single item, updating file on disk.
+
+        Args:
+            group: Category/namespace.
+            name: Item identifier (filename derived via splitter).
+            item: Item to store.
+        """
         filename = self.splitter(name)[0]
         if items := self.read_file(group, filename):
             items[name] = item
@@ -222,6 +288,7 @@ class FileCache(Generic[T]):
             self.write_file(group, filename, {name: item})
 
     def flush(self) -> None:
+        """Write all in-memory items to disk and clear memory cache."""
         for group in self.items.keys():
             for prefix in self.items[group].keys():
                 for filename in self.items[group][prefix].keys():
@@ -243,6 +310,19 @@ class FileCache(Generic[T]):
         prefix: str = '',
         mode: Literal['items', 'files', 'both'] = 'both',
     ) -> Iterator[T]:
+        """
+        Search for items by file or name patterns.
+
+        Args:
+            group: Category/namespace to search.
+            file_rgx: Pattern to match against filenames.
+            name_rgx: Pattern to match against item names.
+            prefix: Optional prefix to limit search scope.
+            mode: Search 'items' (memory), 'files' (disk), or 'both'.
+
+        Yields:
+            Items matching the search criteria.
+        """
         if mode == 'both':
             yield from self.search(group, file_rgx, name_rgx, prefix, 'items')
             yield from self.search(group, file_rgx, name_rgx, prefix, 'files')

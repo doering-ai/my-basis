@@ -17,6 +17,13 @@ from ..infra import Keys, Value
 ### BODY ###
 ############
 class NestedCache(pyd.BaseModel, Generic[Keys, Value]):
+    """
+    Multi-level hierarchical cache with automatic pruning.
+
+    Supports arbitrary nesting depth determined by the signature tuple length.
+    Each level maintains LRU ordering. Pruning is distributed proportionally
+    across child caches based on their sizes.
+    """
     signature: tuple
 
     children: dict[Hashable, 'NestedCache'] = {}
@@ -51,6 +58,19 @@ class NestedCache(pyd.BaseModel, Generic[Keys, Value]):
             return val[keys]
 
     def set(self, keys: list | tuple, value: Value) -> int:
+        """
+        Set a value at the specified key path.
+
+        Args:
+            keys: Path through nested levels (length must match depth).
+            value: Value to store.
+
+        Returns:
+            Number of new items added (0 if key existed, 1 if new).
+
+        Raises:
+            ValueError: If keys length doesn't match cache depth.
+        """
         if len(keys) != self.depth:
             raise ValueError('Keys must match the depth of the cache')
 
@@ -73,6 +93,15 @@ class NestedCache(pyd.BaseModel, Generic[Keys, Value]):
             self.prune(self.bucket_size)
 
     def delete(self, keys: list | tuple) -> int:
+        """
+        Delete a value at the specified key path.
+
+        Args:
+            keys: Path through nested levels (length must match depth).
+
+        Returns:
+            Number of items deleted (0 if not found, 1 if deleted).
+        """
         if len(keys) != self.depth:
             return 0
 
@@ -117,6 +146,18 @@ class NestedCache(pyd.BaseModel, Generic[Keys, Value]):
         yield from (val for _, val in self.items())
 
     def prune(self, n: int) -> int:
+        """
+        Remove approximately n items from the cache.
+
+        For nested caches, distributes pruning proportionally across children
+        based on their relative sizes.
+
+        Args:
+            n: Target number of items to remove.
+
+        Returns:
+            Actual number of items removed.
+        """
         if self.depth == 1:
             orig = len(self.data)
             for key in mi.take(n, self.data.keys()):

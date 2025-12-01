@@ -17,6 +17,13 @@ from ..types import Span, Predicate
 ### BODY ###
 ############
 class MatchData(Predicate):
+    """
+    Container for regex match results with captured groups and match metadata.
+
+    Extends Predicate to store captured group values while also maintaining a reference
+    to the original match object for accessing spans, positions, and matched text.
+    Provides cached properties for common match attributes like start, end, and text.
+    """
     match: ut.MatchField | None = None
     duplicates: bool = True
 
@@ -81,6 +88,12 @@ class MatchData(Predicate):
             return f'MatchData({self.data})'
 
     def print(self, indent: str = '') -> None:
+        """
+        Print captured groups in a formatted table.
+
+        Args:
+            indent: String to prepend to each line for indentation.
+        """
         width = min(max(map(len, self.keys())), 48)
         print(
             '\n'.join(
@@ -92,11 +105,18 @@ class MatchData(Predicate):
         )
 
     def set_to(self, other: 'MatchData | None') -> None:
+        """
+        Replace this MatchData's contents with another's, clearing caches.
+
+        Args:
+            other: MatchData to copy from, or None to clear.
+        """
         self.data = {key: [*values] for key, values in other.items()} if other else {}
         self.match = other.match if other is not None else None
         ut.clear_cached_properties(self, *self.CACHED_PROPERTIES)
 
     def clear(self) -> None:
+        """Clear all match data and captured groups."""
         self.set_to(None)
 
     def starts(self, field: str) -> list[int]:
@@ -118,7 +138,15 @@ class MatchData(Predicate):
         return self.match.ends(field)
 
     def matches(self, other: 'MatchData') -> bool:
-        """Determines if the two data objects share the same keys."""
+        """
+        Determine if two MatchData objects have the same set of capture group names.
+
+        Args:
+            other: MatchData to compare against.
+
+        Returns:
+            True if both have the same keys (ignoring values and order).
+        """
         lhs, rhs = set(self.keys()), set(other.keys())
         nulls = (not lhs, not rhs)
         if all(nulls):

@@ -20,6 +20,14 @@ from ..infra import T, C
 class SyntaxUtils:
     @classmethod
     def fill_tree(cls, tree: dict[T, C]) -> None:
+        """
+        Recursively replace None values with empty dicts in a nested tree structure.
+
+        Modifies tree in-place.
+
+        Args:
+            tree: Nested dictionary tree to fill.
+        """
         for key, val in tree.items():
             if isinstance(val, dict):
                 cls.fill_tree(val)  # type: ignore
@@ -28,6 +36,15 @@ class SyntaxUtils:
 
     @classmethod
     def tree_size(cls, tree: object) -> int:
+        """
+        Calculate total number of leaf nodes in a nested tree structure.
+
+        Args:
+            tree: Tree structure (dict of dicts, or leaf value).
+
+        Returns:
+            Total count of leaf nodes (non-dict values).
+        """
         return sum(map(cls.tree_size, tree.values())) if isinstance(tree, dict) else 1
 
     # ---------------
@@ -35,6 +52,15 @@ class SyntaxUtils:
     # ---------------
     @staticmethod
     def pyd_schemify(tvar: type) -> pyd.GetPydanticSchema:
+        """
+        Create Pydantic schema validator for instance type checking.
+
+        Args:
+            tvar: Type to create validator for.
+
+        Returns:
+            GetPydanticSchema validator for use with Annotated types.
+        """
         return pyd.GetPydanticSchema(lambda _, __: pyd_schema.is_instance_schema(cls=tvar))
 
     # Regex

@@ -16,6 +16,12 @@ from ..infra import Key, Value
 ### BODY ###
 ############
 class Cache(pyd.BaseModel, Generic[Key, Value]):
+    """
+    Simple LRU cache with automatic pruning when size limits are exceeded.
+
+    Maintains insertion order with most recently accessed items at the end.
+    When maxsize is reached, removes items in buckets from the front (oldest first).
+    """
     data: dict[Key, Value] = {}
     maxsize: int = pyd.Field(default=2**12, gt=0)  # 4096
     bucket_size: int = pyd.Field(default=2**8, gt=0)  # 256
@@ -46,5 +52,11 @@ class Cache(pyd.BaseModel, Generic[Key, Value]):
         return list(self.data.values())
 
     def prune(self, n: int) -> None:
+        """
+        Remove the n oldest items from the cache.
+
+        Args:
+            n: Number of items to remove.
+        """
         for key in mi.take(n, self.data.keys()):
             del self.data[key]

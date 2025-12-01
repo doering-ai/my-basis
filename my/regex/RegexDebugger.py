@@ -20,11 +20,27 @@ from .RegexStore import RegexStore
 ### BODY ###
 ############
 class RegexDebugger(RegexStore):
+    """
+    Debugging tools for analyzing regex pattern failures.
+
+    Extends RegexStore with methods to diagnose why patterns fail to match text.
+    Provides detailed failure analysis by isolating the failing clause and showing
+    which parts of the pattern matched successfully before failure.
+    """
     # -------------------
     # `0` Initial Methods
     # -------------------
     @classmethod
     def new_debugger(cls, store: RegexStore) -> Self:
+        """
+        Create a debugger from an existing RegexStore.
+
+        Args:
+            store: RegexStore instance to create debugger from.
+
+        Returns:
+            New RegexDebugger with all patterns from the store.
+        """
         return cls.model_construct(**store.model_dump())
 
     # -------------------
@@ -59,6 +75,19 @@ class RegexDebugger(RegexStore):
     # `+` Primary Methods
     # -------------------
     def debug_failed_match(self, name: str, text: Buffer) -> list[str]:
+        """
+        Analyze a pattern that failed to match and identify the failing clause.
+
+        Iteratively tests progressively longer subpatterns to find exactly where
+        matching stops, then extracts that clause with its dependencies for testing.
+
+        Args:
+            name: Name of pattern that failed.
+            text: Buffer containing text that failed to match.
+
+        Returns:
+            List of strings describing the failure with a curated test regex.
+        """
         output = []
 
         # I. Split the regex up by the root-level groups present
@@ -161,6 +190,22 @@ class RegexDebugger(RegexStore):
         expected: bool = True,
         func: str = '',
     ) -> str:
+        """
+        Generate debug output for a regex test that produced unexpected results.
+
+        Args:
+            names: List of pattern names that were tested.
+            text: Text that was matched against.
+            matched: Whether the pattern actually matched.
+            expected: Whether a match was expected (default: True).
+            func: Name of function used (e.g., 'match', 'search').
+
+        Returns:
+            Multi-line debug report showing pattern, text, and failure analysis.
+
+        Raises:
+            ValueError: If matched and expected are both False (no failure to debug).
+        """
         assert names
         _name = names[0].upper() + (f'.{func}()' if func else '')
         output: list[str] = []

@@ -13,10 +13,42 @@ from .RegexStore import RegexStore, RgxVal
 ### BODY ###
 ############
 def format_url(target: str) -> str:
+    """
+    Cleans and formats a URL by removing detritus and trailing characters.
+
+    Removes archive.org prefixes, URL fragments, and trailing punctuation from URLs
+    to produce a clean, canonical form.
+
+    Args:
+        target: The URL string to format.
+
+    Returns:
+        The cleaned URL string with detritus removed and trimmed.
+    """
     return COMMON_RGXS['url_detritus'].sub('', target).strip('/. ')
 
 
 def atom(*contents: RgxVal) -> RgxVal:
+    """
+    Wraps regex content in word-boundary assertions for atomic matching.
+
+    This function takes one or more regex values and wraps them in word start (_ws)
+    and word end (_we) boundary assertions. This ensures the pattern matches complete
+    words or atomic units rather than partial matches.
+
+    Args:
+        *contents: One or more regex values (strings, lists, or tuples) to wrap.
+
+    Returns:
+        A regex value wrapped with word boundary assertions. Format depends on input:
+        - Multiple contents: tuple with all wrapped together
+        - Single string: string with boundaries
+        - Single list: list with boundaries prepended/appended
+        - Single tuple: tuple with boundaries integrated based on mark type
+
+    Raises:
+        ValueError: If no content provided or tuple has invalid length.
+    """
     if not contents:
         raise ValueError('No content provided')
     elif len(contents) > 1:

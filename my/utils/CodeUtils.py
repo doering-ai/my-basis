@@ -27,6 +27,15 @@ from .IterUtils import iter_utils
 class CodeUtils:
     @staticmethod
     def instance_fields(cls: type[pyd.BaseModel]) -> dict[str, type]:
+        """
+        Extract instance field names and types from a Pydantic model.
+
+        Args:
+            cls: Pydantic BaseModel class to inspect.
+
+        Returns:
+            Dictionary mapping lowercase field names to their type annotations.
+        """
         return {
             field: info.annotation
             for field, info in cls.model_fields.items()
@@ -36,6 +45,18 @@ class CodeUtils:
     @ft.lru_cache(maxsize=1024)
     @staticmethod
     def instance_aliases(cls: type[pyd.BaseModel]) -> dict[str, type]:
+        """
+        Extract field aliases and types from a Pydantic model with caching.
+
+        Resolves field aliases including validation aliases and alias choices,
+        converting AliasPath objects to string representations.
+
+        Args:
+            cls: Pydantic BaseModel class to inspect.
+
+        Returns:
+            Dictionary mapping field aliases to their type annotations.
+        """
         ret = {}
         for field, info in cls.model_fields.items():
             if field.islower() and info.annotation is not None:
@@ -60,6 +81,21 @@ class CodeUtils:
         new: Any,
         depth: int = 0,
     ) -> bool:
+        """
+        Recursively search and replace a value in nested data structures.
+
+        Supports sequences (list, tuple, deque, set), mappings (dict), and Pydantic
+        models. Recursively traverses nested structures up to depth limit.
+
+        Args:
+            obj: Collection or Pydantic model to search within.
+            old: Value to find and replace.
+            new: Replacement value.
+            depth: Current recursion depth (default: 0, max: 10).
+
+        Returns:
+            True if value was found and replaced, False otherwise.
+        """
         next_iter: Collection[Collection | pyd.BaseModel] | None = None
         if isinstance(obj, Series):
             if old in obj:
@@ -105,11 +141,33 @@ class CodeUtils:
 
     @staticmethod
     def import_module(file: pyd.FilePath, root: pyd.DirectoryPath) -> ModuleType:
+        """
+        Dynamically import a Python module from a file path.
+
+        Converts file path to module dotted notation and imports it.
+
+        Args:
+            file: Path to Python file to import.
+            root: Root directory for relative import path calculation.
+
+        Returns:
+            Imported ModuleType object.
+        """
         pathstr = file.with_suffix('').relative_to(root).as_posix().replace('/', '.')
         return imp.import_module(pathstr)
 
     @staticmethod
     def clear_cached_properties(inst: object, *properties: str) -> None:
+        """
+        Clear cached properties from an object instance.
+
+        If no properties specified, clears all properties listed in instance's
+        CACHED_PROPERTIES attribute.
+
+        Args:
+            inst: Object instance to clear cached properties from.
+            *properties: Property names to clear. If empty, uses inst.CACHED_PROPERTIES.
+        """
         if not properties and hasattr(inst, 'CACHED_PROPERTIES'):
             properties = tuple(getattr(inst, 'CACHED_PROPERTIES'))
 

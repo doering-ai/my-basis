@@ -55,4 +55,13 @@ JINJA = jn.Environment(loader=jn.FileSystemLoader(templates), trim_blocks=True, 
 
 @ft.lru_cache(maxsize=128)
 def get_template(template_name: str) -> jn.Template:
+    """
+    Load and cache a Jinja2 template from the data/templates directory.
+
+    Args:
+        template_name: Name of template file.
+
+    Returns:
+        Compiled Jinja2 template.
+    """
     return JINJA.get_template(template_name)

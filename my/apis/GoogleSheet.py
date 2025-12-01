@@ -17,7 +17,7 @@ import pandas as pd
 
 ### INTERNAL
 from ..utils import ut
-from ..types import env
+from .Environment import env
 
 DataFrame = pd.DataFrame
 
@@ -52,6 +52,12 @@ class GoogleSheet:
         return cls.INST
 
     def connect(self, uid: str) -> None:
+        """
+        Connect to a Google Sheet via its sheet ID, loading its conents into local memory.
+
+        Args:
+            uid: The Google Sheet ID (not URL).
+        """
         # I. Store the sheet ID
         self.uid = uid
 
@@ -64,6 +70,9 @@ class GoogleSheet:
         self.worksheets = [ws['title'] for ws in sorted(_worksheets, key=lambda ws: ws['index'])]
 
     def disconnect(self) -> None:
+        """
+        Disconnect from the current Google Sheet, clearing all cached data and freeing memory.
+        """
         # I. Disconnect on their end
         if self.uid and self.gcreds is not None:
             self.sheets.close()
@@ -88,6 +97,16 @@ class GoogleSheet:
         header: bool = True,
         index: bool = False,
     ) -> list[list[str]]:
+        """
+        Serialize a pandas DataFrame into a list of lists for Google Sheets API consumption.
+
+        Args:
+            data: The DataFrame to serialize.
+            header: If true, include column names as the first row.
+            index: If true, include the index as the first column.
+        Returns:
+            A list of lists representing the DataFrame.
+        """
         df = data.copy().reset_index()
         values = df.fillna('').astype(str).values.tolist()
         if header:
@@ -98,6 +117,15 @@ class GoogleSheet:
 
     @staticmethod
     def deserialize_data(values: list[list], header: bool = True, index: str = '') -> DataFrame:
+        """
+        Deserialize a list of lists from the Google Sheets API into a pandas DataFrame.
+        Args:
+            values: The list of lists to deserialize.
+            header: If true, use the first row as column names.
+            index: The column to use as the index, if any.
+        Returns:
+            A pandas DataFrame representing the data.
+        """
         if not any(values):
             return DataFrame()
         if header:
@@ -114,6 +142,15 @@ class GoogleSheet:
 
     @staticmethod
     def shape_to_range(shape: tuple[int, int], start: str = 'A1') -> str:
+        """
+        Convert a shape (width, height) into an A1-style range string, starting from `start`.
+        Args:
+            shape: The (width, height) of the range.
+            start: The starting cell (default 'A1').
+        Returns:
+            An A1-style range string.
+        """
+
         def col_to_num(col: str) -> int:
             if not col:
                 return 1
@@ -148,16 +185,35 @@ class GoogleSheet:
     # `+` Primary Methods
     # -------------------
     def genexec(self, endpoint: str, **kwargs: Any) -> dict[str, Any]:
+        """
+        Generic executor for Google Sheets API endpoints (relatively rare).
+        Args:
+            endpoint: The endpoint to call.
+            kwargs: Additional arguments to pass to the endpoint.
+        Returns:
+            The response from the API call.
+        """
         fn = getattr(self.sheets, endpoint)
         return fn(spreadsheetId=self.uid, **kwargs).execute()
 
     def exec(self, endpoint: str, **kwargs: Any) -> dict[str, Any]:
+        """
+        Generic executor for Google Sheets API `values` endpoints (most data operations).
+        Args:
+            endpoint: The endpoint to call.
+            kwargs: Additional arguments to pass to the endpoint.
+        Returns:
+            The response from the API call.
+        """
         fn = getattr(self.values, endpoint)
         return fn(spreadsheetId=self.uid, **kwargs).execute()
 
     def auth(self) -> None:
         """
-        https://googleapis.dev/python/google-auth/latest/reference/google.oauth2.credentials.html
+        Authenticate with Google APIs via OAuth2, caching tokens locally for future use in the
+        $MY_CREDS directory.
+
+        See: googleapis.dev/python/google-auth/latest/reference/google.oauth2.credentials.html
         """
         assert self.SCOPES, 'Must provide at least one scope to authenticate with Google APIs.'
         did_change = False
@@ -201,10 +257,12 @@ class GoogleSheet:
     # ------------------
     @property
     def is_connected(self) -> bool:
+        """Check if currently connected to a Google Sheet."""
         return bool(self.uid)
 
     @ft.cached_property
     def sheets(self) -> Any:
+        """Build and return the Google Sheets API client."""
         if self.gcreds is None:
             self.auth()
 
@@ -214,6 +272,7 @@ class GoogleSheet:
 
     @ft.cached_property
     def values(self) -> Any:
+        """Return the Google Sheets API `values` resource."""
         return self.sheets.values()
 
     def read(
@@ -239,6 +298,14 @@ class GoogleSheet:
         return self.deserialize_data(response['values'], header=header, index=index)
 
     def batch_read(self, *args: str, **kwargs: dict[str, Any]) -> dict[str, DataFrame]:
+        """
+        Load multiple worksheets/ranges from the given google sheet via the Google Sheets API.
+
+        Args:
+            *args: The worksheet names or ranges to load.
+            **kwargs: Additional options for each range. Each value is a dictionary of options to
+                pass to `deserialize_data`.
+        """
         # I. Issue the request
         n_args = len(args)
         keys = [*args, *kwargs.keys()]
@@ -260,7 +327,14 @@ class GoogleSheet:
 
         return ret
 
-    def clear(self, worksheet: list[str] | str, cells: list[str] | str = ''):
+    def clear(self, worksheet: list[str] | str, cells: list[str] | str = '') -> None:
+        """
+        Clear the given range(s) from the Google Sheet.
+        Args:
+            worksheet: The worksheet name(s) to clear.
+            cells: The cell range(s) to clear. If a single string is provided, it applies to all
+                worksheets. If a list is provided, it must match the length of `worksheet`.
+        """
         if isinstance(worksheet, str):
             assert isinstance(cells, str)
             self.exec('clear', range=f'{worksheet}!{cells}')
@@ -277,6 +351,14 @@ class GoogleSheet:
             fire.info(f'Successfully cleared ranges {response["clearedRanges"]}.')
 
     def write(self, worksheet: str, data: DataFrame, cells: str = 'A1:Z', **kwargs) -> None:
+        """
+        Write data to a single worksheet in the Google Sheet.
+        Args:
+            worksheet: The name of the worksheet to write to.
+            data: The DataFrame to write.
+            cells: The range of cells to write to.
+            **kwargs: Additional arguments to pass to `serialize_data`.
+        """
         response = self.exec(
             'update',
             range=f'{worksheet}!{cells}',
@@ -286,6 +368,12 @@ class GoogleSheet:
         fire.info(f'Successfully updated range {response["updatedRange"]}')
 
     def batch_write(self, **kwargs: DataFrame) -> None:
+        """
+        Write multiple DataFrames to the Google Sheet in a single batch operation.
+        Args:
+            **kwargs: Each key is a target range (e.g. worksheet!cells) and each value is the
+                DataFrame to write to that range.
+        """
         requests = []
         with fire.span(f'Writing {len(kwargs)} ranges to {self.name}...'):
             # I. Build the requests, adding on cell info where needed
@@ -314,6 +402,13 @@ class GoogleSheet:
                 fire.info(f'Successfully updated range {resp["updatedRange"]}')
 
     def add_worksheets(self, *args: str, **kwargs: Any) -> None:
+        """
+        Add new worksheets to the Google Sheet.
+        Args:
+            *args: The names of the worksheets to add with default properties.
+            **kwargs: Each key is a worksheet name and each value is a dictionary of properties to
+                set for that worksheet.
+        """
         worksheets = [
             *(dict(title=worksheet) for worksheet in args),
             *(dict(title=worksheet, **properties) for worksheet, properties in kwargs.items()),

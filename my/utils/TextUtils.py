@@ -29,6 +29,16 @@ class TextUtils:
     # ------------------------
     @staticmethod
     def replace(string: str, *args: tuple[str | Pattern, str | Callable[[Match[str]], str]]) -> str:
+        """
+        Apply multiple regex replacements sequentially to a string.
+
+        Args:
+            string: Input string to transform.
+            *args: Tuples of (pattern, replacement) for sequential application.
+
+        Returns:
+            String with all replacements applied in order.
+        """
         for pattern, repl in args:
             string = re.sub(pattern, repl, string)
         return string
@@ -36,14 +46,19 @@ class TextUtils:
     @staticmethod
     def split_into(text: str, pattern: str | Pattern, n: int = 2, rhs: bool = True) -> list[str]:
         """
-        Splits a string using regex a given number of times AT MINIMUM, padding on the left or right
-        for any missing values.
+        Split string using regex into exactly n parts, padding as needed.
 
         Args:
-            text: The string to split.
-            pattern: The regex pattern to split by.
-            n: The EXACT number of parts to split into.
-            rhs: If True, pad on the right; if False, pad on the left.
+            text: String to split.
+            pattern: Regex pattern to split by.
+            n: Exact number of parts to return (must be > 1).
+            rhs: If True, pad on right; if False, pad on left (default: True).
+
+        Returns:
+            List of exactly n strings, padded with empty strings if needed.
+
+        Raises:
+            AssertionError: If n <= 1 or split operation fails.
         """
         if not text:
             return [''] * n
@@ -65,6 +80,16 @@ class TextUtils:
         dictionary: dict[T, str | tuple[str, ...] | Pattern] | dict[T, str] | None = None,
         compile_function: Callable[..., Pattern] = re.compile,
     ) -> dict[T, Pattern]:
+        """
+        Compile string patterns in a dictionary to compiled regex Pattern objects.
+
+        Args:
+            dictionary: Dict with string/Pattern values to compile.
+            compile_function: Function to compile patterns (default: re.compile).
+
+        Returns:
+            Dictionary with all values as compiled Pattern objects.
+        """
         if dictionary is None:
             dictionary = {}
         ret = {}
@@ -80,6 +105,16 @@ class TextUtils:
         array: Iterable[tuple[str | Pattern, str]],
         compile_function: Callable[..., Pattern] = re.compile,
     ) -> list[tuple[Pattern, str]]:
+        """
+        Compile string patterns in tuple pairs to Pattern objects.
+
+        Args:
+            array: Iterable of (pattern, replacement) tuples.
+            compile_function: Function to compile patterns (default: re.compile).
+
+        Returns:
+            List of (compiled_pattern, replacement) tuples.
+        """
         ret = []
         for key, val in array:
             if isinstance(key, Pattern):
@@ -90,10 +125,30 @@ class TextUtils:
 
     @staticmethod
     def spaced_rgx(pattern: str) -> str:
+        """
+        Convert space-separated pattern to flexible whitespace regex.
+
+        Args:
+            pattern: Space-separated pattern string.
+
+        Returns:
+            Pattern with spaces replaced by \\s* for flexible matching.
+        """
         return r'\s*'.join(' '.split(pattern))
 
     @staticmethod
     def multi_rgx(*rgxs: str | list[str], sep: str = r' ?', branching: bool = False) -> str:
+        """
+        Combine multiple regex patterns into a single alternation group.
+
+        Args:
+            *rgxs: Regex patterns (strings or lists of strings).
+            sep: Separator for joining list patterns (default: r' ?').
+            branching: If True, create capturing group; else non-capturing (default: False).
+
+        Returns:
+            Combined regex pattern in group format (?:|...) or (?:...).
+        """
         parts = [(rgx if isinstance(rgx, str) else sep.join(rgx)) for rgx in rgxs]
         contents = r'|'.join(parts)
         return rf'(?{"|" if branching else ":"}{contents})'
@@ -104,6 +159,18 @@ class TextUtils:
 
     @staticmethod
     def wrap(line: str, prefix: str = '', char: str = '-', width: int = 2) -> str:
+        """
+        Wrap a line of text with decorative borders.
+
+        Args:
+            line: Text to wrap.
+            prefix: Prefix for each line (default: '').
+            char: Character for border (default: '-').
+            width: Padding width on each side (default: 2).
+
+        Returns:
+            Multi-line string with text wrapped in decorative borders.
+        """
         n = (len(line) + 2 + 2 * width) if width else len(line)
         wrapper = prefix + (char * n)
         return '\n'.join(
@@ -117,22 +184,62 @@ class TextUtils:
 
     @staticmethod
     def indent(text: str, n: int = 4) -> str:
+        """
+        Indent all lines in text by n spaces.
+
+        Args:
+            text: Text to indent.
+            n: Number of spaces to indent (default: 4).
+
+        Returns:
+            Indented text, or original if n is 0.
+        """
         if not n:
             return text
         return textwrap.indent(text, ' ' * n)
 
     @staticmethod
     def unindent(text: str, n: int = 4) -> str:
-        """Unindent each line in the given string or iterable of strings by n tabs."""
+        """
+        Remove up to n*4 leading spaces from each line.
+
+        Args:
+            text: Text to unindent.
+            n: Number of indent levels to remove (default: 4, removes up to 16 spaces).
+
+        Returns:
+            Unindented text.
+        """
         fn = ft.partial(re.compile(rf'^ {{1,{n * 4}}}').sub, '')
         return '\n'.join(map(fn, text))
 
     @staticmethod
     def wrap_paragraphs(text: str, width: int = 100) -> str:
+        """
+        Wrap text to specified width, breaking on whitespace.
+
+        Args:
+            text: Text to wrap.
+            width: Maximum line width (default: 100).
+
+        Returns:
+            Wrapped text.
+        """
         return textwrap.fill(text, width=width)
 
-    @clasmethod
+    @classmethod
     def unwrap_paragraphs(cls, text: str) -> str:
+        """
+        Unwrap and normalize paragraph text, joining wrapped lines intelligently.
+
+        Handles hyphenated line breaks, prose detection, and comment prefixes.
+
+        Args:
+            text: Text with potentially wrapped paragraphs.
+
+        Returns:
+            Unwrapped text with proper spacing and line breaks.
+        """
         text = textwrap.dedent(text.strip('\n'))
         text = cls.RGXS['comment_prefix'].sub('', text)
         lines = text.splitlines()
@@ -158,6 +265,17 @@ class TextUtils:
 
     @staticmethod
     def strip_quotes(string: str) -> str:
+        """
+        Remove surrounding quotes and emphasis markers from string.
+
+        Strips matching pairs of ', ", *, and _ characters.
+
+        Args:
+            string: String to strip.
+
+        Returns:
+            String with surrounding quotes/emphasis removed.
+        """
         string = string.strip()
         while len(string) > 2 and (c := string[0]) in '_*\'"':
             if c == string[-2] and not string[-1].isalnum():
@@ -172,6 +290,17 @@ class TextUtils:
 
     @classmethod
     def _clean_nonwords(cls, string: str) -> str:
+        """
+        Clean non-word characters from string using standard replacements.
+
+        Internal method that normalizes newlines, punctuation, spaces, and hyphens.
+
+        Args:
+            string: String to clean.
+
+        Returns:
+            Cleaned string with normalized spacing and punctuation.
+        """
         return cls.replace(
             string,
             (cls.RGXS['newlines'], ' '),
@@ -183,6 +312,18 @@ class TextUtils:
 
     @classmethod
     def clean_string(cls, string: str, case: Literal['lower', 'none', 'upper'] = 'lower') -> str:
+        """
+        Fully clean and normalize a string for use as identifier or slug.
+
+        Applies unidecode, strips whitespace, cleans non-words, and applies case conversion.
+
+        Args:
+            string: String to clean.
+            case: Case conversion - 'lower', 'upper', or 'none' (default: 'lower').
+
+        Returns:
+            Cleaned and normalized string suitable for identifiers.
+        """
         ret = iter_utils.build(string, unidecode, str.strip, cls._clean_nonwords)
         if case == 'lower':
             return ret.lower()
@@ -193,10 +334,29 @@ class TextUtils:
 
     @classmethod
     def to_words(cls, text: str) -> list[str]:
+        """
+        Extract all words from text using regex word boundary matching.
+
+        Args:
+            text: Text to extract words from.
+
+        Returns:
+            List of word strings.
+        """
         return list(cls.RGXS['word'].findall(text))
 
     @staticmethod
     def line_num(article: str, pos: int | str) -> int:
+        """
+        Calculate line number from character position or substring.
+
+        Args:
+            article: Text to search within.
+            pos: Character position (int) or substring to find (str).
+
+        Returns:
+            Line number (1-indexed).
+        """
         if isinstance(pos, int):
             return article.count('\n', 0, pos) + 1
         else:
@@ -204,6 +364,16 @@ class TextUtils:
 
     @staticmethod
     def parse_domain(url: str, default: str = '') -> str:
+        """
+        Extract domain name from URL, removing 'www.' prefix.
+
+        Args:
+            url: URL string to parse.
+            default: Default value if parsing fails (default: '').
+
+        Returns:
+            Domain name without 'www.' prefix, or default if parsing fails.
+        """
         if url:
             try:
                 if host := pyd.HttpUrl(url).host:

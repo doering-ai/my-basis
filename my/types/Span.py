@@ -15,6 +15,14 @@ from ..infra import Series, DELIM
 ### BODY ###
 ############
 class Span(tuple[int, int]):
+    """
+    An immutable half-open interval [start, end) representing a text range.
+
+    Spans are tuples of two integers where the first is inclusive and the second is
+    exclusive. They support arithmetic, containment checks, intersection testing,
+    and merging operations. Can be constructed from various formats including strings
+    like "10-20" or "432-3" (abbreviated form).
+    """
     DELIM_RGX: ClassVar[re.Pattern] = re.compile(r' ?[-,\/]+ ?')
 
     def __new__(cls, arg0: 'Series|int|float|str|Span' = -1, arg1: int | str = -1):
@@ -52,6 +60,7 @@ class Span(tuple[int, int]):
 
     @property
     def delta(self) -> int:
+        """Return the length of this span."""
         return self[1] - self[0]
 
     def __repr__(self) -> str:
@@ -95,6 +104,15 @@ class Span(tuple[int, int]):
         return False
 
     def intersects(self, other: 'Span|tuple[int, int]') -> bool:
+        """
+        Check if this span overlaps with another span.
+
+        Args:
+            other: Span to test for intersection.
+
+        Returns:
+            True if the spans overlap.
+        """
         return other in self
 
     def __add__(self, other: object) -> 'Span':
@@ -108,10 +126,34 @@ class Span(tuple[int, int]):
 
     @staticmethod
     def serialize(*args: 'Span|tuple[int, int]') -> str:
+        """
+        Serialize multiple spans to a delimited string.
+
+        Args:
+            *args: Spans to serialize.
+
+        Returns:
+            String with spans separated by DELIM.
+        """
         return DELIM.join(map(str, args))
 
     @classmethod
     def parse(cls, text: str) -> 'Span':
+        """
+        Parse a span from text with smart abbreviation handling.
+
+        Handles formats like:
+        - "10-20": Full range
+        - "432-3": Abbreviated end (becomes 432-433)
+        - "1475-33": Abbreviated end with rollover (becomes 1475-1533)
+        - "42": Single position (becomes 42-43)
+
+        Args:
+            text: String to parse.
+
+        Returns:
+            Parsed Span, or empty Span (0, 0) if parsing fails.
+        """
         segments = cls.DELIM_RGX.split(text)
         if len(segments) == 2 and all(map(str.isdigit, segments)):
             # Account for ommitted digits (e.g. 432-33, or even 432-3)
@@ -132,10 +174,28 @@ class Span(tuple[int, int]):
             return Span((0, 0))
 
     def join(self, other: 'Span|tuple[int, int]') -> 'Span':
+        """
+        Create a span that encompasses both this span and another.
+
+        Args:
+            other: Span to join with.
+
+        Returns:
+            New span from the minimum start to maximum end.
+        """
         return Span(min(self[0], other[0]), max(self[1], other[1]))
 
     @classmethod
     def merge(cls, *args: 'tuple[int, int]|Span') -> list['Span']:
+        """
+        Merge overlapping spans into a minimal set of non-overlapping spans.
+
+        Args:
+            *args: Spans to merge.
+
+        Returns:
+            Sorted list of non-overlapping spans covering the same positions.
+        """
         spans = list(sorted(set(map(Span, args))))
         i = 0
         while i < len(spans) - 1:

@@ -16,6 +16,12 @@ from .MatchData import MatchData
 ### BODY ###
 ############
 class ParseData(pyd.BaseModel):
+    """
+    Intermediate storage for parsed match data during transformation.
+
+    Holds captured values and their start positions while parsers are being applied.
+    Supports merging, rearranging, and transforming captures based on parser functions.
+    """
     # Dynamic values
     captures: dict[str, list[str]] = {}
     starts: dict[str, list[int]] = {}
@@ -37,6 +43,16 @@ class ParseData(pyd.BaseModel):
     # `+` Primary Methods
     # -------------------
     def apply_dict_parser(self, parser: dict[str, str], rgx: Pattern) -> None:
+        """
+        Apply a dictionary parser that remaps captured groups.
+
+        Re-matches each captured value with the pattern, then uses the parser dict
+        to move captures from source fields to destination fields.
+
+        Args:
+            parser: Mapping from destination field names to source field names.
+            rgx: Pattern to re-match captured values with.
+        """
         matches = [MatchData(match=match) for match in map(rgx.fullmatch, self.value)]
         trips: list[tuple[str, int, str]] = []
         trips = [
@@ -52,6 +68,16 @@ class ParseData(pyd.BaseModel):
             self.interleave(src, dest, [t[1:] for t in trips if t[0] == src])
 
     def apply_func_parser(self, parser: Callable[[str], dict[str, str] | str]) -> None:
+        """
+        Apply a function parser to transform captured values.
+
+        Supports two types of parsers:
+        - Functions returning dicts create new named captures from each value
+        - Functions returning strings replace values in place
+
+        Args:
+            parser: Function transforming each captured string.
+        """
         results = list(map(parser, self.value))
         if isinstance(results[0], dict):
             # I. A regex function that returns new captures
@@ -72,8 +98,15 @@ class ParseData(pyd.BaseModel):
 
     def interleave(self, src: str, dest: str, effects: list[tuple[int, str]]) -> None:
         """
-        Adds the given value to an existing captures list, respecting the order of appearance
-        in the source string of each match.
+        Merge new captures into destination field, maintaining position order.
+
+        Optionally consumes values from a source field, moving them to the destination
+        field while preserving the order of all captures by their start positions.
+
+        Args:
+            src: Source field to consume from (empty string to skip consumption).
+            dest: Destination field to add captures to.
+            effects: List of (start_position, value) tuples to add.
         """
         # I. Delete values that we have "consumed" here"
         if src and src[0] != '_' and src in self.captures:
@@ -117,6 +150,15 @@ class ParseData(pyd.BaseModel):
         return [tup for key, tup in self.items()]
 
     def set_field(self, field: str) -> None:
+        """
+        Set the active field for processing, extracting its data.
+
+        Args:
+            field: Name of field to make active.
+
+        Raises:
+            AssertionError: If field is not in captures.
+        """
         assert field in self, f'Invalid field: {field}'
         self.field = field
         self.value = self.captures.pop(field)

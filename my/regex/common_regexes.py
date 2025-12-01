@@ -8,11 +8,10 @@
 ### INTERNAL
 from .RegexStore import RegexStore, RgxVal
 
+
 ############
 ### DATA ###
 ############
-
-
 def format_url(target: str) -> str:
     return COMMON_RGXS['url_detritus'].sub('', target).strip('/. ')
 
@@ -49,8 +48,9 @@ def atom(*contents: RgxVal) -> RgxVal:
 
 
 COMMON_RGXS = RegexStore.new(
-    options=dict(separator='', ),
-
+    options=dict(
+        separator='',
+    ),
     # General patterns
     _nw=r'[\W_]',
     _delim=r'^|$|[[\W_]--[-.\s]]',
@@ -58,16 +58,17 @@ COMMON_RGXS = RegexStore.new(
     _we=r'(?![&[:alnum:]])',
     _period=('[]:', [('|<=', [r'[^[:alpha:]]', r'[[:alpha:]]{3}']), r'\.(?P=_we)']),
     _dot=('[]:', [('|<!', [r'[^[:alpha:]]', r'[[:alpha:]]{3}']), r'\.(?P=_we)']),
-
     # Web patterns
     _http=r'\b(?i:https?:\/\/|www\w*\.){1,2}',
     tld=r'(?<=[[:lower:]])\.[a-z]{2,4}(?![[:lower:]])',
-    url=([
-        r'(?<!\]\()\b',
-        ('|:', [r'(?P=_http)[^\s\[\]]+', r'[^\s\[\]\/]{3,}(?P=tld)\/[^\s\[\]]+']),
-    ], format_url),
+    url=(
+        [
+            r'(?<!\]\()\b',
+            ('|:', [r'(?P=_http)[^\s\[\]]+', r'[^\s\[\]\/]{3,}(?P=tld)\/[^\s\[\]]+']),
+        ],
+        format_url,
+    ),
     md_url=r'(?<![!\[])\[ *(?P<alias>[^\]\n]+?) *\]\((?P<target>[^\)\n]+?)\)',
-
     # Numeric patterns
     _roman_numeral=[
         r'(?i)(?<![[:alnum:]])(?=[IVXLCDM])',
@@ -77,20 +78,19 @@ COMMON_RGXS = RegexStore.new(
         ('|:?', [r'IX', r'VI{1,3}', r'I?V', r'I{1,3}']),
         r'(?![[:alnum:]])',
     ],
-
     # Symbolic Date Patterns
     y=r'[01]?\d{3}|20[012]\d|\d\d',
     m=r'[01]?\d',
     d=r'[0123]?\d',
     _date=r'(?P=y)[-\/.](?P=m)(?:[-\/.](?P=d))?',  # Preferred ymd only
     _symbolic_date=(
-        '|:', [
+        '|:',
+        [
             r'(?P=y)[-/.](?P=m)(?:[-/.](?P=d))?',
             r'(?:(?P=d)[-/.])?(?P=m)[-/.](?P=y)',
             r'(?P=m)[-/.](?P=d)[-/.](?P=y)',
-        ]
+        ],
     ),
-
     # Atomic date patterns
     day=(
         r'(?i)\b[0123]?\d(?:st|nd|rd|th)?\b',
@@ -103,7 +103,6 @@ COMMON_RGXS = RegexStore.new(
         lambda s: f'20{s[1:]}' if s.startswith("'") else s,
     ),
     epoch=r',? ?(?:(?:B\.?)?C\.?\.?E|A\.?D\.?)',
-
     # Molecular date patterns
     _sep=r' ?[-[:alpha:]]* ?',
     _years=[
@@ -116,45 +115,89 @@ COMMON_RGXS = RegexStore.new(
     _months=r',? ?(?P=month)(?:(?P=_sep)(?P=month))?,? ?',
     _day_month=r'(?:(?P=day) ?(?P=month)?(?P=_sep))?(?P=day) (?P=month),? ?',
     _month_day=r',? ?(?P=month) (?P=day)(?:(?P=_sep)(?P=day)(?: (?P=month))?)?,? ?',
-    _ymd_date=[(
-        '|:', [
-            [r'(?P=_years)', ('|&?', ['season', '_month_day', '_months'])],
-            ('|&', [r'_month_day', '_months']),
-        ]
-    ), r'(?:\/.+)?'],
-    _mdy_date=[(
-        '|:', [
-            [('|&?', ['season', '_month_day', '_months']), r'(?P=_years)'],
-            ('|&', [r'_month_day', '_months']),
-        ]
-    ), r'(?:\/.+)?'],
-    _dmy_date=[(
-        '|:', [
-            [('|&?', ['season', '_day_month', '_months']), r'(?P=_years)'],
-            ('|&', [r'_day_month', '_months']),
-        ]
-    ), r'(?:\/.+)?'],
+    _ymd_date=[
+        (
+            '|:',
+            [
+                [r'(?P=_years)', ('|&?', ['season', '_month_day', '_months'])],
+                ('|&', [r'_month_day', '_months']),
+            ],
+        ),
+        r'(?:\/.+)?',
+    ],
+    _mdy_date=[
+        (
+            '|:',
+            [
+                [('|&?', ['season', '_month_day', '_months']), r'(?P=_years)'],
+                ('|&', [r'_month_day', '_months']),
+            ],
+        ),
+        r'(?:\/.+)?',
+    ],
+    _dmy_date=[
+        (
+            '|:',
+            [
+                [('|&?', ['season', '_day_month', '_months']), r'(?P=_years)'],
+                ('|&', [r'_day_month', '_months']),
+            ],
+        ),
+        r'(?:\/.+)?',
+    ],
     _latent_date=(
-        '|:', '', [
+        '|:',
+        '',
+        [
             [r'(?P=_years)', ('|&?', ['season', '_month_day', '_months'])],
             [('|&', ['season', '_day_month', '_month_day', '_months']), r'(?P=_years)?'],
-        ], r'(?:\/.+)?'
+        ],
+        r'(?:\/.+)?',
     ),
-
     # Detritus patterns
     url_detritus=(
-        '|>', [
+        '|>',
+        [
             r'^(?:\S*?archive\S*?\/\d{14}\/)?(?P=_http)?(?=\S{4,}$)',
             r'(?:#[^\/]+|[.,\'"])$',
-        ]
+        ],
     ),
-
     # Prose patterns
     _preposition=(
-        '<|>i', r'(?P=_ws)', [
-            'a', 'an', 'as', 'at', 'and', 'also', 'by', 'from', 'for', 'is', 'in', 'into', 'or',
-            'of', 'on', 'onto', 'to', 'the', 'than', 'through', 'thru', 'up', 'upon', 'unto',
-            'until', 'via', 'with', 'within', 'without', '&'
-        ], r'(?P=_we)'
+        '<|>i',
+        r'(?P=_ws)',
+        [
+            'a',
+            'an',
+            'as',
+            'at',
+            'and',
+            'also',
+            'by',
+            'from',
+            'for',
+            'is',
+            'in',
+            'into',
+            'or',
+            'of',
+            'on',
+            'onto',
+            'to',
+            'the',
+            'than',
+            'through',
+            'thru',
+            'up',
+            'upon',
+            'unto',
+            'until',
+            'via',
+            'with',
+            'within',
+            'without',
+            '&',
+        ],
+        r'(?P=_we)',
     ),
 )

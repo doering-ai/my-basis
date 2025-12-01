@@ -16,7 +16,8 @@ import pydantic as pyd
 ### BODY ###
 ############
 class UniqueId(pyd.RootModel[str]):
-    """ Validates and operates on 32bit hex strings """
+    """Validates and operates on 32bit hex strings"""
+
     RGX: ClassVar[re.Pattern] = re.compile(
         r'[[:xdigit:]]{8}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{12}', re.I
     )
@@ -29,7 +30,7 @@ class UniqueId(pyd.RootModel[str]):
         return uid.lower()
 
     @classmethod
-    def new(cls, uid: str = '') -> "UniqueId":
+    def new(cls, uid: str = '') -> 'UniqueId':
         return cls(uid or str(uuid4()))
 
     @classmethod
@@ -54,7 +55,7 @@ class UniqueId(pyd.RootModel[str]):
     def __repr__(self) -> str:
         return self.root
 
-    def __lt__(self, other: "UniqueId|str") -> bool:
+    def __lt__(self, other: 'UniqueId|str') -> bool:
         if isinstance(other, UniqueId):
             return self.root < other.root
         else:
@@ -63,3 +64,6 @@ class UniqueId(pyd.RootModel[str]):
     @classmethod
     def remove_uids(cls, text: str) -> str:
         return cls.UID_LINE_RGX.sub('', text)
+
+
+Uid = UniqueId

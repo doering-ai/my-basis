@@ -2,7 +2,7 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import Annotated, ClassVar, Iterator, Any, Collection, TypeVar, Callable
+from typing import Annotated, ClassVar, Iterator, Any, Collection, Callable, Self
 from collections import deque
 
 ### EXTERNAL
@@ -17,11 +17,6 @@ from ..utils import ut
 from ..typing import typist
 from ..types import Buffer, Predicate
 from ..regex import RegexStore
-
-############
-### DATA ###
-############
-SubType = TypeVar('SubType', bound='Markdown')
 
 
 ############
@@ -67,7 +62,7 @@ class Markdown(pyd.BaseModel):
     # `0` Initial Methods
     # -------------------
     @classmethod
-    def new(cls: type[SubType], **kwargs: Any) -> SubType:
+    def new(cls, **kwargs: Any) -> Self:
         """
         Creates a new Markdown object with the given parameters.
         """
@@ -179,7 +174,7 @@ class Markdown(pyd.BaseModel):
         else:
             raise ValueError(f'Invalid index digit: {digit}')
 
-    def indent(self: SubType, num: int) -> SubType:
+    def indent(self, num: int) -> Self:
         """Indents this markdown object by a number of levels."""
         for node in self.tree:
             node.level += num

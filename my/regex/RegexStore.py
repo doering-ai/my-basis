@@ -284,7 +284,6 @@ class RegexStore(pyd.BaseModel):
         Args:
             pattern: Pattern to print (string, compiled Pattern, or Buffer).
             print_head: Whether to include the pattern header in output.
-
         Returns:
             Multi-line string representation with indentation showing nesting.
         """
@@ -300,7 +299,6 @@ class RegexStore(pyd.BaseModel):
 
         Args:
             groups_used: Initial set of group names to analyze.
-
         Returns:
             Complete set of all groups transitively invoked by the initial set.
         """
@@ -326,7 +324,6 @@ class RegexStore(pyd.BaseModel):
 
         Args:
             mark: Custom mark string using the store's DSL syntax.
-
         Returns:
             Tuple of (kind, start, separator, quantifier) where:
             - kind: GroupKind enum value
@@ -369,7 +366,6 @@ class RegexStore(pyd.BaseModel):
 
         Args:
             group: The opening part of a regex group (e.g., '(?:', '(?=', '(?>').
-
         Returns:
             The corresponding GroupKind enum value, or GroupKind(0) if no match.
         """
@@ -385,7 +381,6 @@ class RegexStore(pyd.BaseModel):
 
         Args:
             text: Text to search for character sets.
-
         Yields:
             Tuples of (span, body, quantifier) for each character set found.
         """
@@ -412,7 +407,6 @@ class RegexStore(pyd.BaseModel):
             mask: Optional GroupKind filter to yield only matching group types.
             mode: Iteration mode - 'all' for all groups, 'roots' for top-level only,
                   'leaves' for innermost only.
-
         Yields:
             Tuples of (span, kind, name, body, quantifier) for each group found.
         """
@@ -653,7 +647,6 @@ class RegexStore(pyd.BaseModel):
         Args:
             branches: Tuple of atom sequences representing alternative branches.
             has_suffix: Whether parent context implies a shared suffix exists.
-
         Returns:
             Optimized regex string with factored common elements.
         """
@@ -898,7 +891,6 @@ class RegexStore(pyd.BaseModel):
         Args:
             pattern: Regex pattern string to atomize.
             escape: Whether to escape special regex characters.
-
         Returns:
             Tuple of atomic regex components (characters, groups, character sets, etc.).
         """
@@ -927,7 +919,6 @@ class RegexStore(pyd.BaseModel):
             children: List of child regex values to compose.
             pre: Optional prefix string to prepend inside the group.
             suf: Optional suffix string to append inside the group.
-
         Returns:
             Complete regex group string with composed children.
         """
@@ -1012,10 +1003,8 @@ class RegexStore(pyd.BaseModel):
         Args:
             name: Name of the pattern being cleaned.
             text: Buffer containing the pattern text.
-
         Returns:
             Set of all group names invoked by this pattern.
-
         Raises:
             AssertionError: If local group names conflict with predefined groups.
         """
@@ -1051,10 +1040,8 @@ class RegexStore(pyd.BaseModel):
 
         Args:
             *definitions: Names of definitions to include in the DEFINE block.
-
         Returns:
             String containing the DEFINE block, or empty string if no definitions.
-
         Raises:
             AssertionError: If any definition name is not found in the store.
         """
@@ -1086,7 +1073,6 @@ class RegexStore(pyd.BaseModel):
             val: Regex value to compose (string, list, tuple, or Pattern).
             parser: Optional function to parse match results.
             flags: Optional regex flags to apply during compilation.
-
         Raises:
             AssertionError: If name is already defined.
             Exception: If pattern composition or compilation fails.
@@ -1131,7 +1117,6 @@ class RegexStore(pyd.BaseModel):
 
         Args:
             values: Single string or list of strings to strip.
-
         Returns:
             List of stripped strings with bracket balancing corrected.
         """
@@ -1158,7 +1143,6 @@ class RegexStore(pyd.BaseModel):
 
         Args:
             pattern: Pattern to sanitize (string, Pattern, Buffer, or pattern name).
-
         Returns:
             Sanitized pattern string with normalized flag syntax.
         """
@@ -1193,7 +1177,6 @@ class RegexStore(pyd.BaseModel):
 
         Args:
             match: Regex match object to read.
-
         Returns:
             Tuple of (params dict with last values, captures dict with all values).
         """
@@ -1216,7 +1199,6 @@ class RegexStore(pyd.BaseModel):
         Args:
             match: Match object to parse, or None for empty MatchData.
             pattern_name: Optional name of the pattern that produced this match.
-
         Returns:
             MatchData object with parsed captures and optional match reference.
         """
@@ -1269,7 +1251,6 @@ class RegexStore(pyd.BaseModel):
         Args:
             names: Pattern name or list of pattern names to try.
             text: Text to match against.
-
         Returns:
             MatchData from first successful match, or empty MatchData if none match.
         """
@@ -1283,7 +1264,6 @@ class RegexStore(pyd.BaseModel):
         Args:
             names: Pattern name or list of pattern names to try.
             text: Text to match against.
-
         Returns:
             MatchData from first successful fullmatch, or empty MatchData if none match.
         """
@@ -1297,7 +1277,6 @@ class RegexStore(pyd.BaseModel):
         Args:
             names: Pattern name or list of pattern names to try.
             text: Text to search.
-
         Returns:
             MatchData from first successful search, or empty MatchData if none found.
         """
@@ -1312,7 +1291,6 @@ class RegexStore(pyd.BaseModel):
             name: Pattern name to search for.
             text: Text to search (string or Buffer).
             **kwargs: Optional arguments passed to Buffer.rgx_iterator().
-
         Yields:
             MatchData objects for each match found.
         """
@@ -1332,7 +1310,6 @@ class RegexStore(pyd.BaseModel):
             name: Pattern name to search for.
             text: Text to search (string or Buffer).
             **kwargs: Optional arguments passed to Buffer.rgx_iterator().
-
         Returns:
             List of MatchData objects for all matches found.
         """
@@ -1351,7 +1328,6 @@ class RegexStore(pyd.BaseModel):
             name: Pattern name to split on.
             text: Text to split.
             collapse: Whether to collapse empty sections into adjacent delimiters.
-
         Returns:
             Tuple of (delimiters, sections) where delimiters[0] is always empty and
             the lists interleave: section[0], delim[1], section[1], delim[2], etc.
@@ -1387,7 +1363,6 @@ class RegexStore(pyd.BaseModel):
         Args:
             name: Pattern name to search for.
             text: Text to search (automatically converted to Buffer).
-
         Returns:
             Single MatchData with all captures from all matches merged.
         """
@@ -1414,7 +1389,6 @@ class RegexStore(pyd.BaseModel):
 
         Args:
             text: Regex pattern text to analyze.
-
         Returns:
             Set of all group names invoked directly or indirectly.
         """
@@ -1432,7 +1406,6 @@ class RegexStore(pyd.BaseModel):
         Args:
             name: Pattern name to use.
             func: Matching function name ('match', 'fullmatch', 'search', or 'polymatch').
-
         Returns:
             Function that takes text and returns MatchData using the specified pattern.
         """
@@ -1451,7 +1424,6 @@ class RegexStore(pyd.BaseModel):
             name: Pattern name to use.
             texts: Iterable of text strings to match against.
             func: Matching function to use ('match', 'fullmatch', 'search', or 'polymatch').
-
         Yields:
             MatchData objects for each text in order.
         """
@@ -1470,7 +1442,6 @@ class RegexStore(pyd.BaseModel):
             name: Pattern name to test against.
             texts: Iterable of text strings to filter.
             func: Matching function to use ('match', 'fullmatch', 'search', or 'polymatch').
-
         Yields:
             Only those texts that successfully match the pattern.
         """
@@ -1490,7 +1461,6 @@ class RegexStore(pyd.BaseModel):
             router: Base name for the router patterns.
             items: Mapping of category names to their regex patterns.
             **kwargs: Optional 'prefix'/'suffix' or 'p0'/'p1'/'s0'/'s1' for wrapping patterns.
-
         Raises:
             AssertionError: If router name is already defined.
         """
@@ -1524,10 +1494,8 @@ class RegexStore(pyd.BaseModel):
         Args:
             router: Name of router pattern to use.
             text: Text to classify, or MatchData from previous match.
-
         Returns:
             Name of the matching category, or empty string if no match.
-
         Raises:
             AssertionError: If router name is not found.
         """
@@ -1548,10 +1516,8 @@ class RegexStore(pyd.BaseModel):
         Args:
             router: Name of router pattern to use.
             text: Text to match and expand, or MatchData from previous match.
-
         Returns:
             Expanded string using the matched category name as format string.
-
         Raises:
             AssertionError: If router name is not found or match object is invalid.
         """

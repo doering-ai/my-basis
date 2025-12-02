@@ -35,7 +35,6 @@ class TextUtils:
         Args:
             string: Input string to transform.
             *args: Tuples of (pattern, replacement) for sequential application.
-
         Returns:
             String with all replacements applied in order.
         """
@@ -53,10 +52,8 @@ class TextUtils:
             pattern: Regex pattern to split by.
             n: Exact number of parts to return (must be > 1).
             rhs: If True, pad on right; if False, pad on left (default: True).
-
         Returns:
             List of exactly n strings, padded with empty strings if needed.
-
         Raises:
             AssertionError: If n <= 1 or split operation fails.
         """
@@ -86,7 +83,6 @@ class TextUtils:
         Args:
             dictionary: Dict with string/Pattern values to compile.
             compile_function: Function to compile patterns (default: re.compile).
-
         Returns:
             Dictionary with all values as compiled Pattern objects.
         """
@@ -111,7 +107,6 @@ class TextUtils:
         Args:
             array: Iterable of (pattern, replacement) tuples.
             compile_function: Function to compile patterns (default: re.compile).
-
         Returns:
             List of (compiled_pattern, replacement) tuples.
         """
@@ -130,7 +125,6 @@ class TextUtils:
 
         Args:
             pattern: Space-separated pattern string.
-
         Returns:
             Pattern with spaces replaced by \\s* for flexible matching.
         """
@@ -145,7 +139,6 @@ class TextUtils:
             *rgxs: Regex patterns (strings or lists of strings).
             sep: Separator for joining list patterns (default: r' ?').
             branching: If True, create capturing group; else non-capturing (default: False).
-
         Returns:
             Combined regex pattern in group format (?:|...) or (?:...).
         """
@@ -167,7 +160,6 @@ class TextUtils:
             prefix: Prefix for each line (default: '').
             char: Character for border (default: '-').
             width: Padding width on each side (default: 2).
-
         Returns:
             Multi-line string with text wrapped in decorative borders.
         """
@@ -190,7 +182,6 @@ class TextUtils:
         Args:
             text: Text to indent.
             n: Number of spaces to indent (default: 4).
-
         Returns:
             Indented text, or original if n is 0.
         """
@@ -206,7 +197,6 @@ class TextUtils:
         Args:
             text: Text to unindent.
             n: Number of indent levels to remove (default: 4, removes up to 16 spaces).
-
         Returns:
             Unindented text.
         """
@@ -221,7 +211,6 @@ class TextUtils:
         Args:
             text: Text to wrap.
             width: Maximum line width (default: 100).
-
         Returns:
             Wrapped text.
         """
@@ -236,7 +225,6 @@ class TextUtils:
 
         Args:
             text: Text with potentially wrapped paragraphs.
-
         Returns:
             Unwrapped text with proper spacing and line breaks.
         """
@@ -272,7 +260,6 @@ class TextUtils:
 
         Args:
             string: String to strip.
-
         Returns:
             String with surrounding quotes/emphasis removed.
         """
@@ -297,7 +284,6 @@ class TextUtils:
 
         Args:
             string: String to clean.
-
         Returns:
             Cleaned string with normalized spacing and punctuation.
         """
@@ -320,7 +306,6 @@ class TextUtils:
         Args:
             string: String to clean.
             case: Case conversion - 'lower', 'upper', or 'none' (default: 'lower').
-
         Returns:
             Cleaned and normalized string suitable for identifiers.
         """
@@ -339,7 +324,6 @@ class TextUtils:
 
         Args:
             text: Text to extract words from.
-
         Returns:
             List of word strings.
         """
@@ -353,7 +337,6 @@ class TextUtils:
         Args:
             article: Text to search within.
             pos: Character position (int) or substring to find (str).
-
         Returns:
             Line number (1-indexed).
         """
@@ -370,7 +353,6 @@ class TextUtils:
         Args:
             url: URL string to parse.
             default: Default value if parsing fails (default: '').
-
         Returns:
             Domain name without 'www.' prefix, or default if parsing fails.
         """

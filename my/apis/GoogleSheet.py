@@ -290,7 +290,6 @@ class GoogleSheet:
             cells: The range of cells to load.
             header: If true, use the first returned row as column names.
             index: The column to use as the index, if any.
-
         Returns:
             A pandas DataFrame with the worksheet data.
         """

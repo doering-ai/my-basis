@@ -155,7 +155,6 @@ class ParseData(pyd.BaseModel):
 
         Args:
             field: Name of field to make active.
-
         Raises:
             AssertionError: If field is not in captures.
         """

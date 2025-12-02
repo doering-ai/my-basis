@@ -109,7 +109,6 @@ class Span(tuple[int, int]):
 
         Args:
             other: Span to test for intersection.
-
         Returns:
             True if the spans overlap.
         """
@@ -131,7 +130,6 @@ class Span(tuple[int, int]):
 
         Args:
             *args: Spans to serialize.
-
         Returns:
             String with spans separated by DELIM.
         """
@@ -150,7 +148,6 @@ class Span(tuple[int, int]):
 
         Args:
             text: String to parse.
-
         Returns:
             Parsed Span, or empty Span (0, 0) if parsing fails.
         """
@@ -179,7 +176,6 @@ class Span(tuple[int, int]):
 
         Args:
             other: Span to join with.
-
         Returns:
             New span from the minimum start to maximum end.
         """
@@ -192,7 +188,6 @@ class Span(tuple[int, int]):
 
         Args:
             *args: Spans to merge.
-
         Returns:
             Sorted list of non-overlapping spans covering the same positions.
         """

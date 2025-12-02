@@ -64,10 +64,8 @@ class NestedCache(pyd.BaseModel, Generic[Keys, Value]):
         Args:
             keys: Path through nested levels (length must match depth).
             value: Value to store.
-
         Returns:
             Number of new items added (0 if key existed, 1 if new).
-
         Raises:
             ValueError: If keys length doesn't match cache depth.
         """
@@ -98,7 +96,6 @@ class NestedCache(pyd.BaseModel, Generic[Keys, Value]):
 
         Args:
             keys: Path through nested levels (length must match depth).
-
         Returns:
             Number of items deleted (0 if not found, 1 if deleted).
         """
@@ -154,7 +151,6 @@ class NestedCache(pyd.BaseModel, Generic[Keys, Value]):
 
         Args:
             n: Target number of items to remove.
-
         Returns:
             Actual number of items removed.
         """

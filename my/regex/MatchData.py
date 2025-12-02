@@ -143,7 +143,6 @@ class MatchData(Predicate):
 
         Args:
             other: MatchData to compare against.
-
         Returns:
             True if both have the same keys (ignoring values and order).
         """

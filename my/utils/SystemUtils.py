@@ -44,7 +44,6 @@ class SystemUtils:
 
         Args:
             val: Unix timestamp (int/float), datetime object, or None for current time.
-
         Returns:
             Timezone-aware datetime in UTC.
         """
@@ -62,7 +61,6 @@ class SystemUtils:
 
         Args:
             val: Unix timestamp (int/float), datetime object, or None.
-
         Returns:
             Timedelta representing elapsed time, or zero if val is falsy.
         """
@@ -81,10 +79,8 @@ class SystemUtils:
 
         Args:
             *paths: One or more directory paths to validate.
-
         Returns:
             True if all paths are valid directories.
-
         Raises:
             AssertionError: If any path is invalid or not a directory.
         """
@@ -99,10 +95,8 @@ class SystemUtils:
 
         Args:
             *paths: One or more file paths to validate.
-
         Returns:
             True if all paths are valid files.
-
         Raises:
             AssertionError: If any path is invalid or not a file.
         """
@@ -119,7 +113,6 @@ class SystemUtils:
             path: Path object to modify.
             old: Path component to replace.
             new: Replacement path component.
-
         Returns:
             New Path with substitution applied, or original if old not found.
         """
@@ -145,7 +138,6 @@ class SystemUtils:
 
         Args:
             args: Iterable of arguments to convert.
-
         Yields:
             String representations with appropriate quoting.
         """
@@ -167,7 +159,6 @@ class SystemUtils:
             kwargs: Dictionary of keyword arguments.
             _ud: If True, preserve underscores in keys (default: False).
             _sd: If True, use single dashes for all flags (default: False).
-
         Yields:
             Formatted command-line flags (e.g., '--key value', '-k').
         """
@@ -208,7 +199,6 @@ class SystemUtils:
             _out: If provided, append redirect to this file.
             _pipe: If provided, append pipe to this command.
             **kwargs: Keyword arguments converted to flags.
-
         Returns:
             Complete shell command string.
         """
@@ -242,7 +232,6 @@ class SystemUtils:
             cmd: Base command to execute.
             *args: Positional arguments.
             **kwargs: Keyword arguments (converted to flags).
-
         Returns:
             Tuple of (return_code, stdout, stderr).
         """
@@ -263,7 +252,6 @@ class SystemUtils:
             cmd: Base command to execute.
             *args: Positional arguments.
             **kwargs: Keyword arguments (converted to flags).
-
         Returns:
             Tuple of (return_code, stdout, stderr).
         """
@@ -286,7 +274,6 @@ class SystemUtils:
     def get_terminal_width(cls) -> int:
         """
         Get the current terminal width in characters.
-
         Returns:
             Terminal width (defaults to 100 if unavailable).
         """
@@ -300,7 +287,6 @@ class SystemUtils:
         Args:
             text: Text to wrap.
             indent: Number of characters to reserve for indentation (default: 0).
-
         Returns:
             Text wrapped to terminal width minus indent.
         """
@@ -321,7 +307,6 @@ class SystemUtils:
         Args:
             prompt: Question to display to user.
             default_no: If True, default to 'no' (default: False defaults to 'yes').
-
         Returns:
             True if user confirms, False otherwise. Always True if auto-confirm enabled.
         """
@@ -357,7 +342,6 @@ class SystemUtils:
             app: Optional ASGI app to register logger with.
             maxsize: Maximum log file size in bytes (default: 64 MB).
             maxcount: Maximum number of backup files (default: 1024).
-
         Returns:
             Configured Logger instance.
         """
@@ -410,7 +394,6 @@ class SystemUtils:
             is_dev: If True, use development mode with console output (default: True).
             app: Optional ASGI app to instrument.
             **kwargs: Additional configuration options for Logfire.
-
         Raises:
             AssertionError: If fire_token or package is missing.
         """
@@ -464,7 +447,6 @@ class SystemUtils:
     def get_package_name(cls) -> str:
         """
         Retrieve the current package name from metadata.
-
         Returns:
             Package name as string, derived from module metadata.
         """
@@ -502,7 +484,6 @@ class SystemUtils:
             maxsize: Maximum log file size in bytes (default: 64 MB).
             maxcount: Maximum number of backup files (default: 1024).
             **fire_kwargs: Additional Logfire configuration options.
-
         Returns:
             Configured Logger instance (cached per package).
         """
@@ -564,7 +545,6 @@ class SystemUtils:
         Args:
             metrics: Directory for Prometheus multiprocess metrics.
             logger: Logger for recording setup actions.
-
         Raises:
             AssertionError: If PROMETHEUS_MULTIPROC_DIR not set or mismatches metrics path.
         """
@@ -614,10 +594,10 @@ class SystemUtils:
         Args:
             func: Function to instrument (sync or async).
             counter: Counter to record timing metrics.
-
         Returns:
             Wrapped function that measures execution time.
         """
+
         @ft.wraps(func)
         def wrapper(*args: Any, **kwargs: Any):
             start = int(perf_counter_ns())
@@ -645,7 +625,6 @@ class SystemUtils:
         Args:
             name: Metric name for recording.
             counter: Dictionary counter to record elapsed time.
-
         Yields:
             None (timing measured around context block).
         """
@@ -661,7 +640,6 @@ class SystemUtils:
         Args:
             *args: Positional arguments for fire.instrument().
             **kwargs: Keyword arguments for fire.instrument().
-
         Returns:
             Decorator that instruments function with Logfire monitoring.
         """

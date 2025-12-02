@@ -39,10 +39,8 @@ class MyEnum(Enum):
 
         Args:
             value: Value to parse into enum member.
-
         Returns:
             Corresponding enum member.
-
         Raises:
             ValueError: If value cannot be parsed.
         """
@@ -84,7 +82,6 @@ class MyEnum(Enum):
     def write(self) -> str:
         """
         Convert enum member to string representation.
-
         Returns:
             String value, lowercase name, or pipe-separated flags for Flag enums.
         """
@@ -134,7 +131,6 @@ class MyEnum(Enum):
     def base(self) -> Self:
         """
         Return the first/primary part of a Flag enum, or self for regular enums.
-
         Returns:
             First flag component or self.
         """
@@ -160,7 +156,6 @@ class MyEnum(Enum):
         Define regex patterns for parsing aliases.
 
         Override in subclasses to provide custom alias matching.
-
         Returns:
             Dict mapping member names to alias regex patterns.
         """
@@ -170,7 +165,6 @@ class MyEnum(Enum):
     def vtype(cls) -> Type:
         """
         Get the type of enum values.
-
         Returns:
             Type of the first enum member's value.
         """

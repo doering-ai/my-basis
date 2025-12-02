@@ -72,7 +72,6 @@ class Environment(pyd.BaseModel):
         Args:
             key: Variable name (must be uppercase with underscores).
             value: Variable value.
-
         Raises:
             AssertionError: If key doesn't match naming convention.
         """
@@ -124,7 +123,6 @@ class Environment(pyd.BaseModel):
             key: Environment variable name.
             default: Default path if variable not set.
             mkdir: Whether to create directory if it doesn't exist.
-
         Returns:
             Resolved absolute path.
         """
@@ -165,10 +163,8 @@ class Environment(pyd.BaseModel):
         Args:
             key: Environment variable name (must be uppercase).
             default: Default value if not set or unrecognized.
-
         Returns:
             Integer 0 or 1 (or numeric value).
-
         Raises:
             AssertionError: If key is empty or not uppercase.
         """
@@ -191,7 +187,6 @@ class Environment(pyd.BaseModel):
 
         Args:
             key: String to validate.
-
         Returns:
             True if key contains only uppercase, digits, and underscores.
         """
@@ -204,7 +199,6 @@ class Environment(pyd.BaseModel):
 
         Args:
             key: Variable name to validate.
-
         Raises:
             AssertionError: If key is invalid.
         """

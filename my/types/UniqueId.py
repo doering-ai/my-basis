@@ -31,10 +31,8 @@ class UniqueId(pyd.RootModel[str]):
 
         Args:
             uid: UUID string to validate.
-
         Returns:
             Lowercase normalized UUID.
-
         Raises:
             AssertionError: If string is not a valid UUID format.
         """
@@ -48,7 +46,6 @@ class UniqueId(pyd.RootModel[str]):
 
         Args:
             uid: Optional UUID string. If empty, generates a new UUID.
-
         Returns:
             UniqueId instance.
         """
@@ -58,7 +55,6 @@ class UniqueId(pyd.RootModel[str]):
     def newstr(cls) -> str:
         """
         Generate a new UUID as a string.
-
         Returns:
             New UUID string.
         """
@@ -95,7 +91,6 @@ class UniqueId(pyd.RootModel[str]):
 
         Args:
             text: Text to clean.
-
         Returns:
             Text with UUID-containing lines removed.
         """

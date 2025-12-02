@@ -206,7 +206,6 @@ class Buffer(pyd.BaseModel):
             source: Array of spans with shape (n, 2)
             ref_span: Reference span (start, end)
             delta: Amount to shift spans after the reference
-
         Returns:
             tuple of (pre_spans, shifted_post_spans)
         """

@@ -60,7 +60,6 @@ def get_template(template_name: str) -> jn.Template:
 
     Args:
         template_name: Name of template file.
-
     Returns:
         Compiled Jinja2 template.
     """

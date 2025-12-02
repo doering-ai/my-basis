@@ -60,7 +60,6 @@ class PickleCache(pyd.BaseModel, Generic[Key, Value]):
         1. Returns in-memory data if recent (within TTL)
         2. Loads from pickle file if it exists and is fresh
         3. Calls async func if provided and caches result
-
         Returns:
             Dictionary of cached data.
         """

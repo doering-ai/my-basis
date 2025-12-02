@@ -32,7 +32,6 @@ class CodeUtils:
 
         Args:
             cls: Pydantic BaseModel class to inspect.
-
         Returns:
             Dictionary mapping lowercase field names to their type annotations.
         """
@@ -53,7 +52,6 @@ class CodeUtils:
 
         Args:
             cls: Pydantic BaseModel class to inspect.
-
         Returns:
             Dictionary mapping field aliases to their type annotations.
         """
@@ -92,7 +90,6 @@ class CodeUtils:
             old: Value to find and replace.
             new: Replacement value.
             depth: Current recursion depth (default: 0, max: 10).
-
         Returns:
             True if value was found and replaced, False otherwise.
         """
@@ -149,7 +146,6 @@ class CodeUtils:
         Args:
             file: Path to Python file to import.
             root: Root directory for relative import path calculation.
-
         Returns:
             Imported ModuleType object.
         """

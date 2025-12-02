@@ -40,7 +40,6 @@ class EnumType(sa.TypeDecorator, Generic[E]):
         Args:
             value: MyEnum instance or None.
             dialect: SQLAlchemy dialect (unused).
-
         Returns:
             String representation or None.
         """
@@ -55,7 +54,6 @@ class EnumType(sa.TypeDecorator, Generic[E]):
         Args:
             value: String value from database or None.
             dialect: SQLAlchemy dialect (unused).
-
         Returns:
             MyEnum instance or None.
         """
@@ -92,7 +90,6 @@ class EnumSetType(sa.TypeDecorator, Generic[E]):
         Args:
             value: Set or list of MyEnum instances, or None.
             dialect: SQLAlchemy dialect (unused).
-
         Returns:
             List of string representations or None.
         """
@@ -107,7 +104,6 @@ class EnumSetType(sa.TypeDecorator, Generic[E]):
         Args:
             value: List of strings from database or None.
             dialect: SQLAlchemy dialect (unused).
-
         Returns:
             Set of MyEnum instances or None.
         """

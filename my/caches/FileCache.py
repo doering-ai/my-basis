@@ -201,7 +201,6 @@ class FileCache(Generic[T]):
             group: Category/namespace.
             filename: File identifier.
             prefix: Optional prefix override (auto-derived if empty).
-
         Returns:
             Dictionary of items, or None if file doesn't exist.
         """
@@ -263,7 +262,6 @@ class FileCache(Generic[T]):
         Args:
             group: Category/namespace.
             name: Item identifier (filename derived via splitter).
-
         Returns:
             The item, or None if not found.
         """
@@ -319,7 +317,6 @@ class FileCache(Generic[T]):
             name_rgx: Pattern to match against item names.
             prefix: Optional prefix to limit search scope.
             mode: Search 'items' (memory), 'files' (disk), or 'both'.
-
         Yields:
             Items matching the search criteria.
         """

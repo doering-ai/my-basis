@@ -31,6 +31,7 @@ class Markdown(pyd.BaseModel):
     """
 
     TEMPLATE: ClassVar[str] = 'Markdown.md.jinja'
+    BUFFER_FACTORY: ClassVar[Callable[..., Buffer]] = Buffer.new
     RGXS: ClassVar[RegexStore] = RegexStore.new(
         options=dict(
             separator=r' *\n+',
@@ -50,7 +51,6 @@ class Markdown(pyd.BaseModel):
         ],
         node=[r'(?sm)(?P=header)', r'(?P=prose)', r'(?=^#{1,6} |\Z)'],
     )
-    BUFFER_FACTORY: ClassVar[Callable[..., Buffer]] = Buffer.new
 
     # Metadata
     level: Annotated[int, pyd.Field(ge=1, le=6)] = 1
@@ -78,7 +78,6 @@ class Markdown(pyd.BaseModel):
 
         Args:
             **kwargs: Node properties (level, idx, tags, title, prose, nodes, etc.).
-
         Returns:
             New Markdown instance with properly initialized tree structure.
         """
@@ -111,12 +110,12 @@ class Markdown(pyd.BaseModel):
     ) -> list['Markdown']:
         """
         Recursively build a tree of Markdown nodes from raw data.
+
         Args:
             nodes: List of raw node data (dicts or Markdown instances).
             level: Parent node's header level.
             idx: Parent node's index string.
             buffer_factory: Factory function to create Buffer instances.
-
         Returns:
             List of constructed Markdown nodes that are direct children.
         """
@@ -177,7 +176,7 @@ class Markdown(pyd.BaseModel):
     @staticmethod
     def _num_to_digit(num: int | str) -> str:
         """
-        Transforms a number [0, 61] into a single digit, 0-9, then A-Z, then a-z.
+        Transforms a number [0, 61] into a single digit (0-9), then A-Z, then a-z.
 
         Args:
             num: Number or single-character digit to convert.
@@ -201,7 +200,7 @@ class Markdown(pyd.BaseModel):
     @staticmethod
     def _digit_to_num(digit: str) -> int:
         """
-        Transforms a single digit, 0-9, then a-z, then A-Z, into a number [0, 61].
+        Transforms a single digit (0-9) then a-z, then A-Z, into a number [0, 61].
 
         Args:
             digit: Single-character digit to convert.
@@ -223,7 +222,6 @@ class Markdown(pyd.BaseModel):
 
         Args:
             num: Number of levels to indent (can be negative to outdent).
-
         Returns:
             Self for chaining.
         """
@@ -286,7 +284,7 @@ class Markdown(pyd.BaseModel):
             nodes: Deque of Markdown nodes to process.
             level: Current header level to consider.
         Returns:
-            List of Markdown nodes that are direct children at the current level.
+            List of the "top-level" nodes (ones without parents).
         """
         ret = []
 
@@ -321,11 +319,9 @@ class Markdown(pyd.BaseModel):
             skip_self: Whether to exclude this node from iteration.
             asc: Whether to traverse in reverse order (right to left).
             max_d: Maximum depth to traverse (-1 for unlimited).
-
         Yields:
             Markdown nodes in depth-first order.
         """
-
         # I. Yield the root by default
         if not skip_self:
             yield self
@@ -359,11 +355,9 @@ class Markdown(pyd.BaseModel):
         Args:
             new_nodes: Single node or list of nodes to add.
             left: Whether to prepend (True) or append (False).
-
         Returns:
             Self for chaining.
         """
-        """Appends a node to this markdown object."""
         if isinstance(new_nodes, Markdown):
             new_nodes = [new_nodes]
 
@@ -383,15 +377,12 @@ class Markdown(pyd.BaseModel):
     def get(self, **kwargs) -> 'Markdown | None':
         """
         Get a descendant node by various criteria.
-
         Dispatches to specialized getters based on keyword arguments.
 
         Args:
             **kwargs: One of: idx, child, title, or path.
-
         Returns:
             Matching Markdown node or None.
-
         Raises:
             ValueError: If invalid parameter combination.
         """
@@ -407,6 +398,15 @@ class Markdown(pyd.BaseModel):
             raise ValueError(f'Invalid Markdown.get() parameters: {list(kwargs.keys())}')
 
     def get_idx(self, *, idx: str = '', asc: bool = False, max_d: int = -1) -> 'Markdown | None':
+        """
+        Get a descendant node by its index string.
+        Args:
+            idx: Target index string.
+            asc: Whether to traverse in reverse order (right to left).
+            max_d: Maximum depth to traverse (-1 for unlimited).
+        Returns:
+            Matching Markdown node or None.
+        """
         if idx == self.idx:
             return self
         elif not self.nodes or not max_d or not idx or not idx.startswith(self.idx):
@@ -418,6 +418,16 @@ class Markdown(pyd.BaseModel):
     def get_child(
         self, *, child: int = -1, asc: bool = False, max_d: int = -1
     ) -> 'Markdown | None':
+        """
+        Get a direct child node by its index.
+
+        Args:
+            child: Child index (0-based).
+            asc: Whether to traverse in reverse order (right to left).
+            max_d: Maximum depth to traverse (-1 for unlimited).
+        Returns:
+            Matching Markdown node or None.
+        """
         if max_d and 0 <= child < len(self.nodes):
             return self.nodes[child]
         else:
@@ -426,6 +436,16 @@ class Markdown(pyd.BaseModel):
     def get_title(
         self, *, title: str = '', asc: bool = False, max_d: int = -1
     ) -> 'Markdown | None':
+        """
+        Get a descendant node by its title.
+
+        Args:
+            title: Target title string.
+            asc: Whether to traverse in reverse order (right to left).
+            max_d: Maximum depth to traverse (-1 for unlimited).
+        Returns:
+            Matching Markdown node or None.
+        """
         if not self.nodes or not max_d:
             return None
 
@@ -441,6 +461,16 @@ class Markdown(pyd.BaseModel):
     def get_path(
         self, *, path: list[int] | None = None, asc: bool = False, max_d: int = -1
     ) -> 'Markdown | None':
+        """
+        Get a descendant node by a path of child indices (each relative to its parent).
+
+        Args:
+            path: List of child indices leading to the target node.
+            asc: Whether to traverse in reverse order (right to left).
+            max_d: Maximum depth to traverse (-1 for unlimited).
+        Returns:
+            Matching Markdown node or None.
+        """
         if not self.nodes or not max_d or not path:
             return None
 
@@ -455,7 +485,6 @@ class Markdown(pyd.BaseModel):
 
         Args:
             target: Target index string or list of child indices.
-
         Returns:
             List of nodes from this node (inclusive) to target (exclusive).
             Empty list if target not found or invalid.
@@ -483,12 +512,12 @@ class Markdown(pyd.BaseModel):
     # ------------------
     @property
     def tree(self) -> Iterator['Markdown']:
-        """Iterates over all nodes in this markdown object."""
+        """Iterates depth-first over all nodes in this markdown object. See walk()."""
         return self.walk()
 
     @property
     def prose_tree(self) -> Iterator['Buffer']:
-        """Iterates over all prose in this markdown object."""
+        """Iterates depth-first over all text content in this markdown object."""
         return (node.prose for node in self.tree)
 
     @property
@@ -518,7 +547,6 @@ class Markdown(pyd.BaseModel):
         Args:
             text: Markdown text or Buffer to parse.
             base_level: Minimum header level to parse (default: 0 for all).
-
         Returns:
             List of top-level Markdown nodes with nested children.
         """
@@ -537,9 +565,14 @@ class Markdown(pyd.BaseModel):
         return cls._stack_nodes(nodes, level=base_level)
 
     def parse_predicates(self) -> Predicate:
+        """Parse a YAML-filled markdown document into a Predicate object."""
         return Predicate.new(self.from_yaml())
 
     def reparse_prose(self) -> None:
+        """
+        Search through this node's prose for nested nodes that have yet to be parsed, and move them
+        to this node's "children" section accordingly.
+        """
         if first_node := Markdown.RGXS.search('node', self.prose):
             node_text = self.prose[first_node.start :]
             self.prose.drop((first_node.start, len(self.prose)))
@@ -550,7 +583,6 @@ class Markdown(pyd.BaseModel):
         Extract YAML data from this node and its children.
 
         Parses prose as YAML and recursively collects child nodes as nested dicts.
-
         Returns:
             Dictionary of parsed YAML data with child nodes as nested keys.
         """
@@ -571,7 +603,6 @@ class Markdown(pyd.BaseModel):
         Args:
             strip_notes: Whether to exclude notes from output.
             fix: Whether to apply mdformat formatting.
-
         Returns:
             Formatted markdown string.
         """
@@ -593,7 +624,6 @@ class Markdown(pyd.BaseModel):
 
         Args:
             **kwargs: Node search criteria (passed to get()).
-
         Returns:
             Removed node, or None if not found.
         """

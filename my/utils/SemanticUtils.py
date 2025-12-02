@@ -42,7 +42,6 @@ class SemanticUtils:
 
         Args:
             decimal: Integer to convert (typically 1-3999).
-
         Returns:
             Roman numeral string representation.
         """
@@ -77,7 +76,6 @@ class SemanticUtils:
 
         Args:
             roman: Roman numeral string (case-insensitive).
-
         Returns:
             Decimal integer value, or 0 if invalid format.
         """
@@ -118,7 +116,6 @@ class SemanticUtils:
             amount: Number to format.
             unit: Format type - 'num' for numeric (K/M/B) or 'mem' for memory (KB/MB/GB).
             width: Fixed width for formatting (default: 0 for no fixed width).
-
         Returns:
             Formatted string with appropriate suffix.
         """
@@ -168,10 +165,8 @@ class SemanticUtils:
 
         Args:
             plural: Plural word to convert (case-insensitive).
-
         Returns:
             Singular form of the word.
-
         Raises:
             ValueError: If no singularization rule matches.
             AssertionError: If result is empty string.
@@ -244,7 +239,6 @@ class SemanticUtils:
 
         Args:
             *symbols: Symbol names to validate.
-
         Raises:
             AssertionError: If any symbol is a keyword or invalid identifier.
         """

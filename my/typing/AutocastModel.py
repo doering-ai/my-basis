@@ -29,7 +29,6 @@ class AutocastModel(pyd.BaseModel):
 
         Args:
             data: Input dictionary with potentially mistyped values.
-
         Returns:
             Dictionary with values cast to match model field types.
         """
@@ -42,7 +41,6 @@ class AutocastModel(pyd.BaseModel):
 
         Args:
             handler: Default serialization handler.
-
         Returns:
             Serialized dictionary with simplified nested structures.
         """

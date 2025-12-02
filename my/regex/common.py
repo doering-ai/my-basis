@@ -21,7 +21,6 @@ def format_url(target: str) -> str:
 
     Args:
         target: The URL string to format.
-
     Returns:
         The cleaned URL string with detritus removed and trimmed.
     """
@@ -38,14 +37,12 @@ def atom(*contents: RgxVal) -> RgxVal:
 
     Args:
         *contents: One or more regex values (strings, lists, or tuples) to wrap.
-
     Returns:
         A regex value wrapped with word boundary assertions. Format depends on input:
         - Multiple contents: tuple with all wrapped together
         - Single string: string with boundaries
         - Single list: list with boundaries prepended/appended
         - Single tuple: tuple with boundaries integrated based on mark type
-
     Raises:
         ValueError: If no content provided or tuple has invalid length.
     """

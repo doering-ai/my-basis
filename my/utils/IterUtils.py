@@ -42,7 +42,6 @@ class IterUtils:
         Args:
             val: Initial value.
             *functions: Functions to apply in sequence.
-
         Returns:
             Final transformed value after applying all functions.
         """
@@ -55,7 +54,6 @@ class IterUtils:
 
         Args:
             value: Object to extract items from (dict, mapping, or sequence of 2-tuples).
-
         Returns:
             List of (key, value) tuples, or empty list if extraction fails.
         """
@@ -75,7 +73,6 @@ class IterUtils:
         Args:
             items: Iterable to partition.
             pred: Predicate function (True items go to second list).
-
         Returns:
             Tuple of (items_failing_predicate, items_passing_predicate).
         """
@@ -92,10 +89,8 @@ class IterUtils:
         Args:
             items: Iterable to partition.
             **preds: Named predicates (keys become bucket names).
-
         Returns:
             Dict with predicate names as keys, plus 'rest' for unmatched items.
-
         Raises:
             AssertionError: If 'rest' is used as a predicate key name.
         """
@@ -117,7 +112,6 @@ class IterUtils:
         Args:
             items: Iterable to bucket.
             pred: Function returning bucket key for each item.
-
         Returns:
             Defaultdict mapping bucket keys to lists of items.
         """
@@ -137,7 +131,6 @@ class IterUtils:
         Args:
             container: Sequence to search.
             predicate: Predicate function or value to match (default: bool for truthiness).
-
         Returns:
             Index of first match, or -1 if not found.
         """
@@ -169,7 +162,6 @@ class IterUtils:
         Args:
             container: Container to check membership in.
             items: Items to check.
-
         Returns:
             First item found in container, or None.
         """
@@ -183,7 +175,6 @@ class IterUtils:
         Args:
             items: Iterable to filter.
             pred: Predicate function (default: bool for truthiness).
-
         Returns:
             List of items matching predicate.
         """
@@ -207,7 +198,6 @@ class IterUtils:
             dictionary: Dictionary to extract from.
             *args: Keys to extract.
             mandatory: If True, return empty dict unless all keys present (default: False).
-
         Returns:
             Dict with requested keys that exist, or empty dict if mandatory and any missing.
         """
@@ -229,10 +219,8 @@ class IterUtils:
             *args: Keys to try in order.
             default: Default value if no keys found (default: None).
             unique: If True, raise error if multiple keys found (default: False).
-
         Returns:
             Value of first matching key, or default.
-
         Raises:
             ValueError: If unique=True and multiple keys match.
         """
@@ -277,7 +265,6 @@ class IterUtils:
             obj: Object to extract attributes from.
             fields: Attribute names to extract.
             drop: If True, drop falsy values and use default='' (default: False).
-
         Returns:
             Dict mapping field names to attribute values.
         """
@@ -292,7 +279,6 @@ class IterUtils:
         Args:
             funcs: Functions to apply.
             item: Item to pass to each function.
-
         Yields:
             Non-falsy results from function applications.
         """
@@ -310,7 +296,6 @@ class IterUtils:
 
         Args:
             func: Function returning (num_changes, transformed_value).
-
         Returns:
             Wrapped function that repeats until num_changes is 0.
         """
@@ -337,7 +322,6 @@ class IterUtils:
             container: Container to check.
             *args: Items to check for.
             mode: 'any' or 'all' for membership test (default: 'any').
-
         Returns:
             True if mode condition met, False if container empty or condition fails.
         """
@@ -352,7 +336,6 @@ class IterUtils:
         Args:
             container: Container to check.
             *args: Items that must all be present.
-
         Returns:
             True if all items present, False otherwise or if container empty.
         """
@@ -366,7 +349,6 @@ class IterUtils:
         Args:
             container: Container to check.
             *args: Items to check for (any match succeeds).
-
         Returns:
             True if any item present, False otherwise or if container empty.
         """
@@ -380,7 +362,6 @@ class IterUtils:
         Args:
             container: Collection to check.
             *args: Items that should comprise the entire collection.
-
         Returns:
             True if container contains exactly these items.
         """
@@ -396,7 +377,6 @@ class IterUtils:
         Args:
             container: Container to check.
             *args: Items that must all be absent.
-
         Returns:
             True if no items present, False otherwise.
         """
@@ -410,7 +390,6 @@ class IterUtils:
         Args:
             containers: Containers to check.
             *args: Items that must be in all containers.
-
         Returns:
             True if every container has all items, False otherwise or if empty.
         """
@@ -424,7 +403,6 @@ class IterUtils:
         Args:
             containers: Containers to check.
             *args: Items that must all be in at least one container.
-
         Returns:
             True if at least one container has all items, False otherwise or if empty.
         """
@@ -438,7 +416,6 @@ class IterUtils:
         Args:
             containers: Containers to check.
             *args: Items (at least one must be in each container).
-
         Returns:
             True if every container has at least one item, False otherwise or if empty.
         """
@@ -452,7 +429,6 @@ class IterUtils:
         Args:
             containers: Containers to check.
             *args: Items to look for.
-
         Returns:
             True if at least one container has at least one item, False otherwise or if empty.
         """
@@ -468,7 +444,6 @@ class IterUtils:
 
         Args:
             *strings: Strings to compare.
-
         Returns:
             Longest common prefix string.
         """
@@ -481,7 +456,6 @@ class IterUtils:
 
         Args:
             *strings: Strings to compare.
-
         Returns:
             Longest common suffix string.
         """
@@ -495,7 +469,6 @@ class IterUtils:
         Args:
             lhs: First sequence or set.
             rhs: Second sequence or set.
-
         Returns:
             List of common elements. For sequences, includes duplicates up to min count.
         """
@@ -517,7 +490,6 @@ class IterUtils:
         Args:
             data: Sequence to filter.
             mask: Indices to drop.
-
         Returns:
             List with elements at masked indices removed.
         """

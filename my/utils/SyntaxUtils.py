@@ -41,7 +41,6 @@ class SyntaxUtils:
 
         Args:
             tree: Tree structure (dict of dicts, or leaf value).
-
         Returns:
             Total count of leaf nodes (non-dict values).
         """
@@ -57,7 +56,6 @@ class SyntaxUtils:
 
         Args:
             tvar: Type to create validator for.
-
         Returns:
             GetPydanticSchema validator for use with Annotated types.
         """

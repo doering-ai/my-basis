@@ -37,7 +37,6 @@ class RegexDebugger(RegexStore):
 
         Args:
             store: RegexStore instance to create debugger from.
-
         Returns:
             New RegexDebugger with all patterns from the store.
         """
@@ -84,7 +83,6 @@ class RegexDebugger(RegexStore):
         Args:
             name: Name of pattern that failed.
             text: Buffer containing text that failed to match.
-
         Returns:
             List of strings describing the failure with a curated test regex.
         """
@@ -199,10 +197,8 @@ class RegexDebugger(RegexStore):
             matched: Whether the pattern actually matched.
             expected: Whether a match was expected (default: True).
             func: Name of function used (e.g., 'match', 'search').
-
         Returns:
             Multi-line debug report showing pattern, text, and failure analysis.
-
         Raises:
             ValueError: If matched and expected are both False (no failure to debug).
         """

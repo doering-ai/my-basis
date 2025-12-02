@@ -44,6 +44,37 @@ DEBUG = False
 ### BODY ###
 ############
 class Buffer(pyd.BaseModel):
+    """
+    A mutable text buffer built to allow efficient iterative modification of the given text.
+    Has three main features other than the basic affordances of a mutable string reference:
+
+    ### 1. Efficient Modification
+
+    Supports efficient replacement of substrings, regex matches, or spans of text, updating internal
+    trackers as necessary. Of particular note is the `rgx_iterator` function.
+
+    The class was originally written to allow callers to iteratively search through a text *WHILE*
+    modifying the text in-place, which is impossible with vanilla strings.
+
+    ### 2. Pair Matching
+
+    Supports "pair"-finding operations, where matching start/end delimiters are found in a single
+    pass. Supports nested pairs as well as complex, multi-char delimiters (e.g. `<tag
+    id="relevant">` --> `</tag>`).
+
+    ### 3. Fencing
+
+    Automatically finds "fences" in the text based on a configured regex, which are ranges
+    ("spans") where any searches will not match. They are stored as simple integer pairs, and
+    updated efficiently as the text is modified.
+
+    The typical usecase is for fenced code blocks in markdown or wikitext, which is where they get
+    their name.
+
+    Some functionality is also included for identifying "[hanging] chads", which refer to unmatched
+    pair delimiters that are assumed to represent syntax errors in the original content.
+    """
+
     BUFF_LEN: int = 1
     NO_ESC: ClassVar[str] = NO_ESC
     RGXS: ClassVar[dict[str, Pattern]] = ut.regex_dict(
@@ -68,13 +99,16 @@ class Buffer(pyd.BaseModel):
 
     fences: Annotated[SpanArray, ut.pyd_schemify(np.ndarray)] = pyd.Field(default_factory=no_spans)
     fence_rgxs: list[str] = []
-    fence_rgx: ut.Regex | None = pyd.Field(default=None, exclude=True)
+    fence_rgx: ut.RegexField | None = pyd.Field(default=None, exclude=True)
 
     # -------------------
     # `0` Initial Methods
     # -------------------
     @pyd.model_validator(mode='after')
     def _validate(self) -> 'Buffer':
+        """
+        Pydantic validator that compiles a fence regex (if necessary) and builds the initial fences.
+        """
         assert len(self.text) == self.BUFF_LEN
         if len(self.fence_rgxs) > 0:
             self.fence_rgx = re.compile(
@@ -95,6 +129,16 @@ class Buffer(pyd.BaseModel):
 
     @classmethod
     def new(cls, text: 'list[str] | str | Buffer | None' = None, **kwargs) -> 'Buffer':
+        """
+        The primary interface for creating new Buffers. Handles argument conversion ergonomically.
+
+        Args:
+            text: The text to initialize the buffer with. Can be a string, a list of strings, or
+                another Buffer instance.
+            **kwargs: Additional keyword arguments to pass to the Buffer constructor.
+        Returns:
+            A new Buffer instance.
+        """
         if kwargs.pop('no_fence', '') or 'fence_rgxs' not in kwargs:
             kwargs['fence_rgxs'] = []
 
@@ -115,6 +159,14 @@ class Buffer(pyd.BaseModel):
     # `-` Private Methods
     # -------------------
     def _replace_span(self, old: Span | tuple[int, int], new_text: str, diff: int = 0) -> None:
+        """
+        Replace a span of text with new text, updating fences as necessary.
+
+        Args:
+            old: The span (start, end) to replace.
+            new_text: The new text to insert.
+            diff: An optional static diff to apply to future fences.
+        """
         # Record initial state
         start, end = old
         if end == 0 and not new_text:
@@ -128,25 +180,49 @@ class Buffer(pyd.BaseModel):
             self.update_fences(start, len_old, len(new_text) - len_old, diff)
 
     def update_fences(self, start: int, len_old: int, delta: int, diff: int = 0) -> None:
-        # Refresh fences for this region -- build anew, or just shift future ones
+        """
+        (Re-)calculates the fence spans for the given region.
+
+        Handles both fences that are completely internal to the region, and fences that cross one of
+        the boundaries. Sometimes, new cross-boundary fences can form where none existed before.
+
+        No changes are needed for fences that contain the region entirely; the normal index shifting
+        after a replacement handles that case on its own.
+
+        Args:
+            start: The start position of the replaced region.
+            len_old: The length of the old text that was replaced.
+            delta: The change in length (new length - old length).
+            diff: If set, the content in this range is assumed to have just moved, but NOT changed.
+        """
         if self.fence_rgx is None:
             return
 
         pre, post = self._split_spans(self.fences, Span(start, start + len_old), delta)
+        n, n_pre, n_post = self.fences.shape[0], pre.shape[0], post.shape[0]
         if diff == 0:
             # I. Handle fences in new text, or that appeared b/c of old text
-            b0 = pre[-1][1] if pre.size > 0 else 0
-            b1 = post[0][0] if post.size > 0 else len(self)
+            b0 = pre[-1][1] if n_pre else 0
+            b1 = post[0][0] if n_post else len(self)
             new = self._build_fences(self[b0:b1], b0)
         else:
-            # II. Handle simple translations given by a static diff distance
-            pre_rows = pre.shape[0]
-            post_rows = self.fences.shape[0] - post.shape[0]
-            new = self.fences[pre_rows:post_rows] + diff
+            # II. Simply shift any existing fences in this region by the given static `diff`
+            post_rows = n - n_post
+            new = self.fences[n_pre:post_rows] + diff
 
         self.fences = np.concatenate((pre, new, post))
 
     def _replace_string(self, old: str, new: str, count: int = 0, diff: int = 0) -> None:
+        """
+        Replace one or more occurrences of a substring with new text, updating fences as necessary.
+
+        Args:
+            old: The substring to replace.
+            new: The new text to insert.
+            count: The maximum number of replacements to make (0 for all).
+            diff: If set, the content in this range is assumed to have just moved, but NOT changed.
+        """
+        assert count >= 0, 'Count must be non-negative'
         i, cur = 0, 0
         while count == 0 or i < count:
             if (start := self.text[0].find(old, cur)) == -1:
@@ -199,15 +275,15 @@ class Buffer(pyd.BaseModel):
         delta: int,
     ) -> tuple[SpanArray, SpanArray]:
         """
-        Split spans into those that come before the reference span and those after, applying a
-        shift to the latter array
+        Split spans into those that come before the "reference" span and those after, applying a
+        positional shift to the latter array.
 
         Args:
             source: Array of spans with shape (n, 2)
             ref_span: Reference span (start, end)
             delta: Amount to shift spans after the reference
         Returns:
-            tuple of (pre_spans, shifted_post_spans)
+            Tuple of numpy arrays of the form (pre_spans, post_spans)
         """
         if not isinstance(source, np.ndarray):
             source = np.array(source)
@@ -383,6 +459,18 @@ class Buffer(pyd.BaseModel):
         count: int = 0,
         diff: int = 0,
     ) -> 'Buffer':
+        """
+        Replace the specified text with, updating internal trackers as necessary.
+        The most performant option is by far to directly pass indices.
+
+        Args:
+            old: The substring, span, or regex pattern to replace.
+            new: The new text to insert.
+            count: The maximum number of replacements to make (0 for all). Invalid for spans.
+            diff: An optional static diff to apply to future fences.
+        Returns:
+            The modified Buffer instance (for convenient access and/or builder patterns).
+        """
         if isinstance(old, Pattern):
             self._replace_pattern(old, new, count)
         elif isinstance(old, (tuple, Span)):

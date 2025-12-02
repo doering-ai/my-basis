@@ -300,6 +300,43 @@ class SystemUtils:
         SystemUtils.AUTO_CONFIRM = True
 
     @staticmethod
+    def zsh_colorize(
+        text: str,
+        color: str,
+        bold: bool = False,
+        italic: bool = False,
+        underline: bool = False,
+    ) -> str:
+        """
+        Wrap text in zsh color codes with optional styles.
+
+        Args:
+            text: Text to colorize.
+            color: Zsh color name or code.
+            bold: If True, apply bold style (default: False).
+            italic: If True, apply italic style (default: False).
+            underline: If True, apply underline style (default: False).
+        Returns:
+            Colorized text with zsh codes, or original text if color is empty.
+        """
+        # I. Validate arguments
+        if not (text and color):
+            return text or ''
+
+        # II. Wrap text in (relatively-fancy) zsh coloring syntax
+        ret = f'%F{{{color}}}{text}%f'
+
+        # III. Wrap result in universal ANSI codes for bold/italic/underline
+        if bold:
+            ret = f'\033[1m{ret}\033[22m'
+        if italic:
+            ret = f'\033[3m{ret}\033[23m'
+        if underline:
+            ret = f'\033[4m{ret}\033[24m'
+
+        return ret
+
+    @staticmethod
     def confirm(prompt: str, default_no: bool = False) -> bool:
         """
         Prompt user for confirmation with y/n input.

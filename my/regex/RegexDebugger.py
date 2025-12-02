@@ -27,6 +27,7 @@ class RegexDebugger(RegexStore):
     Provides detailed failure analysis by isolating the failing clause and showing
     which parts of the pattern matched successfully before failure.
     """
+
     # -------------------
     # `0` Initial Methods
     # -------------------
@@ -54,6 +55,19 @@ class RegexDebugger(RegexStore):
         definitions: dict[str, str],
         remaining_text: str,
     ) -> str:
+        """
+        Curate the given regex snippet to include only the failing clause and its dependencies.
+
+        Args:
+            atoms: Tuple of regex atoms from the pattern body.
+            atom_ends: List of end indices for each atom in the body.
+            failed_idx: Index of the atom where matching failed.
+            body: Buffer containing the full pattern body.
+            definitions: Dictionary of group definitions from the pattern head.
+            remaining_text: Text that was left unmatched after failure.
+        Returns:
+            A truncated version of the given rgx, as a plain string.
+        """
         x0 = x1 = failed_idx
         while x0 > 0 and ut.has_any(self._quantify(atoms[x0 - 1]), '?', '*'):
             x0 -= 1
@@ -76,7 +90,6 @@ class RegexDebugger(RegexStore):
     def debug_failed_match(self, name: str, text: Buffer) -> list[str]:
         """
         Analyze a pattern that failed to match and identify the failing clause.
-
         Iteratively tests progressively longer subpatterns to find exactly where
         matching stops, then extracts that clause with its dependencies for testing.
 
@@ -196,7 +209,7 @@ class RegexDebugger(RegexStore):
             text: Text that was matched against.
             matched: Whether the pattern actually matched.
             expected: Whether a match was expected (default: True).
-            func: Name of function used (e.g., 'match', 'search').
+            func: Name of function used (e.g., 'match', 'search', 'findall', etc).
         Returns:
             Multi-line debug report showing pattern, text, and failure analysis.
         Raises:

@@ -18,12 +18,13 @@ from ..types import Span, Predicate
 ############
 class MatchData(Predicate):
     """
-    Container for regex match results with captured groups and match metadata.
+    Ergonomic container for regex match results with captured groups and match metadata.
 
     Extends Predicate to store captured group values while also maintaining a reference
     to the original match object for accessing spans, positions, and matched text.
     Provides cached properties for common match attributes like start, end, and text.
     """
+
     match: ut.MatchField | None = None
     duplicates: bool = True
 

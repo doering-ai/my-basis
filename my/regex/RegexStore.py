@@ -78,19 +78,24 @@ class RegexStore(pyd.BaseModel):
     A powerful regex pattern management system with composition and parsing capabilities.
 
     RegexStore provides a comprehensive framework for defining, composing, and applying
-    complex regex patterns. It supports:
-    - Hierarchical pattern composition from simple building blocks
-    - Named group management and subroutine invocation
-    - Custom parsing functions for match results
-    - Pattern optimization and tree construction
-    - Router trees for pattern classification
+    complex regex patterns.
+    To do this, it also contains code for analyzing existing patterns, breaking them down into their
+    component parts.
 
-    Patterns can be defined using a flexible DSL that supports:
-    - String literals and pre-compiled patterns
-    - Lists for sequential composition
-    - Tuples for group creation with custom separators
-    - Recursive pattern references via named groups
+    Features:
+        - Hierarchical pattern composition from simple building blocks.
+        - Recursive pattern references via named groups.
+        - Ergonomic group management and subroutine invocation.
+        - Automatic parsing of match results into a more ergonomic form (see MatchData).
+        - Pattern optimization applied by default.
+        - Construction of "Router trees" for efficient matching of long patterns to long texts.
+
+    The DSL used to specify patterns can combine a variety of input types into one, including:
+        - String literals and pre-compiled patterns.
+        - Tuples for group creation with custom separators.
+        - Lists for sequential composition of groups.
     """
+
     # Meta Regexes
     RGXS: ClassVar[dict[str, Pattern]] = ut.regex_dict(
         dict(
@@ -163,8 +168,15 @@ class RegexStore(pyd.BaseModel):
         **params: RgxDef | Any,
     ) -> Self:
         """
-        Create a new RegexStore, populating internal fields appropriately by transforming the
-        given inputs. All extra/dynamic params are interpreted as patterns.
+        This is the primary interface for creating new stores, allowing callers to specify their
+        patterns upfront as direct arguments to this function.
+
+        Args:
+            options: A dictionary of store-level options to apply as member variables.
+            imports: References to patterns contianed in existing stores to be included in this one
+            **parms: The named pattern specifications (see RgxDef) that make up the new store.
+        Returns:
+            A new RegexStore instance with the given patterns compiled into execution-ready objects.
         """
         if options is None:
             options = {}
@@ -194,10 +206,14 @@ class RegexStore(pyd.BaseModel):
     @pyd.field_validator('definitions')
     @classmethod
     def _validate_definitions(cls, definitions: dict[str, str]) -> dict[str, str]:
+        """Clean the passed definitions by normalizing group reference syntax."""
         return {key: val.replace('(?P=', '(?&') for key, val in definitions.items()}
 
     @pyd.model_validator(mode='after')
     def _validate_store(self) -> 'RegexStore':
+        """
+        Finalize the store by setting up the autostrip function based on member variables.
+        """
         strip_string = ''
         if self.autostrip_spaces:
             strip_string += ' '
@@ -213,42 +229,6 @@ class RegexStore(pyd.BaseModel):
             self.strip = lambda text: text
 
         return self
-
-    def __len__(self) -> int:
-        return len(self.patterns)
-
-    def __contains__(self, key: str) -> bool:
-        return key in self.patterns
-
-    def __setitem__(self, name: str, param: RgxDef) -> None:
-        assert name not in self.patterns, f'Duplicate pattern name: {name}'
-
-        # Pull out the parser, if present
-        val: RgxVal
-        if isinstance(param, tuple) and len(param) == 2 and not isinstance(param[1], (list, tuple)):
-            val, parser = param  # type: ignore
-        else:
-            val = param
-            parser = None
-
-        self.define(name, val, parser)  # type: ignore
-
-    def __getitem__(self, name: str) -> Pattern:
-        assert name in self.patterns, f'Pattern not found: {name}'
-        return self.patterns[name]
-
-    def pop(self, name: str) -> Pattern:
-        assert name in self.patterns, f'Pattern not found: {name}'
-        del self.definitions[name]
-        if name in self.parsers:
-            del self.parsers[name]
-        return self.patterns.pop(name)
-
-    def get(self, name: str, default: Pattern | None = None) -> Pattern | None:
-        return self.patterns.get(name, default)
-
-    def get_def(self, name: str, default: str | None = None) -> str | None:
-        return self.definitions.get(name, default)
 
     # -------------------
     # `-` Private Methods
@@ -718,14 +698,14 @@ class RegexStore(pyd.BaseModel):
     @classmethod
     def _is_split(cls, pattern: str | Atoms) -> bool:
         if isinstance(pattern, str):
-            return any(atom == '|' for atom in cls.atomize_iter(pattern))
+            return any(atom == '|' for atom in cls._atomize_iter(pattern))
         else:
             return '|' in pattern
 
     @classmethod
     def _is_atomic(cls, pattern: Atom | Atoms) -> bool:
         if isinstance(pattern, str):
-            return next((len(v) == len(pattern) for v in cls.atomize_iter(pattern)), False)
+            return next((len(v) == len(pattern) for v in cls._atomize_iter(pattern)), False)
         else:
             return len(pattern) == 1
 
@@ -865,7 +845,7 @@ class RegexStore(pyd.BaseModel):
             raise ValueError(f'Invalid tuple: {data}')
 
     @classmethod
-    def atomize_iter(cls, pattern: str) -> Generator[str, None, None]:
+    def _atomize_iter(cls, pattern: str) -> Generator[str, None, None]:
         n = len(pattern)
         _x = 0
 
@@ -896,7 +876,7 @@ class RegexStore(pyd.BaseModel):
         """
         if escape:
             pattern = cls.RGXS['special_characters'].sub(r'\\\1', pattern)
-        return tuple(cls.atomize_iter(pattern))
+        return tuple(cls._atomize_iter(pattern))
 
     @staticmethod
     def _collapse_empty_splits(delims: list[str], sections: list[str]) -> None:
@@ -945,6 +925,36 @@ class RegexStore(pyd.BaseModel):
 
         # e.g.        '(?:'  '\(?'   '....'   '\)?' ')?'
         return ''.join([start, pre, body, suf, end, quant])
+
+    def _render_definitions(self, *definitions: str) -> str:
+        """
+        Serialize definitions into a DEFINE block for regex compilation.
+
+        Orders and serializes the specified definitions as a (?(DEFINE)...) block,
+        ensuring references to other definitions are resolved in definition order.
+
+        Args:
+            *definitions: Names of definitions to include in the DEFINE block.
+        Returns:
+            String containing the DEFINE block, or empty string if no definitions.
+        Raises:
+            AssertionError: If any definition name is not found in the store.
+        """
+        if not definitions:
+            return ''
+        assert all(name in self.definitions for name in definitions), (
+            f'Unknown definitions passed: {definitions}'
+        )
+
+        # Render in the order of definition above, not in the order passed in
+        data = [(name, rgx) for name, rgx in self.definitions.items() if name in definitions]
+        return '\n'.join([r'(?(DEFINE)', *[f'(?P<{name}>{rgx})' for name, rgx in data], ')'])
+
+    def _autoparse(self, func: str, names: Iterable[str], text: str) -> MatchData:
+        for name in names:
+            if _match := getattr(self.patterns[name], func)(text):
+                return self.parse(_match, name)
+        return MatchData()
 
     # -------------------
     # `+` Primary Methods
@@ -1031,30 +1041,6 @@ class RegexStore(pyd.BaseModel):
         assert len(ambiguous) == 0, f'Ambiguous groups found: {ambiguous}'
         return groups_used
 
-    def render_definitions(self, *definitions: str) -> str:
-        """
-        Serialize definitions into a DEFINE block for regex compilation.
-
-        Orders and serializes the specified definitions as a (?(DEFINE)...) block,
-        ensuring references to other definitions are resolved in definition order.
-
-        Args:
-            *definitions: Names of definitions to include in the DEFINE block.
-        Returns:
-            String containing the DEFINE block, or empty string if no definitions.
-        Raises:
-            AssertionError: If any definition name is not found in the store.
-        """
-        if not definitions:
-            return ''
-        assert all(name in self.definitions for name in definitions), (
-            f'Unknown definitions passed: {definitions}'
-        )
-
-        # Render in the order of definition above, not in the order passed in
-        data = [(name, rgx) for name, rgx in self.definitions.items() if name in definitions]
-        return '\n'.join([r'(?(DEFINE)', *[f'(?P<{name}>{rgx})' for name, rgx in data], ')'])
-
     def define(
         self,
         name: str,
@@ -1089,7 +1075,7 @@ class RegexStore(pyd.BaseModel):
             self.definitions[name] = str(text)
 
             # III. Compile a finalized version with subroutines attached as 'definitions'
-            definitions = self.render_definitions(*groups_used)
+            definitions = self._render_definitions(*groups_used)
             rgx = rf'{definitions}(?P<{name}>{text})'
             self.patterns[name] = re.compile(rgx, flags)
 
@@ -1162,6 +1148,55 @@ class RegexStore(pyd.BaseModel):
     # ------------------
     # `x` Public Methods
     # ------------------
+
+    # --------------------
+    # `x0` Basic Overrides
+    # --------------------
+    def __len__(self) -> int:
+        return len(self.patterns)
+
+    def __contains__(self, key: str) -> bool:
+        return key in self.patterns
+
+    def __setitem__(self, name: str, param: RgxDef) -> None:
+        assert name not in self.patterns, f'Duplicate pattern name: {name}'
+
+        # Pull out the parser, if present
+        val: RgxVal
+        if isinstance(param, tuple) and len(param) == 2 and not isinstance(param[1], (list, tuple)):
+            val, parser = param  # type: ignore
+        else:
+            val = param
+            parser = None
+
+        self.define(name, val, parser)  # type: ignore
+
+    def __getitem__(self, name: str) -> Pattern:
+        assert name in self.patterns, f'Pattern not found: {name}'
+        return self.patterns[name]
+
+    def __ior__(self, other: 'dict[str, RgxDef] | RegexStore') -> 'RegexStore':
+        if isinstance(other, RegexStore):
+            for name in other.keys():
+                self[name] = (other.definitions[name], other.parsers.get(name, None))
+        else:
+            for name, param in other.items():
+                self[name] = param
+        return self
+
+    def pop(self, name: str) -> Pattern:
+        assert name in self.patterns, f'Pattern not found: {name}'
+        del self.definitions[name]
+        if name in self.parsers:
+            del self.parsers[name]
+        return self.patterns.pop(name)
+
+    def get(self, name: str, default: Pattern | None = None) -> Pattern | None:
+        return self.patterns.get(name, default)
+
+    def get_def(self, name: str, default: str | None = None) -> str | None:
+        return self.definitions.get(name, default)
+
     def keys(self) -> list[str]:
         return list(self.patterns.keys())
 
@@ -1171,6 +1206,9 @@ class RegexStore(pyd.BaseModel):
     def items(self) -> list[tuple[str, Pattern]]:
         return list(self.patterns.items())
 
+    # -------------------
+    # `x1` Match Handling
+    # -------------------
     def read_match(self, match: Match) -> tuple[Params, Captures]:
         """
         Extract and autostrip all captured groups from a match object.
@@ -1236,14 +1274,9 @@ class RegexStore(pyd.BaseModel):
         ret = MatchData(data=captures, match=match)
         return ret
 
-    # Autoparse Overrides
-    # -------------------
-    def _autoparse(self, func: str, names: Iterable[str], text: str) -> MatchData:
-        for name in names:
-            if _match := getattr(self.patterns[name], func)(text):
-                return self.parse(_match, name)
-        return MatchData()
-
+    # -------------------------------
+    # `x3` Top-Level Matching Methods
+    # -------------------------------
     def match(self, names: str | Iterable[str], text: str | Buffer) -> MatchData:
         """
         Match one of the named patterns against text from the beginning.
@@ -1381,8 +1414,9 @@ class RegexStore(pyd.BaseModel):
 
         return MatchData(data=pd.captures)
 
-    # Utility functions
-    # -----------------
+    # -------------------------
+    # `x4` Functional Utilities
+    # -------------------------
     def parse_invocations(self, text: str) -> set[str]:
         """
         Find all group invocations in text and transitively expand dependencies.
@@ -1448,8 +1482,9 @@ class RegexStore(pyd.BaseModel):
         fn = self.partial(name, func)
         yield from filter(lambda text: bool(fn(text)), texts)
 
-    # Builder Functions
-    # -----------------
+    # ---------------------------------------
+    # `x5` Performant "Router Tree" Functions
+    # ---------------------------------------
     def define_router_tree(self, router: str, items: Mapping[str, RgxVal], **kwargs: str) -> None:
         """
         Define a router pattern that classifies text into named categories.

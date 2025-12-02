@@ -580,9 +580,8 @@ class Markdown(pyd.BaseModel):
 
     def from_yaml(self) -> dict[str, Any]:
         """
-        Extract YAML data from this node and its children.
-
         Parses prose as YAML and recursively collects child nodes as nested dicts.
+
         Returns:
             Dictionary of parsed YAML data with child nodes as nested keys.
         """
@@ -657,9 +656,7 @@ class Markdown(pyd.BaseModel):
         return len(self.nodes)
 
     def __isub__(self, nodes: Collection[str]) -> None:
-        """
-        Removes nodes with the given indices from this markdown object.
-        """
+        """Removes nodes with the given indices from this markdown object."""
         for title in nodes:
             if node := self.pop(title=title):
                 logfire.info(f'Removed node: {node.title} ({node.idx})')

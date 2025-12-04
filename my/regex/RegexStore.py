@@ -131,6 +131,7 @@ class RegexStore(pyd.BaseModel):
             special_characters=NO_ESC + r'([+*?()|.^$])',
         )
     )
+    NO_ESC: ClassVar[str] = NO_ESC
 
     # Uncompiled strings, ready for reuse
     definitions: dict[str, str] = {}

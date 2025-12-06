@@ -165,7 +165,7 @@ class RegexStore(pyd.BaseModel):
     def new(
         cls,
         options: dict[str, Any] | None = None,
-        imports: list[tuple['RegexStore', Iterable[str]]] | None = None,
+        imports: list[tuple[Self, Iterable[str]]] | None = None,
         **params: RgxDef | Any,
     ) -> Self:
         """
@@ -206,15 +206,13 @@ class RegexStore(pyd.BaseModel):
 
     @pyd.field_validator('definitions')
     @classmethod
-    def _validate_definitions(cls, definitions: dict[str, str]) -> dict[str, str]:
+    def _init_definitions(cls, definitions: dict[str, str]) -> dict[str, str]:
         """Clean the passed definitions by normalizing group reference syntax."""
         return {key: val.replace('(?P=', '(?&') for key, val in definitions.items()}
 
     @pyd.model_validator(mode='after')
-    def _validate_store(self) -> 'RegexStore':
-        """
-        Finalize the store by setting up the autostrip function based on member variables.
-        """
+    def _init_store(self) -> Self:
+        """Finalize the store by setting up the autostrip function based on member variables."""
         strip_string = ''
         if self.autostrip_spaces:
             strip_string += ' '
@@ -236,6 +234,15 @@ class RegexStore(pyd.BaseModel):
     # -------------------
     @classmethod
     def _tree_print(cls, text: str, depth: int = 0) -> str:
+        """
+        Recursive helper for tree_print, handling indentation and group structure.
+
+        Args:
+            text: The regex pattern body to print.
+            depth: Current indentation depth.
+        Returns:
+            Multi-line string representation with indentation showing nesting.
+        """
         indent = '\t' * depth
 
         branches: list[str] = []
@@ -260,7 +267,8 @@ class RegexStore(pyd.BaseModel):
 
     def tree_print(self, pattern: str | Pattern | Buffer, print_head: bool = True) -> str:
         """
-        Pretty-print a regex pattern as an indented tree structure.
+        Pretty-print a regex pattern as an indented multiline tree structure, primarily for use
+        in debugging.
 
         Args:
             pattern: Pattern to print (string, compiled Pattern, or Buffer).
@@ -298,10 +306,8 @@ class RegexStore(pyd.BaseModel):
 
     def _parse_mark(self, mark: str) -> tuple[GroupKind, str, str, str]:
         """
-        Parse a custom mark string into regex group components.
-
-        Processes mark syntax like '|:', '[]:', '<|>', and flag specifiers to determine
-        the type of regex group to create, the opening syntax, separator, and quantifier.
+        Parses a given string of "mark syntax" DSL (see class documentation) into valid regex
+        snippets.
 
         Args:
             mark: Custom mark string using the store's DSL syntax.
@@ -343,10 +349,10 @@ class RegexStore(pyd.BaseModel):
     @classmethod
     def parse_group_kind(cls, group: str) -> GroupKind:
         """
-        Determine the GroupKind of a regex group from its opening syntax.
+        Classify the given regex group.
 
         Args:
-            group: The opening part of a regex group (e.g., '(?:', '(?=', '(?>').
+            group: A rgx group snippet; does not need to compile, but must be valid syntactically.
         Returns:
             The corresponding GroupKind enum value, or GroupKind(0) if no match.
         """
@@ -358,7 +364,7 @@ class RegexStore(pyd.BaseModel):
     @classmethod
     def set_iterator(cls, text: Buffer | str | list[str]) -> Iterator[tuple[Span, str, str]]:
         """
-        Iterate over all character sets in the text.
+        Iterate over character sets in the given pattern (e.g. `[A-Za-z]`).
 
         Args:
             text: Text to search for character sets.
@@ -381,13 +387,12 @@ class RegexStore(pyd.BaseModel):
         mode: Literal['all', 'roots', 'leaves'] = 'all',
     ) -> Iterator[tuple[Span, GroupKind, str, str, str]]:
         """
-        Iterate over regex groups in the text.
+        Iterate over all groups in the given pattern (e.g. `(?:abc)`).
 
         Args:
-            text: Text to search for groups (automatically converted to Buffer).
+            text: Text to search for groups (will be converted to Buffer).
             mask: Optional GroupKind filter to yield only matching group types.
-            mode: Iteration mode - 'all' for all groups, 'roots' for top-level only,
-                  'leaves' for innermost only.
+            mode: 'all' by default, 'roots' to exclude nested groups, or 'leaves' for the opposite.
         Yields:
             Tuples of (span, kind, name, body, quantifier) for each group found.
         """
@@ -412,9 +417,19 @@ class RegexStore(pyd.BaseModel):
             yield span, kind, name, body, end[1:]
 
     def _validate_params(
-        self, patterns: str | Iterable[str], text: str | Buffer
+        self,
+        patterns: str | Iterable[str],
+        text: str | Buffer,
     ) -> tuple[Iterable[str], str]:
-        """Validate the usual public paramaters, returning a guaranteed Buffer."""
+        """
+        Validate, clean, and/or coerce the usual public paramaters of the constructor.
+
+        Args:
+            patterns: Pattern name(s) to validate.
+            text: Text to coerce to string if necessary.
+        Returns:
+            (validated_patterns, cleaned_text_string)
+        """
         if isinstance(patterns, str):
             patterns = [patterns]
         assert ut.has_all(self.patterns, *patterns), f'Unknown pattern(s): {patterns}'
@@ -422,6 +437,7 @@ class RegexStore(pyd.BaseModel):
 
     @staticmethod
     def _validate_tuple(data: tuple, types: tuple[type, ...]) -> None:
+        """Validate the given tuple against the passed types."""
         assert len(data) == len(types), f'Invalid tuple: {data}'
         assert all(isinstance(v, t) for v, t in zip(data, types, strict=True)), (
             f'Invalid tuple: {data}'
@@ -429,6 +445,7 @@ class RegexStore(pyd.BaseModel):
 
     @staticmethod
     def _greatest_common_prefix(*args: Atoms) -> Atoms:
+        """Finds the longest common prefix present in all of the given atoms."""
         if not args or not all(map(len, args)):
             return tuple()
         elif len(args) == 1:
@@ -438,6 +455,7 @@ class RegexStore(pyd.BaseModel):
 
     @staticmethod
     def _greatest_common_suffix(*args: Atoms) -> Atoms:
+        """Finds the longest common suffix present in all of the given atoms."""
         if not args or not all(map(len, args)):
             return tuple()
         elif len(args) == 1:
@@ -447,6 +465,16 @@ class RegexStore(pyd.BaseModel):
 
     @classmethod
     def _apply_quantity(cls, text: str, quantity: str) -> str:
+        """
+        Create a version of the given pattern that has the request quantifier applied.
+        Handles patterns that need to be wrapped before a quantifier is applied.
+
+        Args:
+            text: The regex pattern body to quantify.
+            quantity: The quantifier string to apply (e.g., '?', '+', '*', '{2,5}').
+        Returns:
+            The quantified regex pattern string.
+        """
         # I. Null case
         if not quantity:
             return text
@@ -463,6 +491,16 @@ class RegexStore(pyd.BaseModel):
 
     @classmethod
     def _clean_branches(cls, branches: Branches, quantity: str) -> tuple[Branches, bool]:
+        """
+        Clean the given branches by removing empty branches and combining optional ones.
+
+        Args:
+            branches: The list of atom sequences representing alternative branches.
+            quantity: The quantifier string applied to the entire group.
+        Returns:
+            0: The optimized list of branches.
+            1: Whether the containing group should be marked as optional.
+        """
         to_drop: set[int] = set()
         inferred_optional = False
         for i, branch in enumerate(branches):
@@ -499,8 +537,21 @@ class RegexStore(pyd.BaseModel):
 
     @classmethod
     def _render_branches(
-        cls, branches: Branches, has_suffix: bool = False, quantity: str = ''
+        cls,
+        branches: Branches,
+        has_suffix: bool = False,
+        quantity: str = '',
     ) -> str:
+        """
+        Render the given branches into a regex group, applying optimizations where possible.
+
+        Args:
+            branches: The list of atom sequences representing alternative branches.
+            has_suffix: Whether parent context implies a shared suffix exists across all branches.
+            quantity: The quantifier string to apply to the entire group.
+        Returns:
+            A pattern representing the properly combined & wrapped branches.
+        """
         # I. Clean the branch list, identifying optional branches and pre-combining where possible
         branches, inferred_optional = cls._clean_branches(branches, quantity)
         assert branches, 'Empty branches passed'
@@ -522,19 +573,35 @@ class RegexStore(pyd.BaseModel):
 
     @classmethod
     def _choose_joining_mark(cls, branches: Branches, has_suffix: bool = False) -> str:
+        """
+        Decides whether the given branches can be safely grouped in an atomic group.
+
+        Args:
+            branches: The list of atom sequences representing alternative branches.
+            has_suffix: Whether parent context implies a shared suffix exists across all branches.
+        Returns:
+            The group mark to use (':' for regular, '>' for atomic).
+        """
         assert branches, 'Empty param.'
 
-        # Look for sets if we have a suffix
-        if any(
-            atom[0] == '[' or cls._is_quantified(atom) or cls._is_complex_group(atom)
-            for branch in branches
-            for atom in (branch if has_suffix else (branch[0],))
-        ):
-            return ':'
+        for branch in branches:
+            # Look for sets if we have a suffix
+            for atom in branch if has_suffix else (branch[0],):
+                if atom[0] == '[' or cls._is_quantified(atom) or cls._is_complex_group(atom):
+                    return ':'
         return '>'
 
     @classmethod
     def _join_atoms(cls, atoms: list[Atom], has_suffix: bool = False) -> Atom:
+        """
+        Join the given simple branching atoms into an optimized (ideally atomic) regex pattern.
+
+        Args:
+            atoms: A list of valid atom strings.
+            has_suffix: Whether parent context implies a shared suffix exists across all atoms.
+        Returns:
+            The optimized regex pattern string.
+        """
         # I. Determine if the resulting atom should be optional
         quantity = ''
         for i, atom in enumerate(atoms):
@@ -562,6 +629,7 @@ class RegexStore(pyd.BaseModel):
 
     @classmethod
     def _group_by_prefix(cls, branches: Branches) -> Generator[Branches, None, None]:
+        """Group the given branches by their common prefixes (if any exist)."""
         yield from map(
             list,
             mi.split_when(branches, lambda lhs, rhs: not cls._greatest_common_prefix(lhs, rhs)),
@@ -569,10 +637,12 @@ class RegexStore(pyd.BaseModel):
 
     @staticmethod
     def _block_suffix(block: Block) -> Atoms:
+        """Determines whether the given block has a suffix, and returns it if so."""
         return block[2] if block[0] else block[1]
 
     @classmethod
     def _group_by_suffix(cls, blocks: list[Block]) -> Generator[list[Block], None, None]:
+        """Group the given blocks by their common suffixes (if any exist)."""
         yield from map(
             list,
             mi.split_when(
@@ -582,6 +652,9 @@ class RegexStore(pyd.BaseModel):
 
     @classmethod
     def _construct_branches(cls, block: Branches) -> Block:
+        """
+        Construct a block of branches by factoring out common prefixes and suffixes.
+        """
         # 0. Return immediately if this is a single branch, with no prefix
         if len(block) == 1:
             return (tuple(), block[0], tuple())

@@ -2,16 +2,16 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import Iterator, Literal, ClassVar, Iterable, Callable, Sequence, Annotated
+from typing import Iterator, Literal, ClassVar, Iterable, Callable, Sequence, Annotated, Self
 from collections import deque
 import itertools as it
+import more_itertools as mi
 import textwrap
 
 ### EXTERNAL
 import pydantic as pyd
 import regex as re
 from regex import Match, Pattern
-import logfire
 import numpy as np
 import numpy.typing as npt
 
@@ -105,10 +105,8 @@ class Buffer(pyd.BaseModel):
     # `0` Initial Methods
     # -------------------
     @pyd.model_validator(mode='after')
-    def _validate(self) -> 'Buffer':
-        """
-        Pydantic validator that compiles a fence regex (if necessary) and builds the initial fences.
-        """
+    def _setup_fencing(self) -> Self:
+        """Compiles a fence regex (if necessary) and builds the initial fences."""
         assert len(self.text) == self.BUFF_LEN
         if len(self.fence_rgxs) > 0:
             self.fence_rgx = re.compile(
@@ -128,7 +126,7 @@ class Buffer(pyd.BaseModel):
         return self.text[0]
 
     @classmethod
-    def new(cls, text: 'list[str] | str | Buffer | None' = None, **kwargs) -> 'Buffer':
+    def new(cls, text: list[str] | str | Self | None = None, **kwargs) -> Self:
         """
         The primary interface for creating new Buffers. Handles argument conversion ergonomically.
 
@@ -152,7 +150,8 @@ class Buffer(pyd.BaseModel):
             text = [text.text[0]]
         return cls(text=text, **kwargs)
 
-    def memcopy(self) -> 'Buffer':
+    def memcopy(self) -> Self:
+        """Create a deep copy of this Buffer instance without recalculating fences."""
         return Buffer.new(self.text[0], fence_rgxs=self.fence_rgxs, fences=np.copy(self.fences))
 
     # -------------------
@@ -165,7 +164,8 @@ class Buffer(pyd.BaseModel):
         Args:
             old: The span (start, end) to replace.
             new_text: The new text to insert.
-            diff: An optional static diff to apply to future fences.
+            diff: When set, indicates that any fences found within the old text are still there, but
+                have simply moved by this static amount.
         """
         # Record initial state
         start, end = old
@@ -193,7 +193,8 @@ class Buffer(pyd.BaseModel):
             start: The start position of the replaced region.
             len_old: The length of the old text that was replaced.
             delta: The change in length (new length - old length).
-            diff: If set, the content in this range is assumed to have just moved, but NOT changed.
+            diff: When set, indicates that any fences found within the old text are still there, but
+                have simply moved by this static amount.
         """
         if self.fence_rgx is None:
             return
@@ -207,8 +208,7 @@ class Buffer(pyd.BaseModel):
             new = self._build_fences(self[b0:b1], b0)
         else:
             # II. Simply shift any existing fences in this region by the given static `diff`
-            post_rows = n - n_post
-            new = self.fences[n_pre:post_rows] + diff
+            new = self.fences[n_pre : n - n_post] + diff
 
         self.fences = np.concatenate((pre, new, post))
 
@@ -220,7 +220,8 @@ class Buffer(pyd.BaseModel):
             old: The substring to replace.
             new: The new text to insert.
             count: The maximum number of replacements to make (0 for all).
-            diff: If set, the content in this range is assumed to have just moved, but NOT changed.
+            diff: When set, indicates that any fences found within the old text are still there, but
+                have simply moved by this static amount.
         """
         assert count >= 0, 'Count must be non-negative'
         i, cur = 0, 0
@@ -233,21 +234,47 @@ class Buffer(pyd.BaseModel):
                 cur = len(new) - len(old) + start + 1
                 i += 1
 
-    def _replace_pattern(self, rgx: Pattern, new: str, count: int = 0) -> None:
+    def _replace_regex(self, rgx: Pattern, new: str, count: int = 0) -> None:
+        """
+        Replaces one or more matching occurrences of a regex pattern with new text, updating fences
+        as necessary. Regex variable substitution is performed as usual for each match.
+
+        Args:
+            rgx: The regex pattern to replace.
+            new: The new text to insert.
+            count: The maximum number of replacements to make (0 for all).
+        """
         for i, match in enumerate(self.rgx_iterator(rgx)):
             if count and i >= count:
                 break
             self._replace_span(match.span(), rgx.sub(new, match[0]))
 
     def _yield_pair(self, pair: Pair) -> tuple[Span, str, str, str]:
+        """
+        Helper function that formats the given pair of spans into a helpful 4-tuple.
+
+        Args:
+            pair: A tuple of spans representing the start and end delimiters.
+        Returns:
+            1. The full span from the start of the first delimiter to the end of the second.
+            2. The text of the start delimiter.
+            3. The text between the delimiters.
+            4. The text of the end delimiter.
+        """
         (s0, s1), (e0, e1) = pair
         return Span((s0, e1)), self[s0:s1], self[s1:e0], self[e0:e1]
 
     def _is_fenced(self, x: int | Span) -> bool:
         """
-        Check if the given span intersects with any of the fenced spans. Uses numpy for speed.
-        NOTE: Fences are assumed to always be bigger than spans -- a ref span that *includes* a
-        fence will pass successfully.
+        Check if the given span intersects with any of the fenced spans. Uses numpy for performance.
+
+        NOTE: Fences are assumed to always be bigger than spans -- a ref span that *includes* one or
+        more fence delimeters will pass successfully. This should never come up for sane usecases.
+
+        Args:
+            x: The position or span to check.
+        Returns:
+            True if the position/span is within any fence, else False.
         """
         if self.fence_rgx is None:
             return False
@@ -257,6 +284,15 @@ class Buffer(pyd.BaseModel):
             return any(map(self._is_fenced, (x[0], x[1] - 1)))
 
     def _build_fences(self, text: str | None = None, offset: int = 0) -> SpanArray:
+        """
+        Build the fence spans for the given text, or the buffer's text if none is given.
+
+        Args:
+            text: The text to search for fences. If None, uses the buffer's text.
+            offset: An offset to add to all found spans.
+        Returns:
+            An array of fence spans with shape (n, 2).
+        """
         if self.fence_rgx is None:
             return no_spans()
 
@@ -327,11 +363,23 @@ class Buffer(pyd.BaseModel):
         b0: int = 0,
         b1: int = -1,
     ) -> Iterator[Pair]:
-        # II. Use a stack of "start" ranges to find matching pairs
-        starts: deque[Span] = deque()
+        """
+        Finds all the "pairs" of text delimiters that match the given regex, handling nesting and
+        self-closing delimiters for the caller. See pair_iterator() for full details.
+
+        Args:
+            rgx: The regex pattern defining the pair delimiters.
+            mode: 'all' by default, 'roots' to exclude nested pairs, or 'leaves' for the opposite.
+            b0: The positive, inclusive start bound for searching.
+            b1: The positive, exclusive end bound for searching, or -1 to search the whole text.
+        Yields:
+            Tuples of spans representing the start and end delimiters.
+        """
         pos = b0
         b1 = b1 if b1 != -1 else len(self)
+        starts: deque[Span] = deque()
 
+        # Iterate using the regex library's native positional search(), adjusting for modifications
         while match := rgx.search(self.text[0], pos):
             oldlen = len(self)
             params = match.groupdict()
@@ -339,23 +387,24 @@ class Buffer(pyd.BaseModel):
             s0, pos = span
 
             if pos > b1:
-                logfire.debug(f'Hit bound {b1}')
+                # I.i. Exit when we hit the end bound
                 break
 
             elif self._is_fenced(s0):
-                # Skip fenced regions
+                # I.ii. Ignore any matches within "fenced" regions
                 continue
 
             elif params.get('is_complete', None):
-                # Yield self-closing starts without an end attached
+                # II.i. Yield self-closing starts (e.g. '<span />')
                 yield span, Span((span[1], span[1]))
 
             elif params.get('start', ''):
-                # A start -- stack and continue
+                # II.ii. We've found the start of a new pair; record it and continue
                 starts.append(span)
                 continue
 
             elif len(starts) == 0:
+                # III.i. We've found an end, but don't have any recorded starts to match it to
                 if DEBUG:
                     print(f'ERROR -- unmatched ENDS for\n"""\n{self.text[0]}\n""":')
 
@@ -363,39 +412,48 @@ class Buffer(pyd.BaseModel):
                     f'Encountered unmatched end: "...{self.slice(max(0, s0 - 48), pos)}"'
                 )
             else:
-                # An end -- pop the most recent start from the stack to match
+                # III.ii. We've found an end, which matches the top-most element of the start stack
+                #         If the mode doesn't match our current nested depth, ignore the pair
                 start, end = (starts.pop(), span)
-
-                # Only yield if the mode matches our current depth
                 if mode == ('roots' if starts else 'leaves'):
                     continue
                 yield start, end
 
+            # IV. Adjust for any changes made by the caller to the buffer during iteration
             if delta := len(self) - oldlen:
                 pos += delta
                 b1 += delta
 
-        if len(starts) > 0:
+        # V. If we still have unmatched starts on the stack, raise an error
+        if remaining := len(starts):
+            err_text = f'Found {remaining} unmatched starts'
+            err_lines = (f'`{s0}`: "{self[s0:s1]}"{self[s1 : s1 + 16]}...' for s0, s1 in starts)
             if DEBUG:
-                print(f'ERROR -- unmatched starts for\n"""\n{self.text[0]}\n""":')
-                for s0, s1 in starts:
-                    print(f'\t@`{s0}`: "{self[s0 : s1 + 48]}..."')
-                print('')
-                assert len(starts) == 0
-            s0, s1 = starts[0]
-            assert len(starts) == 0, (
-                f'Left {len(starts)} unmatched starts, e.g. "{self[s0 : s1 + 20]}..."'
-            )
+                err_text = '\n'.join(
+                    [
+                        err_text + ', e.g.:',
+                        *(f'\t{s}' for s in err_lines),
+                        f'\n...in text:\n"""\n{self.text[0]}\n"""',
+                    ]
+                )
+            else:
+                err_text += f', e.g. {mi.first(err_lines)}'
+            raise ValueError(err_text)
 
     # ------------------
     # `x` Public Methods
     # ------------------
     @property
     def lines(self) -> list[str]:
+        """The number of distinct lines in the buffer."""
         return self.text[0].splitlines()
 
     @property
     def has_fences(self) -> bool:
+        """
+        Whether the buffer has any fences at the moment. To see if fences are configured, use
+        `bool(buffer.fence_rgx)` instead.
+        """
         return self.fences.size > 0
 
     def __str__(self) -> str:
@@ -427,15 +485,16 @@ class Buffer(pyd.BaseModel):
     def __bool__(self) -> bool:
         return len(self.text[0]) > 0
 
-    def __add__(self, other: 'Buffer | str') -> 'Buffer':
+    def __add__(self, other: Self | str) -> Self:
+        cls = type(self)
         if isinstance(other, Buffer):
-            return Buffer(text=[self.text[0] + other.text[0]])
+            return cls(text=[self.text[0] + other.text[0]])
         elif isinstance(other, str):
-            return Buffer(text=[self.text[0] + other])
+            return cls(text=[self.text[0] + other])
         else:
             raise TypeError(f'Cannot concatenate Buffer with {type(other)}')
 
-    def __iadd__(self, other: 'Buffer | str') -> 'Buffer':
+    def __iadd__(self, other: Self | str) -> Self:
         if isinstance(other, Buffer):
             self.text[0] += other.text[0]
         elif isinstance(other, str):
@@ -444,52 +503,65 @@ class Buffer(pyd.BaseModel):
             raise TypeError(f'Cannot concatenate Buffer with {type(other)}')
         return self
 
-    def set(self, text: str) -> 'Buffer':
-        self.text[0] = text
-        self.fences = self._build_fences()
-        return self
-
-    def insert(self, pos: int, new: str) -> None:
-        self._replace_span(Span(pos, pos), new)
-
     def replace(
         self,
         old: Span | tuple[int, int] | str | Pattern,
         new: str,
         count: int = 0,
         diff: int = 0,
-    ) -> 'Buffer':
+    ) -> Self:
         """
-        Replace the specified text with, updating internal trackers as necessary.
-        The most performant option is by far to directly pass indices.
+        Replace the specified text with the new text, updating internal trackers as necessary.
+        Prefer to pass a precalculated span when you have one to prevent rework.
 
         Args:
             old: The substring, span, or regex pattern to replace.
             new: The new text to insert.
-            count: The maximum number of replacements to make (0 for all). Invalid for spans.
-            diff: An optional static diff to apply to future fences.
+            count: The maximum number of replacements to make (0 for all). NOOP for spans.
+            diff: When set, indicates that any fences found within the old text are still there, but
+                have simply moved by this static amount.
         Returns:
             The modified Buffer instance (for convenient access and/or builder patterns).
         """
         if isinstance(old, Pattern):
-            self._replace_pattern(old, new, count)
+            self._replace_regex(old, new, count)
         elif isinstance(old, (tuple, Span)):
             self._replace_span(old, new, diff)
         else:
             self._replace_string(old, new, count, diff)
         return self
 
-    def drop(self, old: str | Span | tuple[int, int]) -> 'Buffer':
+    def insert(self, pos: int, new: str) -> None:
+        """Convenience setter for replacing an empty span with new text."""
+        self._replace_span(Span(pos, pos), new)
+
+    def drop(self, old: str | Span | tuple[int, int]) -> Self:
+        """Convenience setter for removing the specified text from the buffer."""
         self.replace(old, '')
         return self
 
-    def clear(self) -> 'Buffer':
+    def set(self, text: str) -> Self:
+        """Convenience setter for replacing the entire content of the buffer at once."""
+        self.text[0] = text
+        self.fences = self._build_fences()
+        return self
+
+    def clear(self) -> Self:
+        """Convenience setter for clearing the entire content of the buffer at once."""
         self.text[0] = ''
         if self.has_fences:
             self.fences = no_spans()
         return self
 
-    def strip(self, chars: str = '') -> 'Buffer':
+    def strip(self, chars: str = '') -> Self:
+        """
+        Performantly strip the buffer of leading/trailing characters.
+
+        Args:
+            chars: The characters to strip. Defaults to whitespace.
+        Returns:
+            The same (modified) Buffer instance.
+        """
         n_left = len(list(it.takewhile(lambda x: x in chars, self.text[0])))
         n_right = len(list(it.takewhile(lambda i: self[i] in chars, range(-1, -len(self), -1))))
         if n_left or n_right:
@@ -505,20 +577,32 @@ class Buffer(pyd.BaseModel):
         return self
 
     def match(self, rgx: Pattern, *args, **kwargs) -> Match | None:
+        """Wrapper for regex.match()."""
         return rgx.match(self.text[0], *args, **kwargs)
 
     def search(self, rgx: Pattern, *args, **kwargs) -> Match | None:
+        """Wrapper for regex.search()."""
         return rgx.search(self.text[0], *args, **kwargs)
 
     def findall(self, rgx: Pattern, *args, **kwargs) -> list[tuple[str, ...]]:
+        """Wrapper for regex.findall()."""
         return rgx.findall(self.text[0], *args, **kwargs)
 
     def sub(self, rgx: Pattern, new: str, count: int = 0) -> None:
+        """Direct wrapper for _replace_regex(), defined to match the base regex interface."""
         self.replace(rgx, new, count)
 
-    def apply(self, *functions: Callable[[str], str], b0: int = 0, b1: int = -1) -> 'Buffer':
+    def apply(self, *functions: Callable[[str], str], b0: int = 0, b1: int = -1) -> Self:
         """
-        Apply a function to the text in the buffer.
+        Functional utility for applying one or more functions to the text in this buffer.
+        Similar to stdlib's `map()`.
+
+        Args:
+            functions: One or more functions that take a string and return a string.
+            b0: The positive, inclusive start bound.
+            b1: The positive, exclusive end bound, or -1 to apply up to the end of the text.
+        Returns:
+            The modified Buffer instance (for convenient access and/or builder patterns).
         """
         if b1 == -1:
             b1 = len(self)
@@ -546,7 +630,8 @@ class Buffer(pyd.BaseModel):
             end = len(text)
         return Span(start, end)
 
-    def dedent(self) -> 'Buffer':
+    def dedent(self) -> Self:
+        """Dedents all text evenly, so that the line with the fewest spaces starts at column 0."""
         self.text[0] = textwrap.dedent(self.text[0])
         return self
 
@@ -592,6 +677,14 @@ class Buffer(pyd.BaseModel):
         """
         A subsection of pair_iterator's functionality that searches for one or more "hanging chads",
         representing unmatched delimiters of the given regex pair.
+        See `find_pair_match()` for details on pairs.
+
+        Args:
+            rgx: The regex pattern with the named groups 'start' and 'end'.
+            b0: The positive, inclusive start bound for searching.
+            b1: The positive, exclusive end bound for searching, or -1 to search the whole text.
+        Returns:
+            A tuple of two lists: (unmatched_starts, unmatched_ends)
         """
         pos = b0
         b1 = b1 if b1 != -1 else len(self)
@@ -624,6 +717,14 @@ class Buffer(pyd.BaseModel):
     ) -> tuple[Span, str, str, str] | None:
         """
         Find the matching start or end to the given pair member, returning None if nothing is found.
+
+        Args:
+            rgx: The regex pattern with the named groups 'start' and 'end'.
+            pos: The position of the known delimiter.
+            b0: The start bound for searching.
+            b1: The end bound for searching.
+        Returns:
+            (full_span, start_text, body_text, end_text) if a match is found, else None.
         """
         for span, start, body, end in self.pair_iterator(rgx, 'all', b0, b1):
             if pos in span:
@@ -637,7 +738,25 @@ class Buffer(pyd.BaseModel):
         b0: int = 0,
         b1: int = -1,
     ) -> Iterator[tuple[Span, str, str, str]]:
-        """ """
+        """
+        Finds all the "pairs" of text delimiters that match the given regex, handling nesting and
+        self-closing delimiters for the caller.
+
+        Like the other Buffer iterators, this method supports a read+write paradigm where callers
+        modify the buffer's text while they iterate over it. To make this possible, it is assumed
+        that the caller will only ever modify the last-yielded span of text during each iteration.
+
+        It also respects the 'fence' spans specified during initialization, such as code blocks in
+        Markdown files or character sets in regular expressions.
+
+        Args:
+            rgx: The regex pattern with the named groups 'start' and 'end'.
+            mode: 'all' by default, 'roots' to exclude nested pairs, or 'leaves' for the opposite.
+            b0: The positive, inclusive start bound for searching.
+            b1: The positive, exclusive end bound for searching, or -1 to search the whole text.
+        Yields:
+            Tuples of spans representing the start and end delimiters.
+        """
         yield from map(self._yield_pair, self.raw_pair_iterator(rgx, mode, b0, b1))
 
     def rgx_iterator(
@@ -647,6 +766,23 @@ class Buffer(pyd.BaseModel):
         b0: int = 0,
         b1: int = -1,
     ) -> Iterator[Match]:
+        """
+        Iterate over all matches of the given regex pattern in the buffer, allowing for in-place
+        modification of the buffer's text during iteration.
+
+        Like the other Buffer iterators, this method supports a read+write paradigm where callers
+        modify the buffer's text while they iterate over it. To make this possible, it is assumed
+        that the caller will only ever modify the last-yielded match of text during each iteration.
+
+        It also respects the 'fence' spans specified during initialization, such as code blocks in
+        Markdown files or character sets in regular expressions.
+
+        Args:
+            rgx: The regex pattern to search for (compiled or as a plain string).
+            recursive: If set, overlapping matches are also found.
+            b0: The positive, inclusive start bound for searching.
+            b1: The positive, exclusive end bound for searching, or -1 to search the whole text.
+        """
         if isinstance(rgx, str):
             rgx = self.RGXS.get(rgx, re.compile(rgx))
 
@@ -655,7 +791,6 @@ class Buffer(pyd.BaseModel):
         while match := rgx.search(self.text[0], pos):
             x0, x1 = match.span()
             if x1 > b1:
-                logfire.debug(f'Hit bound {b1}')
                 break
 
             # Record initial length

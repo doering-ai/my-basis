@@ -42,11 +42,9 @@ class Command(pyd.BaseModel):
     @property
     def positional_args(self) -> list[str]:
         """
-        Convert positional arguments to shell-safe strings.
+        Convert positional arguments to shell-safe values.
 
-        Args:
-            args: Iterable of arguments to convert.
-        Yields:
+        Returns:
             String representations with appropriate quoting.
         """
         ret = []
@@ -61,10 +59,8 @@ class Command(pyd.BaseModel):
     @property
     def named_args(self) -> list[str]:
         """
-        Convert keyword arguments to shell command flags.
+        Convert keyword arguments to shell-safe flags.
 
-        Args:
-            kwargs: Dictionary of keyword arguments.
         Returns:
             Formatted command-line flags (e.g., '--key value', '-k').
         """
@@ -174,3 +170,6 @@ class Command(pyd.BaseModel):
             (stdout or b'').decode().strip(),
             (stderr or b'').decode().strip(),
         )
+
+    async def __call__(self, verbose: bool = False) -> tuple[int, str, str]:
+        return await self.run(verbose=verbose)

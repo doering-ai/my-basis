@@ -2,10 +2,8 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import Iterable, Iterator, Literal, ClassVar, Any, Callable, Generator, Mapping, Self
-from collections import deque
+from typing import Iterable, Iterator, Literal, ClassVar, Any, Callable, Mapping, Self
 import functools as ft
-import itertools as it
 
 ### EXTERNAL
 import more_itertools as mi
@@ -15,29 +13,17 @@ from regex import Match, Pattern, RegexFlag
 
 ### INTERNAL
 from ..utils import ut
-from ..types import Span, Buffer
-from .GroupKind import GroupKind, GROUP_KIND_MAP
+from ..types import Buffer
+from .meta import Atom, Atoms, Branches, Block, GroupKind, META_RGXS
 from .MatchData import MatchData
 from .ParseData import ParseData
 
 ############
 ### DATA ###
 ############
-DEBUG = False
-re.DEFAULT_VERSION = re.VERSION1
-
-NO_KIND = GroupKind(0)
-NO_FLAG = RegexFlag(0)
-
-# General type aliases
-Params = dict[str, str]
-Captures = dict[str, list[str]]
-
-# Regex-specific type aliases
-Atom = str
-Atoms = tuple[str, ...]
-Branches = list[Atoms]
-Block = tuple[Atoms, Atoms, Atoms]
+# --------------
+# Public Aliases
+# --------------
 RgxParser = (
     str  # base case: Simply renames the output
     | Callable[[str], str]  # 1st case: returns some subset to the same name
@@ -46,28 +32,28 @@ RgxParser = (
 )
 
 RgxTup = tuple[str, 'RgxList'] | tuple[str, str, 'RgxList', str]
-RgxList = Iterable['RgxVal']
+RgxList = list['RgxVal']
 RgxVal = str | RgxList | RgxTup | Pattern | dict
 RgxDef = (
-    str
-    | tuple[str, RgxParser]  # Raw/simple content
-    | RgxTup
-    | tuple[RgxTup, RgxParser]  # Single piece of uncompiled content
-    | RgxList
-    | tuple[RgxList, RgxParser]  # Series of uncompiled content
-    | Pattern
-    | tuple[Pattern, RgxParser]  # Compiled content
+    # Raw/simple content
+    (str | tuple[str, RgxParser])
+    # Single piece of uncompiled content
+    | (RgxTup | tuple[RgxTup, RgxParser])
+    # Series of uncompiled content
+    | (RgxList | tuple[RgxList, RgxParser])
+    # Precompiled content
+    | (Pattern | tuple[Pattern, RgxParser])
 )
 
 # A buffer built to hold Regex patterns
-RgxBuf = ft.partial(Buffer.new, fence_rgxs=['arrays'])
+RegexBuffer = ft.partial(Buffer.new, fence_rgxs=['arrays'])
 
-FLAGS = r'(?P<flags>-?[afiLmsuxwif]+|[afiLmsuxwif]+-[afiLmsuxwif]+)'
-NO_ESC = r'(?<!^\\|[^\\]\\)'
-NON_ESC = r'(?:^|[^\\]|\\\\)'
-NO_SET = rf'(?<!{NON_ESC}\[[^\]]{{0,8}})'
-NO_SET_SUF = rf'(?!\]|[^\[]{{0,8}}{NON_ESC}\])'
-QUANT = r'(?>[*+]|\{\d+(?:,\d*)?\})?[?+]?'
+
+# ---------
+# Constants
+# ---------
+DEBUG = False
+NO_FLAG = RegexFlag(0)
 
 
 ############
@@ -96,67 +82,43 @@ class RegexStore(pyd.BaseModel):
         - Lists for sequential composition of groups.
     """
 
-    # Meta Regexes
-    RGXS: ClassVar[dict[str, Pattern]] = ut.regex_dict(
-        dict(
-            struct_mark=''.join(
-                [
-                    r'(?P<divis><\|>|\||\[.*?\])?',
-                    r'(?P<group>[:>&|]|<?[=!]|P<\w+>)?',
-                    rf'{FLAGS}?(?P<quant>{QUANT})',
-                ]
-            ),
-            set=NO_ESC + ut.multi_rgx(r'(?P<start>\[)', rf'(?P<end>\]{QUANT})'),
-            group=NO_ESC
-            + ut.multi_rgx(
-                rf'(?P<start>\((?:\?(?>[:>&|]|<?[=!]|P[=<]|{FLAGS}:)?)?)',
-                rf'(?P<end>\){QUANT})',
-            ),
-            inline_flags=rf'{NO_ESC}\(\?{FLAGS}:',
-            atom=NO_ESC
-            + ut.multi_rgx(
-                r'\\'
-                + ut.multi_rgx(
-                    r'\d+|g<\d+>',
-                    r'L<\w+>',
-                    r'[Pp]\{[[:alpha:]]+\}',
-                    r'.',
-                ),
-                r'(?<!\[)\[(?s:[^\\\[\]]+|\\.|\[.+?\])*\](?!\])',
-                r'[^\\]',
-            )
-            + QUANT,
-            quant=NO_ESC + r'(?:\?|(?:[*+]|\{\d+(?:,\d*)?\})[?+]?)$',
-            set_operator=rf'^\[?(?:\^|[^\[].*?{NO_ESC}(?>--?|~~|&&|\|\|))',
-            special_characters=NO_ESC + r'([+*?()|.^$])',
-        )
-    )
-    NO_ESC: ClassVar[str] = NO_ESC
+    # ----------------
+    # Meta Expressions
+    # ----------------
+    META_RGXS: ClassVar[dict[str, re.Pattern]] = META_RGXS
 
-    # Uncompiled strings, ready for reuse
+    # --------------
+    # Public Members
+    # --------------
+    # Uncompiled expressions, ready for reuse
     definitions: dict[str, str] = {}
 
-    # Compiled patterns, ready to be invoked
+    # Compiled expressions, ready for invocation
     patterns: dict[str, Pattern] = {}
 
-    # Functions for handling groups we've stored, dropping unnecessary info
+    # Expression-specific parsers of match data
     parsers: dict[str, RgxParser] = {}
-
     routers: dict[str, list[str]] = {}
 
-    # Convenience options
-    init_formatter: Callable[..., str] | None = None
-    formatter: Callable[..., str] | None = None
-    separator: str = r' *'
-    force_named_groups: bool = False
-
-    # Autostrip behavior
-    autostrip_spaces: bool = True
-    autostrip_brackets: bool = False
-    autostrip_commas: bool = False
-
-    # Caches/excluded fields
+    # Private Members
     strip: Callable[[str], str] = pyd.Field(default=lambda x: x, exclude=True)
+
+    # -------------
+    # Store Options
+    # -------------
+    class Options(pyd.BaseModel):
+        # Convenience options
+        init_formatter: Callable[..., str] | None = None
+        formatter: Callable[..., str] | None = None
+        separator: str = r' *'
+        force_named_groups: bool = False
+
+        # Autostrip behavior
+        autostrip_spaces: bool = True
+        autostrip_brackets: bool = False
+        autostrip_commas: bool = False
+
+    options: Options = pyd.Field(default_factory=Options)
 
     # -------------------
     # `0` Initial Methods
@@ -164,9 +126,9 @@ class RegexStore(pyd.BaseModel):
     @classmethod
     def new(
         cls,
-        options: dict[str, Any] | None = None,
+        options: dict[str, Any] | Options | None = None,
         imports: list[tuple[Self, Iterable[str]]] | None = None,
-        **params: RgxDef | Any,
+        **definitions: RgxDef | Any,
     ) -> Self:
         """
         This is the primary interface for creating new stores, allowing callers to specify their
@@ -175,17 +137,19 @@ class RegexStore(pyd.BaseModel):
         Args:
             options: A dictionary of store-level options to apply as member variables.
             imports: References to patterns contianed in existing stores to be included in this one
-            **parms: The named pattern specifications (see RgxDef) that make up the new store.
+            **definitions: The named pattern specifications (see RgxDef) that make up the new store.
         Returns:
             A new RegexStore instance with the given patterns compiled into execution-ready objects.
         """
-        if options is None:
-            options = {}
-        if imports is None:
-            imports = []
-        store = cls(**options)
+        # I. Initialize the store with the requested options before any compilation is done
+        if not options:
+            options = cls.Options()
+        elif isinstance(options, dict):
+            options = cls.Options(**options)
+        store = cls(options=options)
 
-        for source, names in imports:
+        # II. Import the requested patterns from other stores
+        for source, names in imports or []:
             for name in source.find_all_invocations(set(names)):
                 store.definitions[name] = source.definitions[name]
                 store.patterns[name] = source.patterns[name]
@@ -193,14 +157,17 @@ class RegexStore(pyd.BaseModel):
                     store.parsers[name] = source.parsers[name]
 
         if store.init_formatter is not None:
-            # I. Format the given args (of any type) if told to, without parsers
-            for name, param in params.items():
-                val = store.init_formatter(param) if not isinstance(param, Pattern) else param
+            # III.i. Preformat the given definitions with the user-defined formatter function
+            definitions = {
+                name: (store.init_formatter(dfn) if not isinstance(dfn, Pattern) else dfn)
+                for name, dfn in definitions.items()
+            }
+            for name, val in definitions.items():
                 store.define(name, val, None)
         else:
-            # II. Set the values of the store without formatting, but perhaps with Parsers
-            for name, param in params.items():
-                store[name] = param
+            # III.ii. Just set the values of the store
+            for name, _def in definitions.items():
+                store[name] = _def
 
         return store
 
@@ -232,6 +199,24 @@ class RegexStore(pyd.BaseModel):
     # -------------------
     # `-` Private Methods
     # -------------------
+    def _read_match(self, match: Match) -> tuple[dict[str, str], dict[str, list[str]]]:
+        """
+        Extract and autostrip all captured groups from a match object.
+
+        Args:
+            match: Regex match object to read.
+        Returns:
+            Tuple of (params dict with last values, captures dict with all values).
+        """
+        data, captures = {}, {}
+        if match is not None and (src := match.capturesdict().items()):
+            items = [(key, stripped) for key, vals in src if (stripped := self.autostrip(vals))]
+            for key, values in items:
+                data[key] = values[-1]
+                captures[key] = values
+
+        return data, captures
+
     @classmethod
     def _tree_print(cls, text: str, depth: int = 0) -> str:
         """
@@ -291,13 +276,14 @@ class RegexStore(pyd.BaseModel):
         Returns:
             Complete set of all groups transitively invoked by the initial set.
         """
-        buffer = RgxBuf()
+        buffer = RegexBuffer()
         new_groups: set[str] = set()
         for existing_group in groups_used:
             buffer.set(self.definitions[existing_group])
-            for _, _, name, _, _ in self.group_iterator(buffer, mask=GroupKind.INVOC):
-                if name not in groups_used:
-                    new_groups.add(name)
+            group_names = {
+                name for _, _, name, _, _ in self.group_iterator(buffer, mask=GroupKind.INVOC)
+            }
+            new_groups |= group_names - groups_used
 
         if new_groups:
             return groups_used | self.find_all_invocations(new_groups)
@@ -319,9 +305,9 @@ class RegexStore(pyd.BaseModel):
             - quantifier: Quantifier string (e.g., '?', '+', '*')
         """
         mark = mark.strip()
-        match = self.RGXS['struct_mark'].fullmatch(mark)
-        assert match, f'Invalid mark: {mark}, {self.RGXS["struct_mark"].pattern}'
-        data, _ = self.read_match(match)
+        match = META_RGXS['struct_mark'].fullmatch(mark)
+        assert match, f'Invalid mark: {mark}, {META_RGXS["struct_mark"].pattern}'
+        data, _ = self._read_match(match)
 
         sep = match['divis'] or ''
         group = data.pop('group', '')
@@ -346,77 +332,7 @@ class RegexStore(pyd.BaseModel):
 
         return kind, start, sep, quant
 
-    @classmethod
-    def parse_group_kind(cls, group: str) -> GroupKind:
-        """
-        Classify the given regex group.
-
-        Args:
-            group: A rgx group snippet; does not need to compile, but must be valid syntactically.
-        Returns:
-            The corresponding GroupKind enum value, or GroupKind(0) if no match.
-        """
-        return next(
-            (kind for prefix, kind in reversed(GROUP_KIND_MAP.items()) if group.startswith(prefix)),
-            GroupKind(0),
-        )
-
-    @classmethod
-    def set_iterator(cls, text: Buffer | str | list[str]) -> Iterator[tuple[Span, str, str]]:
-        """
-        Iterate over character sets in the given pattern (e.g. `[A-Za-z]`).
-
-        Args:
-            text: Text to search for character sets.
-        Yields:
-            Tuples of (span, body, quantifier) for each character set found.
-        """
-        if isinstance(text, list):
-            text = ''.join(text)
-        if isinstance(text, str):
-            text = Buffer.new(text, no_fence=True)  # NOTE: Not a RgxBuf, so no fence_rgxs
-
-        for span, _, body, end in text.pair_iterator(cls.RGXS['set'], mode='roots'):
-            yield span, body, end[1:]
-
-    @classmethod
-    def group_iterator(
-        cls,
-        text: Buffer | str | list[str],
-        mask: GroupKind = NO_KIND,
-        mode: Literal['all', 'roots', 'leaves'] = 'all',
-    ) -> Iterator[tuple[Span, GroupKind, str, str, str]]:
-        """
-        Iterate over all groups in the given pattern (e.g. `(?:abc)`).
-
-        Args:
-            text: Text to search for groups (will be converted to Buffer).
-            mask: Optional GroupKind filter to yield only matching group types.
-            mode: 'all' by default, 'roots' to exclude nested groups, or 'leaves' for the opposite.
-        Yields:
-            Tuples of (span, kind, name, body, quantifier) for each group found.
-        """
-        # Cast the input text to a charset-ignoring buffer
-        if isinstance(text, list):
-            text = RgxBuf(''.join(text))
-        elif isinstance(text, str):
-            text = RgxBuf(text)
-        else:
-            assert 'arrays' in text.fence_rgxs, f'Invalid buffer: {text.fence_rgxs}'
-
-        for span, start, body, end in text.pair_iterator(cls.RGXS['group'], mode):
-            kind = cls.parse_group_kind(start)
-            if mask and kind not in mask:
-                continue
-
-            if kind in GroupKind._NAMED:
-                name = body.split('>', 1)[0]
-                body = body[len(name) + 1 :]
-            else:
-                name = ''
-            yield span, kind, name, body, end[1:]
-
-    def _validate_params(
+    def _validate_automatch_params(
         self,
         patterns: str | Iterable[str],
         text: str | Buffer,
@@ -443,468 +359,7 @@ class RegexStore(pyd.BaseModel):
             f'Invalid tuple: {data}'
         )
 
-    @staticmethod
-    def _greatest_common_prefix(*args: Atoms) -> Atoms:
-        """Finds the longest common prefix present in all of the given atoms."""
-        if not args or not all(map(len, args)):
-            return tuple()
-        elif len(args) == 1:
-            return args[0]
-
-        return tuple(mi.longest_common_prefix(args))
-
-    @staticmethod
-    def _greatest_common_suffix(*args: Atoms) -> Atoms:
-        """Finds the longest common suffix present in all of the given atoms."""
-        if not args or not all(map(len, args)):
-            return tuple()
-        elif len(args) == 1:
-            return args[0]
-
-        return tuple(reversed(tuple(mi.longest_common_prefix(map(reversed, args)))))
-
-    @classmethod
-    def _apply_quantity(cls, text: str, quantity: str) -> str:
-        """
-        Create a version of the given pattern that has the request quantifier applied.
-        Handles patterns that need to be wrapped before a quantifier is applied.
-
-        Args:
-            text: The regex pattern body to quantify.
-            quantity: The quantifier string to apply (e.g., '?', '+', '*', '{2,5}').
-        Returns:
-            The quantified regex pattern string.
-        """
-        # I. Null case
-        if not quantity:
-            return text
-        elif cls._is_atomic(text):
-            if cls._is_optional(text):
-                # Edge case: double-applying optionality
-                if quantity == '?':
-                    return text
-            elif not cls._is_quantified(text):
-                return f'{text}{quantity}'
-
-        # Default: Wrap in group
-        return f'(?:{text}){quantity}'
-
-    @classmethod
-    def _clean_branches(cls, branches: Branches, quantity: str) -> tuple[Branches, bool]:
-        """
-        Clean the given branches by removing empty branches and combining optional ones.
-
-        Args:
-            branches: The list of atom sequences representing alternative branches.
-            quantity: The quantifier string applied to the entire group.
-        Returns:
-            0: The optimized list of branches.
-            1: Whether the containing group should be marked as optional.
-        """
-        to_drop: set[int] = set()
-        inferred_optional = False
-        for i, branch in enumerate(branches):
-            if (n := len(branch)) == 0 or not any(branch):
-                # I.i. Empty branch -- whole thing is now optional
-                to_drop.add(i)
-                inferred_optional = True
-            elif n == 1:
-                # I.ii. Single atom -- check for optionality
-                atom = branch[0]
-                _q = cls._quantify(atom)
-                if _q == '?':
-                    inferred_optional = True
-                    branches[i] = (atom[:-1],)
-                elif quantity in ('', '?'):
-                    if _q.startswith('{0'):
-                        inferred_optional = True
-                        branches[i] = (atom[: -len(_q)] + '{1' + _q[2:],)
-                    elif _q.startswith('*'):
-                        inferred_optional = True
-                        branches[i] = (atom[: -len(_q)] + f'+{_q[1:]}',)
-            else:
-                # I.iii. Look for a copy of this branch w/ a prefix
-                candidates = [
-                    j for j, j_br in enumerate(branches) if j not in to_drop and len(j_br) == n + 1
-                ]
-                if (j := next((j for j in candidates if branches[j][1:] == branch), -1)) != -1:
-                    to_drop.add(i)
-                    j_br = branches[j]
-                    branches[j] = (cls._apply_quantity(j_br[0], '?'), *j_br[1:])
-
-        # II. Combine the branches into one atomic group
-        return ut.drop_at(branches, to_drop), inferred_optional
-
-    @classmethod
-    def _render_branches(
-        cls,
-        branches: Branches,
-        has_suffix: bool = False,
-        quantity: str = '',
-    ) -> str:
-        """
-        Render the given branches into a regex group, applying optimizations where possible.
-
-        Args:
-            branches: The list of atom sequences representing alternative branches.
-            has_suffix: Whether parent context implies a shared suffix exists across all branches.
-            quantity: The quantifier string to apply to the entire group.
-        Returns:
-            A pattern representing the properly combined & wrapped branches.
-        """
-        # I. Clean the branch list, identifying optional branches and pre-combining where possible
-        branches, inferred_optional = cls._clean_branches(branches, quantity)
-        assert branches, 'Empty branches passed'
-
-        # II. Determine whether we can safely use an atomic grouping here
-        if len(branches) == 1:
-            body = ''.join(branches[0])
-        else:
-            mark = cls._choose_joining_mark(branches, has_suffix)
-            body = f'(?{mark}{"|".join(map("".join, branches))})'
-
-        # III. Apply quantity mark & optionality to the group, and return
-        if inferred_optional:
-            body = cls._apply_quantity(body, '?')
-        if quantity:
-            body = cls._apply_quantity(body, quantity)
-
-        return body
-
-    @classmethod
-    def _choose_joining_mark(cls, branches: Branches, has_suffix: bool = False) -> str:
-        """
-        Decides whether the given branches can be safely grouped in an atomic group.
-
-        Args:
-            branches: The list of atom sequences representing alternative branches.
-            has_suffix: Whether parent context implies a shared suffix exists across all branches.
-        Returns:
-            The group mark to use (':' for regular, '>' for atomic).
-        """
-        assert branches, 'Empty param.'
-
-        for branch in branches:
-            # Look for sets if we have a suffix
-            for atom in branch if has_suffix else (branch[0],):
-                if atom[0] == '[' or cls._is_quantified(atom) or cls._is_complex_group(atom):
-                    return ':'
-        return '>'
-
-    @classmethod
-    def _join_atoms(cls, atoms: list[Atom], has_suffix: bool = False) -> Atom:
-        """
-        Join the given simple branching atoms into an optimized (ideally atomic) regex pattern.
-
-        Args:
-            atoms: A list of valid atom strings.
-            has_suffix: Whether parent context implies a shared suffix exists across all atoms.
-        Returns:
-            The optimized regex pattern string.
-        """
-        # I. Determine if the resulting atom should be optional
-        quantity = ''
-        for i, atom in enumerate(atoms):
-            if cls._is_optional(atom):
-                quantity = '?'
-                atoms[i] = atom[:-1]
-
-        # II. Split into simple atoms and sets
-        branches, simple_atoms = map(list, mi.partition(cls._is_simple, atoms))
-
-        if (n_simple := len(simple_atoms)) == 0:
-            pass
-        elif n_simple == 1:
-            branches.insert(0, simple_atoms[0])
-        else:
-            chars, sets = map(list, mi.partition(cls._is_simple_set, simple_atoms))
-            set_chars = [
-                _atom for _set in sets for _atoms in cls.split_set(_set) for _atom in _atoms
-            ]
-            set_body = ''.join(sorted({*set_chars, *chars}))
-            branches.insert(0, f'[{set_body}]')
-
-        # III. Render the resulting set alternated w/ the complex branches
-        return cls._render_branches([(b,) for b in branches], has_suffix, quantity)
-
-    @classmethod
-    def _group_by_prefix(cls, branches: Branches) -> Generator[Branches, None, None]:
-        """Group the given branches by their common prefixes (if any exist)."""
-        yield from map(
-            list,
-            mi.split_when(branches, lambda lhs, rhs: not cls._greatest_common_prefix(lhs, rhs)),
-        )
-
-    @staticmethod
-    def _block_suffix(block: Block) -> Atoms:
-        """Determines whether the given block has a suffix, and returns it if so."""
-        return block[2] if block[0] else block[1]
-
-    @classmethod
-    def _group_by_suffix(cls, blocks: list[Block]) -> Generator[list[Block], None, None]:
-        """Group the given blocks by their common suffixes (if any exist)."""
-        yield from map(
-            list,
-            mi.split_when(
-                blocks, lambda *args: not cls._greatest_common_suffix(*map(cls._block_suffix, args))
-            ),
-        )
-
-    @classmethod
-    def _construct_branches(cls, block: Branches) -> Block:
-        """
-        Construct a block of branches by factoring out common prefixes and suffixes.
-        """
-        # 0. Return immediately if this is a single branch, with no prefix
-        if len(block) == 1:
-            return (tuple(), block[0], tuple())
-
-        # I. Determine the prefix for this block, which is guaranteed to exist
-        prefix = cls._greatest_common_prefix(*block)
-        assert (n_pre := len(prefix)), f'No prefix found for: {block}'
-        block = [branch[n_pre:] for branch in block]
-
-        # II. Check for a shared suffix
-        if suffix := cls._greatest_common_suffix(*block):
-            block = [branch[: -len(suffix)] for branch in block]
-
-        # III. Recursively construct children branches
-        content = cls.construct_tree(block, has_suffix=bool(suffix))
-        return (prefix, (content,), suffix)
-
-    @classmethod
-    def _render_blocks(cls, section: list[Block]) -> Atoms:
-        assert (n := len(section)), 'Iterated to empty section.'
-        # I. Simple/base case is that each block is handled separately
-        if n == 1:
-            prefix, body, suffix = section[0]
-            return prefix + body + suffix
-
-        # II. When adjacent blocks share (part of) their suffixes, handle here
-        shared_suffix = cls._greatest_common_suffix(*map(cls._block_suffix, section))
-        assert shared_suffix, f'Somehow collected multiple no-suffix sections: {section}'
-        branches = [
-            (prefix + body + suffix)[: -len(shared_suffix)] for prefix, body, suffix in section
-        ]
-
-        # III. Render the final result with the suffix at the end
-        return (cls._render_branches(branches, True), *shared_suffix)
-
-    @classmethod
-    def construct_tree(cls, branches: Branches, has_suffix: bool = False) -> str:
-        """
-        Construct an optimized regex from branches by factoring common prefixes and suffixes.
-
-        This method builds an efficient regex pattern by identifying and extracting common
-        prefixes and suffixes from multiple branches, minimizing redundancy in the result.
-
-        Args:
-            branches: Tuple of atom sequences representing alternative branches.
-            has_suffix: Whether parent context implies a shared suffix exists.
-        Returns:
-            Optimized regex string with factored common elements.
-        """
-        # 0. Sort and de-dupe
-        branches = list(sorted(set(branches)))
-
-        # I. Shortcut for simple cases
-        if len(branches) == 1:
-            assert (branch := branches[0]), 'Just one empty branch passed in.'
-            ret = ''.join(branch)
-        elif max(*map(len, branches)) == 1:
-            ret = cls._join_atoms([(branch[0] if branch else '') for branch in branches])
-        else:
-            # II. Separate the sorted branches into sections that share prefixes
-            blocks = list(map(cls._construct_branches, cls._group_by_prefix(branches)))
-
-            # III. Render each block, factoring out any shared suffixes
-            clauses = list(map(cls._render_blocks, cls._group_by_suffix(blocks)))
-            ret = cls._render_branches(clauses, has_suffix)
-
-        return ret
-
-    @classmethod
-    @ft.lru_cache(maxsize=64)
-    def _is_group(cls, atom: str) -> bool:
-        return len(atom) > 0 and atom[0] == '('
-
-    @classmethod
-    @ft.lru_cache(maxsize=64)
-    def _is_complex_group(cls, atom: str) -> bool:
-        if not cls._is_group(atom):
-            return False
-        kind, _, _, _, quant = cls._parse_group(atom)
-        return kind not in GroupKind._SIMPLE or quant not in ('', '?')
-
-    @classmethod
-    @ft.lru_cache(maxsize=64)
-    def _is_simple(cls, atom: str) -> bool:
-        # Don't include groups or quantified values
-        return len(atom) > 0 and not (
-            cls._is_group(atom)
-            or cls._is_quantified(atom)
-            or (atom[0] == '[' and not cls._is_simple_set(atom))
-        )
-
-    @classmethod
-    @ft.lru_cache(maxsize=64)
-    def _is_simple_set(cls, atom: str) -> bool:
-        if len(atom) < 3:
-            return False
-        return bool(atom[0] == '[' and not cls.RGXS['set_operator'].search(atom))
-
-    @classmethod
-    def _quantify(cls, atom: str) -> str:
-        if cls._is_atomic(atom) and len(atom) >= 2 and (match := cls.RGXS['quant'].search(atom)):
-            return match[0]
-        return ''
-
-    @classmethod
-    @ft.lru_cache(maxsize=64)
-    def _is_quantified(cls, atom: str) -> bool:
-        return cls._quantify(atom) not in ('', '?')
-
-    @classmethod
-    @ft.lru_cache(maxsize=64)
-    def _is_optional(cls, atom: str) -> bool:
-        return cls._quantify(atom) == '?'
-
-    @classmethod
-    def _is_split(cls, pattern: str | Atoms) -> bool:
-        if isinstance(pattern, str):
-            return any(atom == '|' for atom in cls._atomize_iter(pattern))
-        else:
-            return '|' in pattern
-
-    @classmethod
-    def _is_atomic(cls, pattern: Atom | Atoms) -> bool:
-        if isinstance(pattern, str):
-            return next((len(v) == len(pattern) for v in cls._atomize_iter(pattern)), False)
-        else:
-            return len(pattern) == 1
-
-    @classmethod
-    def split_group(cls, grp_atom: Atom, recursive: bool = False) -> tuple[Atoms, ...]:
-        branches: tuple[Atoms, ...] = ((grp_atom,),)
-        if cls._is_group(grp_atom):
-            kind, start, flags, body, quant = cls._parse_group(grp_atom)
-
-            if kind in GroupKind._SPLITTABLE and quant in ('', '?'):
-                branches = cls._atomic_split(body, recursive)
-                if quant == '?':
-                    branches = (tuple(),) + branches
-                if flags:
-                    flag_group = (f'(?{flags})',)
-                    branches = tuple(
-                        (flag_group + branch) if branch else branch for branch in branches
-                    )
-            elif quant == '?':
-                branches = (tuple(), (grp_atom[:-1],))
-
-        return branches
-
-    @classmethod
-    @ft.lru_cache(maxsize=64)
-    def split_set(cls, set_atom: Atom) -> tuple[Atoms, ...]:
-        is_simple, body, quant = cls._parse_set(set_atom)
-        if not is_simple or quant not in ('', '?'):
-            return ((set_atom,),)
-
-        branches = tuple((atom,) for atom in cls.atomize(body, escape=True))
-        return (tuple(), *branches) if quant == '?' else branches
-
-    @classmethod
-    def _split_atom(cls, atom: Atom) -> tuple[Atoms, ...]:
-        if cls._is_group(atom):
-            return cls.split_group(atom, True)
-        elif cls._is_simple_set(atom):
-            return cls.split_set(atom)
-        elif cls._is_optional(atom):
-            return (tuple(), (atom[:-1],))
-        else:
-            return ((atom,),)
-
-    @classmethod
-    def _atomic_split(
-        cls, pattern: str | Atoms | list[str], recursive: bool = False, max_split: int = 4
-    ) -> tuple[Atoms, ...]:
-        # 0. Handle edge cases and different call formats
-        if not pattern:
-            return tuple()
-        elif isinstance(pattern, list):
-            return tuple(block for p in pattern for block in cls._atomic_split(p, recursive))
-        elif isinstance(pattern, tuple):
-            items = pattern
-        else:
-            items = cls.atomize(pattern)
-
-        # I. Split into initial groupings based on hard branches
-        blocks: deque[Atoms] = deque()
-        separators = [i for i, c in enumerate(items) if c == '|'] + [len(items)]
-        for j, end in enumerate(separators):
-            start = separators[j - 1] + 1 if j else 0
-            block: Atoms = items[start:end]
-
-            # I.i. Recursively split up to one set or group to create multiple branches
-            if recursive:
-                n_split = 0
-                branch_list: deque[tuple[Atoms, ...]] = deque()
-                for atom in block:
-                    if n_split < max_split and len(branches := cls._split_atom(atom)) > 1:
-                        branch_list.append(branches)
-                        n_split += 1
-                    else:
-                        branch_list.append(((atom,),))
-
-                if n_split:
-                    blocks.extend(
-                        [
-                            tuple(mi.collapse(permutation))
-                            for permutation in it.product(*branch_list)
-                        ]
-                    )
-                    continue
-
-            # I.ii. Otherwise, just return this block as one branch
-            blocks.append(block)
-
-        return tuple(sorted(set(blocks)) if recursive else blocks)
-
-    @classmethod
-    def split(cls, pattern: str | Atoms | list[str], recursive: bool = False) -> list[str]:
-        return list(map(''.join, cls._atomic_split(pattern, recursive)))
-
-    @classmethod
-    def _parse_set(cls, atom: str) -> tuple[bool, str, str]:
-        body, quant = atom[1:].rsplit(']', 1)
-        return cls._is_simple_set(atom), body, quant
-
-    @classmethod
-    def _parse_group(cls, atom: str) -> tuple[GroupKind, str, str, str, str]:
-        # I. Parse the group and determine its type
-        ret = next(cls.group_iterator(atom, mode='roots'), None)
-        assert ret, f'Invalid atom: {atom}'
-
-        span, kind, cname, body, quant = ret
-        assert span == (0, len(atom)), f'Invalid atom: {atom}'
-
-        start = atom[: atom.index(body)]
-
-        # II. Expand out inline flags
-        flags = ''
-        if kind == GroupKind.FLAGS and start.endswith(':'):
-            flags = start[2:-1]
-            start = '(?:'
-            kind = GroupKind.PLAIN
-
-        return kind, start, flags, body, quant
-
-    @classmethod
-    def _parse_tuple(
-        cls,
-        data: RgxTup,
-        formatter: Callable[[str], str] | None = None,
-    ) -> tuple[str, RgxList, str, str]:
+    def _parse_tuple(self, data: RgxTup) -> tuple[str, RgxList, str, str]:
         if (n := len(data)) == 2:
             cls._validate_tuple(data, (str, list))
             mark, children = data  # type: ignore
@@ -918,42 +373,15 @@ class RegexStore(pyd.BaseModel):
         else:
             raise ValueError(f'Invalid tuple: {data}')
 
-    @classmethod
-    def _atomize_iter(cls, pattern: str) -> Generator[str, None, None]:
-        n = len(pattern)
-        _x = 0
-
-        for (x0, x1), *_ in cls.group_iterator(pattern, mode='roots'):
-            if x0 > _x:
-                # Yield any atoms between this and the last group
-                yield from cls.RGXS['atom'].findall(pattern[_x:x0])
-            if x1 > x0:
-                # Yield this group
-                yield pattern[x0:x1]
-            _x = x1
-
-        # Yield any atoms after the last group
-        if _x < n:
-            yield from cls.RGXS['atom'].findall(pattern[_x:])
-
-    @classmethod
-    @ft.lru_cache(maxsize=64)
-    def atomize(cls, pattern: str, escape: bool = False) -> Atoms:
+    @staticmethod
+    def _collapse_empty_sections(delims: list[str], sections: list[str]) -> None:
         """
-        Break a regex pattern into its atomic components.
+        Remove any empty sections in the given delimited fullsplit(). Modifies arguments.
 
         Args:
-            pattern: Regex pattern string to atomize.
-            escape: Whether to escape special regex characters.
-        Returns:
-            Tuple of atomic regex components (characters, groups, character sets, etc.).
+            delims: List of delimiters.
+            sections: List of sections.
         """
-        if escape:
-            pattern = cls.RGXS['special_characters'].sub(r'\\\1', pattern)
-        return tuple(cls._atomize_iter(pattern))
-
-    @staticmethod
-    def _collapse_empty_splits(delims: list[str], sections: list[str]) -> None:
         empty_idxs = list(mi.locate(sections, lambda x: len(x) == 0))
         for i in reversed(empty_idxs):
             if i == len(sections) - 1:
@@ -1033,6 +461,53 @@ class RegexStore(pyd.BaseModel):
     # -------------------
     # `+` Primary Methods
     # -------------------
+    def parse(self, match: Match | None, pattern_name: str = '') -> MatchData:
+        """
+        Parse a match object, applying registered parsers and cleaning results.
+
+        Reads the match, applies any parsers registered for captured groups, removes
+        hidden fields (those starting with '_'), and returns a clean MatchData object.
+
+        Args:
+            match: Match object to parse, or None for empty MatchData.
+            pattern_name: Optional name of the pattern that produced this match.
+        Returns:
+            MatchData object with parsed captures and optional match reference.
+        """
+        # I. Read the match object, dropping any empty values
+        if match is None:
+            return MatchData()
+
+        _, captures = self._read_match(match)
+        if parseable := list(filter(self.parsers.__contains__, captures.keys())):
+            pd = ParseData(captures=captures, starts={f: match.starts(f) for f in captures.keys()})
+            for field, parser in [(f, self.parsers[f]) for f in parseable]:
+                pd.set_field(field)
+
+                if isinstance(parser, str):
+                    pd.interleave(pd.field, parser, list(zip(pd.start, pd.value, strict=True)))
+                elif isinstance(parser, dict):
+                    pd.apply_dict_parser(parser, self.patterns[field])  # type: ignore
+                else:
+                    pd.apply_func_parser(parser)
+            captures = pd.captures
+
+        # IV. Removed unnecessary "hidden" values
+        hidden_fields = [key for key in captures.keys() if key[0] == '_' and key != pattern_name]
+        if 0 < len(hidden_fields) < len(captures):
+            for field in hidden_fields:
+                del captures[field]
+
+        for field in [k for k, v in captures.items() if not v or not any(v)]:
+            del captures[field]
+
+        if pattern_name in captures and len(captures) > 1 and pattern_name not in self.parsers:
+            del captures[pattern_name]
+
+        # V. Clean and return a datadict and a capturedict
+        ret = MatchData(data=captures, match=match)
+        return ret
+
     def compose(self, data: RgxVal, sep: str | None = None) -> str:
         """
         Recursively process a flexible definition structure into a single valid regex string.
@@ -1043,13 +518,13 @@ class RegexStore(pyd.BaseModel):
         if not data:
             return ''
         elif isinstance(data, str):
-            if self.force_named_groups and '(' in data:
-                buf = RgxBuf(data)
+            if self.options.force_named_groups and '(' in data:
+                buf = RegexBuffer(data)
                 for (x0, _), *_ in self.group_iterator(buf, mask=GroupKind.POSIT):
                     buf.replace((x0, x0 + 1), '(?:')
                 data = str(buf)
-            if self.formatter:
-                data = self.formatter(data)
+            if self.options.formatter:
+                data = self.options.formatter(data)
             return data
 
         elif isinstance(data, Pattern):
@@ -1057,7 +532,7 @@ class RegexStore(pyd.BaseModel):
 
         elif isinstance(data, list):
             if sep is None:
-                sep = self.separator
+                sep = self.options.separator
             elif sep == '<|>':
                 unique_segments = list({self.compose(item, sep='|') for item in data})
                 branches = list(self._atomic_split(unique_segments, recursive=True))
@@ -1067,12 +542,12 @@ class RegexStore(pyd.BaseModel):
 
         # II. Handle the main/complex case: a tuple describing a group
         elif isinstance(data, tuple):
-            return self.compose_tuple(*self._parse_tuple(data, self.formatter))  # type: ignore
+            return self.compose_tuple(*self._parse_tuple(data))  # type: ignore
 
         # III. Special case: an explicitly-specified tuple (likely by a .yaml file)
         elif isinstance(data, dict):
             tup = (data['mark'], data.get('pre', ''), data['body'], data.get('suf', ''))  # type: ignore
-            return self.compose_tuple(*self._parse_tuple(tup, self.formatter))
+            return self.compose_tuple(*self._parse_tuple(tup))
 
         else:
             raise ValueError(f'Invalid data type: {type(data)}')
@@ -1099,7 +574,7 @@ class RegexStore(pyd.BaseModel):
         groups_used: set[str] = set()
         local_groups: set[str] = set()
 
-        for _, kind, cname, _, _ in self.group_iterator(text, mask=GroupKind._NAMED):
+        for _, kind, cname, _, _ in Atom.group_iterator(text, mask=GroupKind._NAMED):
             if kind == GroupKind.PARAM:
                 local_groups.add(cname)
             elif kind == GroupKind.INVOC and cname != name:
@@ -1144,7 +619,7 @@ class RegexStore(pyd.BaseModel):
             raw_text = self.compose(val, self.separator)
 
             # II. Clean up the pattern and store it as-is, while noticing which groups are used
-            text = RgxBuf(raw_text)
+            text = RegexBuffer(raw_text)
             groups_used = self.clean(name, text)
             self.definitions[name] = str(text)
 
@@ -1197,35 +672,92 @@ class RegexStore(pyd.BaseModel):
                     values[i] = f'{value}{rb}' if ln > rn else f'{lb}{value}'
         return values
 
-    def sanitize(self, pattern: str | Pattern | Buffer) -> str:
+    @classmethod
+    def _join_atomic_branches(cls, atoms: Atoms) -> Atom:
         """
-        Sanitize a pattern by normalizing inline flag syntax.
+        Given a collection of single atoms, attempt to combine them into a more succint set-based
+        expression.
+
+        Examples:
+            _join_atomic_branches(['a', 'b', '']) -> '[ab]?'
+            _join_atomic_branches(['(?:one)', '(?:two)', 'a', 'b', '']) -> '(?:one|two|[ab])?'
 
         Args:
-            pattern: Pattern to sanitize (string, Pattern, Buffer, or pattern name).
+            atoms: A list of valid atom strings.
         Returns:
-            Sanitized pattern string with normalized flag syntax.
+            The optimized regex pattern string.
         """
-        if isinstance(pattern, Pattern):
-            pattern = pattern.pattern
-        elif isinstance(pattern, Buffer):
-            pattern = str(pattern)
-        elif pattern in self.patterns:
-            pattern = self.patterns[pattern].pattern
-        assert isinstance(pattern, str)
+        # I. Determine if the resulting atom should be optional
+        quantity = ''
+        for i, atom in enumerate(atoms):
+            if atom.is_optional:
+                quantity = '?'
+                atoms[i] = atom.quantify('')
+            elif not atom:
+                quantity = '?'
 
-        return ut.replace(
-            pattern,
-            (self.RGXS['inline_flags'], r'(?:(?\1)'),
-        )
+        # II. Separate chars and simple sets from groups and complex sets
+        complex_atoms, simple_atoms = map(list, mi.partition(lambda atom: atom.is_simple, atoms))
+
+        # II.ii. Combine simple atoms into a new set
+        if not simple_atoms:
+            branches = []
+        elif len(simple_atoms) == 1:
+            branches = [simple_atoms[0]]
+        else:
+            chars, sets = map(list, mi.partition(lambda atom: atom.is_set, simple_atoms))
+            set_chars = [
+                _atom for _set in sets for _atoms in cls.split_set(_set) for _atom in _atoms
+            ]
+            set_body = ''.join(sorted({*set_chars, *chars}))
+            branches = [Atom(f'[{set_body}]')]
+
+        branches.extend(complex_atoms)
+
+        # III. Render the resulting set alternated w/ the complex branches
+        return cls._render_branches([(b,) for b in branches], has_suffix, quantity)
+
+    @classmethod
+    def construct_tree(cls, branches: Branches, has_suffix: bool = False) -> str:
+        """
+        Construct an optimized regex from branches by factoring common prefixes and suffixes.
+
+        This method builds an efficient regex pattern by identifying and extracting common
+        prefixes and suffixes from multiple branches, minimizing redundancy in the result.
+
+        Args:
+            branches: Tuple of atom sequences representing alternative branches.
+            has_suffix: Whether parent context implies a shared suffix exists.
+        Returns:
+            Optimized regex string with factored common elements.
+        """
+        # I. Shortcut for simple cases
+        if len(branches) == 1:
+            assert (atoms := branches[0]), 'Just one empty branch passed in.'
+            ret = ''.join(atoms)
+        elif max(*map(len, branches.data)) == 1:
+            ret = cls._join_atomic_branches([atoms.first for atoms in branches.data])
+        else:
+            # II. Separate the sorted branches into sections that share prefixes
+            blocks = []
+            for branch_group in cls._group_by_prefix(branches):
+                block = Block.factor(branch_group)
+                blocks.append(block)
+
+                content = cls.construct_tree(block, has_suffix=bool(block.suffix))
+
+            # III. Render each block, factoring out any shared suffixes
+            clauses = list(map(cls._render_blocks, Block.group_by_suffix(*blocks)))
+            ret = cls._render_branches(clauses, has_suffix)
+
+        return ret
 
     # ------------------
     # `x` Public Methods
     # ------------------
-
-    # --------------------
-    # `x0` Basic Overrides
-    # --------------------
+    # --------------
+    # `x0` Overrides
+    # --------------
     def __len__(self) -> int:
         return len(self.patterns)
 
@@ -1280,76 +812,8 @@ class RegexStore(pyd.BaseModel):
     def items(self) -> list[tuple[str, Pattern]]:
         return list(self.patterns.items())
 
-    # -------------------
-    # `x1` Match Handling
-    # -------------------
-    def read_match(self, match: Match) -> tuple[Params, Captures]:
-        """
-        Extract and autostrip all captured groups from a match object.
-
-        Args:
-            match: Regex match object to read.
-        Returns:
-            Tuple of (params dict with last values, captures dict with all values).
-        """
-        data, captures = {}, {}
-        if match is not None and (src := match.capturesdict().items()):
-            items = [(key, stripped) for key, vals in src if (stripped := self.autostrip(vals))]
-            for key, values in items:
-                data[key] = values[-1]
-                captures[key] = values
-
-        return data, captures
-
-    def parse(self, match: Match | None, pattern_name: str = '') -> MatchData:
-        """
-        Parse a match object, applying registered parsers and cleaning results.
-
-        Reads the match, applies any parsers registered for captured groups, removes
-        hidden fields (those starting with '_'), and returns a clean MatchData object.
-
-        Args:
-            match: Match object to parse, or None for empty MatchData.
-            pattern_name: Optional name of the pattern that produced this match.
-        Returns:
-            MatchData object with parsed captures and optional match reference.
-        """
-        # I. Read the match object, dropping any empty values
-        if match is None:
-            return MatchData()
-
-        _, captures = self.read_match(match)
-        if parseable := list(filter(self.parsers.__contains__, captures.keys())):
-            pd = ParseData(captures=captures, starts={f: match.starts(f) for f in captures.keys()})
-            for field, parser in [(f, self.parsers[f]) for f in parseable]:
-                pd.set_field(field)
-
-                if isinstance(parser, str):
-                    pd.interleave(pd.field, parser, list(zip(pd.start, pd.value, strict=True)))
-                elif isinstance(parser, dict):
-                    pd.apply_dict_parser(parser, self.patterns[field])  # type: ignore
-                else:
-                    pd.apply_func_parser(parser)
-            captures = pd.captures
-
-        # IV. Removed unnecessary "hidden" values
-        hidden_fields = [key for key in captures.keys() if key[0] == '_' and key != pattern_name]
-        if 0 < len(hidden_fields) < len(captures):
-            for field in hidden_fields:
-                del captures[field]
-
-        for field in [k for k, v in captures.items() if not v or not any(v)]:
-            del captures[field]
-
-        if pattern_name in captures and len(captures) > 1 and pattern_name not in self.parsers:
-            del captures[pattern_name]
-
-        # V. Clean and return a datadict and a capturedict
-        ret = MatchData(data=captures, match=match)
-        return ret
-
     # -------------------------------
-    # `x3` Top-Level Matching Methods
+    # `x1` Top-Level Matching Methods
     # -------------------------------
     def match(self, names: str | Iterable[str], text: str | Buffer) -> MatchData:
         """
@@ -1361,7 +825,7 @@ class RegexStore(pyd.BaseModel):
         Returns:
             MatchData from first successful match, or empty MatchData if none match.
         """
-        names, text = self._validate_params(names, text)
+        names, text = self._validate_automatch_params(names, text)
         return self._autoparse('match', names, text)
 
     def fullmatch(self, names: str | Iterable[str], text: str | Buffer) -> MatchData:
@@ -1374,7 +838,7 @@ class RegexStore(pyd.BaseModel):
         Returns:
             MatchData from first successful fullmatch, or empty MatchData if none match.
         """
-        names, text = self._validate_params(names, text)
+        names, text = self._validate_automatch_params(names, text)
         return self._autoparse('fullmatch', names, text)
 
     def search(self, names: str | Iterable[str], text: str | Buffer) -> MatchData:
@@ -1387,7 +851,7 @@ class RegexStore(pyd.BaseModel):
         Returns:
             MatchData from first successful search, or empty MatchData if none found.
         """
-        names, text = self._validate_params(names, text)
+        names, text = self._validate_automatch_params(names, text)
         return self._autoparse('search', names, text)
 
     def finditer(self, name: str, text: str | Buffer, **kwargs) -> Iterator[MatchData]:
@@ -1439,7 +903,7 @@ class RegexStore(pyd.BaseModel):
             Tuple of (delimiters, sections) where delimiters[0] is always empty and
             the lists interleave: section[0], delim[1], section[1], delim[2], etc.
         """
-        _, text = self._validate_params(name, text)
+        _, text = self._validate_automatch_params(name, text)
         delims, sections = [], []
         if matches := list(self.finditer(name, text)):
             xp = 0
@@ -1456,7 +920,7 @@ class RegexStore(pyd.BaseModel):
 
             # If requested, collapse any empty sections into longer delimiters
             if collapse:
-                self._collapse_empty_splits(delims, sections)
+                self._collapse_empty_sections(delims, sections)
 
         return delims, sections
 
@@ -1475,7 +939,7 @@ class RegexStore(pyd.BaseModel):
         """
         pd = ParseData()
         if isinstance(text, str):
-            text = RgxBuf(text)
+            text = RegexBuffer(text)
 
         for match in text.rgx_iterator(self.patterns[name]):
             for field, values in self.parse(match, name).items():
@@ -1489,7 +953,7 @@ class RegexStore(pyd.BaseModel):
         return MatchData(data=pd.captures)
 
     # -------------------------
-    # `x4` Functional Utilities
+    # `x2` Functional Utilities
     # -------------------------
     def parse_invocations(self, text: str) -> set[str]:
         """
@@ -1500,7 +964,7 @@ class RegexStore(pyd.BaseModel):
         Returns:
             Set of all group names invoked directly or indirectly.
         """
-        invocations = {name for _, _, name, _, _ in self.group_iterator(text, mask=GroupKind.INVOC)}
+        invocations = {name for _, _, name, _, _ in Atom.group_iterator(text, mask=GroupKind.INVOC)}
         return self.find_all_invocations(invocations)
 
     def partial(
@@ -1557,7 +1021,7 @@ class RegexStore(pyd.BaseModel):
         yield from filter(lambda text: bool(fn(text)), texts)
 
     # ---------------------------------------
-    # `x5` Performant "Router Tree" Functions
+    # `x3` Performant "Router Tree" Functions
     # ---------------------------------------
     def define_router_tree(self, router: str, items: Mapping[str, RgxVal], **kwargs: str) -> None:
         """
@@ -1643,3 +1107,32 @@ class RegexStore(pyd.BaseModel):
             return data.match.expandf(fmt)
 
         return ''
+
+    # ---------
+    # `x4` Misc
+    # ---------
+    def sanitize(self, pattern: str | Pattern | Buffer) -> str:
+        """
+        Sanitize a pattern by normalizing inline flag syntax.
+
+        Args:
+            pattern: Pattern to sanitize (string, Pattern, Buffer, or pattern name).
+        Returns:
+            Sanitized pattern string with normalized flag syntax.
+        """
+        if isinstance(pattern, Pattern):
+            pattern = pattern.pattern
+        elif isinstance(pattern, Buffer):
+            pattern = str(pattern)
+        elif pattern in self.patterns:
+            pattern = self.patterns[pattern].pattern
+        assert isinstance(pattern, str)
+
+        return ut.replace(
+            pattern,
+            (META_RGXS['inline_flags'], r'(?:(?\1)'),
+        )
+
+    @classmethod
+    def split(cls, pattern: str | Atoms | list[str], recursive: bool = False) -> list[str]:
+        return list(map(''.join, cls._atomic_split(pattern, recursive)))

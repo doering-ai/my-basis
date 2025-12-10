@@ -2,17 +2,19 @@
 ### HEAD ###
 ############
 ### STANDARD
+from typing import Self
 from enum import Flag, auto
 
 ### EXTERNAL
 
 ### INTERNAL
+from ...types import MyEnum
 
 
 ############
 ### BODY ###
 ############
-class GroupKind(Flag):
+class GroupKind(MyEnum, Flag):
     """
     Describes a regex group's kind.
 
@@ -60,6 +62,16 @@ class GroupKind(Flag):
     _LOOK = AHEAD | BEHIND | NOT_AHEAD | NOT_BEHIND
     _SPLITTABLE = PLAIN | ATOMS | AHEAD | BEHIND | MULTI
     _SIMPLE = PLAIN | ATOMS
+
+    @classmethod
+    def read(cls, value: str | int | list | Self) -> Self:  # ty:ignore[invalid-method-override]
+        if isinstance(value, str):
+            for prefix, kind in reversed(GROUP_KIND_MAP.items()):
+                if value.startswith(prefix):
+                    return kind
+            return cls(0)
+        else:
+            return super().read(value)
 
 
 GROUP_KIND_MAP = {

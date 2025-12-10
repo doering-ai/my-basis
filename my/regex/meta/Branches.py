@@ -14,6 +14,7 @@ import pydantic as pyd
 from my import ut
 from .GroupKind import GroupKind
 from .meta_patterns import META_RGXS
+from .Quantifier import Quantifier
 from .Atom import Atom
 from .Atoms import Atoms
 
@@ -31,6 +32,7 @@ class Branches(pyd.BaseModel):
     prefix: Atoms = Atoms()
     data: list[Atoms] = []
     suffix: Atoms = Atoms()
+    quantifier: str = ''
 
     # -------------------
     # `0` Initial Methods
@@ -56,35 +58,6 @@ class Branches(pyd.BaseModel):
         ret = cls(data=data)
         if factor:
             ret.factor()
-
-    def sort(self) -> Self:
-        """Ensure that all branches are unique and sorted."""
-        self.data = list(sorted(set(self.data)))
-        return self
-
-    def factor(self) -> Self:
-        """
-        Factor out common prefixes and suffixes from the branches in the main data structure,
-        modifying the object's member variables.
-        """
-        # 0. Return immediately if this is a single branch, or if we already are factored
-        if self.prefix or self.suffix or len(self) <= 1:
-            return self.model_copy(deep=True)
-
-        # I. Determine the prefix for this block, which is guaranteed to exist
-        new_body = [branch.model_copy() for branch in self.data]
-
-        if prefix := self.greatest_common_prefix(*new_body):
-            new_body = [branch[len(prefix) :] for branch in new_body]
-            self.prefix += prefix
-
-        # II. Check for a shared suffix
-        if suffix := self.greatest_common_suffix(*new_body):
-            new_body = [branch[: -len(suffix)] for branch in new_body]
-            self.suffix += suffix
-
-        # III. Recursively construct children branches
-        return self.__class__(prefix=prefix, data=new_body, suffix=suffix)
 
     # -------------------
     # `-` Private Methods
@@ -133,50 +106,103 @@ class Branches(pyd.BaseModel):
     # `+` Primary Methods
     # -------------------
     @classmethod
-    def condense_group(cls, atom: Atom, recursive: bool = False) -> Self:
+    def expand_group(cls, atom: Atom, recursive: bool = False) -> Self:
         """
         Split a group atom into branches with shared prefixes, if possible.
         """
         assert atom.is_group, f'Expected group atom, got: {atom!r}'
-        kind, start, flags, body, quant = atom.as_group()
+        if atom.has_complex_quantifier:
+            return cls(data=Atoms(atom))
 
-        ret = Atoms(atom)
-        if quant not in ('', '?'):
-            pass
+        data: list[Atom] = []
+        if atom.is_optional:
+            data.append(Atom())
+
+        kind, start, flags, body, quant = atom.as_group()
         if kind in GroupKind._SPLITTABLE:
-            ret = cls._atomic_split(body, recursive)
+            data = cls.condense(body, recursive)
             if quant == '?':
                 ret = (tuple(),) + ret
             if flags:
                 flag_group = (f'(?{flags})',)
                 ret = tuple((flag_group + branch) if branch else branch for branch in ret)
-        elif quant == '?':
-            ret = (tuple(), (atom[:-1],))
 
-        return ret
+            ret = ((atom[:-1],))
+
+        return cls(data=data)
 
     @classmethod
-    def condense_set(cls, atom: Atom) -> Self:
+    def expand_set(cls, atom: Atom) -> Self:
         assert atom.is_set, f'Expected set atom, got: {atom!r}'
         if atom.is_complex_set or atom.has_complex_quantifier:
-            return cls(
-                (set_atom,),
-            )
+            return cls(data=[Atoms(atom)])
 
-        is_simple, body, quant = atom.as_set()
-        branches = tuple((atom,) for atom in cls.atomize(body, escape=True))
-        return (tuple(), *branches) if quant == '?' else branches
+        _, body, _ = atom.as_set()
+        new_data = [Atoms(atom) for atom in Atoms.atomize(body, escape=True)]
+        if atom.is_optional:
+            new_data.insert(0, Atoms(Atom()))
+
+        return cls(data=new_data)
 
     @classmethod
-    def condense_atom(cls, atom: Atom) -> Self:
+    def expand_atom(cls, atom: Atom) -> Self:
         if cls._is_group(atom):
-            return cls.split_group(atom, True)
+            return cls.expand_group(atom, True)
         elif cls._is_simple_set(atom):
-            return cls.split_set(atom)
+            return cls.expand_set(atom)
         elif cls._is_optional(atom):
-            return (tuple(), (atom[:-1],))
+            return cls(data=[Atoms(Atom()), Atoms(atom.quantify(''))])
         else:
-            return ((atom,),)
+            return cls(data=Atoms(atom))
+
+    @classmethod
+    def atomic_condense(cls, atoms: Atoms) -> Atom:
+        """
+        Given a collection of single atoms, attempt to combine them into a more succint set-based
+        expression.
+
+        NOTE: This is a special case of condense() above where all the alternatives are themselves
+        atomic.
+
+        Examples:
+            _join_atomic_branches(['a', 'b', '']) -> '[ab]?'
+            _join_atomic_branches(['(?:one)', '(?:two)', 'a', 'b', '']) -> '(?:one|two|[ab])?'
+
+        Args:
+            atoms: A list of valid atom strings.
+        Returns:
+            The optimized regex pattern string.
+        """
+        # I. Determine if the resulting atom should be optional
+        quantity = ''
+        for i, atom in enumerate(atoms):
+            if atom.is_optional:
+                quantity = '?'
+                atoms[i] = atom.quantify('')
+            elif not atom:
+                quantity = '?'
+
+        # II. Separate chars and simple sets from groups and complex sets
+        complex_atoms, simple_atoms = map(list, mi.partition(lambda atom: atom.is_simple, atoms))
+
+        # II.ii. Combine simple atoms into a new set
+        if not simple_atoms:
+            branches = []
+        elif len(simple_atoms) == 1:
+            branches = [simple_atoms[0]]
+        else:
+            chars, sets = map(list, mi.partition(lambda atom: atom.is_set, simple_atoms))
+            set_chars = [
+                _atom for _set in sets for _atoms in cls.split_set(_set) for _atom in _atoms
+            ]
+            set_body = ''.join(sorted({*set_chars, *chars}))
+            branches = [Atom(f'[{set_body}]')]
+
+        branches.extend(complex_atoms)
+
+        # III. Render the resulting set alternated w/ the complex branches
+        return cls._render_branches([(b,) for b in branches], has_suffix, quantity)
+
 
     # ------------------
     # `x` Public Methods
@@ -241,101 +267,77 @@ class Branches(pyd.BaseModel):
         prefixes and suffixes into non-branched expressions where possible.
         """
         # 0. Validate & normalize parameters
-        if not branches:
-            return cls()
-        branches = tuple(arg if isinstance(arg, Atoms) else Atoms(arg) for arg in args)
+        if not self:
+            return self
 
         # I. Split into initial groupings based on hard branches
-        blocks: deque[Atoms] = deque()
-        separators = [i for i, c in enumerate(branches) if c == '|'] + [len(branches)]
-        for j, end in enumerate(separators):
-            start = separators[j - 1] + 1 if j else 0
-            block: Atoms = items[start:end]
-
-            # I.i. Recursively split up to one set or group to create multiple branches
+        new_data: list[Atoms] = []
+        for branch in mi.split_at(self.data, lambda atom: atom == '|'):
+            # II. Recursively split up to one set or group to create multiple branches
             if recursive:
+                new_branches = []
                 n_split = 0
-                branch_list: deque[tuple[Atoms, ...]] = deque()
-                for atom in block:
-                    if n_split < max_split and len(branches := cls._split_atom(atom)) > 1:
-                        branch_list.append(branches)
+                for atom in branch:
+                    if n_split < max_split and len(branches := self.expand_atom(atom)) > 1:
+                        new_branches.append(branches)
                         n_split += 1
                     else:
-                        branch_list.append([[atom]])
+                        new_branches.append(Atoms(atom))
 
                 if n_split:
-                    blocks.extend(
-                        [list(mi.collapse(permutation)) for permutation in it.product(*branch_list)]
+                    new_data.extend(
+                        [Atoms(mi.collapse(permutation)) for permutation in it.product(*new_branches)]
                     )
                     continue
 
-            # I.ii. Otherwise, just return this block as one branch
-            blocks.append(block)
+            # I.ii. Otherwise, just return this branch as one branch
+            new_data.append(Atoms(branch))
 
-        return tuple(sorted(set(blocks)) if recursive else blocks)
+        return tuple(sorted(set(new_data)) if recursive else new_data)
 
-    @classmethod
-    def atomic_condense(cls, atoms: Atoms) -> Atom:
+
+    # --------------
+    # `x3` Modifiers
+    # --------------
+    def sort(self) -> Self:
+        """Ensure that all branches are unique and sorted."""
+        self.data = list(sorted(set(self.data)))
+        return self
+
+    def factor(self) -> Self:
         """
-        Given a collection of single atoms, attempt to combine them into a more succint set-based
-        expression.
-
-        NOTE: This is a special case of condense() above where all the alternatives are themselves
-        atomic.
-
-        Examples:
-            _join_atomic_branches(['a', 'b', '']) -> '[ab]?'
-            _join_atomic_branches(['(?:one)', '(?:two)', 'a', 'b', '']) -> '(?:one|two|[ab])?'
-
-        Args:
-            atoms: A list of valid atom strings.
-        Returns:
-            The optimized regex pattern string.
+        Factor out common prefixes and suffixes from the branches in the main data structure,
+        modifying the object's member variables.
         """
-        # I. Determine if the resulting atom should be optional
-        quantity = ''
-        for i, atom in enumerate(atoms):
-            if atom.is_optional:
-                quantity = '?'
-                atoms[i] = atom.quantify('')
-            elif not atom:
-                quantity = '?'
+        # 0. Return immediately if this is a single branch, or if we already are factored
+        if self.prefix or self.suffix or len(self) <= 1:
+            return self.model_copy(deep=True)
 
-        # II. Separate chars and simple sets from groups and complex sets
-        complex_atoms, simple_atoms = map(list, mi.partition(lambda atom: atom.is_simple, atoms))
+        # I. Determine the prefix for this block, which is guaranteed to exist
+        new_body = [branch.model_copy() for branch in self.data]
 
-        # II.ii. Combine simple atoms into a new set
-        if not simple_atoms:
-            branches = []
-        elif len(simple_atoms) == 1:
-            branches = [simple_atoms[0]]
-        else:
-            chars, sets = map(list, mi.partition(lambda atom: atom.is_set, simple_atoms))
-            set_chars = [
-                _atom for _set in sets for _atoms in cls.split_set(_set) for _atom in _atoms
-            ]
-            set_body = ''.join(sorted({*set_chars, *chars}))
-            branches = [Atom(f'[{set_body}]')]
+        if prefix := self.greatest_common_prefix(*new_body):
+            new_body = [branch[len(prefix) :] for branch in new_body]
+            self.prefix += prefix
 
-        branches.extend(complex_atoms)
+        # II. Check for a shared suffix
+        if suffix := self.greatest_common_suffix(*new_body):
+            new_body = [branch[: -len(suffix)] for branch in new_body]
+            self.suffix += suffix
 
-        # III. Render the resulting set alternated w/ the complex branches
-        return cls._render_branches([(b,) for b in branches], has_suffix, quantity)
+        # III. Recursively construct children branches
+        return self.__class__(prefix=prefix, data=new_body, suffix=suffix)
 
-    def clean(self, quantity: str) -> tuple[Self, bool]:
+
+    def clean(self) -> tuple[Self, bool]:
         """
         Clean the given branches by removing empty branches and combining optional ones.
-
-        Args:
-            branches: The list of atom sequences representing alternative branches.
-            quantity: The quantifier string applied to the entire group.
-        Returns:
-            0: The optimized list of branches.
-            1: Whether the containing group should be marked as optional.
         """
         to_drop: set[int] = set()
         inferred_optional = False
-        for i, branch in enumerate(branches):
+
+        # I. Identify branches to drop or combine
+        for i, branch in enumerate(self.data):
             if (n := len(branch)) == 0 or not any(branch):
                 # I.i. Empty branch -- whole thing is now optional
                 to_drop.add(i)
@@ -365,8 +367,12 @@ class Branches(pyd.BaseModel):
                     branches[j] = (cls._apply_quantity(j_br[0], '?'), *j_br[1:])
 
         # II. Combine the branches into one atomic group
-        return ut.drop_at(branches, to_drop), inferred_optional
+        self.data = Atoms(ut.drop_at(branches, to_drop))
+        return , inferred_optional
 
+    # ------------------
+    # `x4` Serialization
+    # ------------------
     def render(self, has_suffix: bool = False, quantity: str = '') -> Atoms:
         """
         Render the given branches into a regex group, applying optimizations where possible.
@@ -388,7 +394,7 @@ class Branches(pyd.BaseModel):
 
         elif n == 1:
             # II.
-            body = ''.join(branches[0])
+            body = branches[0]
         else:
             # II.iii. Determine whether we can safely use an atomic grouping here
             mark = self._choose_joining_mark(has_suffix)

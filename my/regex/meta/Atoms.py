@@ -17,6 +17,7 @@ from .meta_patterns import META_RGXS
 ############
 ### DATA ###
 ############
+@ft.total_ordering
 class Atoms(pyd.RootModel[list[Atom]]):
     # -------------------
     # `0` Initial Methods
@@ -128,6 +129,12 @@ class Atoms(pyd.RootModel[list[Atom]]):
             return cls(self.data + cls(other).data)
         else:
             raise TypeError(f'Unsupported type for Atoms addition: {type(other)}')
+
+    def __lt__(self, other: object) -> bool:
+        if isinstance(other, (str, Atom, Sequence, Atoms)):
+            return self.data < self.__class__(other).data
+        else:
+            raise TypeError(f'Unsupported type for Atoms comparison: {type(other)}')
 
     # ---------------
     # `x1` Properties

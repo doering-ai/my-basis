@@ -28,6 +28,7 @@ RegexBuffer = ft.partial(Buffer.new, fence_rgxs=['arrays'])
 ############
 ### BODY ###
 ############
+@ft.total_ordering
 class Atom(pyd.RootModel[str]):
     # -------------------
     # `0` Initial Methods

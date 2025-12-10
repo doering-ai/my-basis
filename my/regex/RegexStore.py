@@ -535,7 +535,7 @@ class RegexStore(pyd.BaseModel):
                 sep = self.options.separator
             elif sep == '<|>':
                 unique_segments = list({self.compose(item, sep='|') for item in data})
-                branches = list(self._atomic_split(unique_segments, recursive=True))
+                branches = list((unique_segments, recursive=True))
                 return self.construct_tree(branches)
 
             return sep.join(map(self.compose, data))
@@ -672,50 +672,6 @@ class RegexStore(pyd.BaseModel):
                     values[i] = f'{value}{rb}' if ln > rn else f'{lb}{value}'
         return values
 
-    @classmethod
-    def _join_atomic_branches(cls, atoms: Atoms) -> Atom:
-        """
-        Given a collection of single atoms, attempt to combine them into a more succint set-based
-        expression.
-
-        Examples:
-            _join_atomic_branches(['a', 'b', '']) -> '[ab]?'
-            _join_atomic_branches(['(?:one)', '(?:two)', 'a', 'b', '']) -> '(?:one|two|[ab])?'
-
-        Args:
-            atoms: A list of valid atom strings.
-        Returns:
-            The optimized regex pattern string.
-        """
-        # I. Determine if the resulting atom should be optional
-        quantity = ''
-        for i, atom in enumerate(atoms):
-            if atom.is_optional:
-                quantity = '?'
-                atoms[i] = atom.quantify('')
-            elif not atom:
-                quantity = '?'
-
-        # II. Separate chars and simple sets from groups and complex sets
-        complex_atoms, simple_atoms = map(list, mi.partition(lambda atom: atom.is_simple, atoms))
-
-        # II.ii. Combine simple atoms into a new set
-        if not simple_atoms:
-            branches = []
-        elif len(simple_atoms) == 1:
-            branches = [simple_atoms[0]]
-        else:
-            chars, sets = map(list, mi.partition(lambda atom: atom.is_set, simple_atoms))
-            set_chars = [
-                _atom for _set in sets for _atoms in cls.split_set(_set) for _atom in _atoms
-            ]
-            set_body = ''.join(sorted({*set_chars, *chars}))
-            branches = [Atom(f'[{set_body}]')]
-
-        branches.extend(complex_atoms)
-
-        # III. Render the resulting set alternated w/ the complex branches
-        return cls._render_branches([(b,) for b in branches], has_suffix, quantity)
 
     @classmethod
     def construct_tree(cls, branches: Branches, has_suffix: bool = False) -> str:

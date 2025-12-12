@@ -7,7 +7,7 @@
 import pytest as pyt
 
 ### INTERNAL
-from my.text import RegexStore, RgxList, RgxVal, GroupKind
+from my.regex import RegexStore, RgxList, RgxVal, GroupKind
 
 Captures = dict[str, list[str]]
 Params = dict[str, str]

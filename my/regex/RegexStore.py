@@ -536,7 +536,7 @@ class RegexStore(pyd.BaseModel):
                 sep = self.options.separator
             elif sep == '<|>':
                 root_branches = [self.compose(item, sep='|') for item in data]
-                return str(self.construct_tree(root_branches))
+                return str(Block.construct_tree(root_branches))
 
             return sep.join(map(self.compose, data))
 
@@ -672,50 +672,6 @@ class RegexStore(pyd.BaseModel):
                     values[i] = f'{value}{rb}' if ln > rn else f'{lb}{value}'
         return values
 
-    @classmethod
-    def construct_tree(cls, block: Block | Iterable[str], max_split: int = 4) -> Atoms:
-        """
-        Construct an optimized regex from branches by factoring common prefixes and suffixes.
-
-        This method builds an efficient regex pattern by identifying and extracting common
-        prefixes and suffixes from multiple branches, minimizing redundancy in the result.
-
-        Args:
-            branches: Tuple of atom sequences representing alternative branches.
-        Returns:
-            Optimized regex string with factored common elements.
-        """
-        if not isinstance(block, Block):
-            block = Block.new(*sorted(set(block))).expand(max_split)
-
-        assert block, 'Empty branching block passed to construct_tree()'
-
-        # I. Prepare the block; the main stage is the "factor" step, where prefixes are found
-        block.clean()
-        block.factor()
-
-        # II. Recursively replace the block's body with an equivalent tree
-        result = block.model_copy(update=dict(branches=[]), deep=True)
-        if len(block) == 1:
-            # II.i. Singular case: return it as-is
-            result.branches = block.branches
-
-        elif max(*map(len, block.branches)) == 1:
-            # II.ii. Atomic case: join them directly
-            atomic_branches = [branch.first for branch in block.branches]
-            result.branches = [Atoms(Block.join_atoms(*atomic_branches))]
-
-        else:
-            # II.iii. Main case: recurse into groups that share a prefix, then factor out shared
-            #         suffixes of those results before returning
-            prefix_groups = list(block.group_by_prefix())
-            for group in prefix_groups:
-                group.branches = cls.construct_tree(group, max_split)
-
-            result.branches = Block.join_by_suffix(prefix_groups)
-
-        return result.render()
-
     # ------------------
     # `x` Public Methods
     # ------------------
@@ -736,7 +692,7 @@ class RegexStore(pyd.BaseModel):
         if isinstance(param, tuple) and len(param) == 2 and not isinstance(param[1], (list, tuple)):
             val, parser = param  # type: ignore
         else:
-            val = param
+            val = param  # type: ignore
             parser = None
 
         self.define(name, val, parser)  # type: ignore

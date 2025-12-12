@@ -2,7 +2,7 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import Self, Sequence, Iterator, Generator
+from typing import Self, Sequence, Iterator, Generator, Iterable
 import itertools as it
 import more_itertools as mi
 import functools as ft
@@ -241,54 +241,31 @@ class Block(pyd.BaseModel):
         rendered_atoms = new_branch_obj.render(quantity=quantity)
         return rendered_atoms.one
 
-    # ------------------
-    # `x` Public Methods
-    # ------------------
-    # --------------
-    # `x0` Overrides
-    # --------------
-    def __len__(self) -> int:
-        return len(self.branches)
+    @classmethod
+    def join_by_suffix(cls, blocks: list[Self]) -> list[Atoms]:
+        ret = []
+        for group in cls.group_by_suffix(*blocks):
+            n = len(group)
+            if n == 0:
+                raise ValueError('Somehow collected an empty block group')
+            if n == 1:
+                ret.append(group[0].render())
+            else:
+                # II. Factor out shared suffixes between *blocks* (usually only checking branches
+                #     within them, as in `factor()`)
+                shared_suffix = cls._greatest_common_suffix(*(br.last for br in group))
+                assert (shared_len := len(shared_suffix)), 'Grouped blocks with no shared suffix.'
+                for block in group:
+                    if block.suffix:
+                        block.suffix = block.suffix[:-shared_len]
+                    else:
+                        block.branches = [br[:-shared_len] for br in block.branches]
 
-    def __str__(self) -> str:
-        return str(self.branches)
+                # III. Render the final result with the suffix at the end
+                sub_branches = [block.render() for block in group]
+                ret.append(f'(?:{sub_branches})', *shared_suffix)
+        return ret
 
-    def __repr__(self) -> str:
-        return f'{self.branches!r}'
-
-    def __hash__(self) -> int:
-        return hash(self.branches)
-
-    def __bool__(self) -> bool:
-        return any(map(bool, self.branches))
-
-    @ft.singledispatchmethod
-    def __getitem__(self, key):
-        raise TypeError
-
-    @__getitem__.register
-    def _get_branch(self, key: int) -> Atoms:
-        return self.branches[key]
-
-    @__getitem__.register
-    def _get_branches(self, key: slice) -> Self:
-        return self.new(*self.branches[key])
-
-    # ---------------
-    # `x1` Properties
-    # ---------------
-    @property
-    def last(self) -> list[Atoms]:
-        """Returns all the atoms tied for the final position in this object."""
-        return [self.suffix] if self.suffix else self.branches
-
-    @property
-    def has_complex_quantifier(self) -> bool:
-        return self.quantifier not in ('', '?')
-
-    # ------------
-    # `x2` Methods
-    # ------------
     def group_by_prefix(self) -> Generator[Self, None, None]:
         """
         Group the given branches into buckets by their common prefixes (if any exist).
@@ -326,8 +303,46 @@ class Block(pyd.BaseModel):
             return True
         return False
 
+    # ------------------
+    # `x` Public Methods
+    # ------------------
     # --------------
-    # `x3` Modifiers
+    # `x0` Overrides
+    # --------------
+    def __len__(self) -> int:
+        return len(self.branches)
+
+    def __str__(self) -> str:
+        return str(self.branches)
+
+    def __repr__(self) -> str:
+        return f'{self.branches!r}'
+
+    def __hash__(self) -> int:
+        return hash(self.branches)
+
+    def __bool__(self) -> bool:
+        return any(map(bool, self.branches))
+
+    @ft.singledispatchmethod
+    def __getitem__(self, key):
+        raise TypeError
+
+    @__getitem__.register
+    def _get_branch(self, key: int) -> Atoms:
+        return self.branches[key]
+
+    @__getitem__.register
+    def _get_branches(self, key: slice) -> Self:
+        return self.new(*self.branches[key])
+
+    @property
+    def last(self) -> list[Atoms]:
+        """Returns all the atoms tied for the final position in this object."""
+        return [self.suffix] if self.suffix else self.branches
+
+    # --------------
+    # `x1` Modifiers
     # --------------
     def sort(self) -> Self:
         """Ensure that all branches are unique and sorted."""
@@ -431,7 +446,7 @@ class Block(pyd.BaseModel):
         return self
 
     # ------------------
-    # `x4` Serialization
+    # `x2` Serialization
     # ------------------
     def render(self) -> Atoms:
         """
@@ -444,12 +459,9 @@ class Block(pyd.BaseModel):
             A pattern representing the properly combined & wrapped branches.
         """
         # I. Clean the branch list, identifying optional branches and pre-combining where possible
-        # self.clean()
-
-        n = len(self)
-        if n == 0:
+        if not self:
             raise ValueError('Cannot render empty Branches object')
-        elif n == 1:
+        elif len(self) == 1:
             # II.i. Singular branch -- no need to choose a mark
             ret = self.branches[0]
         else:
@@ -465,27 +477,49 @@ class Block(pyd.BaseModel):
             ret = Atoms.quantify(ret, self.quantifier)
         return ret
 
+    # ------------------
+    # `x3` Top-level API
+    # ------------------
     @classmethod
-    def join_by_suffix(cls, blocks: list[Self]) -> list[Atoms]:
-        ret = []
-        for group in cls.group_by_suffix(*blocks):
-            n = len(group)
-            if n == 0:
-                raise ValueError('Somehow collected an empty block group')
-            if n == 1:
-                ret.append(group[0].render())
-            else:
-                # II. Factor out shared suffixes between *blocks* (usually only checking branches
-                #     within them, as in `factor()`)
-                shared_suffix = cls._greatest_common_suffix(*(br.last for br in group))
-                assert (shared_len := len(shared_suffix)), 'Grouped blocks with no shared suffix.'
-                for block in group:
-                    if block.suffix:
-                        block.suffix = block.suffix[:-shared_len]
-                    else:
-                        block.branches = [br[:-shared_len] for br in block.branches]
+    def construct_tree(cls, block: Self | Iterable[str], max_split: int = 4) -> Atoms:
+        """
+        Construct an optimized regex from branches by factoring common prefixes and suffixes.
 
-                # III. Render the final result with the suffix at the end
-                sub_branches = [block.render() for block in group]
-                ret.append(f'(?:{sub_branches})', *shared_suffix)
-        return ret
+        This method builds an efficient regex pattern by identifying and extracting common
+        prefixes and suffixes from multiple branches, minimizing redundancy in the result.
+
+        Args:
+            branches: Tuple of atom sequences representing alternative branches.
+        Returns:
+            Optimized regex string with factored common elements.
+        """
+        if not isinstance(block, cls):
+            block = cls.new(*sorted(set(block))).expand(max_split)
+
+        assert block, 'Empty branching block passed to construct_tree()'
+
+        # I. Prepare the block; the main stage is the "factor" step, where prefixes are found
+        block.clean()
+        block.factor()
+
+        # II. Recursively replace the block's body with an equivalent tree
+        result = block.model_copy(update=dict(branches=[]), deep=True)
+        if len(block) == 1:
+            # II.i. Singular case: return it as-is
+            result.branches = block.branches
+
+        elif max(*map(len, block.branches)) == 1:
+            # II.ii. Atomic case: join them directly
+            atomic_branches = [branch.first for branch in block.branches]
+            result.branches = [Atoms(cls.join_atoms(*atomic_branches))]
+
+        else:
+            # II.iii. Main case: recurse into groups that share a prefix, then factor out shared
+            #         suffixes of those results before returning
+            prefix_groups = list(block.group_by_prefix())
+            for group in prefix_groups:
+                group.branches = cls.construct_tree(group, max_split)
+
+            result.branches = cls.join_by_suffix(prefix_groups)
+
+        return result.render()

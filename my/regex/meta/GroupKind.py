@@ -70,8 +70,7 @@ class GroupKind(MyEnum, Flag):
                 if value.startswith(prefix):
                     return kind
             return cls(0)
-        else:
-            return super().read(value)
+        return super().read(value)
 
 
 GROUP_KIND_MAP = {

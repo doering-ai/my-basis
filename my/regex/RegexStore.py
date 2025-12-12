@@ -14,7 +14,8 @@ from regex import Match, Pattern, RegexFlag
 ### INTERNAL
 from ..utils import ut
 from ..types import Buffer
-from .meta import Atom, Atoms, Branches, Block, GroupKind, META_RGXS
+from ..typing import typist
+from .meta import Atom, Atoms, Block, GroupKind, META_RGXS
 from .MatchData import MatchData
 from .ParseData import ParseData
 
@@ -178,15 +179,15 @@ class RegexStore(pyd.BaseModel):
         return {key: val.replace('(?P=', '(?&') for key, val in definitions.items()}
 
     @pyd.model_validator(mode='after')
-    def _init_store(self) -> Self:
+    def _process_options(self) -> Self:
         """Finalize the store by setting up the autostrip function based on member variables."""
         strip_string = ''
-        if self.autostrip_spaces:
+        if self.options.autostrip_spaces:
             strip_string += ' '
-        if self.autostrip_brackets:
+        if self.options.autostrip_brackets:
             strip_string += '()[]'
 
-        if self.autostrip_commas:
+        if self.options.autostrip_commas:
             strip_string += ','
 
         if strip_string:
@@ -281,7 +282,7 @@ class RegexStore(pyd.BaseModel):
         for existing_group in groups_used:
             buffer.set(self.definitions[existing_group])
             group_names = {
-                name for _, _, name, _, _ in self.group_iterator(buffer, mask=GroupKind.INVOC)
+                name for _, _, name, _, _ in Atom.group_iterator(buffer, mask=GroupKind.INVOC)
             }
             new_groups |= group_names - groups_used
 
@@ -320,13 +321,13 @@ class RegexStore(pyd.BaseModel):
         elif len(sep) >= 2 and sep[0] == '[' and sep[-1] == ']':  # type: ignore
             sep = sep[1:-1]
         elif not sep:
-            sep = self.separator
+            sep = self.options.separator
 
         # Override this group, which is used by the caller to wrap children
         if group == '&':
             group = ':'
         start = f'(?{group}' if group else '('
-        kind = self.parse_group_kind(start)
+        kind = GroupKind.read(start)
         if flags := data.pop('flags', ''):
             start = f'(?{flags}:' if kind == GroupKind.PLAIN else f'{start}(?{flags})'
 
@@ -351,27 +352,22 @@ class RegexStore(pyd.BaseModel):
         assert ut.has_all(self.patterns, *patterns), f'Unknown pattern(s): {patterns}'
         return patterns, str(text) if isinstance(text, Buffer) else text
 
-    @staticmethod
-    def _validate_tuple(data: tuple, types: tuple[type, ...]) -> None:
-        """Validate the given tuple against the passed types."""
-        assert len(data) == len(types), f'Invalid tuple: {data}'
-        assert all(isinstance(v, t) for v, t in zip(data, types, strict=True)), (
-            f'Invalid tuple: {data}'
-        )
-
     def _parse_tuple(self, data: RgxTup) -> tuple[str, RgxList, str, str]:
         if (n := len(data)) == 2:
-            cls._validate_tuple(data, (str, list))
+            assert typist.tuple_is(data, tuple[str, list]), f'Invalid group spec: {data}'
             mark, children = data  # type: ignore
             return mark, children, '', ''
         elif n == 4:
-            cls._validate_tuple(data, (str, str, list, str))
+            assert typist.tuple_is(data, tuple[str, str, list, str]), (
+                f'Invalid group spec (w/ prefix & suffix): {data}'
+            )
             mark, prefix, children, suffix = data  # type: ignore
-            if formatter is not None:
-                prefix, suffix = map(formatter, (prefix, suffix))
+            # The prefix and suffix weren't formatted upfront
+            if self.options.formatter is not None:
+                prefix, suffix = map(self.options.formatter, (prefix, suffix))
             return mark, children, prefix, suffix
         else:
-            raise ValueError(f'Invalid tuple: {data}')
+            raise ValueError(f'Invalid group spec (bad length of {n=}, should be 2 or 4): {data}')
 
     @staticmethod
     def _collapse_empty_sections(delims: list[str], sections: list[str]) -> None:
@@ -409,23 +405,25 @@ class RegexStore(pyd.BaseModel):
             assert all(isinstance(child, str) for child in children)
             children = [f'(?&{child})' for child in children]
 
-        # II. Parse the custom "mark" language into final regex syntax
+        # I. Parse the custom "mark" language into final regex syntax
         kind, start, sep, quant = self._parse_mark(mark)
         end = ')'
 
-        # III. Recursively compose the list component into a single string
+        # II. Recursively compose the list component into a single string
         body = self.compose(children, sep)
 
-        # III.ii. Add wrappers to handle surrounding context
+        # III. Add wrappers to handle surrounding context
         has_context = pre or suf or start[-1] == ')'
-        if self._is_split(body):
+        if Atoms.is_split(body):
             if has_context:
+                # III.i. Split groups with context must be wrapped in a non-capturing group
                 c = '>' if start == '(?>' else ':'
                 body = f'(?{c}{body})'
         elif kind in GroupKind._SIMPLE and len(start) == 3 and not quant and not has_context:
+            # III.ii. Non-split, simple, unquantified groups can drop the wrapping entirely
             start = end = ''
 
-        # e.g.        '(?:'  '\(?'   '....'   '\)?' ')?'
+        # e.g.          (?:    \(?  ...   \)?  )    ?
         return ''.join([start, pre, body, suf, end, quant])
 
     def _render_definitions(self, *definitions: str) -> str:
@@ -519,30 +517,32 @@ class RegexStore(pyd.BaseModel):
             return ''
         elif isinstance(data, str):
             if self.options.force_named_groups and '(' in data:
+                # I.i. Force all anonynmous groups (i.e. kind=POSIT) to be non-capturing
                 buf = RegexBuffer(data)
-                for (x0, _), *_ in self.group_iterator(buf, mask=GroupKind.POSIT):
+                for (x0, _), *_ in Atom.group_iterator(buf, mask=GroupKind.POSIT):
                     buf.replace((x0, x0 + 1), '(?:')
                 data = str(buf)
             if self.options.formatter:
+                # I.ii. Format the final string if requested
                 data = self.options.formatter(data)
             return data
 
         elif isinstance(data, Pattern):
+            # I.ii. Extract the (raw) expressions behind (compiled) patterns
             return data.pattern
 
         elif isinstance(data, list):
             if sep is None:
                 sep = self.options.separator
             elif sep == '<|>':
-                unique_segments = list({self.compose(item, sep='|') for item in data})
-                branches = list((unique_segments, recursive=True))
-                return self.construct_tree(branches)
+                root_branches = [self.compose(item, sep='|') for item in data]
+                return str(self.construct_tree(root_branches))
 
             return sep.join(map(self.compose, data))
 
         # II. Handle the main/complex case: a tuple describing a group
         elif isinstance(data, tuple):
-            return self.compose_tuple(*self._parse_tuple(data))  # type: ignore
+            return self.compose_tuple(*self._parse_tuple(data))
 
         # III. Special case: an explicitly-specified tuple (likely by a .yaml file)
         elif isinstance(data, dict):
@@ -616,7 +616,7 @@ class RegexStore(pyd.BaseModel):
 
         try:
             # I. Compose complex data structures into a string, and apply universal formatting
-            raw_text = self.compose(val, self.separator)
+            raw_text = self.compose(val, self.options.separator)
 
             # II. Clean up the pattern and store it as-is, while noticing which groups are used
             text = RegexBuffer(raw_text)
@@ -660,7 +660,7 @@ class RegexStore(pyd.BaseModel):
         values = list(filter(len, map(self.strip, values)))
 
         # Check if we removed an actually useful bracket above, and add it back in if so
-        if values and self.autostrip_brackets:
+        if values and self.options.autostrip_brackets:
             steps = [
                 (i, val, brs[0], brs[1])
                 for i, val in enumerate(values)
@@ -672,9 +672,8 @@ class RegexStore(pyd.BaseModel):
                     values[i] = f'{value}{rb}' if ln > rn else f'{lb}{value}'
         return values
 
-
     @classmethod
-    def construct_tree(cls, branches: Branches, has_suffix: bool = False) -> str:
+    def construct_tree(cls, block: Block | Iterable[str], max_split: int = 4) -> Atoms:
         """
         Construct an optimized regex from branches by factoring common prefixes and suffixes.
 
@@ -683,30 +682,39 @@ class RegexStore(pyd.BaseModel):
 
         Args:
             branches: Tuple of atom sequences representing alternative branches.
-            has_suffix: Whether parent context implies a shared suffix exists.
         Returns:
             Optimized regex string with factored common elements.
         """
-        # I. Shortcut for simple cases
-        if len(branches) == 1:
-            assert (atoms := branches[0]), 'Just one empty branch passed in.'
-            ret = ''.join(atoms)
-        elif max(*map(len, branches.data)) == 1:
-            ret = cls._join_atomic_branches([atoms.first for atoms in branches.data])
+        if not isinstance(block, Block):
+            block = Block.new(*sorted(set(block))).expand(max_split)
+
+        assert block, 'Empty branching block passed to construct_tree()'
+
+        # I. Prepare the block; the main stage is the "factor" step, where prefixes are found
+        block.clean()
+        block.factor()
+
+        # II. Recursively replace the block's body with an equivalent tree
+        result = block.model_copy(update=dict(branches=[]), deep=True)
+        if len(block) == 1:
+            # II.i. Singular case: return it as-is
+            result.branches = block.branches
+
+        elif max(*map(len, block.branches)) == 1:
+            # II.ii. Atomic case: join them directly
+            atomic_branches = [branch.first for branch in block.branches]
+            result.branches = [Atoms(Block.join_atoms(*atomic_branches))]
+
         else:
-            # II. Separate the sorted branches into sections that share prefixes
-            blocks = []
-            for branch_group in cls._group_by_prefix(branches):
-                block = Block.factor(branch_group)
-                blocks.append(block)
+            # II.iii. Main case: recurse into groups that share a prefix, then factor out shared
+            #         suffixes of those results before returning
+            prefix_groups = list(block.group_by_prefix())
+            for group in prefix_groups:
+                group.branches = cls.construct_tree(group, max_split)
 
-                content = cls.construct_tree(block, has_suffix=bool(block.suffix))
+            result.branches = Block.join_by_suffix(prefix_groups)
 
-            # III. Render each block, factoring out any shared suffixes
-            clauses = list(map(cls._render_blocks, Block.group_by_suffix(*blocks)))
-            ret = cls._render_branches(clauses, has_suffix)
-
-        return ret
+        return result.render()
 
     # ------------------
     # `x` Public Methods

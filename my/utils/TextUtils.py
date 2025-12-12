@@ -74,22 +74,22 @@ class TextUtils:
 
     @staticmethod
     def regex_dict(
-        dictionary: dict[T, str | tuple[str, ...] | Pattern] | dict[T, str] | None = None,
+        expressions: dict[T, str | tuple[str, ...] | Pattern] | dict[T, str] | None = None,
         compile_function: Callable[..., Pattern] = re.compile,
     ) -> dict[T, Pattern]:
         """
-        Compile string patterns in a dictionary to compiled regex Pattern objects.
+        Compile string patterns in a expressions to compiled regex Pattern objects.
 
         Args:
-            dictionary: Dict with string/Pattern values to compile.
+            expressions: A mapping of string names to regular expressions (compiled or otherwise).
             compile_function: Function to compile patterns (default: re.compile).
         Returns:
-            Dictionary with all values as compiled Pattern objects.
+            The expressions mapping with all values now compiled.
         """
-        if dictionary is None:
-            dictionary = {}
+        if expressions is None:
+            expressions = {}
         ret = {}
-        for key, val in dictionary.items():
+        for key, val in expressions.items():
             if isinstance(val, Pattern):
                 ret[key] = val
             else:
@@ -102,7 +102,8 @@ class TextUtils:
         compile_function: Callable[..., Pattern] = re.compile,
     ) -> list[tuple[Pattern, str]]:
         """
-        Compile string patterns in tuple pairs to Pattern objects.
+        Compile raw expressions associated with keys into a list of two-tuples, effectively mapping
+        `pattern: name`.
 
         Args:
             array: Iterable of (pattern, replacement) tuples.
@@ -119,37 +120,45 @@ class TextUtils:
         return ret
 
     @staticmethod
-    def spaced_rgx(pattern: str) -> str:
+    def spaced_rgx(expr: str) -> str:
         """
-        Convert space-separated pattern to flexible whitespace regex.
+        Convert space-separated expression to flexible whitespace regex.
 
         Args:
-            pattern: Space-separated pattern string.
+            expr: Space-separated expression.
         Returns:
             Pattern with spaces replaced by \\s* for flexible matching.
         """
-        return r'\s*'.join(' '.split(pattern))
+        return r'\s*'.join(' '.split(expr))
 
     @staticmethod
-    def multi_rgx(*rgxs: str | list[str], sep: str = r' ?', branching: bool = False) -> str:
+    def multi_rgx(
+        *expressions: str | list[str],
+        branching: bool = False,
+        sep: str = r' ?',
+        pre: str = '',
+        suf: str = '',
+    ) -> str:
         """
-        Combine multiple regex patterns into a single alternation group.
+        Combine two or more regular expressions into a single "branching" group that matches any of
+        the passed expressions.
 
         Args:
-            *rgxs: Regex patterns (strings or lists of strings).
+            *expressions: Regex patterns (strings or lists of strings).
             sep: Separator for joining list patterns (default: r' ?').
-            branching: If True, create capturing group; else non-capturing (default: False).
+            pre: Prefix to add before combined pattern (default: '').
+            suf: Suffix to add after combined pattern (default: '').
+            branching: If True, use branching group (resets group names b/w branches)
         Returns:
             Combined regex pattern in group format (?:|...) or (?:...).
         """
-        parts = [(rgx if isinstance(rgx, str) else sep.join(rgx)) for rgx in rgxs]
+        parts = [(expr if isinstance(expr, str) else sep.join(expr)) for expr in expressions]
         contents = r'|'.join(parts)
-        return rf'(?{"|" if branching else ":"}{contents})'
+        return rf'{pre}(?{"|" if branching else ":"}{contents}){suf}'
 
     # --------------
     # `1` FORMATTING
     # --------------
-
     @staticmethod
     def wrap(line: str, prefix: str = '', char: str = '-', width: int = 2) -> str:
         """

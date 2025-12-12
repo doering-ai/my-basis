@@ -7,12 +7,12 @@ import functools as ft
 import more_itertools as mi
 
 ### EXTERNAL
-import regex as re
 import pydantic as pyd
 
 ### INTERNAL
 from ...types import Span, Buffer
 from .GroupKind import GroupKind
+from .Quantifier import Quantifier
 from .meta_patterns import META_RGXS
 
 
@@ -36,15 +36,32 @@ class Atom(pyd.RootModel[str]):
     def __init__(self, data: str | Self = '') -> None:
         self.data = data.data if isinstance(data, Atom) else str(data)
 
-    def quantify(self, quantifier: str) -> Self:
+    def quantify(self, quantifier: str | Quantifier, overwrite: bool = True) -> Self:
         """
         Create a copy of this atom with the given quantifier applied. Any existing quantifier is
         dropped.
         """
         val = self.data
         if n_quant := len(self.quantifier):
-            val = val[:-n_quant]
-        return self.__class__(val + quantifier)
+            if self.quantifier == quantifier and quantifier in ('?', '*', '+'):
+                # I.i. Skip redundant quantifiers
+                return self
+            elif overwrite:
+                # I.ii. Remove the existing quantifier
+                val = val[:-n_quant]
+            elif quantifier:
+                # I.iii. Add the new quantifier to the whole existing atom with a wrapping group
+                val = f'(?:{val})'
+        return self.__class__(val + str(quantifier))
+
+    def as_optional(self) -> Self:
+        if opt := self.quantifier.as_optional():
+            return self.quantify(opt)
+        else:
+            return self.quantify('?', overwrite=False)
+
+    def as_required(self) -> Self:
+        return self.quantify(self.quantifier.as_required)
 
     # -------------------
     # `-` Private Methods
@@ -205,23 +222,23 @@ class Atom(pyd.RootModel[str]):
     # `x1` Properties
     # ---------------
     @ft.cached_property
-    def quantifier(self) -> str:
+    def quantifier(self) -> Quantifier:
         if len(self) >= 2:
             if self.is_group:
                 # I. Look for quantifier after the closing ')'
-                return self.data.rsplit(')', 1)[-1]
+                return Quantifier(self.data.rsplit(')', 1)[-1])
             elif match := META_RGXS['quant'].search(self.data):
                 # II. Otherwise, just search with a regex that only matches at the end of the string
-                return match[0]
-        return ''
+                return Quantifier(match[0])
+        return Quantifier()
 
     @ft.cached_property
     def has_complex_quantifier(self) -> bool:
-        return self.quantifier not in ('', '?')
+        return not self.quantifier.is_simple
 
     @ft.cached_property
     def is_optional(self) -> bool:
-        return self.quantifier == '?'
+        return self.quantifier.is_optional
 
     @ft.cached_property
     def is_group(self) -> bool:
@@ -268,14 +285,14 @@ class Atom(pyd.RootModel[str]):
         x = 0
         for (x0, x1), *_ in cls.group_iterator(expr, mode='roots'):
             if x0 > x:
-                # Yield any atoms between this and the last group
+                # I.i. Yield any atoms between this and the last group
                 yield from META_RGXS['atom'].findall(expr[x:x0])
             if x1 > x0:
-                # Yield this group
+                # I.ii. Yield this group
                 yield expr[x0:x1]
             x = x1
 
-        # Yield any atoms after the last group
+        # II. Yield any atoms after the last group
         if x < n_chars:
             yield from META_RGXS['atom'].findall(expr[x:])
 

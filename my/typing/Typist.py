@@ -13,6 +13,7 @@ from typing import (
     Mapping,
     Sequence,
     TypeGuard,
+    TypeVar,
     Hashable,
 )
 from collections import Counter, deque
@@ -53,6 +54,8 @@ ParsedType = tuple[type | None, TypeArg, TypeArg]
 # Misc aliases
 File = pyd.FilePath
 Directory = pyd.DirectoryPath
+
+TupleType = TypeVar('TupleType', bound=tuple)
 
 
 ############
@@ -187,28 +190,6 @@ class Typist(pyd.BaseModel):
             if self.match(t0, t1):
                 ret -= 2
         return ret
-
-    def _tuple_is(self, value: tuple, tvar: type) -> bool:
-        """
-        Check if a tuple matches a type variable, considering its arguments.
-        """
-        args = list(getattr(tvar, '__args__', []))
-        n_vals, n_args = len(value), len(args)
-
-        if n_args == 0:
-            # I. Without args, we assume called checked the container's tuple-ness
-            return True
-        elif args[-1] is Ellipsis:
-            # II. Handle ellipses
-            if n_args == 1:
-                return True
-            else:
-                args += [args[-2]] * (n_vals - n_args + 1)
-        elif n_vals != n_args:
-            # III. The lengths must match exactly
-            return False
-
-        return all(it.starmap(isinstance, zip(value, args, strict=True)))
 
     @staticmethod
     def _is_split(tvar: TypeArg) -> TypeGuard[tuple | UnionType | type]:
@@ -538,6 +519,12 @@ class Typist(pyd.BaseModel):
         annotations = ut.instance_aliases(target)
         return {key: typist.flexcast(val, annotations.get(key, None)) for key, val in items}
 
+    @staticmethod
+    def type_partition(container: Iterable, t0: type[C], t1: type[T]) -> tuple[list[C], list[T]]:
+        return tuple(  #  type:ignore
+            map(list, mi.partition(lambda x: isinstance(x, type), container))
+        )
+
     # -------------------
     # `+` Primary Methods
     # -------------------
@@ -779,11 +766,27 @@ class Typist(pyd.BaseModel):
         """Check if any value in an iterable matches a type variable."""
         return any(self.check(value, tvar) for value in list(iterable))
 
-    @staticmethod
-    def type_partition(container: Iterable, t0: type[C], t1: type[T]) -> tuple[list[C], list[T]]:
-        return tuple(  #  type:ignore
-            map(list, mi.partition(lambda x: isinstance(x, type), container))
-        )
+    def tuple_is(self, value: tuple, tvar: type[TupleType]) -> TypeGuard[TupleType]:
+        """
+        Check if a tuple matches a type variable, considering its arguments.
+        """
+        args = list(getattr(tvar, '__args__', []))
+        n_vals, n_args = len(value), len(args)
+
+        if n_args == 0:
+            # I. Without args, we assume called checked the container's tuple-ness
+            return True
+        elif args[-1] is Ellipsis:
+            # II. Handle ellipses
+            if n_args == 1:
+                return True
+            else:
+                args += [args[-2]] * (n_vals - n_args + 1)
+        elif n_vals != n_args:
+            # III. The lengths must match exactly
+            return False
+
+        return all(it.starmap(isinstance, zip(value, args, strict=True)))
 
     # -------------------
     # DATA TRANSFORMATION

@@ -2,23 +2,25 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import Iterator, Self, Sequence, overload
+from typing import Iterator, Self, Sequence
 import functools as ft
 import more_itertools as mi
 
 ### EXTERNAL
-import pydantic as pyd
 
 ### INTERNAL
-from .Atom import Atom
 from .meta_patterns import META_RGXS
+from .Quantifier import Quantifier
+from .Atom import Atom
 
 
 ############
 ### DATA ###
 ############
 @ft.total_ordering
-class Atoms(pyd.RootModel[list[Atom]]):
+class Atoms:
+    data: list[Atom] = []
+
     # -------------------
     # `0` Initial Methods
     # -------------------
@@ -28,7 +30,7 @@ class Atoms(pyd.RootModel[list[Atom]]):
             if isinstance(arg, Atom):
                 self.data.append(arg)
             elif isinstance(arg, Atoms):
-                self.data.extend(arg.model_copy(deep=True))
+                self.data.extend(arg.data)
             elif isinstance(arg, str):
                 self.data.extend(Atom.parse(arg))
             elif isinstance(arg, Sequence):
@@ -52,26 +54,16 @@ class Atoms(pyd.RootModel[list[Atom]]):
             expr = META_RGXS['special_characters'].sub(r'\\\1', expr)
         return cls(Atom.parse(expr))
 
+    @classmethod
+    def empty(cls) -> Self:
+        return cls(Atom())
+
+    def copy(self) -> Self:
+        return self.__class__(self.data.copy())
+
     # -------------------
     # `-` Private Methods
     # -------------------
-    @classmethod
-    def _is_split(cls, expr: str | Self) -> bool:
-        if isinstance(expr, str):
-            return any(atom == '|' for atom in cls._atomize_iter(expr))
-        else:
-            return '|' in expr
-
-    @classmethod
-    def _is_atomic(cls, expr: str | Atom | Self) -> bool:
-        if isinstance(expr, Atom):
-            return True
-        elif isinstance(expr, Atoms):
-            return len(expr) == 1
-        elif isinstance(expr, str):
-            return Atom.is_atomic(expr)
-        else:
-            raise TypeError(f'Unsupported type for is_atomic check: {type(expr)}')
 
     # -------------------
     # `+` Primary Methods
@@ -98,11 +90,20 @@ class Atoms(pyd.RootModel[list[Atom]]):
     def __bool__(self) -> bool:
         return len(self.data) > 0 and any(map(bool, self.data))
 
-    def __getitem__(self, key: slice | int) -> Self:
+    @ft.singledispatchmethod
+    def __getitem__(self, key):
+        raise TypeError(f'Unsupported type for Atoms indexing: {type(key)}')
+
+    @__getitem__.register
+    def _get_pos(self, key: int) -> Atom:
+        return self.data[key]
+
+    @__getitem__.register
+    def _get_slice(self, key: slice) -> Self:
         return self.__class__(self.data[key])
 
     @ft.singledispatchmethod
-    def __setitem__(self, key, value) -> None:
+    def __setitem__(self, key, value):
         raise TypeError(f'Unsupported types for Atoms assignment: {type(key)}, {type(value)}')
 
     @__setitem__.register
@@ -136,22 +137,43 @@ class Atoms(pyd.RootModel[list[Atom]]):
         else:
             raise TypeError(f'Unsupported type for Atoms comparison: {type(other)}')
 
+    def __iter__(self) -> Iterator[Atom]:
+        return iter(self.data)
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, (str, Atom, Sequence, Atoms)):
+            return self.data == self.__class__(other).data
+        else:
+            return False
+
+    def __contains__(self, item: object) -> bool:
+        if isinstance(item, (str, Atom)):
+            return item in self.data
+        else:
+            return False
+
     # ---------------
     # `x1` Properties
     # ---------------
     @property
-    def is_split(self) -> bool:
-        return self._is_split(self)
-
-    @property
     def first(self) -> Atom:
         return self.data[0] if self else Atom()
+
+    @property
+    def one(self) -> Atom:
+        assert len(self) == 1, 'Atoms.one called on Atoms with length != 1'
+        return self.data[0]
 
     # ------------
     # `x2` Methods
     # ------------
     @classmethod
-    def quantify(cls, expr: str | Self, quantifier: str) -> Self:
+    def quantify(
+        cls,
+        expr: str | Self,
+        quantifier: str | Quantifier,
+        overwrite: bool = False,
+    ) -> Self:
         """
         Create a version of the given pattern that has the request quantifier applied.
         Handles patterns that need to be wrapped before a quantifier is applied.
@@ -162,15 +184,31 @@ class Atoms(pyd.RootModel[list[Atom]]):
         Returns:
             The quantified regex pattern string.
         """
-        if isinstance(expr, str):
-            expr = Atoms.atomize(expr)
-        assert isinstance(expr, cls), f'Unsupported type for quantify: {type(expr)}'
+        atoms = Atoms.atomize(expr) if isinstance(expr, str) else expr
+        assert isinstance(atoms, cls), f'Unsupported type for quantify: {type(atoms)}'
 
         # Edge & null cases
-        if not expr:
+        if not atoms:
             return cls()
-        elif not quantifier or (quantifier == '?' and all(atom.is_optional for atom in expr)):
-            return expr
+        elif not quantifier:
+            return atoms
+        elif len(atoms) == 1:
+            return cls(atoms.first.quantify(quantifier, overwrite=overwrite))
 
         # Base case: Must wrap multi-atom expression in a new group
-        return cls(Atom(f'(?:{expr}){quantifier}'))
+        return cls(Atom(f'(?:{atoms}){quantifier}'))
+
+    @classmethod
+    def is_split(cls, expr: str | Self) -> bool:
+        return Atom('|') in (cls._atomize_iter(expr) if isinstance(expr, str) else expr)
+
+    @classmethod
+    def is_atomic(cls, expr: str | Atom | Self) -> bool:
+        if isinstance(expr, Atom):
+            return True
+        elif isinstance(expr, Atoms):
+            return len(expr) == 1
+        elif isinstance(expr, str):
+            return Atom.is_atomic(expr)
+        else:
+            raise TypeError(f'Unsupported type for is_atomic check: {type(expr)}')

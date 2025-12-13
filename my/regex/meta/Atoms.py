@@ -2,7 +2,7 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import Iterator, Self, Sequence
+from typing import Iterator, Self, Sequence, ClassVar
 import functools as ft
 import more_itertools as mi
 
@@ -19,6 +19,8 @@ from .Atom import Atom
 ############
 @ft.total_ordering
 class Atoms:
+    SPLITTER: ClassVar[Atom] = Atom(r'|')
+
     data: list[Atom] = []
 
     # -------------------
@@ -32,15 +34,14 @@ class Atoms:
             elif isinstance(arg, Atoms):
                 self.data.extend(arg.data)
             elif isinstance(arg, str):
-                self.data.extend(Atom.parse(arg))
-            elif isinstance(arg, Sequence):
+                self.data.extend(Atom.atomize(arg))
+            elif isinstance(arg, (Sequence | Iterator)):
                 self.data.extend(map(Atom, arg))
             else:
                 raise TypeError(f'Unsupported type for Atoms initialization: {type(arg)}')
 
     @classmethod
-    @ft.lru_cache(maxsize=64)
-    def atomize(cls, expr: str, escape: bool = False) -> Self:
+    def atomize(cls, expr: str | Self, escape: bool = False) -> Self:
         """
         Break a regex expression into its atomic components.
 
@@ -50,9 +51,11 @@ class Atoms:
         Returns:
             Tuple of atomic regex components (characters, groups, character sets, etc.).
         """
+        if isinstance(expr, cls):
+            return expr
         if escape:
             expr = META_RGXS['special_characters'].sub(r'\\\1', expr)
-        return cls(Atom.parse(expr))
+        return cls(Atom.atomize(expr))
 
     @classmethod
     def empty(cls) -> Self:
@@ -109,7 +112,7 @@ class Atoms:
     @__setitem__.register
     def _set_pos(self, key: int, value: str | Atom) -> None:
         if isinstance(value, str):
-            value = mi.one(Atom.parse(value))
+            value = mi.one(Atom.atomize(value))
         self.data[key] = value
 
     @__setitem__.register
@@ -147,8 +150,10 @@ class Atoms:
             return False
 
     def __contains__(self, item: object) -> bool:
-        if isinstance(item, (str, Atom)):
+        if isinstance(item, Atom):
             return item in self.data
+        elif isinstance(item, str):
+            return Atom(item) in self.data
         else:
             return False
 
@@ -212,3 +217,12 @@ class Atoms:
             return Atom.is_atomic(expr)
         else:
             raise TypeError(f'Unsupported type for is_atomic check: {type(expr)}')
+
+    def split(self) -> Iterator[Self]:
+        """
+        Split the Atoms instance into branches at top-level '|' atoms.
+
+        Yields:
+            Atoms instances representing alternate branches.
+        """
+        yield from map(Atoms, mi.split_at(self.data, lambda atom: atom == self.SPLITTER))

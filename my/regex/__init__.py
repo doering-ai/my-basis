@@ -1,4 +1,4 @@
-from .meta import GroupKind, Atom, Atoms, Block, Quantifier, META_RGXS
+from .meta import META_RGXS, Quantifier, GroupKind, Atom, Atoms, Block
 from .MatchData import MatchData
 from .ParseData import ParseData
 from .RegexStore import RegexStore, RgxParser, RgxTup, RgxList, RgxVal, RgxDef

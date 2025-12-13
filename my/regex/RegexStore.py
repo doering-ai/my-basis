@@ -251,46 +251,6 @@ class RegexStore(pyd.BaseModel):
             branches.append(''.join(line))
         return indent + f'|\n{indent}'.join(branches)
 
-    def tree_print(self, pattern: str | Pattern | Buffer, print_head: bool = True) -> str:
-        """
-        Pretty-print a regex pattern as an indented multiline tree structure, primarily for use
-        in debugging.
-
-        Args:
-            pattern: Pattern to print (string, compiled Pattern, or Buffer).
-            print_head: Whether to include the pattern header in output.
-        Returns:
-            Multi-line string representation with indentation showing nesting.
-        """
-        text = self.sanitize(pattern)
-        *head_arr, body = text.split('\n)(', 1)
-        body = body[body.index('>') + 1 : -1]
-        ret = self._tree_print(body)
-        return f'{head_arr[0]}\n){ret}' if print_head and head_arr else ret
-
-    def find_all_invocations(self, groups_used: set[str]) -> set[str]:
-        """
-        Recursively find all groups invoked by the given set of groups.
-
-        Args:
-            groups_used: Initial set of group names to analyze.
-        Returns:
-            Complete set of all groups transitively invoked by the initial set.
-        """
-        buffer = RegexBuffer()
-        new_groups: set[str] = set()
-        for existing_group in groups_used:
-            buffer.set(self.definitions[existing_group])
-            group_names = {
-                name for _, _, name, _, _ in Atom.group_iterator(buffer, mask=GroupKind.INVOC)
-            }
-            new_groups |= group_names - groups_used
-
-        if new_groups:
-            return groups_used | self.find_all_invocations(new_groups)
-        else:
-            return groups_used
-
     def _parse_mark(self, mark: str) -> tuple[GroupKind, str, str, str]:
         """
         Parses a given string of "mark syntax" DSL (see class documentation) into valid regex
@@ -388,6 +348,59 @@ class RegexStore(pyd.BaseModel):
             delims.pop(i)
             sections.pop(i)
 
+    def _render_definitions(self, *definitions: str) -> str:
+        """
+        Serialize definitions into a DEFINE block for regex compilation.
+
+        Orders and serializes the specified definitions as a (?(DEFINE)...) block,
+        ensuring references to other definitions are resolved in definition order.
+
+        Args:
+            *definitions: Names of definitions to include in the DEFINE block.
+        Returns:
+            String containing the DEFINE block, or empty string if no definitions.
+        Raises:
+            AssertionError: If any definition name is not found in the store.
+        """
+        if not definitions:
+            return ''
+        assert all(name in self.definitions for name in definitions), (
+            f'Unknown definitions passed: {definitions}'
+        )
+
+        # Render in the order of definition above, not in the order passed in
+        data = [(name, rgx) for name, rgx in self.definitions.items() if name in definitions]
+        return '\n'.join([r'(?(DEFINE)', *[f'(?P<{name}>{rgx})' for name, rgx in data], ')'])
+
+    def _autoparse(self, func: str, names: Iterable[str], text: str) -> MatchData:
+        for name in names:
+            if _match := getattr(self.patterns[name], func)(text):
+                return self.parse(_match, name)
+        return MatchData()
+
+    def find_all_invocations(self, groups_used: set[str]) -> set[str]:
+        """
+        Recursively find all groups invoked by the given set of groups.
+
+        Args:
+            groups_used: Initial set of group names to analyze.
+        Returns:
+            Complete set of all groups transitively invoked by the initial set.
+        """
+        buffer = RegexBuffer()
+        new_groups: set[str] = set()
+        for existing_group in groups_used:
+            buffer.set(self.definitions[existing_group])
+            group_names = {
+                name for _, _, name, _, _ in Atom.group_iterator(buffer, mask=GroupKind.INVOC)
+            }
+            new_groups |= group_names - groups_used
+
+        if new_groups:
+            return groups_used | self.find_all_invocations(new_groups)
+        else:
+            return groups_used
+
     def compose_tuple(self, mark: str, children: RgxList, pre: str = '', suf: str = '') -> str:
         """
         Compose a regex group from a mark, children, and optional prefix/suffix.
@@ -426,35 +439,19 @@ class RegexStore(pyd.BaseModel):
         # e.g.          (?:    \(?  ...   \)?  )    ?
         return ''.join([start, pre, body, suf, end, quant])
 
-    def _render_definitions(self, *definitions: str) -> str:
+    def compose_tree(self, data: RgxList) -> str:
         """
-        Serialize definitions into a DEFINE block for regex compilation.
-
-        Orders and serializes the specified definitions as a (?(DEFINE)...) block,
-        ensuring references to other definitions are resolved in definition order.
+        Compose an optimized branching tree from a list of regex values.
+        See define_router_tree().
 
         Args:
-            *definitions: Names of definitions to include in the DEFINE block.
-        Returns:
-            String containing the DEFINE block, or empty string if no definitions.
-        Raises:
-            AssertionError: If any definition name is not found in the store.
+            data: List of regex values passed from a caller's defintion.
+        Return:
+            The corresponding optimized branching tree regex expression.
         """
-        if not definitions:
-            return ''
-        assert all(name in self.definitions for name in definitions), (
-            f'Unknown definitions passed: {definitions}'
-        )
-
-        # Render in the order of definition above, not in the order passed in
-        data = [(name, rgx) for name, rgx in self.definitions.items() if name in definitions]
-        return '\n'.join([r'(?(DEFINE)', *[f'(?P<{name}>{rgx})' for name, rgx in data], ')'])
-
-    def _autoparse(self, func: str, names: Iterable[str], text: str) -> MatchData:
-        for name in names:
-            if _match := getattr(self.patterns[name], func)(text):
-                return self.parse(_match, name)
-        return MatchData()
+        composed_content = [self.compose(item, sep='|') for item in data]
+        block = Block.expand_branches(composed_content).build_router_tree()
+        return str(block)
 
     # -------------------
     # `+` Primary Methods
@@ -535,8 +532,7 @@ class RegexStore(pyd.BaseModel):
             if sep is None:
                 sep = self.options.separator
             elif sep == '<|>':
-                root_branches = [self.compose(item, sep='|') for item in data]
-                return str(Block.construct_tree(root_branches))
+                return self.compose_tree(data)
 
             return sep.join(map(self.compose, data))
 
@@ -1053,6 +1049,22 @@ class RegexStore(pyd.BaseModel):
             (META_RGXS['inline_flags'], r'(?:(?\1)'),
         )
 
-    @classmethod
-    def split(cls, pattern: str | Atoms | list[str], recursive: bool = False) -> list[str]:
+    def tree_print(self, pattern: str | Pattern | Buffer, print_head: bool = True) -> str:
+        """
+        Pretty-print a regex pattern as an indented multiline tree structure, primarily for use
+        in debugging.
+
+        Args:
+            pattern: Pattern to print (string, compiled Pattern, or Buffer).
+            print_head: Whether to include the pattern header in output.
+        Returns:
+            Multi-line string representation with indentation showing nesting.
+        """
+        text = self.sanitize(pattern)
+        *head_arr, body = text.split('\n)(', 1)
+        body = body[body.index('>') + 1 : -1]
+        ret = self._tree_print(body)
+        return f'{head_arr[0]}\n){ret}' if print_head and head_arr else ret
+
+    def atomize(self, pattern: str | Atoms | Iterable[str], recursive: bool = False) -> list[str]:
         return list(map(''.join, cls._atomic_split(pattern, recursive)))

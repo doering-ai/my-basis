@@ -11,7 +11,7 @@ import functools as ft
 import pydantic as pyd
 
 ### INTERNAL
-from my import ut
+from ...utils import ut
 from .GroupKind import GroupKind
 from .Quantifier import Quantifier
 from .Atom import Atom
@@ -40,38 +40,31 @@ class Block(pyd.BaseModel):
     def new(
         cls,
         *args: str | Atom | Atoms | Sequence[Atoms] | Iterator[Atoms] | Self,
-        factor: bool = False,
-        sort: bool = False,
-        clean: bool = False,
-        **kwargs: Atoms | str,
+        **kwargs: Atoms | Quantifier,
     ) -> Self:
         branches = []
         for arg in args:
             if isinstance(arg, cls):
-                # I.i. Copy from existing structures
+                # I. Copy from existing structures
                 branches.extend(arg.branches)
             elif isinstance(arg, Atom):
-                # I.ii. Singular branches
+                # II. Singular branches
                 branches.append(Atoms(arg))
+            elif isinstance(arg, (Sequence | Iterator)) and not isinstance(arg, str):
+                # III. Handle args that represent multiple branches
+                branches.extend(map(Atoms, arg))
+            elif isinstance(arg, (Atoms | str)):
+                # IV. Handle args that MAY represent multiple branches (using r'|')
+                atoms = Atoms.atomize(arg)
+                branches.extend(atoms.split())
             else:
-                # I.iii. Args that MAY represent multiple branches
-                if isinstance(arg, Atoms):
-                    atoms = arg
-                elif isinstance(arg, str):
-                    atoms = Atoms.atomize(arg)
-                elif isinstance(arg, Sequence):
-                    atoms = list(map(Atoms, arg))
-                else:
-                    raise TypeError(f'Unsupported type for Branches initialization: {type(arg)}')
-                branches.extend(mi.split_at(atoms, lambda atom: atom == '|'))
-        ret = cls(branches=branches, **kwargs)
-        if factor:
-            ret.factor()
-        if sort:
-            ret.sort()
-        if clean:
-            ret.clean()
-        return ret
+                raise TypeError(f'Unsupported type for Branches initialization: {type(arg)}')
+
+        return cls(branches=branches, **kwargs)
+
+    def copy_context(self) -> Self:
+        """Copy just the context (prefix, suffix, quantifier) of this block to a new instance."""
+        return self.model_copy(update=dict(branches=[]), deep=True)
 
     # -------------------
     # `-` Private Methods
@@ -119,6 +112,31 @@ class Block(pyd.BaseModel):
     @classmethod
     def _is_clone_with_prefix(cls, lhs: Atoms, rhs: Atoms) -> bool:
         return bool(lhs and rhs) and len(rhs) == len(lhs) + 1 and rhs[1:] == lhs
+
+    @classmethod
+    def group_branches_by_prefix(cls, *branches: Atoms) -> Generator[list[Atoms], None, None]:
+        """
+        Group the given branches into buckets by their common prefixes (if any exist).
+        It is assumed that branches are already given in a meaningful (and likely alphabetical)
+        order, so only adjacent branches are compared.
+
+        Yields:
+            Lists of atoms, each representing a contiguous subset of this block's branches.
+        """
+        _split = lambda lhs, rhs: not cls.greatest_common_prefix(lhs, rhs)
+        yield from mi.split_when(branches, _split)
+
+    @classmethod
+    def group_blocks_by_suffix(cls, *blocks: Self) -> Generator[list[Self], None, None]:
+        """
+        Group the given blocks by their common suffixes (if any exist).
+        Uses the main body branches of a block for this purpose if it lacks a suffix.
+
+        Yields:
+            Lists of Block instances, each representing a contiguous subset of the given blocks.
+        """
+        _split = lambda lhs, rhs: not cls.greatest_common_suffix(*lhs.last, *rhs.last)
+        yield from map(list, mi.split_when(blocks, _split))
 
     # -------------------
     # `+` Primary Methods
@@ -184,7 +202,7 @@ class Block(pyd.BaseModel):
             return cls.new(atom)
 
     @classmethod
-    def join_atoms(cls, *args: Atom) -> Atom:
+    def collapse_atoms(cls, *args: Atom) -> Atom:
         """
         Given a collection of single atoms, attempt to combine them into a more succint set-based
         expression.
@@ -193,8 +211,8 @@ class Block(pyd.BaseModel):
         atomic.
 
         Examples:
-            _join_atomic_branches(['a', 'b', '']) -> '[ab]?'
-            _join_atomic_branches(['(?:one)', '(?:two)', 'a', 'b', '']) -> '(?:one|two|[ab])?'
+            _collapse_atomic_branches(['a', 'b', '']) -> '[ab]?'
+            _collapse_atomic_branches(['(?:one)', '(?:two)', 'a', 'b', '']) -> '(?:one|two|[ab])?'
 
         Args:
             atoms: A list of valid atom strings.
@@ -242,9 +260,9 @@ class Block(pyd.BaseModel):
         return rendered_atoms.one
 
     @classmethod
-    def join_by_suffix(cls, blocks: list[Self]) -> list[Atoms]:
+    def collapse_blocks_by_suffix(cls, blocks: list[Self]) -> list[Atoms]:
         ret = []
-        for group in cls.group_by_suffix(*blocks):
+        for group in cls.group_blocks_by_suffix(*blocks):
             n = len(group)
             if n == 0:
                 raise ValueError('Somehow collected an empty block group')
@@ -265,29 +283,6 @@ class Block(pyd.BaseModel):
                 sub_branches = [block.render() for block in group]
                 ret.append(f'(?:{sub_branches})', *shared_suffix)
         return ret
-
-    def group_by_prefix(self) -> Generator[Self, None, None]:
-        """
-        Group the given branches into buckets by their common prefixes (if any exist).
-        It is assumed that branches are already given in a meaningful (and likely alphabetical)
-        order, so only adjacent branches are compared.
-        """
-        yield from map(
-            list,
-            mi.split_when(
-                self.branches, lambda lhs, rhs: not self.greatest_common_prefix(lhs, rhs)
-            ),
-        )
-
-    @classmethod
-    def group_by_suffix(cls, *blocks: Self) -> Generator[list[Self], None, None]:
-        """Group the given blocks by their common suffixes (if any exist)."""
-        yield from map(
-            list,
-            mi.split_when(
-                blocks, lambda lhs, rhs: not cls.greatest_common_suffix(*lhs.last, *rhs.last)
-            ),
-        )
 
     def make_optional(self) -> bool:
         """
@@ -313,7 +308,7 @@ class Block(pyd.BaseModel):
         return len(self.branches)
 
     def __str__(self) -> str:
-        return str(self.branches)
+        return str(self.render())
 
     def __repr__(self) -> str:
         return f'{self.branches!r}'
@@ -335,6 +330,14 @@ class Block(pyd.BaseModel):
     @__getitem__.register
     def _get_branches(self, key: slice) -> Self:
         return self.new(*self.branches[key])
+
+    @property
+    def lengths(self) -> list[int]:
+        return list(map(len, self.branches)) if self else []
+
+    @property
+    def max_length(self) -> int:
+        return max(*self.lengths) if self else 0
 
     @property
     def last(self) -> list[Atoms]:
@@ -416,6 +419,11 @@ class Block(pyd.BaseModel):
         self.sort()
         return self
 
+    @classmethod
+    def expand_branches(cls, branches: Iterable[str]) -> Self:
+        block = cls.new(*sorted(set(branches)))
+        return block.expand()
+
     def factor(self) -> Self:
         """
         Factor out common prefixes and suffixes from the branches in the main data structure,
@@ -436,12 +444,49 @@ class Block(pyd.BaseModel):
             self.suffix = suffix + self.suffix
 
         # III. Check for a shared quantifier
-        if not self.quantifier and max(map(len, self.branches)) == 1:
+        if not self.quantifier and self.max_length == 1:
             quantifiers = {branch.one.quantifier for branch in self.branches if branch}
             if len(quantifiers) == 1 and (common_quantifier := quantifiers.pop()):
                 self.quantifier = common_quantifier
                 for branch in self.branches:
                     branch[0] = branch[0].quantify('')
+
+        return self
+
+    def build_router_tree(self) -> Self:
+        """
+        Construct an optimized regex from branches by factoring common prefixes and suffixes.
+
+        This method builds an efficient regex pattern by identifying and extracting common
+        prefixes and suffixes from multiple branches, minimizing redundancy in the result.
+
+        Args:
+            block:
+        Returns:
+            Optimized regex string with factored common elements.
+        """
+        cls = self.__class__
+
+        # I. Prepare the block; the main stage is the "factor" step, where prefixes are found
+        self.clean()
+        self.factor()
+
+        # II. Recursively replace the block's body with an equivalent tree
+        if len(self) == 1:
+            # II.i. Singular case: return it as-is
+            pass
+        elif self.max_length == 1:
+            # II.ii. Atomic case: join them directly, as there are unique opportunities
+            union = cls.collapse_atoms(*(branch.first for branch in self.branches))
+            self.branches = [Atoms(union)]
+        else:
+            # II.iii. Main case: recurse into groups that share a prefix, then factor out shared
+            #         suffixes of those results before returning
+            children = [
+                cls(branches=branches).build_router_tree()
+                for branches in cls.group_branches_by_prefix(*self.branches)
+            ]
+            self.branches = cls.collapse_blocks_by_suffix(children)
 
         return self
 
@@ -480,46 +525,3 @@ class Block(pyd.BaseModel):
     # ------------------
     # `x3` Top-level API
     # ------------------
-    @classmethod
-    def construct_tree(cls, block: Self | Iterable[str], max_split: int = 4) -> Atoms:
-        """
-        Construct an optimized regex from branches by factoring common prefixes and suffixes.
-
-        This method builds an efficient regex pattern by identifying and extracting common
-        prefixes and suffixes from multiple branches, minimizing redundancy in the result.
-
-        Args:
-            branches: Tuple of atom sequences representing alternative branches.
-        Returns:
-            Optimized regex string with factored common elements.
-        """
-        if not isinstance(block, cls):
-            block = cls.new(*sorted(set(block))).expand(max_split)
-
-        assert block, 'Empty branching block passed to construct_tree()'
-
-        # I. Prepare the block; the main stage is the "factor" step, where prefixes are found
-        block.clean()
-        block.factor()
-
-        # II. Recursively replace the block's body with an equivalent tree
-        result = block.model_copy(update=dict(branches=[]), deep=True)
-        if len(block) == 1:
-            # II.i. Singular case: return it as-is
-            result.branches = block.branches
-
-        elif max(*map(len, block.branches)) == 1:
-            # II.ii. Atomic case: join them directly
-            atomic_branches = [branch.first for branch in block.branches]
-            result.branches = [Atoms(cls.join_atoms(*atomic_branches))]
-
-        else:
-            # II.iii. Main case: recurse into groups that share a prefix, then factor out shared
-            #         suffixes of those results before returning
-            prefix_groups = list(block.group_by_prefix())
-            for group in prefix_groups:
-                group.branches = cls.construct_tree(group, max_split)
-
-            result.branches = cls.join_by_suffix(prefix_groups)
-
-        return result.render()

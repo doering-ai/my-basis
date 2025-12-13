@@ -97,6 +97,9 @@ class Quantifier:
     # ------------------
     # `x` Public Methods
     # ------------------
+    # --------------
+    # `x0` Overrides
+    # --------------
     def __bool__(self) -> bool:
         return bool(self.data)
 
@@ -110,8 +113,10 @@ class Quantifier:
         return len(self.data)
 
     def __eq__(self, other: object) -> bool:
-        if isinstance(other, (str, Quantifier)):
-            return self.data == (other.data if isinstance(other, Quantifier) else other)
+        if isinstance(other, str):
+            return self.data == other
+        elif isinstance(other, Quantifier):
+            return self.data == other.data
         else:
             return False
 
@@ -130,6 +135,9 @@ class Quantifier:
     def __getitem__(self, key: slice | int) -> str:
         return self.data[key]
 
+    # ---------------
+    # `x1` Properties
+    # ---------------
     @ft.cached_property
     def is_simple(self) -> bool:
         return self.data in ('', '?')

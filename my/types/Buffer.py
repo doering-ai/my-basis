@@ -465,7 +465,9 @@ class Buffer(pyd.BaseModel):
     def __getitem__(self, key: int | slice) -> str:
         return self.text[0][key]
 
-    def slice(self, start: int, end: int) -> str:
+    def slice(self, start: int, end: int = -1) -> str:
+        if end == -1:
+            end = len(self)
         return self.text[0][start:end]
 
     def __contains__(self, val: str) -> bool:

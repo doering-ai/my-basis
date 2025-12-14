@@ -229,9 +229,3 @@ class TestRegexStore:
         text_b = '123'
         assert store.match('test', text_b)
         assert store.route_match('test', text_b) == 'nums'
-
-    # ---------
-    # `x4` Misc
-    # ---------
-    def test_sanitize(self):
-        pass

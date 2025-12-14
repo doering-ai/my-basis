@@ -45,7 +45,7 @@ class GroupKind(MyEnum, Flag):
 
     POSIT = auto()  # positional capturing
     PLAIN = auto()  # Positional non-capturing
-    FLAGS = auto()  # Custom flag
+    FLAGS = auto()  # Custom sections, usually inline flags
     INLINE = auto()  # Inline flags in plain groups
     ATOMS = auto()  # Atomic
     MULTI = auto()  # 'Branch Reset'

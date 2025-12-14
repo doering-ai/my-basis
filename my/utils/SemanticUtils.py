@@ -180,6 +180,26 @@ class SemanticUtils:
 
         raise ValueError(f'Failed to convert {plural} to singular form.')
 
+    @staticmethod
+    def to_ordinal(num: int | str) -> str:
+        num = str(num).lstrip('0')
+        if len(num) == 0:
+            return ''
+        assert num.isdigit(), f'Input {num} is not a valid integer string.'
+
+        if num[-1] > '3':
+            ordinal = 'th'
+        elif re.search(r'(?<!1)1$', num):
+            ordinal = 'st'
+        elif re.search(r'(?<!1)2$', num):
+            ordinal = 'nd'
+        elif re.search(r'(?<!1)3$', num):
+            ordinal = 'rd'
+        else:
+            ordinal = 'th'
+
+        return f'{num}{ordinal}'
+
     # ---------------
     # `3` IDENTIFIERS
     # ---------------

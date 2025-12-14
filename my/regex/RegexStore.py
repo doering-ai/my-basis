@@ -936,9 +936,9 @@ class RegexStore(pyd.BaseModel):
         fn = self.partial(name, func)
         yield from filter(lambda text: bool(fn(text)), texts)
 
-    # ---------------------------------------
-    # `x3` Performant "Router Tree" Functions
-    # ---------------------------------------
+    # ---------------------------
+    # `x3` Optimization Functions
+    # ---------------------------
     def define_router_tree(self, router: str, items: Mapping[str, RgxVal], **kwargs: str) -> None:
         """
         Define a router pattern that classifies text into named categories.
@@ -1065,6 +1065,3 @@ class RegexStore(pyd.BaseModel):
         body = body[body.index('>') + 1 : -1]
         ret = self._tree_print(body)
         return f'{head_arr[0]}\n){ret}' if print_head and head_arr else ret
-
-    def atomize(self, pattern: str | Atoms | Iterable[str], recursive: bool = False) -> list[str]:
-        return list(map(''.join, cls._atomic_split(pattern, recursive)))

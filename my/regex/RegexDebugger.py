@@ -2,8 +2,9 @@
 ### HEAD ###
 ############
 ### STANDARD
-import itertools as it
-from typing import Self
+from typing import Self, Any
+import more_itertools as mi
+import functools as ft
 
 ### EXTERNAL
 import regex as re
@@ -11,9 +12,9 @@ import regex as re
 ### INTERNAL
 from ..utils import ut
 from ..types import Buffer
-from .GroupKind import GroupKind
+from .meta import GroupKind, Atom, Atoms, Block, Quantifier
 from .MatchData import MatchData
-from .RegexStore import RegexStore
+from .RegexStore import RegexStore, RegexBuffer
 
 
 ############
@@ -46,15 +47,21 @@ class RegexDebugger(RegexStore):
     # -------------------
     # `-` Private Methods
     # -------------------
-    def _curate(
-        self,
-        atoms: tuple[str, ...],
-        atom_ends: list[int],
-        failed_idx: int,
-        body: Buffer,
-        definitions: dict[str, str],
-        remaining_text: str,
-    ) -> str:
+    def pinpoint_failure(self, text: Buffer, atoms: Atoms, prefix: str) -> tuple[int, MatchData]:
+        last_match: MatchData = MatchData()
+
+        # I. Iterate through the atoms, progressively testing longer snippets until one breaks
+        for i in range(len(atoms)):
+            snippet = re.compile(rf'{prefix}{atoms[:i]}')
+            if (match := text.match(snippet)) is not None:
+                last_match = self.parse(match)
+            else:
+                return i, last_match
+
+        # II. If no failure was found, return an impossible index to indicate as much
+        return len(atoms), last_match
+
+    def curate(self, atoms: Atoms, failed_idx: int, flags: Atom) -> str:
         """
         Curate the given regex snippet to include only the failing clause and its dependencies.
 
@@ -63,26 +70,50 @@ class RegexDebugger(RegexStore):
             atom_ends: List of end indices for each atom in the body.
             failed_idx: Index of the atom where matching failed.
             body: Buffer containing the full pattern body.
-            definitions: Dictionary of group definitions from the pattern head.
-            remaining_text: Text that was left unmatched after failure.
+            defs: Dictionary of group definitions from the pattern head.
         Returns:
-            A truncated version of the given rgx, as a plain string.
+            A truncated version of the given expression.
         """
-        x0 = x1 = failed_idx
-        while x0 > 0 and ut.has_any(self._quantify(atoms[x0 - 1]), '?', '*'):
-            x0 -= 1
+        # I. Starting from the failed atom, walk backwards to include any optional atoms that may
+        #    not have matched, thus causing the error
+        start_idx = failed_idx
+        while start_idx > 0 and atoms[start_idx - 1].is_optional:
+            start_idx -= 1
 
-        snippet = body.slice(atom_ends[x0 - 1] if x0 else 0, atom_ends[x1])
-        rgx_snippet = self.sanitize(snippet)
-        invocations = self.parse_invocations(rgx_snippet)
+        # II. Slice out the snippet and 'sanitize' it so that it's exportable to any regex platform
+        snippet = str(atoms[start_idx:failed_idx])
 
-        return '\n'.join(
-            [
-                r'(?(DEFINE)',
-                *[definitions[group] for group in invocations],
-                rf')(?m)^{rgx_snippet}',
-            ]
-        )
+        # III. Identify the groups referenced in the snippet and collect just those definitions
+        groups_invoked = self.parse_invocations(snippet)
+        definitions = self._render_definitions(*groups_invoked)
+
+        # IV. Return a valid RGX expression.
+        return rf'{definitions}{flags}^{self.sanitize(snippet)}'
+
+    def format_expr(self, expr: str | Atoms) -> str:
+        return ut.wrap('EXPRESSION', char='-', width=3) + f'\n{expr}'
+
+    def format_data(self, match: str | MatchData) -> str:
+        return ut.wrap('LAST MATCH', char='-', width=1) + f'\n{match}'
+
+    def format_curated(self, curated_expr: str | Atoms) -> str:
+        return ut.wrap('CURATED EXPRESSION', char='-', width=2) + f'\n{curated_expr}'
+
+    def format_text(self, text: str | Buffer) -> str:
+        return ut.wrap('UNMATCHED TEXT', char='-', width=1) + f'\n{text}'
+
+    def format_fulltext(self, text: str | Buffer) -> str:
+        return ut.wrap('FULL TEXT', char='-', width=3) + f'\n{text}'
+
+    def format_fullexpr(self, expr: str | Atoms) -> str:
+        return ut.wrap('FULL EXPRESSION', char='-', width=3) + f'\n{expr}'
+
+    def format_early_return(self, name: str, explanation: str, text: str, expr: str) -> list[str]:
+        return [
+            f'Regular expression "{name}" {explanation}',
+            self.format_fulltext(text),
+            self.format_fullexpr(expr),
+        ]
 
     # -------------------
     # `+` Primary Methods
@@ -101,90 +132,68 @@ class RegexDebugger(RegexStore):
         """
         output = []
 
-        # I. Split the regex up by the root-level groups present
-        rgx = self.patterns[name]
-        head, body_rgx = rgx.split(f'(?P<{name}>', 1)
-        body_rgx = body_rgx[:-1]
-        body = Buffer.new(body_rgx, fence_rgxs=['arrays'])
-        atoms = self.atomize(str(body))
-        while len(atoms) == 1 and self._is_group(atoms[0]):
-            kind, start, flags, group_body, quant = self._parse_group(atoms[0])
-            if kind in GroupKind._SIMPLE and quant == '' and not self._is_split(group_body):
-                body.set(group_body)
-                atoms = self.atomize(group_body)
+        flags = {'m'}
+        atoms = Atoms.atomize(self.definitions[name])
+        while len(atoms) == 1 and atoms.one.is_group:
+            _kind, _, _flags, _body, _quant = atoms.one.as_group()
+            group_atoms = Atoms.atomize(_body)
+            if _kind in GroupKind._SIMPLE and not (_quant or Atoms.is_split(group_atoms)):
+                atoms = group_atoms
+                flags |= set(_flags)
             else:
                 break
-        atom_ends = list(it.accumulate(map(len, atoms)))
+
+        # I.ii. Generate a convenient (if oversized) prefix for future repeated use
+        flag_group = Atom(f'(?{"".join(sorted(flags))})')
+        definitions = mi.first(Atoms.atomize(self.patterns[name].pattern))
+        prefix = str(Atoms(definitions, flag_group))
 
         # II. Iterate through the groups, matching until we fail
-        n = 0
-        data: MatchData = MatchData()
-        for end in atom_ends:
-            match = text.match(re.compile(head + body[:end]))
-            if match is not None:
-                data = self.parse(match)
-                n += 1
-            else:
-                break
+        failed_idx, last_match = self.pinpoint_failure(text, atoms, prefix)
 
-        # III. Exit early if we completely failed or completely succeeded
-        out_rgx = self.sanitize(head + body_rgx)
-        if n == 0:
+        # III. Identify special cases
+        if failed_idx == len(atoms):
+            # III.i. All atoms succeeded
             output.extend(
                 [
-                    f'Returned FAILED MATCH (n={n}) for entire RGX:',
-                    out_rgx,
-                    '',
+                    'Failed to identify failure during debugging (all atoms matched successfully).',
+                    self.format_expr(self.sanitize(name)),
+                    self.format_data(last_match),
+                ]
+            )
+            if last_match.end < len(text):
+                output.append(self.format_text(text[last_match.end :]))
+            return output
+        elif failed_idx == 0:
+            # III.ii. All atoms failed
+            output.extend(
+                [
+                    'All atoms of the regex failed, implicating the first atom OR a context issue.',
+                    self.format_expr(self.sanitize(name)),
                 ]
             )
             remaining_text = str(text)
-        elif n == len(atoms):
-            output.extend(
-                [
-                    'Returned UNEXPECTED MATCH for RGX:',
-                    '',
-                    out_rgx,
-                    '',
-                    '...returning:',
-                    '',
-                    f'\t{data}',
-                ]
-            )
-            if data.end < len(text):
-                output.extend(['Unmatched text:', text.slice(data.end, len(text))])
-            return output
+
         else:
-            output.extend(
-                [
-                    f'Returned PARTIAL MATCH up to clause {n}, returning data:',
-                    f'\t{data}',
-                ]
-            )
-            remaining_text = str(text.slice(data.end, len(text)))
+            # III.iii. Main case (partial match up to failure)
+            output.extend([f'Successfully identified the problematic atom ({failed_idx=}).'])
+            remaining_text = text[last_match.end :]
 
         # IV. Return just the clauses that we think failed
-        head_buf = Buffer.new(head[len('(?(DEFINE)') : -1], fence_rgxs=['arrays'])
-        definitions = {
-            name: head_buf.slice(*span)
-            for span, _, name, _, _ in self.group_iterator(
-                head_buf, mask=GroupKind.PARAM, mode='roots'
-            )
-        }
-        curated_rgx = self._curate(atoms, atom_ends, n, body, definitions, remaining_text)
+        curated_rgx = self.curate(atoms, failed_idx, flag_group)
         if not curated_rgx:
-            output.extend(['Failed to curate RGX:', '', out_rgx])
+            output.extend(
+                [
+                    'DEBUGGING ERROR -- failed to curate!',
+                    self.format_expr(self.sanitize(name)),
+                ]
+            )
         else:
             output.extend(
                 [
-                    '-' * 80,
-                    'This test RGX:',
-                    '',
-                    curated_rgx,
-                    '',
-                    '...needs to match this remaining text:',
-                    '',
-                    remaining_text,
-                    '-' * 80,
+                    self.format_data(last_match),
+                    self.format_curated(curated_rgx),
+                    self.format_text(remaining_text),
                 ]
             )
 
@@ -216,67 +225,36 @@ class RegexDebugger(RegexStore):
             ValueError: If matched and expected are both False (no failure to debug).
         """
         assert names
-        _name = names[0].upper() + (f'.{func}()' if func else '')
-        output: list[str] = []
+        name = names[0].upper() + (f'.{func}()' if func else '')
 
-        status = str(int(matched)) + str(int(expected))
-        rgxs_str = '\n\n'.join(map(self.sanitize, names))
-        if status == '11':
-            output.extend(
-                [
-                    f'RGX `{_name}` returned INCORRECT results for text:',
-                    '',
-                    text,
-                    '',
-                    '...VIA PATTERN:',
-                    '',
-                    rgxs_str,
-                    '',
-                ]
-            )
+        term_width = ut.get_terminal_width()
+        output: list[str] = [f'{" REGEX DEBUGGER ":#^{term_width}}']
+        preamble = ft.partial(
+            self.format_early_return,
+            name=name,
+            text=text,
+            expressions='\n\n'.join(map(self.sanitize, names)),
+        )
 
-        elif status == '10':
-            output.extend(
-                [
-                    f'RGX `{_name}` returned UNEXPECTED success for text:',
-                    '',
-                    text,
-                    '',
-                    '...VIA PATTERN:',
-                    '',
-                    rgxs_str,
-                    '',
-                ]
-            )
+        # II. Analyze the failure case
+        if matched and expected:
+            # II.i. Incorrect case
+            output.extend(preamble('INCORRECTLY MATCHED, returning the wrong data.'))
 
-        elif status == '01':
-            output.extend(
-                [
-                    f'RGX `{_name}` returned FAILURE to match text:',
-                    '',
-                    text,
-                    '',
-                    '...VIA PATTERN:',
-                    '',
-                    rgxs_str,
-                    '',
-                ]
-            )
-            buf = Buffer.new(text, fence_rgxs=['arrays'])
-            for i, name in enumerate(names):
+        elif matched and not expected:
+            # II.ii. Unexpected case
+            output.extend(preamble('UNEXPECTEDLY MATCHED when it should have failed.'))
+
+        elif expected and not matched:
+            # II.iii. Main case
+            output.extend(preamble('FAILED TO MATCH the full text.'))
+            for i, _name in enumerate(names):
                 if len(names) > 1:
-                    header = f'## `{i}` output for {name.upper()} ##'
-                    output.extend(
-                        [
-                            '',
-                            '#' * len(header),
-                            header,
-                            '#' * len(header),
-                        ]
-                    )
+                    output.append(ut.wrap(f'`{i}` DEBUGGING {_name.upper()}...', char='=', width=4))
 
-                output.extend(self.debug_failed_match(name, buf))
+                output.extend(self.debug_failed_match(_name, RegexBuffer(text)))
         else:
             raise ValueError('No match, when we expected none -- why call debug_regex_test()?')
 
+        output.extend(['', '#' * term_width])
         return '\n'.join(output)

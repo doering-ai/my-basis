@@ -8,6 +8,7 @@ from typing import Any
 import pytest as pyt
 
 ### INTERNAL
+from ..conftest import boolmap
 from my.regex import Quantifier, Atom, Atoms, Block
 
 cls = Block
@@ -56,52 +57,94 @@ class TestBlock:
     # `-` Private Methods
     # -------------------
     @pyt.mark.parametrize(
-        'lhs, args, expected',
+        'atoms, expected',
         [
-            ('abc', 'bbc', ''),
-            ('', '', ''),
-            ('abc', '', ''),
-            ('', 'abc', ''),
-            ('abc', 'abd', 'ab'),
-            (r'ab\d', r'ab\d', r'ab\d'),
+            (['abc', 'bbc'], ''),
+            (['', ''], ''),
+            (['abc', ''], ''),
+            (['', 'abc'], ''),
+            (['abc', 'abd'], 'ab'),
+            (['abc', 'abd', '.abc'], r''),
+            ([r'ab\d', r'ab\d'], r'ab\d'),
         ],
     )
-    def test_greatest_common_prefix(self, lhs: str, args: str | list[str], expected: str):
-        if isinstance(args, str):
-            args = [args]
-        ret = cls._greatest_common_prefix(*map(cls.atomize, (lhs, *args)))
-        assert ''.join(ret) == expected
+    def test_greatest_common_prefix(self, atoms: list[str], expected: str):
+        assert cls.greatest_common_prefix(Atoms(*atoms)) == expected
 
     @pyt.mark.parametrize(
         'lhs, args, expected',
         [
-            ('abc', 'bbc', 'bc'),
-            ('', '', ''),
-            ('abc', '', ''),
-            ('', 'abc', ''),
-            ('abc', 'abd', ''),
-            (r'ab\d', r'ab\d', r'ab\d'),
-            (r'xa(?:b|c)', [r'ya(?:b|c)', r'za(?:b|c)'], r'a(?:b|c)'),
+            (['abc', 'bbc'], 'bc'),
+            (['', ''], ''),
+            (['abc', ''], ''),
+            (['', 'abc'], ''),
+            (['abc', 'abd'], ''),
+            ([r'ab\d', r'ab\d'], r'ab\d'),
+            ([r'xa(?:b|c)', r'ya(?:b|c)', r'za(?:b|c)'], r'a(?:b|c)'),
         ],
     )
-    def test_greatest_common_suffix(self, lhs: str, args: str | list[str], expected: str):
-        if isinstance(args, str):
-            args = [args]
-        ret = cls._greatest_common_suffix(*map(cls.atomize, (lhs, *args)))
-        assert ''.join(ret) == expected
+    def test_greatest_common_suffix(self, atoms: list[str], expected: str):
+        assert cls.greatest_common_suffix(Atoms(atoms)) == expected
 
-    def test_choose_joining_mark(self):
-        pass
+    @pyt.mark.parametrize(
+        'branches, expected',
+        boolmap(
+            false=[
+                [],
+            ],
+            true=[
+                [],
+            ],
+        ),
+    )
+    def test_supports_atomic_grouping(self, branches: list[str], expected: bool):
+        block = cls.new(*branches)
+        assert block.supports_atomic_grouping() == expected
 
-    def test_is_clone_with_prefix(self):
-        pass
+    @pyt.mark.parametrize(
+        'lhs, rhs, expected',
+        boolmap(
+            false=[
+                [
+                    ('', ''),
+                ],
+            ],
+            true=[
+                [
+                    ('', ''),
+                ],
+            ],
+        ),
+    )
+    def test_is_clone_with_prefix(self, lhs: str, rhs: str, expected: bool):
+        assert cls._is_clone_with_prefix(Atoms(lhs), Atoms(rhs)) == expected
 
     # -------------------
     # `+` Primary Methods
     # -------------------
+    @pyt.mark.parametrize(
+        'expr, expected',
+        [
+            # Groups
+            (r'(?:ab)?', ['', r'ab']),
+            (r'(ab)?', ['', r'(ab)']),
+            (r'(?:a|b)', 2),
+            (r'(?:footnotes|reliable)', ['footnotes', 'reliable']),
+            (r'(?i-s:ab)?', ['', r'(?i-s)ab']),
+        ],
+    )
     def test_expand_group(self):
         pass
 
+    @pyt.mark.parametrize(
+        'expr, expected',
+        [
+            (r'[ab]?', ['', 'a', 'b']),
+            (r'[+*?]', [r'\+', r'\*', r'\?']),
+            (r'[()|]', [r'\(', r'\)', r'\|']),
+            (r'[.^$]', [r'\.', r'\^', r'\$']),
+        ],
+    )
     def test_expand_set(self):
         pass
 
@@ -109,20 +152,9 @@ class TestBlock:
         'expr, expected',
         [
             # No-op
-            (r'a', 1),
-            (r'\P{s}', 1),
-            (r'(?:ab)', 1),
-            # Groups
-            (r'(?:ab)?', ['', r'ab']),
-            (r'(ab)?', ['', r'(ab)']),
-            (r'(?:a|b)', 2),
-            (r'(?:footnotes|reliable)', ['footnotes', 'reliable']),
-            (r'(?i-s:ab)?', ['', r'(?i-s)ab']),
-            # Sets
-            (r'[ab]?', ['', 'a', 'b']),
-            (r'[+*?]', [r'\+', r'\*', r'\?']),
-            (r'[()|]', [r'\(', r'\)', r'\|']),
-            (r'[.^$]', [r'\.', r'\^', r'\$']),
+            (r'a', ['a']),
+            (r'\P{s}', [r'\P{s}']),
+            (r'(?:ab)', [r'(?:ab)']),
             # Optionals
             (r'(?:ab[cd]?e)', ['abe', 'abce', 'abde']),
             (r'(?:ac?ez)', ['aez', 'acez']),
@@ -130,15 +162,10 @@ class TestBlock:
             (r'(?:br2?)', ['br', 'br2']),
         ],
     )
-    def test_expand_atom(self, expr: str, expected: int | list[str]):
-        ret = cls.expand_atom(Atom(expr))
-        if isinstance(expected, int):
-            assert len(ret) == expected
-        elif len(expected) == 0:
-            assert len(ret) == 0
-        else:
-            assert len(ret) == len(expected)
-            assert set(map(''.join, ret)) == set(expected)
+    def test_expand_atom(self, expr: str, expected: list[str]):
+        block = cls.expand_atom(Atom(expr))
+        assert len(block) == len(expected)
+        assert set(map(str, block.branches)) == set(expected)
 
     @pyt.mark.parametrize(
         'atoms, expected',
@@ -150,10 +177,9 @@ class TestBlock:
         ],
     )
     def test_collapse_atoms(self, atoms: list[str], expected: str):
-        ret = cls.collapse_atoms(*map(Atom, atoms))
-        assert ret == expected
+        assert cls.collapse_atoms(*map(Atom, atoms)) == expected
 
-    def test_collapse_by_suffix(self):
+    def test_collapse_blocks_by_suffix(self, blocks: list[list[str]], expected: list[str]):
         pass
 
     def test_group_branches_by_prefix(self):

@@ -77,7 +77,7 @@ class MyClass:
     # ------------------
     # `x` Public Methods
     # ------------------
-    # [The primary public interface methods of this class, including overloads of `__str__`, `__repr__`, etc.]
+    # [The primary public interface methods of this class, including overloads, properties, etc.]
 ```
 
 ### Types

@@ -89,25 +89,25 @@ class Block(pyd.BaseModel):
         return Atoms(reversed(common_suffix))
 
     @staticmethod
-    def _supports_atomic_grouping(atom: Atom) -> bool:
+    def _atom_supports_atomic_grouping(atom: Atom) -> bool:
         """Determines if the given atom can be safely included in a (new) atomic group."""
         return not (atom.is_set or atom.has_complex_quantifier or atom.is_complex_group)
 
-    def _choose_joining_mark(self) -> str:
+    def supports_atomic_grouping(self) -> bool:
         """
         Decides whether the given branches can be safely grouped in an atomic group.
 
         Args:
             branches: The list of atom sequences representing alternative branches.
         Returns:
-            The group mark to use (':' for regular, '>' for atomic).
+            True if this block can be joing atomically (i.e. with '(?>...)'), False otherwise.
         """
         if self.suffix:
             search_space = (atom for branch in self.branches for atom in branch)
         else:
             search_space = (branch.first for branch in self.branches)
 
-        return '>' if all(map(self._supports_atomic_grouping, search_space)) else ':'
+        return all(map(self._atom_supports_atomic_grouping, search_space))
 
     @classmethod
     def _is_clone_with_prefix(cls, lhs: Atoms, rhs: Atoms) -> bool:
@@ -387,7 +387,15 @@ class Block(pyd.BaseModel):
         return self
 
     def expand(self, max_split: int = 4) -> Self:
-        """"""
+        """
+        Recursively "expand" all branching clauses in this block, creating multiple explicit cases
+        where there was previously implicit behavior.
+
+        Args:
+            max_split: The maximum number of atoms to split per branch (default: 4).
+        Returns:
+            The modified block instance with expanded branches.
+        """
         if not self:
             return self
 
@@ -421,6 +429,14 @@ class Block(pyd.BaseModel):
 
     @classmethod
     def expand_branches(cls, branches: Iterable[str]) -> Self:
+        """
+        Parse the given branches into a block, then expand its contents to be fully explicit.
+
+        Args:
+            branches: An iterable of branch strings to expand.
+        Returns:
+            A new block instance with expanded branches.
+        """
         block = cls.new(*sorted(set(branches)))
         return block.expand()
 
@@ -511,8 +527,8 @@ class Block(pyd.BaseModel):
             ret = self.branches[0]
         else:
             # II.ii. Determine whether we can safely use an atomic grouping here
-            mark = self._choose_joining_mark()
-            ret = Atoms(f'(?{mark}{r"|".join(map(str, self.branches))})')
+            start = '(?>' if self.supports_atomic_grouping() else '(?:'
+            ret = Atoms(f'{start}{r"|".join(map(str, self.branches))})')
 
         # III. Add contextual details (prefix, suffix, quantifier)
         if self.prefix or self.suffix:

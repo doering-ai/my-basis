@@ -4,6 +4,7 @@
 ### STANDARD
 from typing import Iterator, Self, Sequence, ClassVar
 import functools as ft
+import itertools as it
 import more_itertools as mi
 
 ### EXTERNAL
@@ -168,6 +169,12 @@ class Atoms:
     def one(self) -> Atom:
         assert len(self) == 1, 'Atoms.one called on Atoms with length != 1'
         return self.data[0]
+
+    @property
+    def spans(self) -> list[tuple[int, int]]:
+        ends = list(it.accumulate(map(len, self.data)))
+        starts = [0] + ends[:-1]
+        return list(zip(starts, ends, strict=True))
 
     # ------------
     # `x2` Methods

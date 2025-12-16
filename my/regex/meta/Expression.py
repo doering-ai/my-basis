@@ -54,9 +54,7 @@ class Expression:
                 raise TypeError(f'Unsupported type for Expression initialization: {type(arg)}')
 
     @classmethod
-    def atomize(
-        cls, expr: str | Buffer | Self, escape: bool = False
-    ) -> Generator[Atom, None, None]:
+    def atomize(cls, expr: str | Buffer | Self) -> Generator[Atom, None, None]:
         """
         Break a regex expression into its atomic components.
 
@@ -70,9 +68,6 @@ class Expression:
             return iter(expr.data)
 
         expr = str(expr)
-        if escape:
-            expr = META_RGXS['special_characters'].sub(r'\\\1', expr)
-
         n = len(expr)
 
         # I. Break up the expression into ranges of different types

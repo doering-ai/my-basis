@@ -1,4 +1,4 @@
-from .meta import META_RGXS, Quantifier, GroupKind, Atom, Expression, Block
+from .meta import META_RGXS, Quantifier, GroupKind, Atom, GroupAtom, SetAtom, Expression, Block
 from .MatchData import MatchData
 from .ParseData import ParseData
 from .RegexStore import RegexStore, RegexParser, RegexTup, RegexList, RegexVal, RegexDef
@@ -12,6 +12,8 @@ re.DEFAULT_VERSION = re.VERSION1
 __all__ = [
     'GroupKind',
     'Atom',
+    'GroupAtom',
+    'SetAtom',
     'Expression',
     'Block',
     'Quantifier',

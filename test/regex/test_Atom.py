@@ -8,7 +8,7 @@ import pytest as pyt
 
 ### INTERNAL
 from ..conftest import boolmap
-from my.regex import Atom, GroupKind
+from my.regex import Atom
 
 cls = Atom
 
@@ -20,6 +20,19 @@ class TestAtom:
     # -------------------
     # `0` Initial Methods
     # -------------------
+    @pyt.mark.parametrize(
+        'expr, expected',
+        [
+            (r'', []),
+            (r'abc', [r'a', r'b', r'c']),
+            (r'a|b?|c++', [r'a', r'|', r'b?', r'|', r'c++']),
+            (r'\d{4,5}\g<1>', [r'\d{4,5}', r'\g<1>']),
+        ],
+    )
+    def test_plain_atomize(self, expr: str, expected: list[str]):
+        ret = list(cls.plain_atomize(expr))
+        exp = list(map(Atom, expected))
+        assert ret == exp
 
     # -------------------
     # `-` Private Methods
@@ -28,23 +41,6 @@ class TestAtom:
     # -------------------
     # `+` Primary Methods
     # -------------------
-    @pyt.mark.parametrize(
-        'text, expected',
-        [
-            ('', ''),
-        ],
-    )
-    def test_as_group(self, text: str, expected: str):
-        pass
-
-    @pyt.mark.parametrize(
-        'text, expected',
-        [
-            ('', ''),
-        ],
-    )
-    def test_as_set(self, text: str, expected: str):
-        pass
 
     # ------------------
     # `x` Public Methods
@@ -54,14 +50,19 @@ class TestAtom:
     # ---------------
     @pyt.mark.parametrize(
         'expr, expected',
-        boolmap(
-            true=[r'a+', r'a*+', r'a*?', r'a{1,}', r'a{0,5}', r'a{0,5}?', r'[abc]+'],
-            false=[r'a', r'a?', r'[abc]'],
-        ),
+        [
+            (r'a', r''),
+            (r'a+', r'+'),
+            (r'(?:a|b|c)*+', r'*+'),
+            (r'a*?', r'*?'),
+            (r'a{1,}', r'{1,}'),
+            (r'a{0,5}', r'{0,5}'),
+            (r'a{0,5}?', r'{0,5}?'),
+            (r'[abc]++', r'++'),
+        ],
     )
     def test_quantifier(self, expr: str, expected: bool):
-        atom = cls(expr)
-        assert atom.has_complex_quantifier == expected
+        assert cls(expr).quantifier == expected
 
     @pyt.mark.parametrize(
         'expr, expected',
@@ -113,4 +114,3 @@ class TestAtom:
     )
     def test_is_simple(self, expr: str, expected: bool):
         assert cls(expr).is_simple == expected
-

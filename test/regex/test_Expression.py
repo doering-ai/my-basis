@@ -32,22 +32,24 @@ class TestAtoms:
     @pyt.mark.parametrize(
         'expr, escape, expected',
         [
-            # Simple pattern with no groups
-            ('abc', ['a', 'b', 'c']),
-            ('(?=abc)', ['(?=abc)']),
-            ('a(bc)d', ['a', '(bc)', 'd']),
-            ('(?=ab)(?<!cd)', ['(?=ab)', '(?<!cd)']),
-            ('a(b(c)d)e', ['a', '(b(c)d)', 'e']),
-            ('a.b*c+', ['a', '.', 'b*', 'c+']),
-            (r'[[:alpha:]]+[A[:lower:]Z]', ['[[:alpha:]]+', '[A[:lower:]Z]']),
-            # Optional characters
-            (r'a?', [r'a?']),
-            (r'a?b?c?', ['a?', 'b?', 'c?']),
-            # No-ops
-            (r'[()|]', [r'[()|]']),
+            # Plain expressions
+            (r'abc', [r'a', r'b', r'c']),
+            (r'a.b*c++\d{0,}', [r'a', r'.', r'b*', r'c++', r'\d{0,}']),
+            # Group Expressions
+            (r'(?=abc)', [r'(?=abc)']),
+            (r'a(bc)d', [r'a', r'(bc)', r'd']),
+            (r'(?=ab)(?<!cd)', [r'(?=ab)', r'(?<!cd)']),
+            (r'a(b(c)d)e', [r'a', r'(b(c)d)', r'e']),
+            # Set Expressions
+            (r'[abc]de[f\d]', [r'[abc]', r'd', r'e', r'[f\d]']),
+            (r'[[:alpha:]]+[A[:lower:]Z]', ['[[:alpha:]]+', r'[A[:lower:]Z]']),
+            # Combined expressions
+            (r'a(b[c|d]e)f', [r'a', r'(b[c|d]e)', r'f']),
+            (r'a[bc(d|e)f]g', [r'a', r'[bc(d|e)f]', r'g']),
             # Edge cases
             ('', []),
             ('()', ['()']),
+            (r'[()|]', [r'[()|]']),
             (r'|\||', ['|', r'\|', '|']),
         ],
     )
@@ -62,24 +64,6 @@ class TestAtoms:
     # -------------------
     # `+` Primary Methods
     # -------------------
-    @pyt.mark.parametrize(
-        'expr, body, quant',
-        [
-            (r'ab[cd]*?ef', 'cd', '*?'),
-            (r'ab\[cd\]ef', '', ''),
-            (r'ab[(?:cd)+]ef', '(?:cd)+', ''),
-            (r'ab[^[:lower:]A-Z]ef', r'^[:lower:]A-Z', ''),
-            (r'ab[\[|\]\[[:lower:]\]]+?cd', r'\[|\]\[[:lower:]\]', '+?'),
-        ],
-    )
-    def test_set_iterator(self, expr: str, body: str, quant: str):
-        ret = next(cls.set_iterator(expr), None)  # type: ignore
-        if not body:
-            assert ret is None
-        else:
-            assert ret is not None
-            assert ret[1:] == (body, quant)
-
     @pyt.mark.parametrize(
         'expr, kind, name, body, quant',
         [

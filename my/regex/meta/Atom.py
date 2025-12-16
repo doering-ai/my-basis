@@ -42,6 +42,13 @@ class Atom(pyd.BaseModel):
 
     @classmethod
     def plain_atomize(cls, expr: str) -> Generator[Self, None, None]:
+        """
+        Transform the given expression text into a series of atom objects.
+        This function is "plain" because it does NOT handle groups or sets -- the caller must
+        guarantee that neither type of atom appears in the snippet before calling this function.
+
+        For general-purpose atomization, see Expression.atomize().
+        """
         yield from map(cls, META_RGXS['atom'].findall(expr))
 
     # -------------------

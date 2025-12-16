@@ -31,6 +31,10 @@ class SetAtom(Atom):
         if len(self.data) > 2 and not self.body:
             self.body, end = self.data[1:].rsplit(']', 1)
             self.quantifier = Quantifier(end)
+
+        # Escape special characters found within the set
+        self.body = META_RGXS['special_characters'].sub(r'\\\1', self.body)
+
         return self
 
     @ft.cached_property

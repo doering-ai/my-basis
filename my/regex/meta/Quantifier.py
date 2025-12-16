@@ -24,13 +24,13 @@ class Quantifier:
     # -------------------
     # `0` Initial Methods
     # -------------------
-    def __init__(self, data: str = '') -> None:
-        data = data.lstrip(')')
-        assert self.RGX.fullmatch(data), f'Invalid quantifier: {data!r}'
-        self.data = data
-
-    def copy(self) -> Self:
-        return self.__class__(self.data)
+    def __init__(self, data: str | Self = '') -> None:
+        if isinstance(data, Quantifier):
+            self.data = data.data
+        else:
+            data = data.lstrip(')')
+            assert self.RGX.fullmatch(data), f'Invalid quantifier: {data!r}'
+            self.data = data
 
     # -------------------
     # `-` Private Methods
@@ -71,13 +71,13 @@ class Quantifier:
     def as_optional(self) -> Self | None:
         cls = self.__class__
         if self.is_optional:
-            return self.copy()
-        elif self.data == '':
+            return cls(self)
+        elif self == '':
             return cls('?')
-        elif self.data.startswith('{1'):
-            return cls('{0' + self.data[3:])
-        elif self.data[0] == '+':
-            return cls('*' + self.data[1:])
+        elif self.startswith('{1'):
+            return cls('{0' + self[3:])
+        elif self.startswith('+'):
+            return cls('*' + self[1:])
         else:
             # IV. Indicate that this quantifier can not trivially be made optional
             return None
@@ -85,13 +85,13 @@ class Quantifier:
     def as_required(self) -> Self:
         cls = self.__class__
         if not self.is_optional:
-            return self.copy()
-        elif self.data == '?':
+            return cls(self)
+        elif self == '?':
             return cls('')
-        elif self.data.startswith('{0'):
-            return cls('{1' + self.data[3:])
-        elif self.data[0] == '*':
-            return cls('+' + self.data[1:])
+        elif self.startswith('{0'):
+            return cls('{1' + self[3:])
+        elif self.startswith('*'):
+            return cls('+' + self[1:])
         else:
             raise RuntimeError(f'Unhandled optional quantifier: {self.data!r}')
 
@@ -148,3 +148,7 @@ class Quantifier:
         return bool(self.data) and (
             self.data == '?' or self.data.startswith('{0,') or self.data.startswith('*')
         )
+
+    @ft.cached_property
+    def is_greedy(self) -> bool:
+        return len(self) <= 1 or not self.data.endswith('?')

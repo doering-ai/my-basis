@@ -191,7 +191,7 @@ class Block(pyd.BaseModel):
             result.append(Expression.empty())
 
         # II. Atomize the set body into individual atomic branches
-        result.extend(map(Expression, Expression.atomize(atom.body, escape=True)))
+        result.extend(map(Expression, Expression.atomize(atom.body)))
 
         return cls.new(*result, quantifier=atom.quantifier.as_required())
 

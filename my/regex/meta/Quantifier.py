@@ -25,6 +25,7 @@ class Quantifier:
     # `0` Initial Methods
     # -------------------
     def __init__(self, data: str = '') -> None:
+        data = data.lstrip(')')
         assert self.RGX.fullmatch(data), f'Invalid quantifier: {data!r}'
         self.data = data
 
@@ -40,8 +41,8 @@ class Quantifier:
     # -------------------
     def join(self, other: str | Self) -> Self | None:
         """
-        Create a copy of this atom with the given quantifier applied. Any existing quantifier is
-        dropped.
+        Create a copy of this quantifier with the given quantifier applied. If the two quantifiers
+        cannot be simply combined, return `None` to indicate that nested groups are needed.
         """
         cls = self.__class__
         if isinstance(other, str):

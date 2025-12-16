@@ -20,31 +20,6 @@ class TestAtom:
     # -------------------
     # `0` Initial Methods
     # -------------------
-    @pyt.mark.parametrize(
-        'expr, expected',
-        [
-            # Simple pattern with no groups
-            ('abc', ['a', 'b', 'c']),
-            ('(?=abc)', ['(?=abc)']),
-            ('a(bc)d', ['a', '(bc)', 'd']),
-            ('(?=ab)(?<!cd)', ['(?=ab)', '(?<!cd)']),
-            ('a(b(c)d)e', ['a', '(b(c)d)', 'e']),
-            ('a.b*c+', ['a', '.', 'b*', 'c+']),
-            (r'[[:alpha:]]+[A[:lower:]Z]', ['[[:alpha:]]+', '[A[:lower:]Z]']),
-            # Optional characters
-            (r'a?', [r'a?']),
-            (r'a?b?c?', ['a?', 'b?', 'c?']),
-            # No-ops
-            (r'[()|]', [r'[()|]']),
-            # Edge cases
-            ('', []),
-            ('()', ['()']),
-            (r'|\||', ['|', r'\|', '|']),
-        ],
-    )
-    def test_atomize(self, expr: str, expected: list[str]):
-        ret = cls.atomize(expr)
-        assert ret == tuple(expected)
 
     # -------------------
     # `-` Private Methods
@@ -111,26 +86,6 @@ class TestAtom:
     @pyt.mark.parametrize(
         'expr, expected',
         boolmap(
-            true=[],
-            false=[],
-        ),
-    )
-    def test_is_complex_set(self, expr: str, expected: bool):
-        assert cls(expr).is_complex_set == expected
-
-    @pyt.mark.parametrize(
-        'expr, expected',
-        boolmap(
-            true=[],
-            false=[],
-        ),
-    )
-    def test_is_complex_group(self, expr: str, expected: bool):
-        assert cls(expr).is_complex_group == expected
-
-    @pyt.mark.parametrize(
-        'expr, expected',
-        boolmap(
             true=[
                 r'a',
                 r'\+',
@@ -159,40 +114,3 @@ class TestAtom:
     def test_is_simple(self, expr: str, expected: bool):
         assert cls(expr).is_simple == expected
 
-    @pyt.mark.parametrize(
-        'expr, body, quant',
-        [
-            (r'ab[cd]*?ef', 'cd', '*?'),
-            (r'ab\[cd\]ef', '', ''),
-            (r'ab[(?:cd)+]ef', '(?:cd)+', ''),
-            (r'ab[^[:lower:]A-Z]ef', r'^[:lower:]A-Z', ''),
-            (r'ab[\[|\]\[[:lower:]\]]+?cd', r'\[|\]\[[:lower:]\]', '+?'),
-        ],
-    )
-    def test_set_iterator(self, expr: str, body: str, quant: str):
-        ret = next(cls.set_iterator(expr), None)  # type: ignore
-        if not body:
-            assert ret is None
-        else:
-            assert ret is not None
-            assert ret[1:] == (body, quant)
-
-    @pyt.mark.parametrize(
-        'expr, kind, name, body, quant',
-        [
-            (r'ab(cd)ef', GroupKind.POSIT, '', 'cd', ''),
-            (r'ab(?:cd)+ef', GroupKind.PLAIN, '', 'cd', '+'),
-            (r'ab\\(?:cd\\)+ef', GroupKind.PLAIN, '', r'cd\\', '+'),
-            (r'ab\(?:cd\)+ef', GroupKind(0), '', '', ''),
-            (r'ab[a-b](?:cd)+ef', GroupKind.PLAIN, '', 'cd', '+'),
-            (r'ab\[(?:cd)+\]ef', GroupKind.PLAIN, '', 'cd', '+'),
-            (r'ab[(?:cd)+]ef', GroupKind(0), '', '', ''),
-        ],
-    )
-    def test_group_iterator(self, expr: str, kind: GroupKind, name: str, body: str, quant: str):
-        ret = next(cls.group_iterator(expr), None)  # type: ignore
-        if kind == GroupKind(0):
-            assert ret is None
-        else:
-            assert ret is not None
-            assert ret[1:] == (kind, name, body, quant)

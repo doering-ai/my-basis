@@ -2,7 +2,9 @@ from .meta_patterns import META_RGXS, FLAGS, NO_ESC, NON_ESC, QUANT
 from .Quantifier import Quantifier
 from .GroupKind import GroupKind, GROUP_KIND_MAP
 from .Atom import Atom
-from .Atoms import Atoms
+from .GroupAtom import GroupAtom
+from .SetAtom import SetAtom
+from .Expression import Expression
 from .Block import Block
 
 __all__ = [
@@ -15,7 +17,9 @@ __all__ = [
     'GroupKind',
     'GROUP_KIND_MAP',
     'Atom',
-    'Atoms',
+    'GroupAtom',
+    'SetAtom',
+    'Expression',
     'Block',
     'Branches',
 ]

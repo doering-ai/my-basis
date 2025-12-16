@@ -6,7 +6,7 @@
 ### EXTERNAL
 
 ### INTERNAL
-from .RegexStore import RegexStore, RgxVal
+from .RegexStore import RegexStore, RegexVal
 
 
 ############
@@ -27,7 +27,7 @@ def format_url(target: str) -> str:
     return COMMON_RGXS['url_detritus'].sub('', target).strip('/. ')
 
 
-def atom(*contents: RgxVal) -> RgxVal:
+def atom(*contents: RegexVal) -> RegexVal:
     """
     Wraps regex content in word-boundary assertions for atomic matching.
 

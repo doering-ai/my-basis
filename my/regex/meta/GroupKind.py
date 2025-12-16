@@ -8,6 +8,7 @@ from enum import Flag, auto
 ### EXTERNAL
 
 ### INTERNAL
+from ...utils import ut
 from ...types import MyEnum
 
 
@@ -25,8 +26,7 @@ class GroupKind(MyEnum, Flag):
     Attributes:
         POSIT: Positional capturing group, e.g., (rgx).
         PLAIN: Positional non-capturing group, e.g., (?:rgx).
-        FLAGS: Custom flag group for setting regex flags.
-        INLINE: Inline flags in plain groups, e.g., (?i:rgx).
+        FLAGS: Custom flag group for setting regex flags, e.g. (?msi)
         ATOMS: Atomic group, e.g., (?>rgx).
         MULTI: Branch reset group, e.g., (?|rgx).
         PARAM: Named capturing group, e.g., (?P<name>rgx).
@@ -35,6 +35,7 @@ class GroupKind(MyEnum, Flag):
         BEHIND: Positive lookbehind assertion, e.g., (?<=rgx).
         NOT_AHEAD: Negative lookahead assertion, e.g., (?!rgx).
         NOT_BEHIND: Negative lookbehind assertion, e.g., (?<!rgx).
+        DEFINE: Group for defining subpatterns without capturing.
         _NAMED: Combined flag for all named groups (PARAM | INVOC).
         _LOOKAHEADS: Combined flag for lookahead groups (AHEAD | NOT_AHEAD).
         _LOOKBEHINDS: Combined flag for lookbehind groups (BEHIND | NOT_BEHIND).
@@ -46,7 +47,6 @@ class GroupKind(MyEnum, Flag):
     POSIT = auto()  # positional capturing
     PLAIN = auto()  # Positional non-capturing
     FLAGS = auto()  # Custom sections, usually inline flags
-    INLINE = auto()  # Inline flags in plain groups
     ATOMS = auto()  # Atomic
     MULTI = auto()  # 'Branch Reset'
     PARAM = auto()  # Named capturing
@@ -55,6 +55,7 @@ class GroupKind(MyEnum, Flag):
     BEHIND = auto()  # Lookbehind
     NOT_AHEAD = auto()  # Negative lookahead
     NOT_BEHIND = auto()  # Negative lookbehind
+    DEFINE = auto()  # Definition Section
 
     _NAMED = PARAM | INVOC
     _LOOKAHEADS = AHEAD | NOT_AHEAD
@@ -70,7 +71,12 @@ class GroupKind(MyEnum, Flag):
                 if value.startswith(prefix):
                     return kind
             return cls(0)
-        return super().read(value)
+        return super().read(value)  # type:ignore[return-value]
+
+    @property
+    def prefix(self) -> str:
+        # return next((pre for pre, kind in GROUP_KIND_MAP.items() if self & kind), '(')
+        return ut.find_key(GROUP_KIND_MAP, self) or '('
 
 
 GROUP_KIND_MAP = {
@@ -86,4 +92,5 @@ GROUP_KIND_MAP = {
     '(?!': GroupKind.NOT_AHEAD,
     '(?<=': GroupKind.BEHIND,
     '(?<!': GroupKind.NOT_BEHIND,
+    '(?(DEFINE)': GroupKind.DEFINE,
 }

@@ -8,7 +8,7 @@ import pytest as pyt
 
 ### INTERNAL
 from my.regex.meta import GroupKind
-from my.regex import RegexStore, RgxList, RgxVal
+from my.regex import RegexStore, RegexList, RegexVal
 
 ############
 ### DATA ###
@@ -85,7 +85,7 @@ class TestRegexStore:
             (('[ *]:is', ['ab', 'cd']), r'(?is:ab *cd)'),
         ],
     )
-    def test_compose_tuple(self, definition: RgxVal, expected: str, store: RegexStore):
+    def test_compose_tuple(self, definition: RegexVal, expected: str, store: RegexStore):
         ret = store.compose(definition)
         assert ret == expected
 
@@ -128,7 +128,7 @@ class TestRegexStore:
             ([r'(?P=_ws)(?:p?p|P[Pp])\.(?!\S)'], r'(?P=_ws)(?:P[Pp]|pp?)\.(?!\S)'),
         ],
     )
-    def test_compose_tree(self, data: RgxList, expected: str, store: RegexStore):
+    def test_compose_tree(self, data: RegexList, expected: str, store: RegexStore):
         ret = store.compose(('<|>', data))
         assert ret == expected
 

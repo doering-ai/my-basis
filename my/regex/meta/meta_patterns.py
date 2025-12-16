@@ -24,7 +24,7 @@ META_RGXS: dict[str, re.Pattern] = ut.regex_dict(
         # Primary decomposition
         set=ut.multi_rgx(r'(?P<start>\[)', rf'(?P<end>\]{QUANT})', pre=NO_ESC),
         group=ut.multi_rgx(
-            rf'(?P<start>\((?:\?(?>[:>&|]|<?[=!]|P[=<]|{FLAGS}:)?)?)',
+            rf'(?P<start>\((?:\?(?>[:>&|]|<?[=!]|P[=<]|{FLAGS}:|\(DEFINE\))?)?)',
             rf'(?P<end>\){QUANT})',
             pre=NO_ESC,
         ),
@@ -35,9 +35,9 @@ META_RGXS: dict[str, re.Pattern] = ut.regex_dict(
                 r'[Pp]\{[[:alpha:]]+\}',
                 r'.',
                 pre=r'\\',
-            ),
-            r'(?<!\[)\[(?s:[^\\\[\]]+|\\.|\[.+?\])*\](?!\])',
-            r'[^\\]',
+            ),  # Escaped characters
+            r'(?<!\[)\[(?s:[^\\\[\]]+|\\.|\[.+?\])*\](?!\])',  # Character sets
+            r'[^\\]',  # Any other single character
             pre=NO_ESC,
             suf=QUANT,
         ),

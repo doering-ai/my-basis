@@ -16,4 +16,29 @@ cls = Quantifier
 ### BODY ###
 ############
 class TestQuantifier:
-    pass
+    @pyt.mark.parametrize(
+        'lhs, rhs, expected',
+        [
+            ('', '', ''),
+        ],
+    )
+    def test_join(self, lhs: str, rhs: str, expected: str | None):
+        pass
+
+    @pyt.mark.parametrize(
+        'data, expected',
+        [
+            ('', '', ''),
+        ],
+    )
+    def test_as_optional(self, data: str, expected: str | None):
+        pass
+
+    @pyt.mark.parametrize(
+        'data, expected',
+        [
+            ('', '', ''),
+        ],
+    )
+    def test_as_required(self, data: str, expected: str):
+        pass

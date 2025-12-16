@@ -4,6 +4,7 @@
 ### STANDARD
 from typing import Iterable, Iterator, Literal, ClassVar, Any, Callable, Mapping, Self
 import functools as ft
+import contextlib as ctx
 
 ### EXTERNAL
 import more_itertools as mi
@@ -15,7 +16,7 @@ from regex import Match, Pattern, RegexFlag
 from ..utils import ut
 from ..types import Buffer
 from ..typing import typist
-from .meta import Atom, Atoms, Block, GroupKind, META_RGXS
+from .meta import Atom, GroupAtom, Expression, Block, GroupKind, META_RGXS
 from .MatchData import MatchData
 from .ParseData import ParseData
 
@@ -25,29 +26,32 @@ from .ParseData import ParseData
 # --------------
 # Public Aliases
 # --------------
-RgxParser = (
+RegexParser = (
     str  # base case: Simply renames the output
     | Callable[[str], str]  # 1st case: returns some subset to the same name
     | Callable[[str], dict[str, str]]  # 2nd case: returns to any number of other names
     | Callable[[str], dict[str, str] | str]  # 3rd case: combo of above two
 )
 
-RgxTup = tuple[str, 'RgxList'] | tuple[str, str, 'RgxList', str]
-RgxList = list['RgxVal']
-RgxVal = str | RgxList | RgxTup | Pattern | dict
-RgxDef = (
+RegexTup = tuple[str, 'RegexList'] | tuple[str, str, 'RegexList', str]
+RegexList = list['RegexVal']
+RegexVal = str | RegexList | RegexTup | Pattern | dict
+RegexDef = (
     # Raw/simple content
-    (str | tuple[str, RgxParser])
+    (str | tuple[str, RegexParser])
     # Single piece of uncompiled content
-    | (RgxTup | tuple[RgxTup, RgxParser])
+    | (RegexTup | tuple[RegexTup, RegexParser])
     # Series of uncompiled content
-    | (RgxList | tuple[RgxList, RgxParser])
+    | (RegexList | tuple[RegexList, RegexParser])
     # Precompiled content
-    | (Pattern | tuple[Pattern, RgxParser])
+    | (Pattern | tuple[Pattern, RegexParser])
 )
 
 # A buffer built to hold Regex patterns
 RegexBuffer = ft.partial(Buffer.new, fence_rgxs=['arrays'])
+
+# Allowed regex search functions
+RegexFunction = Literal['match', 'fullmatch', 'search', 'polymatch']
 
 
 # ---------
@@ -98,7 +102,7 @@ class RegexStore(pyd.BaseModel):
     patterns: dict[str, Pattern] = {}
 
     # Expression-specific parsers of match data
-    parsers: dict[str, RgxParser] = {}
+    parsers: dict[str, RegexParser] = {}
     routers: dict[str, list[str]] = {}
 
     # Private Members
@@ -129,7 +133,7 @@ class RegexStore(pyd.BaseModel):
         cls,
         options: dict[str, Any] | Options | None = None,
         imports: list[tuple[Self, Iterable[str]]] | None = None,
-        **definitions: RgxDef | Any,
+        **definitions: RegexDef | Any,
     ) -> Self:
         """
         This is the primary interface for creating new stores, allowing callers to specify their
@@ -138,7 +142,7 @@ class RegexStore(pyd.BaseModel):
         Args:
             options: A dictionary of store-level options to apply as member variables.
             imports: References to patterns contianed in existing stores to be included in this one
-            **definitions: The named pattern specifications (see RgxDef) that make up the new store.
+            **definitions: A dictionary of named regular expressions -- see RegexDef.
         Returns:
             A new RegexStore instance with the given patterns compiled into execution-ready objects.
         """
@@ -150,25 +154,21 @@ class RegexStore(pyd.BaseModel):
         store = cls(options=options)
 
         # II. Import the requested patterns from other stores
-        for source, names in imports or []:
-            for name in source.find_all_invocations(set(names)):
-                store.definitions[name] = source.definitions[name]
-                store.patterns[name] = source.patterns[name]
-                if name in source.parsers:
-                    store.parsers[name] = source.parsers[name]
+        if imports:
+            for source, names in imports:
+                for name in source.find_all_invocations(set(names)):
+                    store.definitions[name] = source.definitions[name]
+                    store.patterns[name] = source.patterns[name]
+                    if name in source.parsers:
+                        store.parsers[name] = source.parsers[name]
 
-        if store.init_formatter is not None:
-            # III.i. Preformat the given definitions with the user-defined formatter function
-            definitions = {
-                name: (store.init_formatter(dfn) if not isinstance(dfn, Pattern) else dfn)
-                for name, dfn in definitions.items()
-            }
-            for name, val in definitions.items():
-                store.define(name, val, None)
-        else:
-            # III.ii. Just set the values of the store
-            for name, _def in definitions.items():
-                store[name] = _def
+        # III. Preformat the given definitions with the user-defined formatter function
+        if (fn := store.options.init_formatter) is not None:
+            definitions = ut.val_map(ft.partial(cls.format_definition, fn=fn), definitions)
+
+        # IV. Set the values of the store
+        for name, val in definitions.items():
+            store[name] = val
 
         return store
 
@@ -200,6 +200,20 @@ class RegexStore(pyd.BaseModel):
     # -------------------
     # `-` Private Methods
     # -------------------
+    @classmethod
+    def format_definition(cls, fn: Callable[..., str], value: RegexDef) -> RegexDef:
+        if isinstance(value, Pattern):
+            pass
+        elif isinstance(value, tuple) and len(value) == 2 and callable(value[1]):
+            val, parser = value  # type: ignore
+            if isinstance(val, str):
+                with ctx.suppress(Exception):
+                    return (fn(val), parser)
+        else:
+            with ctx.suppress(Exception):
+                return fn(value)
+        return value
+
     def _read_match(self, match: Match) -> tuple[dict[str, str], dict[str, list[str]]]:
         """
         Extract and autostrip all captured groups from a match object.
@@ -219,37 +233,47 @@ class RegexStore(pyd.BaseModel):
         return data, captures
 
     @classmethod
-    def _tree_print(cls, text: str, depth: int = 0) -> str:
+    def _tree_print(
+        cls,
+        expr: Expression | str,
+        depth: int = 0,
+        maxdepth: int = 0,
+        threshold: int = 48,
+    ) -> str:
         """
         Recursive helper for tree_print, handling indentation and group structure.
 
         Args:
-            text: The regex pattern body to print.
+            expr: The regex expression to print.
             depth: Current indentation depth.
         Returns:
             Multi-line string representation with indentation showing nesting.
         """
-        indent = '\t' * depth
+        if maxdepth > 0 and depth >= maxdepth:
+            return f'\t{expr}'
 
-        branches: list[str] = []
-        for atoms in cls._atomic_split(text):
-            line: list[str] = []
-            for atom in atoms:
-                if cls._is_group(atom) and ('|' in atom or len(atom) > 48):
-                    kind, start, flags, body, quant = cls._parse_group(atom)
-                    line.append(
-                        '\n'.join(
-                            [
-                                f'{start}{"(?" + flags + ")" if flags else ""}',
-                                cls._tree_print(body, depth + 1),
-                                f'{indent}){quant}',
-                            ]
-                        )
+        sections: list[str] = []
+        block = Block.new(expr)
+        for branch in block.branches:
+            lines: list[str] = []
+            for atom in branch:
+                if isinstance(atom, GroupAtom) and (
+                    Expression.is_split(atom) or len(atom) > threshold
+                ):
+                    lines.extend(
+                        [
+                            atom.start,
+                            cls._tree_print(atom.body, depth + 1, maxdepth, threshold),
+                            f'){atom.quant}',
+                        ]
                     )
                 else:
-                    line.append(atom)
-            branches.append(''.join(line))
-        return indent + f'|\n{indent}'.join(branches)
+                    lines.append(str(atom))
+            if lines:
+                if depth > 0:
+                    lines = [f'\t{line}' for line in lines]
+                sections.append('\n'.join(lines))
+        return r'|\n'.join(sections)
 
     def _parse_mark(self, mark: str) -> tuple[GroupKind, str, str, str]:
         """
@@ -312,7 +336,7 @@ class RegexStore(pyd.BaseModel):
         assert ut.has_all(self.patterns, *patterns), f'Unknown pattern(s): {patterns}'
         return patterns, str(text) if isinstance(text, Buffer) else text
 
-    def _parse_tuple(self, data: RgxTup) -> tuple[str, RgxList, str, str]:
+    def _parse_tuple(self, data: RegexTup) -> tuple[str, RegexList, str, str]:
         if (n := len(data)) == 2:
             assert typist.tuple_is(data, tuple[str, list]), f'Invalid group spec: {data}'
             mark, children = data  # type: ignore
@@ -373,6 +397,16 @@ class RegexStore(pyd.BaseModel):
         return '\n'.join([r'(?(DEFINE)', *[f'(?P<{name}>{rgx})' for name, rgx in data], ')'])
 
     def _autoparse(self, func: str, names: Iterable[str], text: str) -> MatchData:
+        """
+        Helper function for parsing the outputs from a typical regex call.
+
+        Args:
+            func: Name of the regex function to call (e.g., 'match', 'search').
+            names: Names of patterns to try in order.
+            text: Text to apply the patterns to.
+        Returns:
+            MatchData object with the first successful match's data, or empty if none matched.
+        """
         for name in names:
             if _match := getattr(self.patterns[name], func)(text):
                 return self.parse(_match, name)
@@ -391,17 +425,15 @@ class RegexStore(pyd.BaseModel):
         new_groups: set[str] = set()
         for existing_group in groups_used:
             buffer.set(self.definitions[existing_group])
-            group_names = {
-                name for _, _, name, _, _ in Atom.group_iterator(buffer, mask=GroupKind.INVOC)
-            }
-            new_groups |= group_names - groups_used
+            groups = list(Atom.group_iterator(buffer, mask=GroupKind.INVOC))
+            new_groups |= {group.name for group in groups} - groups_used
 
         if new_groups:
             return groups_used | self.find_all_invocations(new_groups)
         else:
             return groups_used
 
-    def compose_tuple(self, mark: str, children: RgxList, pre: str = '', suf: str = '') -> str:
+    def compose_group(self, mark: str, children: RegexList, pre: str = '', suf: str = '') -> str:
         """
         Compose a regex group from a mark, children, and optional prefix/suffix.
 
@@ -427,7 +459,7 @@ class RegexStore(pyd.BaseModel):
 
         # III. Add wrappers to handle surrounding context
         has_context = pre or suf or start[-1] == ')'
-        if Atoms.is_split(body):
+        if Expression.is_split(body):
             if has_context:
                 # III.i. Split groups with context must be wrapped in a non-capturing group
                 c = '>' if start == '(?>' else ':'
@@ -439,7 +471,7 @@ class RegexStore(pyd.BaseModel):
         # e.g.          (?:    \(?  ...   \)?  )    ?
         return ''.join([start, pre, body, suf, end, quant])
 
-    def compose_tree(self, data: RgxList) -> str:
+    def compose_tree(self, data: RegexList) -> str:
         """
         Compose an optimized branching tree from a list of regex values.
         See define_router_tree().
@@ -450,8 +482,8 @@ class RegexStore(pyd.BaseModel):
             The corresponding optimized branching tree regex expression.
         """
         composed_content = [self.compose(item, sep='|') for item in data]
-        block = Block.expand_branches(composed_content).build_router_tree()
-        return str(block)
+        block = Block.expand_branches(composed_content)
+        return str(block.optimize())
 
     # -------------------
     # `+` Primary Methods
@@ -503,50 +535,59 @@ class RegexStore(pyd.BaseModel):
         ret = MatchData(data=captures, match=match)
         return ret
 
-    def compose(self, data: RgxVal, sep: str | None = None) -> str:
+    @ft.singledispatchmethod
+    def compose(self, data: RegexVal, sep: str | None = None) -> str:
         """
-        Recursively process a flexible definition structure into a single valid regex string.
-        Lists are combined using a given (or default) "separator" string, strings and patterns
-        are returned as-is, and tuples are used to create new non-capturing groups.
+        Recursively transform a DSL-compliant definition into a valid regular expression.
+
+        Args:
+            data: The regex value to compose.
+            sep: Optional separator string for lists (defaults to store's separator).
+        Returns:
+            The composed expression.
         """
-        # I. Catch simple cases: plain strings, pre-composed patterns, and lists of other values
         if not data:
             return ''
-        elif isinstance(data, str):
-            if self.options.force_named_groups and '(' in data:
-                # I.i. Force all anonynmous groups (i.e. kind=POSIT) to be non-capturing
-                buf = RegexBuffer(data)
-                for (x0, _), *_ in Atom.group_iterator(buf, mask=GroupKind.POSIT):
-                    buf.replace((x0, x0 + 1), '(?:')
-                data = str(buf)
-            if self.options.formatter:
-                # I.ii. Format the final string if requested
-                data = self.options.formatter(data)
-            return data
+        raise NotImplementedError(f'Unsupported data type: {type(data)}')
 
-        elif isinstance(data, Pattern):
-            # I.ii. Extract the (raw) expressions behind (compiled) patterns
-            return data.pattern
+    @compose.register
+    def _compose_string(self, data: str, sep: str | None = None) -> str:
+        # I.i. Change all positional capture groups to non-capturing
+        if self.options.force_named_groups and '(' in data:
+            buf = RegexBuffer(data)
+            for group in Atom.group_iterator(buf, mask=GroupKind.POSIT):
+                buf.insert(group.span[0] + 1, '?:')
+            data = str(buf)
 
-        elif isinstance(data, list):
-            if sep is None:
-                sep = self.options.separator
-            elif sep == '<|>':
-                return self.compose_tree(data)
+        # I.ii. Format the final string if requested
+        if self.options.formatter:
+            data = self.options.formatter(data)
+        return data
 
-            return sep.join(map(self.compose, data))
+    @compose.register
+    def _compose_pattern(self, data: Pattern, sep: str | None = None) -> str:
+        # I.ii. Extract the (raw) expressions behind (compiled) patterns
+        return data.pattern
 
+    @compose.register
+    def _compose_list(self, data: list, sep: str | None = None) -> str:
+        if sep is None:
+            sep = self.options.separator
+        elif sep == '<|>':
+            return self.compose_tree(data)
+
+        return sep.join(map(self.compose, data))
+
+    @compose.register
+    def _compose_tuple(self, data: tuple, sep: str | None = None) -> str:
         # II. Handle the main/complex case: a tuple describing a group
-        elif isinstance(data, tuple):
-            return self.compose_tuple(*self._parse_tuple(data))
+        return self.compose_group(*self._parse_tuple(data))
 
+    @compose.register
+    def _compose_dict(self, data: dict, sep: str | None = None) -> str:
         # III. Special case: an explicitly-specified tuple (likely by a .yaml file)
-        elif isinstance(data, dict):
-            tup = (data['mark'], data.get('pre', ''), data['body'], data.get('suf', ''))  # type: ignore
-            return self.compose_tuple(*self._parse_tuple(tup))
-
-        else:
-            raise ValueError(f'Invalid data type: {type(data)}')
+        tup = (data.get('mark', ''), data.get('pre', ''), data.get('body', []), data.get('suf', ''))
+        return self.compose_group(*self._parse_tuple(tup))
 
     def clean(self, name: str, text: Buffer) -> set[str]:
         """
@@ -570,13 +611,13 @@ class RegexStore(pyd.BaseModel):
         groups_used: set[str] = set()
         local_groups: set[str] = set()
 
-        for _, kind, cname, _, _ in Atom.group_iterator(text, mask=GroupKind._NAMED):
-            if kind == GroupKind.PARAM:
-                local_groups.add(cname)
-            elif kind == GroupKind.INVOC and cname != name:
+        for group in Atom.group_iterator(text, mask=GroupKind._NAMED):
+            if group.kind == GroupKind.PARAM:
+                local_groups.add(group.name)
+            elif group.kind == GroupKind.INVOC and group.name != name:
                 # Intentional reference to a defined subroutine
-                assert cname in self.definitions, f'Unknown group invoked: {cname}'
-                groups_used.add(cname)
+                assert group.name in self.definitions, f'Unknown group invoked: {group.name}'
+                groups_used.add(group.name)
 
         # III. Recursively fetch dependencies for the used groups
         groups_used = self.find_all_invocations(groups_used)
@@ -589,8 +630,8 @@ class RegexStore(pyd.BaseModel):
     def define(
         self,
         name: str,
-        val: RgxVal,
-        parser: RgxParser | None = None,
+        val: RegexVal,
+        parser: RegexParser | None = None,
         flags: RegexFlag = NO_FLAG,
     ) -> None:
         """
@@ -680,11 +721,11 @@ class RegexStore(pyd.BaseModel):
     def __contains__(self, key: str) -> bool:
         return key in self.patterns
 
-    def __setitem__(self, name: str, param: RgxDef) -> None:
+    def __setitem__(self, name: str, param: RegexDef) -> None:
         assert name not in self.patterns, f'Duplicate pattern name: {name}'
 
         # Pull out the parser, if present
-        val: RgxVal
+        val: RegexVal
         if isinstance(param, tuple) and len(param) == 2 and not isinstance(param[1], (list, tuple)):
             val, parser = param  # type: ignore
         else:
@@ -697,7 +738,7 @@ class RegexStore(pyd.BaseModel):
         assert name in self.patterns, f'Pattern not found: {name}'
         return self.patterns[name]
 
-    def __ior__(self, other: 'dict[str, RgxDef] | RegexStore') -> 'RegexStore':
+    def __ior__(self, other: dict[str, RegexDef] | Self) -> Self:
         if isinstance(other, RegexStore):
             for name in other.keys():
                 self[name] = (other.definitions[name], other.parsers.get(name, None))
@@ -880,7 +921,7 @@ class RegexStore(pyd.BaseModel):
         Returns:
             Set of all group names invoked directly or indirectly.
         """
-        invocations = {name for _, _, name, _, _ in Atom.group_iterator(text, mask=GroupKind.INVOC)}
+        invocations = {group.name for group in Atom.group_iterator(text, mask=GroupKind.INVOC)}
         return self.find_all_invocations(invocations)
 
     def partial(
@@ -939,7 +980,7 @@ class RegexStore(pyd.BaseModel):
     # ---------------------------
     # `x3` Optimization Functions
     # ---------------------------
-    def define_router_tree(self, router: str, items: Mapping[str, RgxVal], **kwargs: str) -> None:
+    def define_router_tree(self, router: str, items: Mapping[str, RegexVal], **kwargs: str) -> None:
         """
         Define a router pattern that classifies text into named categories.
 
@@ -1027,7 +1068,7 @@ class RegexStore(pyd.BaseModel):
     # ---------
     # `x4` Misc
     # ---------
-    def sanitize(self, pattern: str | Pattern | Buffer) -> str:
+    def sanitize(self, pattern: str | Pattern | Buffer | Expression | Atom) -> str:
         """
         Sanitize a pattern by normalizing inline flag syntax.
 
@@ -1038,30 +1079,58 @@ class RegexStore(pyd.BaseModel):
         """
         if isinstance(pattern, Pattern):
             pattern = pattern.pattern
-        elif isinstance(pattern, Buffer):
-            pattern = str(pattern)
-        elif pattern in self.patterns:
+        elif isinstance(pattern, str) and pattern in self.patterns:
             pattern = self.patterns[pattern].pattern
-        assert isinstance(pattern, str)
+        else:
+            pattern = str(pattern)
 
         return ut.replace(
             pattern,
             (META_RGXS['inline_flags'], r'(?:(?\1)'),
         )
 
-    def tree_print(self, pattern: str | Pattern | Buffer, print_head: bool = True) -> str:
+    def tree_print(
+        self,
+        pattern: str | Pattern | Buffer | Expression | Atom,
+        print_head: bool = True,
+        **kwargs: Any,
+    ) -> str:
         """
         Pretty-print a regex pattern as an indented multiline tree structure, primarily for use
         in debugging.
 
         Args:
-            pattern: Pattern to print (string, compiled Pattern, or Buffer).
-            print_head: Whether to include the pattern header in output.
+            pattern: The name of an existing pattern, a compiled pattern, or a raw expression.
+            print_head: Whether to include the pattern header (i.e. '(?:DEFINE)...)') in output.
         Returns:
             Multi-line string representation with indentation showing nesting.
         """
-        text = self.sanitize(pattern)
-        *head_arr, body = text.split('\n)(', 1)
-        body = body[body.index('>') + 1 : -1]
-        ret = self._tree_print(body)
-        return f'{head_arr[0]}\n){ret}' if print_head and head_arr else ret
+        # 0. Normalize & validate arguments
+        body: Expression
+        if isinstance(pattern, Expression):
+            body = pattern
+        elif isinstance(pattern, Atom):
+            body = Expression(pattern)
+        else:
+            if isinstance(pattern, Pattern):
+                expr = pattern.pattern
+            elif isinstance(pattern, str) and pattern in self:
+                expr = self.definitions[pattern]
+            else:
+                expr = str(pattern)
+            body = Expression.atomize(expr)
+
+        if not body:
+            return ''
+
+        # I. Identify and separate out the definition section, if present
+        head = Atom()
+        if len(body) > 1 and body.first.is_group_of_kind(GroupKind.DEFINE):
+            head = body[0]
+            body = body[1:]
+        elif print_head and isinstance(pattern, str) and pattern in self:
+            head = mi.first(Expression.atom_iterator(self.patterns[pattern].pattern))
+            assert head.is_group_of_kind(GroupKind.DEFINE)
+
+        kwargs = dict(maxdepth=6, threshold=48) | kwargs
+        return self._tree_print(body, depth=0, **kwargs)

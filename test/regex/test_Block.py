@@ -9,7 +9,7 @@ import pytest as pyt
 
 ### INTERNAL
 from ..conftest import boolmap
-from my.regex import Quantifier, Atom, Atoms, Block
+from my.regex import Quantifier, Atom, Expression, Block
 
 cls = Block
 
@@ -36,10 +36,14 @@ class TestBlock:
             (['ab', 'c', 'd|e'], [2, 1, 1, 1]),
             # Other types
             (
-                [Atoms(Atom('a'), Atom('b')), Atom('c'), Atoms(Atom('d'), Atom('|'), Atom('e'))],
+                [
+                    Expression(Atom('a'), Atom('b')),
+                    Atom('c'),
+                    Expression(Atom('d'), Atom('|'), Atom('e')),
+                ],
                 [2, 1, 1, 1],
             ),
-            ([map(Atoms, ['ab', 'c', 'd|e'])], [2, 1, 1, 1]),
+            ([map(Expression, ['ab', 'c', 'd|e'])], [2, 1, 1, 1]),
             # Edge cases
             ([], []),
             ([''], [0]),
@@ -69,7 +73,7 @@ class TestBlock:
         ],
     )
     def test_greatest_common_prefix(self, atoms: list[str], expected: str):
-        assert cls.greatest_common_prefix(Atoms(*atoms)) == expected
+        assert cls.greatest_common_prefix(Expression(*atoms)) == expected
 
     @pyt.mark.parametrize(
         'lhs, args, expected',
@@ -84,7 +88,7 @@ class TestBlock:
         ],
     )
     def test_greatest_common_suffix(self, atoms: list[str], expected: str):
-        assert cls.greatest_common_suffix(Atoms(atoms)) == expected
+        assert cls.greatest_common_suffix(Expression(atoms)) == expected
 
     @pyt.mark.parametrize(
         'branches, expected',
@@ -117,7 +121,7 @@ class TestBlock:
         ),
     )
     def test_is_clone_with_prefix(self, lhs: str, rhs: str, expected: bool):
-        assert cls._is_clone_with_prefix(Atoms(lhs), Atoms(rhs)) == expected
+        assert cls._is_clone_with_prefix(Expression(lhs), Expression(rhs)) == expected
 
     # -------------------
     # `+` Primary Methods

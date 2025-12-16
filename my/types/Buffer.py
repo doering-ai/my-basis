@@ -152,7 +152,7 @@ class Buffer(pyd.BaseModel):
 
     def memcopy(self) -> Self:
         """Create a deep copy of this Buffer instance without recalculating fences."""
-        return Buffer.new(self.text[0], fence_rgxs=self.fence_rgxs, fences=np.copy(self.fences))
+        return self.new(self.text[0], fence_rgxs=self.fence_rgxs, fences=np.copy(self.fences))
 
     # -------------------
     # `-` Private Methods
@@ -455,6 +455,12 @@ class Buffer(pyd.BaseModel):
         `bool(buffer.fence_rgx)` instead.
         """
         return self.fences.size > 0
+
+    @property
+    def fence_spans(self) -> Iterator[Span]:
+        """An iterator over the current fence spans."""
+        for s0, s1 in self.fences:
+            yield Span((s0, s1))
 
     def __str__(self) -> str:
         return self.serialize()

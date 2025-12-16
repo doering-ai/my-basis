@@ -2,7 +2,7 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import ClassVar
+from typing import ClassVar, Self
 
 ### EXTERNAL
 import regex as re
@@ -23,9 +23,13 @@ class Span(tuple[int, int]):
     and merging operations. Can be constructed from various formats including strings
     like "10-20" or "432-3" (abbreviated form).
     """
+
     DELIM_RGX: ClassVar[re.Pattern] = re.compile(r' ?[-,\/]+ ?')
 
-    def __new__(cls, arg0: 'Series|int|float|str|Span' = -1, arg1: int | str = -1):
+    # -------------------
+    # `0` Initial Methods
+    # -------------------
+    def __new__(cls, arg0: Series | int | float | str | Self = -1, arg1: int | str = -1):
         if isinstance(arg0, Span):
             return arg0
 
@@ -58,11 +62,20 @@ class Span(tuple[int, int]):
         assert x0 <= x1, f'Invalid span: {x0} > {x1}'
         return super().__new__(cls, (x0, x1))
 
-    @property
-    def delta(self) -> int:
-        """Return the length of this span."""
-        return self[1] - self[0]
+    # -------------------
+    # `-` Private Methods
+    # -------------------
 
+    # -------------------
+    # `+` Primary Methods
+    # -------------------
+
+    # ------------------
+    # `x` Public Methods
+    # ------------------
+    # --------------
+    # `x0` Overrides
+    # --------------
     def __repr__(self) -> str:
         return f'Span({self[0]}, {self[1]})'
 
@@ -97,22 +110,13 @@ class Span(tuple[int, int]):
             return False
         elif isinstance(value, int):
             return self[0] <= value < self[1]
+        elif isinstance(value, list):
+            return any(v in self for v in value)
         elif isinstance(value, tuple) and len(value) == 2:
             i0, i1 = value
             if isinstance(i0, int) and isinstance(i1, int):
                 return p0 < i1 and i0 < p1
         return False
-
-    def intersects(self, other: 'Span|tuple[int, int]') -> bool:
-        """
-        Check if this span overlaps with another span.
-
-        Args:
-            other: Span to test for intersection.
-        Returns:
-            True if the spans overlap.
-        """
-        return other in self
 
     def __add__(self, other: object) -> 'Span':
         if isinstance(other, int):
@@ -122,6 +126,28 @@ class Span(tuple[int, int]):
             if isinstance(o0, int) and isinstance(o1, int):
                 return Span((self[0] + o0, self[1] + o1))
         return self
+
+    # ---------------
+    # `x1` Properties
+    # ---------------
+    @property
+    def delta(self) -> int:
+        """Return the length of this span."""
+        return self[1] - self[0]
+
+    # ------------
+    # `x2` Methods
+    # ------------
+    def intersects(self, other: tuple[int, int] | Self | list[Self]) -> bool:
+        """
+        Check if this span overlaps with another span.
+
+        Args:
+            other: Span to test for intersection.
+        Returns:
+            True if the spans overlap.
+        """
+        return other in self
 
     @staticmethod
     def serialize(*args: 'Span|tuple[int, int]') -> str:

@@ -2,7 +2,7 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import Self, Any
+from typing import Self
 import more_itertools as mi
 import functools as ft
 
@@ -12,7 +12,7 @@ import regex as re
 ### INTERNAL
 from ..utils import ut
 from ..types import Buffer
-from .meta import GroupKind, Atom, Atoms, Block, Quantifier
+from .meta import GroupKind, Atom, Expression, GroupAtom
 from .MatchData import MatchData
 from .RegexStore import RegexStore, RegexBuffer
 
@@ -47,21 +47,24 @@ class RegexDebugger(RegexStore):
     # -------------------
     # `-` Private Methods
     # -------------------
-    def pinpoint_failure(self, text: Buffer, atoms: Atoms, prefix: str) -> tuple[int, MatchData]:
+    def pinpoint_failure(
+        self, text: Buffer, expr: Expression, prefix: str
+    ) -> tuple[int, MatchData]:
+        n = len(expr)
         last_match: MatchData = MatchData()
 
         # I. Iterate through the atoms, progressively testing longer snippets until one breaks
-        for i in range(len(atoms)):
-            snippet = re.compile(rf'{prefix}{atoms[:i]}')
+        for i in range(n):
+            snippet = re.compile(rf'{prefix}{expr[:i]}')
             if (match := text.match(snippet)) is not None:
                 last_match = self.parse(match)
             else:
                 return i, last_match
 
         # II. If no failure was found, return an impossible index to indicate as much
-        return len(atoms), last_match
+        return n, last_match
 
-    def curate(self, atoms: Atoms, failed_idx: int, flags: Atom) -> str:
+    def curate(self, atoms: Expression, failed_idx: int, flags: Atom) -> str:
         """
         Curate the given regex snippet to include only the failing clause and its dependencies.
 
@@ -90,13 +93,20 @@ class RegexDebugger(RegexStore):
         # IV. Return a valid RGX expression.
         return rf'{definitions}{flags}^{self.sanitize(snippet)}'
 
-    def format_expr(self, expr: str | Atoms) -> str:
+    def _do_drill(self, group: GroupAtom) -> bool:
+        return (
+            group.kind in GroupKind._SIMPLE
+            and group.quantifier == ''
+            and not Expression.is_split(group.body)
+        )
+
+    def format_expr(self, expr: str | Expression) -> str:
         return ut.wrap('EXPRESSION', char='-', width=3) + f'\n{expr}'
 
     def format_data(self, match: str | MatchData) -> str:
         return ut.wrap('LAST MATCH', char='-', width=1) + f'\n{match}'
 
-    def format_curated(self, curated_expr: str | Atoms) -> str:
+    def format_curated(self, curated_expr: str | Expression) -> str:
         return ut.wrap('CURATED EXPRESSION', char='-', width=2) + f'\n{curated_expr}'
 
     def format_text(self, text: str | Buffer) -> str:
@@ -105,7 +115,7 @@ class RegexDebugger(RegexStore):
     def format_fulltext(self, text: str | Buffer) -> str:
         return ut.wrap('FULL TEXT', char='-', width=3) + f'\n{text}'
 
-    def format_fullexpr(self, expr: str | Atoms) -> str:
+    def format_fullexpr(self, expr: str | Expression) -> str:
         return ut.wrap('FULL EXPRESSION', char='-', width=3) + f'\n{expr}'
 
     def format_early_return(self, name: str, explanation: str, text: str, expr: str) -> list[str]:
@@ -132,21 +142,19 @@ class RegexDebugger(RegexStore):
         """
         output = []
 
+        atoms = Expression(self.definitions[name])
+
+        # I.i. Drill down through unnecessary wrapper groups, collecting any flags set along the way
         flags = {'m'}
-        atoms = Atoms.atomize(self.definitions[name])
-        while len(atoms) == 1 and atoms.one.is_group:
-            _kind, _, _flags, _body, _quant = atoms.one.as_group()
-            group_atoms = Atoms.atomize(_body)
-            if _kind in GroupKind._SIMPLE and not (_quant or Atoms.is_split(group_atoms)):
-                atoms = group_atoms
-                flags |= set(_flags)
-            else:
-                break
+        while len(atoms) == 1 and isinstance(atoms.one, GroupAtom) and self._do_drill(atoms.one):
+            assert Expression.is_group(group := atoms.one), 'Expected group, got plain atom.'
+            atoms = Expression(group.body)
+            flags |= group.flags
 
         # I.ii. Generate a convenient (if oversized) prefix for future repeated use
-        flag_group = Atom(f'(?{"".join(sorted(flags))})')
-        definitions = mi.first(Atoms.atomize(self.patterns[name].pattern))
-        prefix = str(Atoms(definitions, flag_group))
+        definitions = mi.first(Expression.atomize(self.patterns[name].pattern))
+        flag_group = Atom(f'(?{"".join(sorted(flags))})') if flags else Atom('')
+        prefix = str(Expression(definitions, flag_group))
 
         # II. Iterate through the groups, matching until we fail
         failed_idx, last_match = self.pinpoint_failure(text, atoms, prefix)

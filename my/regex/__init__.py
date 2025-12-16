@@ -1,7 +1,7 @@
-from .meta import META_RGXS, Quantifier, GroupKind, Atom, Atoms, Block
+from .meta import META_RGXS, Quantifier, GroupKind, Atom, Expression, Block
 from .MatchData import MatchData
 from .ParseData import ParseData
-from .RegexStore import RegexStore, RgxParser, RgxTup, RgxList, RgxVal, RgxDef
+from .RegexStore import RegexStore, RegexParser, RegexTup, RegexList, RegexVal, RegexDef
 from .common import format_url, atom, COMMON_RGXS
 from .RegexDebugger import RegexDebugger
 
@@ -12,18 +12,18 @@ re.DEFAULT_VERSION = re.VERSION1
 __all__ = [
     'GroupKind',
     'Atom',
-    'Atoms',
+    'Expression',
     'Block',
     'Quantifier',
     'META_RGXS',
     'MatchData',
     'ParseData',
     'RegexStore',
-    'RgxParser',
-    'RgxTup',
-    'RgxList',
-    'RgxVal',
-    'RgxDef',
+    'RegexParser',
+    'RegexTup',
+    'RegexList',
+    'RegexVal',
+    'RegexDef',
     'format_url',
     'atom',
     'COMMON_RGXS',

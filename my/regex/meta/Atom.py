@@ -48,6 +48,10 @@ class Atom(pyd.BaseModel):
     def _normalize_other_atom(param: object) -> str:
         return param.data if isinstance(param, Atom) else str(param)
 
+    @staticmethod
+    def _has_set_operator(data) -> bool:
+        return bool(META_RGXS['set_operator'].search(data))
+
     # -------------------
     # `+` Primary Methods
     # -------------------
@@ -109,11 +113,6 @@ class Atom(pyd.BaseModel):
         return Quantifier()
 
     @ft.cached_property
-    def has_complex_quantifier(self) -> bool:
-        """Determines if this atom has a complex quantifier (e.g. '+', '*', '{2,5}')."""
-        return not self.quantifier.is_simple
-
-    @ft.cached_property
     def is_optional(self) -> bool:
         """Determines if this atom has an optional quantifier (e.g. '?', '*', '{0,3}')."""
         return self.quantifier.is_optional
@@ -134,7 +133,12 @@ class Atom(pyd.BaseModel):
         Determine if this atom is 'simple', i.e. a single symbol with no grouping, set, or complex
         quantifier. Useful for isomorphic transformations.
         """
-        return bool(self) and self.quantifier.is_simple
+        return (
+            bool(self)
+            and self.quantifier.is_simple
+            and not self.is_group
+            and not (self.is_set and self._has_set_operator(self.data))
+        )
 
     # ------------
     # `x2` Methods
@@ -171,4 +175,4 @@ class Atom(pyd.BaseModel):
 
     def as_required(self) -> Self:
         """Generate a copy of this atom with its quantifier made non-optional (default '')."""
-        return self.quantify(self.quantifier.as_required)
+        return self.quantify(self.quantifier.as_required())

@@ -11,7 +11,6 @@ import pydantic as pyd
 ### INTERNAL
 from ...types import Span
 from .meta_patterns import META_RGXS
-from .Quantifier import Quantifier
 from .Atom import Atom
 
 
@@ -21,7 +20,6 @@ from .Atom import Atom
 class SetAtom(Atom):
     span: Span = pyd.Field(default_factory=lambda: Span(0, 0))
     body: str = ''
-    quantifier: Quantifier = pyd.Field(default_factory=Quantifier)
 
     @pyd.model_validator(mode='after')
     def _construct_span(self) -> Self:
@@ -29,8 +27,7 @@ class SetAtom(Atom):
         assert self.data.startswith('['), f'Invalid set data (missing `[`): {self.data}'
 
         if len(self.data) > 2 and not self.body:
-            self.body, end = self.data[1:].rsplit(']', 1)
-            self.quantifier = Quantifier(end)
+            self.body = self.data[1:].rsplit(']', 1)[0]
 
         # Escape special characters found within the set
         self.body = META_RGXS['special_characters'].sub(r'\\\1', self.body)

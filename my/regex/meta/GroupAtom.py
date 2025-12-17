@@ -32,7 +32,6 @@ class GroupAtom(Atom):
     # Primary fields
     start: str = ''
     body: str = ''
-    quantifier: Quantifier = pyd.Field(default_factory=Quantifier)
 
     # Derived fields
     span: Span = pyd.Field(default_factory=lambda: Span(0, 0))
@@ -63,8 +62,7 @@ class GroupAtom(Atom):
 
             # I.iii. Separate out the closing paren and quantifier (if present)
             rest = self.data[len(self.start) :]
-            self.body, end = rest.rsplit(')', 1)
-            self.quantifier = Quantifier(end)
+            self.body = rest.rsplit(')', 1)[0]
 
         if self.kind in GroupKind._NAMED and not self.name:
             self.infer_name()

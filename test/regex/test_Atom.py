@@ -106,7 +106,8 @@ class TestAtom:
                 r'a+',
                 r'a*+',
                 r'\++',
-                r'\+{1,}',
+                r'a{1,5}',
+                r'a{1,}',
                 r'[a-z]',
                 r'[ab--c]',
             ],
@@ -114,16 +115,6 @@ class TestAtom:
     )
     def test_is_simple(self, expr: str, expected: bool):
         assert cls(expr).is_simple == expected
-
-    @pyt.mark.parametrize(
-        'expr, expected',
-        boolmap(
-            true=[r'a+', r'a*', r'a{2,5}', r'(?:abc)*+', r'[abc]++'],
-            false=[r'a', r'a?', r'(?:abc)', r'[abc]'],
-        ),
-    )
-    def test_has_complex_quantifier(self, expr: str, expected: bool):
-        assert cls(expr).has_complex_quantifier == expected
 
     @pyt.mark.parametrize(
         'expr, expected',

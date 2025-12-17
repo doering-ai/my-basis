@@ -79,7 +79,7 @@ class Quantifier:
         elif self == '':
             return cls('?')
         elif self.startswith('{1'):
-            return cls('{0' + self[3:])
+            return cls('{0' + self[2:])
         elif self.startswith('+'):
             return cls('*' + self[1:])
         else:
@@ -93,7 +93,7 @@ class Quantifier:
         elif self == '?':
             return cls('')
         elif self.startswith('{0'):
-            return cls('{1' + self[3:])
+            return cls('{1' + self[2:])
         elif self.startswith('*'):
             return cls('+' + self[1:])
         else:

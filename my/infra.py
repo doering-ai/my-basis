@@ -17,9 +17,11 @@ import jinja2 as jn
 ############
 ### DATA ###
 ############
-BASIS_DATA_DIR = Path(__file__).parent.parent / 'data'
-assert BASIS_DATA_DIR.exists() and BASIS_DATA_DIR.is_dir()
+BASIS_ROOT_DIR = Path(__file__).parent
+assert BASIS_ROOT_DIR.exists() and BASIS_ROOT_DIR.is_dir()
 
+TEMPLATE_DIR = BASIS_ROOT_DIR / 'templates'
+assert TEMPLATE_DIR.exists() and TEMPLATE_DIR.is_dir()
 
 ############
 ### BODY ###
@@ -48,9 +50,11 @@ TimeType = date | datetime | time | timedelta
 # -----
 # JINJA
 # -----
-templates = BASIS_DATA_DIR / 'templates'
-assert templates.exists() and templates.is_dir()
-JINJA = jn.Environment(loader=jn.FileSystemLoader(templates), trim_blocks=True, lstrip_blocks=True)
+JINJA = jn.Environment(
+    loader=jn.FileSystemLoader(TEMPLATE_DIR),
+    trim_blocks=True,
+    lstrip_blocks=True,
+)
 
 
 @ft.lru_cache(maxsize=128)

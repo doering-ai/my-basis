@@ -7,8 +7,8 @@
 import pytest as pyt
 
 ### INTERNAL
-from ..conftest import boolmap
 from my.regex import Atom
+from ..conftest import boolmap
 
 cls = Atom
 
@@ -77,8 +77,8 @@ class TestAtom:
     @pyt.mark.parametrize(
         'expr, expected',
         boolmap(
-            true=[],
-            false=[],
+            true=[r'[abc]', r'[a-z]', r'[+*?]', r'[()|]', r'[.^$]'],
+            false=[r'', r'a', r'\[', r'ab', r'(?:abc)'],
         ),
     )
     def test_is_set(self, expr: str, expected: bool):
@@ -114,3 +114,74 @@ class TestAtom:
     )
     def test_is_simple(self, expr: str, expected: bool):
         assert cls(expr).is_simple == expected
+
+    @pyt.mark.parametrize(
+        'expr, expected',
+        boolmap(
+            true=[r'a+', r'a*', r'a{2,5}', r'(?:abc)*+', r'[abc]++'],
+            false=[r'a', r'a?', r'(?:abc)', r'[abc]'],
+        ),
+    )
+    def test_has_complex_quantifier(self, expr: str, expected: bool):
+        assert cls(expr).has_complex_quantifier == expected
+
+    @pyt.mark.parametrize(
+        'expr, expected',
+        boolmap(
+            true=[r'a?', r'a*', r'a{0,5}', r'(?:abc)?', r'[abc]*'],
+            false=[r'a', r'a+', r'a{1,5}', r'(?:abc)', r'[abc]+'],
+        ),
+    )
+    def test_is_optional(self, expr: str, expected: bool):
+        assert cls(expr).is_optional == expected
+
+    # ------------
+    # `x2` Methods
+    # ------------
+    @pyt.mark.parametrize(
+        'expr, quantifier, overwrite, expected',
+        [
+            (r'a', r'+', True, r'a+'),
+            (r'a', r'*', True, r'a*'),
+            (r'a', r'?', True, r'a?'),
+            (r'a', r'{2,5}', True, r'a{2,5}'),
+            (r'a+', r'*', True, r'a*'),
+            (r'a+', r'?', True, r'a?'),
+            (r'a+', r'+', True, r'a+'),
+            (r'a+', r'*', False, r'(?:a+)*'),
+            (r'(?:abc)', r'+', True, r'(?:abc)+'),
+            (r'(?:abc)+', r'*', True, r'(?:abc)*'),
+            (r'(?:abc)+', r'?', False, r'(?:(?:abc)+)?'),
+        ],
+    )
+    def test_quantify(self, expr: str, quantifier: str, overwrite: bool, expected: str):
+        assert cls(expr).quantify(quantifier, overwrite) == expected
+
+    @pyt.mark.parametrize(
+        'expr, expected',
+        [
+            (r'a', r'a?'),
+            (r'a+', r'a*'),
+            (r'a*', r'a*'),
+            (r'a{1,5}', r'a{0,5}'),
+            (r'(?:abc)', r'(?:abc)?'),
+            (r'(?:abc)+', r'(?:abc)*'),
+        ],
+    )
+    def test_as_optional(self, expr: str, expected: str):
+        assert cls(expr).as_optional() == expected
+
+    @pyt.mark.parametrize(
+        'expr, expected',
+        [
+            (r'a', r'a'),
+            (r'a?', r'a'),
+            (r'a+', r'a+'),
+            (r'a*', r'a+'),
+            (r'a{0,5}', r'a{1,5}'),
+            (r'(?:abc)?', r'(?:abc)'),
+            (r'(?:abc)*', r'(?:abc)+'),
+        ],
+    )
+    def test_as_required(self, expr: str, expected: str):
+        assert cls(expr).as_required() == expected

@@ -8,7 +8,9 @@ import pytest as pyt
 import pandas as pd
 
 ### INTERNAL
-from my import GoogleSheet
+from my.apis import GoogleSheet
+
+cls = GoogleSheet
 
 
 ############
@@ -26,7 +28,7 @@ class TestGoogleSheet:
         ],
     )
     def test_shape_to_range(self, shape: tuple[int, int], start: str, expected: str):
-        result = GoogleSheet.shape_to_range(shape, start)
+        result = cls.shape_to_range(shape, start)
         assert result == expected
 
     @pyt.mark.parametrize(
@@ -63,7 +65,7 @@ class TestGoogleSheet:
     def test_serialize_data(
         self, data: pd.DataFrame, header: bool, index: bool, expected: list[list[str]]
     ):
-        result = GoogleSheet.serialize_data(data, header=header, index=index)
+        result = cls.serialize_data(data, header=header, index=index)
         assert result == expected
 
     @pyt.mark.parametrize(
@@ -114,5 +116,5 @@ class TestGoogleSheet:
     def test_deserialize_data(
         self, values: list[list], header: bool, index: str, expected: pd.DataFrame
     ):
-        result = GoogleSheet.deserialize_data(values, header=header, index=index)
+        result = cls.deserialize_data(values, header=header, index=index)
         pd.testing.assert_frame_equal(result, expected.astype(str), check_dtype=False)

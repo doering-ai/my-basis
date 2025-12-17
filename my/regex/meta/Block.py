@@ -17,7 +17,7 @@ from .Quantifier import Quantifier
 from .Atom import Atom
 from .GroupAtom import GroupAtom
 from .SetAtom import SetAtom
-from .Expression import Expression
+from .Regex import Regex
 
 
 ############
@@ -30,9 +30,9 @@ class Block(pyd.BaseModel):
         Block("(?:br1|br2|br3)") -> {prefix: 'br', branches: ['1', '2', '3'], suffix: ''} .
     """
 
-    prefix: Expression = Expression()
-    branches: list[Expression] = []
-    suffix: Expression = Expression()
+    prefix: Regex = Regex()
+    branches: list[Regex] = []
+    suffix: Regex = Regex()
     quantifier: Quantifier = Quantifier()
 
     # -------------------
@@ -41,8 +41,8 @@ class Block(pyd.BaseModel):
     @classmethod
     def new(
         cls,
-        *args: str | Atom | Expression | Sequence[Expression] | Iterator[Expression] | Self,
-        **kwargs: Expression | Quantifier,
+        *args: str | Atom | Regex | Sequence[Regex] | Iterator[Regex] | Self,
+        **kwargs: Regex | Quantifier,
     ) -> Self:
         branches = []
         for arg in args:
@@ -51,13 +51,13 @@ class Block(pyd.BaseModel):
                 branches.extend(arg.branches)
             elif isinstance(arg, Atom):
                 # II. Singular branches
-                branches.append(Expression(arg))
+                branches.append(Regex(arg))
             elif isinstance(arg, (Sequence | Iterator)) and not isinstance(arg, str):
                 # III. Handle args that represent multiple branches
-                branches.extend(map(Expression, arg))
-            elif isinstance(arg, (Expression | str)):
+                branches.extend(map(Regex, arg))
+            elif isinstance(arg, (Regex | str)):
                 # IV. Handle args that MAY represent multiple branches (using r'|')
-                atoms = Expression(arg)
+                atoms = Regex(arg)
                 branches.extend(atoms.split())
             else:
                 raise TypeError(f'Unsupported type for Branches initialization: {type(arg)}')
@@ -87,33 +87,33 @@ class Block(pyd.BaseModel):
 
         return all(map(self._atom_supports_atomic_grouping, search_space))
 
-    def _serialize(self, data: Expression) -> Expression:
+    def contextualize(self, data: Regex) -> Regex:
         """Add the context (prefix, suffix, quantifier) to the given atoms, usually a branch."""
         if self.prefix or self.suffix:
             data = self.prefix + data + self.suffix
 
         if self.quantifier:
-            data = Expression.quantify(data, self.quantifier)
+            data = Regex.quantify(data, self.quantifier)
         return data
 
     @staticmethod
-    def greatest_common_prefix(*args: Expression) -> Expression:
+    def greatest_common_prefix(*args: Regex) -> Regex:
         if not args or not all(map(len, args)):
-            return Expression()
+            return Regex()
         elif len(args) == 1:
             return args[0]
-        return Expression(mi.longest_common_prefix(args))
+        return Regex(mi.longest_common_prefix(args))
 
     @staticmethod
-    def greatest_common_suffix(*args) -> Expression:
+    def greatest_common_suffix(*args) -> Regex:
         if not args or not all(map(len, args)):
-            return Expression()
+            return Regex()
         elif len(args) == 1:
             return args[0]
 
         # Reverse the contents before and after invoking the `common_prefix` library function
         common_suffix = tuple(mi.longest_common_prefix(map(reversed, args)))
-        return Expression(reversed(common_suffix))
+        return Regex(reversed(common_suffix))
 
     @staticmethod
     def _atom_supports_atomic_grouping(atom: Atom) -> bool:
@@ -125,13 +125,11 @@ class Block(pyd.BaseModel):
         )
 
     @staticmethod
-    def _is_clone_with_prefix(lhs: Expression, rhs: Expression) -> bool:
+    def _is_clone_with_prefix(lhs: Regex, rhs: Regex) -> bool:
         return bool(lhs and rhs) and len(rhs) == len(lhs) + 1 and rhs[1:] == lhs
 
     @classmethod
-    def group_branches_by_prefix(
-        cls, *branches: Expression
-    ) -> Generator[list[Expression], None, None]:
+    def group_branches_by_prefix(cls, *branches: Regex) -> Generator[list[Regex], None, None]:
         """
         Group the given branches into buckets by their common prefixes (if any exist).
         It is assumed that branches are already given in a meaningful (and likely alphabetical)
@@ -152,7 +150,9 @@ class Block(pyd.BaseModel):
         Yields:
             Lists of Block instances, each representing a contiguous subset of the given blocks.
         """
-        _split = lambda lhs, rhs: not cls.greatest_common_suffix(*lhs.last, *rhs.last)
+        _split = lambda lhs, rhs: not (
+            lhs.last and rhs.last and cls.greatest_common_suffix(*lhs.last, *rhs.last)
+        )
         yield from map(list, mi.split_when(blocks, _split))
 
     # -------------------
@@ -169,12 +169,12 @@ class Block(pyd.BaseModel):
             return cls.new(atom)
 
         # I. Split the group's contents into branches
-        block = cls.new(atom.body, prefix=Expression(atom.inline_flags))
+        block = cls.new(atom.body, prefix=Regex(atom.inline_flags))
         block.expand()
 
         # II. Expand out an optional quantifier into a new, empty branch
         if atom.is_optional and all(block.branches):
-            block.branches.append(Expression.empty())
+            block.branches.append(Regex.empty())
 
         return block
 
@@ -184,14 +184,14 @@ class Block(pyd.BaseModel):
         assert isinstance(atom, SetAtom), f'Expected set atom, got: {atom!r}'
         if not atom.is_simple:
             return cls.new(atom)
-        result: list[Expression] = []
+        result: list[Regex] = []
 
         # I. Expand out optional quantifier into a new branch
         if atom.quantifier.is_optional:
-            result.append(Expression.empty())
+            result.append(Regex.empty())
 
         # II. Atomize the set body into individual atomic branches
-        result.extend(map(Expression, Expression.atomize(atom.body)))
+        result.extend(map(Regex, Regex.atomize(atom.body)))
 
         return cls.new(*result, quantifier=atom.quantifier.as_required())
 
@@ -202,12 +202,12 @@ class Block(pyd.BaseModel):
         elif atom.is_set:
             return cls.expand_set(atom)
         elif atom.is_optional:
-            return cls.new(Expression.empty(), Expression(atom.as_required()))
+            return cls.new(Regex.empty(), Regex(atom.as_required()))
         else:
             return cls.new(atom)
 
     @classmethod
-    def collapse_atoms(cls, *args: Atom | Expression) -> Expression:
+    def collapse_atoms(cls, *args: Atom | Regex) -> Regex:
         """
         Given a collection of single atoms, attempt to combine them into a more succint set-based
         expression.
@@ -225,7 +225,7 @@ class Block(pyd.BaseModel):
             The optimized regex pattern string.
         """
         # 0. Normalize args
-        atoms = [(arg.one if isinstance(arg, Expression) else arg) for arg in args]
+        atoms = [(arg.one if isinstance(arg, Regex) else arg) for arg in args]
 
         # I. Determine if the resulting atom should be optional
         to_drop = set()
@@ -267,10 +267,12 @@ class Block(pyd.BaseModel):
         return new_branch_obj.render()
 
     @classmethod
-    def collapse_blocks_by_suffix(cls, blocks: list[Self]) -> list[Expression]:
+    def collapse_blocks_by_suffix(cls, blocks: list[Self]) -> list[Regex]:
         ret = []
+        print(f'collapse_blocks_by_suffix START: {blocks=}')
         for group in cls.group_blocks_by_suffix(*blocks):
             n = len(group)
+            print(f'collapse_blocks_by_suffix: {n=}, {group=}, {ret=}')
             if n == 0:
                 raise ValueError('Somehow collected an empty block group')
             if n == 1:
@@ -331,7 +333,7 @@ class Block(pyd.BaseModel):
         raise TypeError
 
     @__getitem__.register
-    def _get_branch(self, key: int) -> Expression:
+    def _get_branch(self, key: int) -> Regex:
         return self.branches[key]
 
     @__getitem__.register
@@ -350,7 +352,7 @@ class Block(pyd.BaseModel):
         return max(*self.lengths) if self else 0
 
     @property
-    def last(self) -> list[Expression]:
+    def last(self) -> list[Regex]:
         """Returns all the atoms tied for the final position in this object."""
         return [self.suffix] if self.suffix else self.branches
 
@@ -382,7 +384,7 @@ class Block(pyd.BaseModel):
             elif len(branch) == 1:
                 # I.ii. Single atom -- check for optionality
                 if branch.one.is_optional and self.make_optional():
-                    self.branches[i] = Expression(branch.one.as_required())
+                    self.branches[i] = Regex(branch.one.as_required())
             else:
                 # I.iii. Look for a copy of this branch w/ a prefix
                 for j, other_branch in enumerate(self.branches):
@@ -390,7 +392,7 @@ class Block(pyd.BaseModel):
                         continue
                     elif self._is_clone_with_prefix(branch, other_branch):
                         to_drop.add(i)
-                        self.branches[j][0] = other_branch[0].optional()
+                        other_branch[0] = other_branch[0].as_optional()
 
         if to_drop:
             self.branches = ut.drop_at(self.branches, to_drop)
@@ -409,9 +411,9 @@ class Block(pyd.BaseModel):
         if not self:
             return self
 
-        new_data: list[Expression] = []
+        new_data: list[Regex] = []
         for branch in self.branches:
-            sub_branches: list[Expression] = []
+            sub_branches: list[Regex] = []
             n_split = 0
 
             # I. Split any sets and groups we can find into nested branch objects
@@ -419,13 +421,13 @@ class Block(pyd.BaseModel):
                 if n_split < max_split and len(sub_block := self.expand_atom(atom)) > 1:
                     sub_branches.extend(sub_block.export_branches())
                 else:
-                    sub_branches.append(Expression(atom))
+                    sub_branches.append(Regex(atom))
 
             # II. Reconstruct the branches from the expanded atoms
             if len(sub_branches) > len(branch):
                 # II.i. If any atoms were split, record all possible permutations
                 all_branches = it.product(*(br.data for br in sub_branches))
-                new_data.extend(map(Expression, all_branches))
+                new_data.extend(map(Regex, all_branches))
             else:
                 # II.ii. For all non-splittable atoms, just add them as-is
                 new_data.append(branch)
@@ -492,17 +494,19 @@ class Block(pyd.BaseModel):
         cls = self.__class__
 
         # I. Prepare the block; the main stage is the "factor" step, where prefixes are found
-        self.clean()
         self.factor()
+        self.clean()
 
         # II. Recursively replace the block's body with an equivalent tree
         if len(self) == 1:
             # II.i. Singular case: recurse into child groups
-            for i, atom in enumerate(self.branches[0]):
-                if atom.is_group:
-                    # II.i. Recurse into any groups found here
-                    sub_block = cls.expand_group(atom).optimize()
-                    self.branches[0][i] = sub_block.render()
+            # branch = self.branches[0]
+            # for i, atom in enumerate(branch):
+            #     if atom.is_group:
+            #         # II.i. Recurse into any groups found here
+            #         sub_block = cls.expand_group(atom).optimize()
+            #         branch[i] = sub_block.render()
+            pass
         elif self.max_length == 1:
             # II.ii. Atomic case: join them directly, as there are unique opportunities
             self.branches = [cls.collapse_atoms(*self.branches)]
@@ -518,7 +522,7 @@ class Block(pyd.BaseModel):
     # ------------------
     # `x3` Serialization
     # ------------------
-    def render(self) -> Expression:
+    def render(self) -> Regex:
         """
         Render the given branches into a regex group, applying optimizations where possible.
 
@@ -537,11 +541,11 @@ class Block(pyd.BaseModel):
         else:
             # II.ii. Determine whether we can safely use an atomic grouping here
             start = '(?>' if self.supports_atomic_grouping() else '(?:'
-            ret = Expression(f'{start}{r"|".join(map(str, self.branches))})')
+            ret = Regex(f'{start}{r"|".join(map(str, self.branches))})')
 
         # III. Add contextual details (prefix, suffix, quantifier)
-        return self._serialize(ret)
+        return self.contextualize(ret)
 
-    def export_branches(self) -> list[Expression]:
+    def export_branches(self) -> list[Regex]:
         """Export just the branches of this block."""
-        return list(map(self._serialize, self.branches))
+        return list(map(self.contextualize, self.branches))

@@ -2,12 +2,13 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import Iterator, Self, Sequence, ClassVar, Literal, TypeGuard, Generator
+from typing import Iterator, Self, Sequence, ClassVar, Literal, Generator
 import functools as ft
 import itertools as it
 import more_itertools as mi
 
 ### EXTERNAL
+from pydantic_core import core_schema as pyds
 
 ### INTERNAL
 from ...types import Buffer
@@ -31,7 +32,7 @@ RegexBuffer = ft.partial(Buffer.new, fence_rgxs=['arrays'])
 ### BODY ###
 ############
 @ft.total_ordering
-class Expression:
+class Regex:
     SPLITTER: ClassVar[Atom] = Atom(r'|')
 
     data: list[Atom] = []
@@ -44,14 +45,14 @@ class Expression:
         for arg in args:
             if isinstance(arg, Atom):
                 self.data.append(arg)
-            elif isinstance(arg, Expression):
+            elif isinstance(arg, Regex):
                 self.data.extend(arg.data)
             elif isinstance(arg, str):
                 self.data.extend(self.atomize(arg))
             elif isinstance(arg, (Sequence | Iterator)):
                 self.data.extend(arg)
             else:
-                raise TypeError(f'Unsupported type for Expression initialization: {type(arg)}')
+                raise TypeError(f'Unsupported type for Regex initialization: {type(arg)}')
 
     @classmethod
     def atomize(cls, expr: str | Buffer | Self) -> Generator[Atom, None, None]:
@@ -70,18 +71,17 @@ class Expression:
         expr = str(expr)
         n = len(expr)
 
-        # I. Break up the expression into ranges of different types
-        # I.i. First, find all the "root" (top-level) groups in the expression
+        # I. First, find all the "root" (top-level) groups in the expression
         buf = RegexBuffer(expr)
         group_atoms = list(cls.group_iterator(buf, mode='roots'))
         group_spans = [group.span for group in group_atoms]
 
-        # I.ii. Next, reuse the work already done by Buffer to find character sets (for exclusion)
-        set_spans = [span for span in buf.fence_spans if not span.interects(group_spans)]
+        # II. Next, reuse the work already done by Buffer to find character sets (for exclusion)
+        set_spans = [span for span in buf.fence_spans if not span.intersects(group_spans)]
         assert all(set_spans), f'Identified empty set spans, which is impossible: {set_spans}'
         set_atoms = [SetAtom(data=expr[span[0] : span[1]], span=span) for span in set_spans]
 
-        # I.iii. Finally, enumerate all the remaining "plain" spans between groups and sets
+        # III. Yield each atom found above, interspersed with the plain atoms found between them
         x_prev = 0
         for atom in sorted(group_atoms + set_atoms, key=lambda atom: atom.span):
             x0, x1 = atom.span
@@ -91,7 +91,7 @@ class Expression:
             x_prev = x1
 
         if x_prev < n:
-            yield from Atom.plain_atomize(expr[x0:x1])
+            yield from Atom.plain_atomize(expr[x_prev:])
 
     @classmethod
     def empty(cls) -> Self:
@@ -99,6 +99,46 @@ class Expression:
 
     def copy(self) -> Self:
         return self.__class__(self.data.copy())
+
+    @classmethod
+    def __get_pydantic_core_schema__(cls, source: type, handler) -> pyds.CoreSchema:
+        """
+        Provide Pydantic with schema generation instructions for Regex.
+
+        This allows Regex instances to be used as fields in Pydantic models.
+        Accepts str or list inputs and serializes back to str.
+        """
+
+        # Validator function that converts input to Regex
+        def validate_expression(value):
+            return value if isinstance(value, cls) else cls(value)
+
+        # Create validation schema that accepts str or list inputs
+        python_schema = pyds.union_schema(
+            [
+                pyds.is_instance_schema(cls),
+                pyds.no_info_after_validator_function(
+                    validate_expression,
+                    pyds.union_schema(
+                        [
+                            pyds.str_schema(),
+                            pyds.list_schema(items_schema=pyds.any_schema()),
+                        ]
+                    ),
+                ),
+            ]
+        )
+
+        return pyds.json_or_python_schema(
+            json_schema=pyds.no_info_after_validator_function(
+                validate_expression, pyds.str_schema()
+            ),
+            python_schema=python_schema,
+            serialization=pyds.plain_serializer_function_ser_schema(
+                lambda instance: str(instance),
+                return_schema=pyds.str_schema(),
+            ),
+        )
 
     # -------------------
     # `-` Private Methods
@@ -138,7 +178,8 @@ class Expression:
 
         # II. Use the Buffer's "pair" functionality to find matching parens
         for span, start, body, end in text.pair_iterator(META_RGXS['group'], mode):
-            if not mask or (kind := GroupKind.read(start)) in mask:
+            kind = GroupKind.read(start)
+            if not mask or kind in mask:
                 yield GroupAtom(
                     data=text[span[0] : span[1]],
                     span=span,
@@ -196,7 +237,7 @@ class Expression:
 
     @ft.singledispatchmethod
     def __getitem__(self, key):
-        raise TypeError(f'Unsupported type for Expression indexing: {type(key)}')
+        raise TypeError(f'Unsupported type for Regex indexing: {type(key)}')
 
     @__getitem__.register
     def _get_pos(self, key: int) -> Atom:
@@ -208,7 +249,7 @@ class Expression:
 
     @ft.singledispatchmethod
     def __setitem__(self, key, value):
-        raise TypeError(f'Unsupported types for Expression assignment: {type(key)}, {type(value)}')
+        raise TypeError(f'Unsupported types for Regex assignment: {type(key)}, {type(value)}')
 
     @__setitem__.register
     def _set_pos(self, key: int, value: str | Atom) -> None:
@@ -220,31 +261,31 @@ class Expression:
     def _set_slice(self, key: slice, value: str | Sequence[Atom] | Self) -> None:
         if isinstance(value, str):
             self.data[key] = list(self.atomize(value))
-        elif isinstance(value, Expression):
+        elif isinstance(value, Regex):
             self.data[key] = value.data
         elif isinstance(value, Sequence):
             self.data[key] = list(map(Atom, value))
         else:
-            raise TypeError(f'Unsupported type for Expression assignment: {type(value)}')
+            raise TypeError(f'Unsupported type for Regex assignment: {type(value)}')
 
     def __add__(self, other: object) -> Self:
         cls = self.__class__
-        if isinstance(other, (str, Atom, Sequence, Expression)):
+        if isinstance(other, (str, Atom, Sequence, Regex)):
             return cls(self.data + cls(other).data)
         else:
-            raise TypeError(f'Unsupported type for Expression addition: {type(other)}')
+            raise TypeError(f'Unsupported type for Regex addition: {type(other)}')
 
     def __lt__(self, other: object) -> bool:
-        if isinstance(other, (str, Atom, Sequence, Expression)):
+        if isinstance(other, (str, Atom, Sequence, Regex)):
             return self.data < self.__class__(other).data
         else:
-            raise TypeError(f'Unsupported type for Expression comparison: {type(other)}')
+            raise TypeError(f'Unsupported type for Regex comparison: {type(other)}')
 
     def __iter__(self) -> Iterator[Atom]:
         return iter(self.data)
 
     def __eq__(self, other: object) -> bool:
-        if isinstance(other, (str, Atom, Sequence, Expression)):
+        if isinstance(other, (str, Atom, Sequence, Regex)):
             return self.data == self.__class__(other).data
         else:
             return False
@@ -270,8 +311,8 @@ class Expression:
 
     @property
     def one(self) -> Atom:
-        assert len(self) == 1, 'Expression.one called on Expression with length != 1'
-        return self.data[0]
+        assert len(self) <= 1, 'Regex.one called on Regex with length != 1'
+        return self.data[0] if self else Atom()
 
     @property
     def spans(self) -> list[tuple[int, int]]:
@@ -299,7 +340,7 @@ class Expression:
         Returns:
             The quantified regex pattern string.
         """
-        atoms = Expression.atomize(expr) if isinstance(expr, str) else expr
+        atoms = Regex.atomize(expr) if isinstance(expr, str) else expr
         assert isinstance(atoms, cls), f'Unsupported type for quantify: {type(atoms)}'
 
         # Edge & null cases
@@ -327,7 +368,7 @@ class Expression:
     def is_atomic(cls, expr: str | Atom | Self) -> bool:
         if isinstance(expr, Atom) or not expr:
             return True
-        elif isinstance(expr, Expression):
+        elif isinstance(expr, Regex):
             return len(expr) == 1
         elif isinstance(expr, str):
             first_atom = mi.first(cls.atomize(expr), default=Atom(''))
@@ -337,9 +378,9 @@ class Expression:
 
     def split(self) -> Iterator[Self]:
         """
-        Split the Expression instance into branches at top-level '|' atoms.
+        Split the Regex instance into branches at top-level '|' atoms.
 
         Yields:
-            Expression instances representing alternate branches.
+            Regex instances representing alternate branches.
         """
-        yield from map(Expression, mi.split_at(self.data, lambda atom: atom == self.SPLITTER))
+        yield from map(Regex, mi.split_at(self.data, lambda atom: atom == self.SPLITTER))

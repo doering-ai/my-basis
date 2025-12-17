@@ -4,7 +4,7 @@ from .GroupKind import GroupKind, GROUP_KIND_MAP
 from .Atom import Atom
 from .GroupAtom import GroupAtom
 from .SetAtom import SetAtom
-from .Expression import Expression
+from .Regex import Regex
 from .Block import Block
 
 __all__ = [
@@ -19,7 +19,7 @@ __all__ = [
     'Atom',
     'GroupAtom',
     'SetAtom',
-    'Expression',
+    'Regex',
     'Block',
     'Branches',
 ]

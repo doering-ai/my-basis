@@ -16,7 +16,7 @@ from regex import Match, Pattern, RegexFlag
 from ..utils import ut
 from ..types import Buffer
 from ..typing import typist
-from .meta import Atom, GroupAtom, Expression, Block, GroupKind, META_RGXS
+from .meta import Atom, GroupAtom, Regex, Block, GroupKind, META_RGXS
 from .MatchData import MatchData
 from .ParseData import ParseData
 
@@ -99,7 +99,7 @@ class RegexStore(pyd.BaseModel):
     definitions: dict[str, str] = {}
 
     # Compiled expressions, ready for invocation
-    patterns: dict[str, Pattern] = {}
+    patterns: dict[str, ut.RegexField] = {}
 
     # Expression-specific parsers of match data
     parsers: dict[str, RegexParser] = {}
@@ -235,7 +235,7 @@ class RegexStore(pyd.BaseModel):
     @classmethod
     def _tree_print(
         cls,
-        expr: Expression | str,
+        expr: Regex | str | Atom,
         depth: int = 0,
         maxdepth: int = 0,
         threshold: int = 48,
@@ -257,14 +257,12 @@ class RegexStore(pyd.BaseModel):
         for branch in block.branches:
             lines: list[str] = []
             for atom in branch:
-                if isinstance(atom, GroupAtom) and (
-                    Expression.is_split(atom) or len(atom) > threshold
-                ):
+                if isinstance(atom, GroupAtom) and (Regex.is_split(atom) or len(atom) > threshold):
                     lines.extend(
                         [
                             atom.start,
                             cls._tree_print(atom.body, depth + 1, maxdepth, threshold),
-                            f'){atom.quant}',
+                            f'){atom.quantifier}',
                         ]
                     )
                 else:
@@ -425,8 +423,8 @@ class RegexStore(pyd.BaseModel):
         new_groups: set[str] = set()
         for existing_group in groups_used:
             buffer.set(self.definitions[existing_group])
-            groups = list(Atom.group_iterator(buffer, mask=GroupKind.INVOC))
-            new_groups |= {group.name for group in groups} - groups_used
+            groups_invoked = {g.name for g in Regex.group_iterator(buffer, mask=GroupKind.INVOC)}
+            new_groups |= groups_invoked - groups_used
 
         if new_groups:
             return groups_used | self.find_all_invocations(new_groups)
@@ -459,7 +457,7 @@ class RegexStore(pyd.BaseModel):
 
         # III. Add wrappers to handle surrounding context
         has_context = pre or suf or start[-1] == ')'
-        if Expression.is_split(body):
+        if Regex.is_split(body):
             if has_context:
                 # III.i. Split groups with context must be wrapped in a non-capturing group
                 c = '>' if start == '(?>' else ':'
@@ -555,7 +553,7 @@ class RegexStore(pyd.BaseModel):
         # I.i. Change all positional capture groups to non-capturing
         if self.options.force_named_groups and '(' in data:
             buf = RegexBuffer(data)
-            for group in Atom.group_iterator(buf, mask=GroupKind.POSIT):
+            for group in Regex.group_iterator(buf, mask=GroupKind.POSIT):
                 buf.insert(group.span[0] + 1, '?:')
             data = str(buf)
 
@@ -611,7 +609,7 @@ class RegexStore(pyd.BaseModel):
         groups_used: set[str] = set()
         local_groups: set[str] = set()
 
-        for group in Atom.group_iterator(text, mask=GroupKind._NAMED):
+        for group in Regex.group_iterator(text, mask=GroupKind._NAMED):
             if group.kind == GroupKind.PARAM:
                 local_groups.add(group.name)
             elif group.kind == GroupKind.INVOC and group.name != name:
@@ -741,7 +739,10 @@ class RegexStore(pyd.BaseModel):
     def __ior__(self, other: dict[str, RegexDef] | Self) -> Self:
         if isinstance(other, RegexStore):
             for name in other.keys():
-                self[name] = (other.definitions[name], other.parsers.get(name, None))
+                if name in other.parsers:
+                    self[name] = (other.definitions[name], other.parsers[name])
+                else:
+                    self[name] = other.definitions[name]
         else:
             for name, param in other.items():
                 self[name] = param
@@ -921,7 +922,7 @@ class RegexStore(pyd.BaseModel):
         Returns:
             Set of all group names invoked directly or indirectly.
         """
-        invocations = {group.name for group in Atom.group_iterator(text, mask=GroupKind.INVOC)}
+        invocations = {group.name for group in Regex.group_iterator(text, mask=GroupKind.INVOC)}
         return self.find_all_invocations(invocations)
 
     def partial(
@@ -1068,7 +1069,7 @@ class RegexStore(pyd.BaseModel):
     # ---------
     # `x4` Misc
     # ---------
-    def sanitize(self, pattern: str | Pattern | Buffer | Expression | Atom) -> str:
+    def sanitize(self, pattern: str | Pattern | Buffer | Regex | Atom) -> str:
         """
         Sanitize a pattern by normalizing inline flag syntax.
 
@@ -1091,7 +1092,7 @@ class RegexStore(pyd.BaseModel):
 
     def tree_print(
         self,
-        pattern: str | Pattern | Buffer | Expression | Atom,
+        pattern: str | Pattern | Buffer | Regex | Atom,
         print_head: bool = True,
         **kwargs: Any,
     ) -> str:
@@ -1106,11 +1107,11 @@ class RegexStore(pyd.BaseModel):
             Multi-line string representation with indentation showing nesting.
         """
         # 0. Normalize & validate arguments
-        body: Expression
-        if isinstance(pattern, Expression):
+        body: Regex
+        if isinstance(pattern, Regex):
             body = pattern
         elif isinstance(pattern, Atom):
-            body = Expression(pattern)
+            body = Regex(pattern)
         else:
             if isinstance(pattern, Pattern):
                 expr = pattern.pattern
@@ -1118,19 +1119,26 @@ class RegexStore(pyd.BaseModel):
                 expr = self.definitions[pattern]
             else:
                 expr = str(pattern)
-            body = Expression.atomize(expr)
+            body = Regex(expr)
 
         if not body:
             return ''
 
         # I. Identify and separate out the definition section, if present
         head = Atom()
-        if len(body) > 1 and body.first.is_group_of_kind(GroupKind.DEFINE):
-            head = body[0]
-            body = body[1:]
+        if (
+            len(body) > 1
+            and isinstance(first := body.first, GroupAtom)
+            and first.kind == GroupKind.DEFINE
+        ):
+            head, *body = body
         elif print_head and isinstance(pattern, str) and pattern in self:
-            head = mi.first(Expression.atom_iterator(self.patterns[pattern].pattern))
+            head = mi.first(Regex.atomize(self.patterns[pattern].pattern))
             assert head.is_group_of_kind(GroupKind.DEFINE)
 
+        # II. Pretty-print the body & head separately
         kwargs = dict(maxdepth=6, threshold=48) | kwargs
-        return self._tree_print(body, depth=0, **kwargs)
+        ret = self._tree_print(body, **kwargs)
+        if print_head and head:
+            ret = f'{self._tree_print(head, **kwargs)}\n{ret}'
+        return ret

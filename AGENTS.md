@@ -6,6 +6,13 @@ It is developed with usage as a library in mind, and given its broad scope, is o
 The source code is found in `my/`, broken up further into subdirectories (e.g. `my/utils/`, `my/text/`, etc.) for the purposes of organization and prevention of circular imports.
 The corresponding PyTest files for each individual python file are present in matching subdirectories of `tests/`.
 
+## Commands
+
+- **Testing:**
+    - `uv run pytest` - Run all unit tests.
+    - `uv run pytest -k <pattern>` - Run all unit tests matching `<pattern>`.
+    - `uv run pytest --cov=my --cov-report=term-missing` - Run all unit tests with coverage report for the `my` package.
+
 ## Important Dependencies
 
 ### Development

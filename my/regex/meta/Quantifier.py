@@ -6,6 +6,7 @@ from typing import ClassVar, Self
 import functools as ft
 
 ### EXTERNAL
+from pydantic_core import core_schema as pyds
 import regex as re
 
 ### INTERNAL
@@ -19,7 +20,7 @@ from .meta_patterns import META_RGXS
 class Quantifier:
     RGX: ClassVar[re.Pattern] = META_RGXS['quant']
 
-    data: str
+    data: str = ''
 
     # -------------------
     # `0` Initial Methods
@@ -27,10 +28,13 @@ class Quantifier:
     def __init__(self, data: str | Self = '') -> None:
         if isinstance(data, Quantifier):
             self.data = data.data
-        else:
-            data = data.lstrip(')')
+        elif data := data.lstrip(')'):
             assert self.RGX.fullmatch(data), f'Invalid quantifier: {data!r}'
             self.data = data
+
+    @classmethod
+    def __get_pydantic_core_schema__(cls, source: type, handler) -> pyds.CoreSchema:
+        return pyds.no_info_before_validator_function(cls, pyds.is_instance_schema(cls))
 
     # -------------------
     # `-` Private Methods
@@ -106,6 +110,9 @@ class Quantifier:
 
     def __str__(self) -> str:
         return self.data
+
+    def __hash__(self) -> int:
+        return hash(self.data)
 
     def __contains__(self, item: str) -> bool:
         return item == self.data

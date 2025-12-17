@@ -2,26 +2,15 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import Self, Generator
+from typing import Self, Generator, Any
 import functools as ft
 
 ### EXTERNAL
 import pydantic as pyd
 
 ### INTERNAL
-from ...types import Buffer
-from .GroupKind import GroupKind
-from .Quantifier import Quantifier
 from .meta_patterns import META_RGXS
-
-
-############
-### DATA ###
-############
-NO_KIND = GroupKind(0)
-
-# A buffer built to hold Regex patterns
-RegexBuffer = ft.partial(Buffer.new, fence_rgxs=['arrays'])
+from .Quantifier import Quantifier
 
 
 ############
@@ -34,11 +23,12 @@ class Atom(pyd.BaseModel):
     # -------------------
     # `0` Initial Methods
     # -------------------
-    def __init__(self, data: str | Self = '') -> None:
+    def __init__(self, data: str | Self = '', *args: Any, **kwargs: Any) -> None:
         if isinstance(data, Atom):
-            self = data.model_copy(deep=True)
+            kwargs = data.model_dump() | kwargs
         else:
-            self.data = str(data)
+            kwargs['data'] = str(data)
+        super().__init__(*args, **kwargs)
 
     @classmethod
     def plain_atomize(cls, expr: str) -> Generator[Self, None, None]:
@@ -47,7 +37,7 @@ class Atom(pyd.BaseModel):
         This function is "plain" because it does NOT handle groups or sets -- the caller must
         guarantee that neither type of atom appears in the snippet before calling this function.
 
-        For general-purpose atomization, see Expression.atomize().
+        For general-purpose atomization, see Regex.atomize().
         """
         yield from map(cls, META_RGXS['atom'].findall(expr))
 

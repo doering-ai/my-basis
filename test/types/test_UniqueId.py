@@ -9,7 +9,7 @@ import pydantic as pyd
 import pytest as pyt
 
 ### INTERNAL
-from my import UniqueId
+from my.types import UniqueId
 
 ############
 ### BODY ###

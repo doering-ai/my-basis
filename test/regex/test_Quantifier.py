@@ -70,6 +70,26 @@ class TestQuantifier:
     @pyt.mark.parametrize(
         'data, expected',
         boolmap(
+            true=[r'', r'?'],
+            false=[r'+', r'*', r'{1,}', r'{2,5}', r'*?', r'+?'],
+        ),
+    )
+    def test_is_simple(self, data: str, expected: bool):
+        assert cls(data).is_simple == expected
+
+    @pyt.mark.parametrize(
+        'data, expected',
+        boolmap(
+            true=[r'?', r'*', r'*?', r'{0,}', r'{0,5}', r'{0,5}?'],
+            false=[r'', r'+', r'+?', r'{1,}', r'{2,5}'],
+        ),
+    )
+    def test_is_optional(self, data: str, expected: bool):
+        assert cls(data).is_optional == expected
+
+    @pyt.mark.parametrize(
+        'data, expected',
+        boolmap(
             true=[r'*', r'?', r'{0,}', r'{4,5}'],
             false=[r'*?', r'{0,}?', r'{2,3}?'],
         ),

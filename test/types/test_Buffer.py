@@ -12,7 +12,7 @@ import numpy as np
 import regex as re
 
 ### INTERNAL
-from my.text import Span, Buffer
+from my.types import Span, Buffer
 
 ############
 ### DATA ###

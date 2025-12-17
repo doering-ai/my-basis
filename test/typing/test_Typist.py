@@ -27,8 +27,10 @@ import pytest as pyt
 import pydantic as pyd
 
 ### INTERNAL
-from my.type import Typist, TypeArg, TimeType
-from my.text import Buffer, MatchData, Span
+from my.infra import TimeType
+from my.types import Buffer, Span
+from my.regex import MatchData
+from my.typing import Typist, TypeArg
 
 ############
 ### DATA ###

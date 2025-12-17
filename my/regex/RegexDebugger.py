@@ -12,7 +12,7 @@ import regex as re
 ### INTERNAL
 from ..utils import ut
 from ..types import Buffer
-from .meta import GroupKind, Atom, Expression, GroupAtom
+from .meta import GroupKind, Atom, Regex, GroupAtom
 from .MatchData import MatchData
 from .RegexStore import RegexStore, RegexBuffer
 
@@ -47,9 +47,7 @@ class RegexDebugger(RegexStore):
     # -------------------
     # `-` Private Methods
     # -------------------
-    def pinpoint_failure(
-        self, text: Buffer, expr: Expression, prefix: str
-    ) -> tuple[int, MatchData]:
+    def pinpoint_failure(self, text: Buffer, expr: Regex, prefix: str) -> tuple[int, MatchData]:
         n = len(expr)
         last_match: MatchData = MatchData()
 
@@ -64,7 +62,7 @@ class RegexDebugger(RegexStore):
         # II. If no failure was found, return an impossible index to indicate as much
         return n, last_match
 
-    def curate(self, atoms: Expression, failed_idx: int, flags: Atom) -> str:
+    def curate(self, atoms: Regex, failed_idx: int, flags: Atom) -> str:
         """
         Curate the given regex snippet to include only the failing clause and its dependencies.
 
@@ -97,16 +95,16 @@ class RegexDebugger(RegexStore):
         return (
             group.kind in GroupKind._SIMPLE
             and group.quantifier == ''
-            and not Expression.is_split(group.body)
+            and not Regex.is_split(group.body)
         )
 
-    def format_expr(self, expr: str | Expression) -> str:
+    def format_expr(self, expr: str | Regex) -> str:
         return ut.wrap('EXPRESSION', char='-', width=3) + f'\n{expr}'
 
     def format_data(self, match: str | MatchData) -> str:
         return ut.wrap('LAST MATCH', char='-', width=1) + f'\n{match}'
 
-    def format_curated(self, curated_expr: str | Expression) -> str:
+    def format_curated(self, curated_expr: str | Regex) -> str:
         return ut.wrap('CURATED EXPRESSION', char='-', width=2) + f'\n{curated_expr}'
 
     def format_text(self, text: str | Buffer) -> str:
@@ -115,7 +113,7 @@ class RegexDebugger(RegexStore):
     def format_fulltext(self, text: str | Buffer) -> str:
         return ut.wrap('FULL TEXT', char='-', width=3) + f'\n{text}'
 
-    def format_fullexpr(self, expr: str | Expression) -> str:
+    def format_fullexpr(self, expr: str | Regex) -> str:
         return ut.wrap('FULL EXPRESSION', char='-', width=3) + f'\n{expr}'
 
     def format_early_return(self, name: str, explanation: str, text: str, expr: str) -> list[str]:
@@ -142,19 +140,19 @@ class RegexDebugger(RegexStore):
         """
         output = []
 
-        atoms = Expression(self.definitions[name])
+        atoms = Regex(self.definitions[name])
 
         # I.i. Drill down through unnecessary wrapper groups, collecting any flags set along the way
         flags = {'m'}
         while len(atoms) == 1 and isinstance(atoms.one, GroupAtom) and self._do_drill(atoms.one):
-            assert Expression.is_group(group := atoms.one), 'Expected group, got plain atom.'
-            atoms = Expression(group.body)
+            assert Regex.is_group(group := atoms.one), 'Expected group, got plain atom.'
+            atoms = Regex(group.body)
             flags |= group.flags
 
         # I.ii. Generate a convenient (if oversized) prefix for future repeated use
-        definitions = mi.first(Expression.atomize(self.patterns[name].pattern))
+        definitions = mi.first(Regex.atomize(self.patterns[name].pattern))
         flag_group = Atom(f'(?{"".join(sorted(flags))})') if flags else Atom('')
-        prefix = str(Expression(definitions, flag_group))
+        prefix = str(Regex(definitions, flag_group))
 
         # II. Iterate through the groups, matching until we fail
         failed_idx, last_match = self.pinpoint_failure(text, atoms, prefix)

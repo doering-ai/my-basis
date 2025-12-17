@@ -2,7 +2,7 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import Callable, TypeVar
+from typing import Callable
 from datetime import datetime
 from pathlib import Path
 

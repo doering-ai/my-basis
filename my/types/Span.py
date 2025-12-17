@@ -6,6 +6,7 @@ from typing import ClassVar, Self
 
 ### EXTERNAL
 import regex as re
+from pydantic_core import core_schema as pyds
 
 ### INTERNAL
 from ..infra import Series, DELIM
@@ -61,6 +62,10 @@ class Span(tuple[int, int]):
         # Create and return the tuple
         assert x0 <= x1, f'Invalid span: {x0} > {x1}'
         return super().__new__(cls, (x0, x1))
+
+    @classmethod
+    def __get_pydantic_core_schema__(cls, source: type, handler) -> pyds.CoreSchema:
+        return pyds.no_info_before_validator_function(cls, pyds.is_instance_schema(cls))
 
     # -------------------
     # `-` Private Methods

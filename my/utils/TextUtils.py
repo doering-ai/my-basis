@@ -213,54 +213,6 @@ class TextUtils:
         return '\n'.join(map(fn, text))
 
     @staticmethod
-    def wrap_paragraphs(text: str, width: int = 100) -> str:
-        """
-        Wrap text to specified width, breaking on whitespace.
-
-        Args:
-            text: Text to wrap.
-            width: Maximum line width (default: 100).
-        Returns:
-            Wrapped text.
-        """
-        return textwrap.fill(text, width=width)
-
-    @classmethod
-    def unwrap_paragraphs(cls, text: str) -> str:
-        """
-        Unwrap and normalize paragraph text, joining wrapped lines intelligently.
-
-        Handles hyphenated line breaks, prose detection, and comment prefixes.
-
-        Args:
-            text: Text with potentially wrapped paragraphs.
-        Returns:
-            Unwrapped text with proper spacing and line breaks.
-        """
-        text = textwrap.dedent(text.strip('\n'))
-        text = cls.RGXS['comment_prefix'].sub('', text)
-        lines = text.splitlines()
-        prose_mask = [bool(cls.RGXS['prose_line'].match(line)) for line in lines]
-
-        acc = lines[0].strip()
-        for (prev, prev_is_prose), (cur, cur_is_prose) in it.pairwise(
-            zip(lines, prose_mask, strict=True)
-        ):
-            if not (_stripped := cur.strip()):
-                acc += '\n'
-            elif prev_is_prose and cur_is_prose:
-                if prev.endswith('-') and _stripped[0].isalpha():
-                    acc += _stripped
-                else:
-                    acc += f' {_stripped}'
-            elif cur_is_prose:
-                acc += f'\n{_stripped}'
-            else:
-                acc += f'\n{cur}'
-
-        return acc
-
-    @staticmethod
     def strip_quotes(string: str) -> str:
         """
         Remove surrounding quotes and emphasis markers from string.
@@ -372,6 +324,54 @@ class TextUtils:
             except Exception:
                 pass
         return default
+
+    @staticmethod
+    def wrap_paragraphs(text: str, width: int = 100) -> str:
+        """
+        Wrap text to specified width, breaking on whitespace.
+
+        Args:
+            text: Text to wrap.
+            width: Maximum line width (default: 100).
+        Returns:
+            Wrapped text.
+        """
+        return textwrap.fill(text, width=width)
+
+    @classmethod
+    def unwrap_paragraphs(cls, text: str) -> str:
+        """
+        Unwrap and normalize paragraph text, joining wrapped lines intelligently.
+
+        Handles hyphenated line breaks, prose detection, and comment prefixes.
+
+        Args:
+            text: Text with potentially wrapped paragraphs.
+        Returns:
+            Unwrapped text with proper spacing and line breaks.
+        """
+        text = textwrap.dedent(text.strip('\n'))
+        text = cls.RGXS['comment_prefix'].sub('', text)
+        lines = text.splitlines()
+        prose_mask = [bool(cls.RGXS['prose_line'].match(line)) for line in lines]
+
+        acc = lines[0].strip()
+        for (prev, prev_is_prose), (cur, cur_is_prose) in it.pairwise(
+            zip(lines, prose_mask, strict=True)
+        ):
+            if not (_stripped := cur.strip()):
+                acc += '\n'
+            elif prev_is_prose and cur_is_prose:
+                if prev.endswith('-') and _stripped[0].isalpha():
+                    acc += _stripped
+                else:
+                    acc += f' {_stripped}'
+            elif cur_is_prose:
+                acc += f'\n{_stripped}'
+            else:
+                acc += f'\n{cur}'
+
+        return acc
 
 
 TextUtils.RGXS = TextUtils.regex_dict(

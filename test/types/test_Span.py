@@ -8,7 +8,8 @@ from typing import Any
 import pytest as pyt
 
 ### INTERNAL
-from my.text import Span
+from my.types import Span
+from ..conftest import boolmap
 
 
 ############
@@ -94,109 +95,104 @@ class TestSpan:
 
     # Property tests
     @pyt.mark.parametrize(
-        'p0, expected',
+        'span, expected',
         [
-            ((1, 5), 4),
-            ((0, 10), 10),
-            ((5, 5), 0),
-            ((100, 200), 100),
+            (Span(1, 5), 4),
+            (Span(0, 10), 10),
+            (Span(5, 5), 0),
+            (Span(100, 200), 100),
         ],
     )
-    def test_delta(self, p0: tuple[int, int], expected: bool):
-        span = Span(*p0)
+    def test_delta(self, span: Span, expected: int):
         assert span.delta == expected
 
     @pyt.mark.parametrize(
-        'p0, expected',
+        'span, expected',
         [
-            ((1, 5), '1-4'),
-            ((0, 10), '0-9'),
-            ((5, 6), '5'),
-            ((5, 5), ''),  # Empty span
-            ((10, 11), '10'),
+            (Span(1, 5), '1-4'),
+            (Span(0, 10), '0-9'),
+            (Span(5, 6), '5'),
+            (Span(10, 11), '10'),
+            (Span(5, 5), ''),
         ],
     )
-    def test_str(self, p0: tuple[int, int], expected: bool):
-        span = Span(*p0)
+    def test_str(self, span: Span, expected: bool):
         assert str(span) == expected
 
     # Boolean tests
     @pyt.mark.parametrize(
-        'p0, expected',
-        [
-            ((1, 5), True),
-            ((0, 10), True),
-            ((5, 5), False),  # Empty span
-        ],
+        'span, expected',
+        boolmap(
+            true=[Span(1, 5), Span(0, 10)],
+            false=[Span(0, 0), Span(5, 5)],
+        ),
     )
-    def test_bool(self, p0: tuple[int, int], expected: bool):
-        span = Span(*p0)
+    def test_bool(self, span: Span, expected: bool):
         assert bool(span) == expected
 
     # Comparison tests
     @pyt.mark.parametrize(
-        'p0, p1, expected',
-        [
-            ((1, 5), (2, 6), True),
-            ((2, 6), (1, 5), False),
-            ((1, 5), (1, 5), False),
-            ((5, 10), (3, 8), False),
-        ],
+        'lhs, rhs, expected',
+        boolmap(
+            true=[
+                (Span(1, 5), Span(2, 6)),
+                (Span(1, 5), (2, 6)),
+            ],
+            false=[
+                (Span(2, 6), Span(1, 5)),
+                (Span(1, 5), Span(1, 5)),
+                (Span(5, 10), Span(3, 8)),
+                (Span(1, 5), (1, 5)),
+                (Span(1, 5), (0, 4)),
+            ],
+        ),
     )
-    def test_lt(self, p0: tuple[int, int], p1: tuple[int, int], expected: bool):
-        span1 = Span(*p0)
-        span2 = Span(*p1)
-        assert (span1 < span2) == expected
-
-    def test_lt_with_tuple(self):
-        span = Span(1, 5)
-        assert span < (2, 6)
-        assert not span < (1, 5)
-        assert not span < (0, 4)
+    def test_lt(self, lhs: Span, rhs: Span | tuple, expected: bool):
+        assert (lhs < rhs) == expected
 
     @pyt.mark.parametrize(
-        'p0, p1, expected',
-        [
-            ((1, 5), (1, 5), True),
-            ((1, 5), (2, 6), False),
-            ((0, 0), (0, 0), True),
-        ],
+        'lhs, rhs, expected',
+        boolmap(
+            true=[
+                (Span(1, 5), Span(1, 5)),
+                (Span(0, 0), Span(0, 0)),
+                (Span(1, 5), (1, 5)),
+            ],
+            false=[
+                (Span(1, 5), Span(1, 6)),
+                (Span(1, 5), Span(2, 5)),
+                (Span(1, 5), (2, 5)),
+            ],
+        ),
     )
-    def test_eq(self, p0: tuple[int, int], p1: tuple[int, int], expected: bool):
-        span1 = Span(*p0)
-        span2 = Span(*p1)
-        assert (span1 == span2) == expected
-
-    def test_eq_with_tuple(self):
-        span = Span(1, 5)
-        assert span == (1, 5)
-        assert span != (2, 6)
+    def test_eq(self, lhs: Span, rhs: Span | tuple, expected: bool):
+        assert (lhs == rhs) == expected
 
     @pyt.mark.parametrize(
-        'p0, p1, expected',
-        [
-            ((1, 5), (3, 7), True),  # Overlap
-            ((1, 5), (5, 8), False),  # Adjacent, no overlap
-            ((1, 5), (0, 2), True),  # Overlap at start
-            ((1, 5), (6, 8), False),  # No overlap
-            ((1, 5), (2, 4), True),  # One contained in other
-            ((2, 4), (1, 5), True),  # Other way around
-            ((1, 5), (1, 5), True),  # Identical
-            ((1, 5), (4, 8), True),
-            # Invalid types
-            ((1, 5), 'string', False),
-            ((1, 5), (1, 2, 3), False),
-            ((1, 5), [1, 2, 3], False),
-        ],
+        'primary, other, expected',
+        boolmap(
+            true=[
+                (Span(1, 5), Span(3, 7)),  # Overlap
+                (Span(1, 5), Span(0, 2)),  # Overlap at start
+                (Span(1, 5), Span(2, 4)),  # One contained in other
+                (Span(2, 4), Span(1, 5)),  # Other way around
+                (Span(1, 5), Span(1, 5)),  # Identical
+                (Span(1, 5), Span(4, 8)),
+                (Span(1, 5), (3, 7)),
+            ],
+            false=[
+                (Span(1, 5), Span(5, 8)),  # Adjacent, no overlap
+                (Span(1, 5), Span(6, 8)),  # No overlap
+                (Span(1, 5), (5, 8)),
+                # Invalid types
+                (Span(1, 5), 'string'),
+                (Span(1, 5), (1, 2, 3)),
+                (Span(1, 5), [1, 2, 3]),
+            ],
+        ),
     )
-    def test_contains(self, p0: tuple[int, int], p1: tuple[int, int], expected: bool):
-        span = Span(*p0)
-        assert (p1 in span) == expected
-
-    def test_intersects_with_tuple(self):
-        span = Span(1, 5)
-        assert span.intersects((3, 7))
-        assert not span.intersects((5, 8))
+    def test_contains(self, primary: Span, other: object, expected: bool):
+        assert (other in primary) == expected
 
     # Addition tests
     @pyt.mark.parametrize(
@@ -215,7 +211,7 @@ class TestSpan:
             ((1, 5), dict(a=1), (1, 5)),
         ],
     )
-    def test_add(self, p0: tuple[int, int], other: Any, expected: bool):
+    def test_add(self, p0: Span, other: Any, expected: Span):
         span = Span(*p0)
         result = span + other
         assert result == expected
@@ -275,7 +271,6 @@ class TestSpan:
         for i in range(len(result) - 1):
             assert result[i] < result[i + 1]
 
-    # Edge cases and special scenarios
     def test_empty_span_behavior(self):
         """Test behavior of empty spans"""
         empty_span = Span(5, 5)

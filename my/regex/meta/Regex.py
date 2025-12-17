@@ -41,18 +41,7 @@ class Regex:
     # `0` Initial Methods
     # -------------------
     def __init__(self, *args: str | Atom | Sequence[Atom] | Iterator[Atom] | Self) -> None:
-        self.data = []
-        for arg in args:
-            if isinstance(arg, Atom):
-                self.data.append(arg)
-            elif isinstance(arg, Regex):
-                self.data.extend(arg.data)
-            elif isinstance(arg, str):
-                self.data.extend(self.atomize(arg))
-            elif isinstance(arg, (Sequence | Iterator)):
-                self.data.extend(arg)
-            else:
-                raise TypeError(f'Unsupported type for Regex initialization: {type(arg)}')
+        self.data = list(mi.flatten(map(self._parse_arg, args)))
 
     @classmethod
     def atomize(cls, expr: str | Buffer | Self) -> Generator[Atom, None, None]:
@@ -143,6 +132,18 @@ class Regex:
     # -------------------
     # `-` Private Methods
     # -------------------
+    @classmethod
+    def _parse_arg(cls, arg: str | Atom | Sequence[Atom] | Iterator[Atom] | Self) -> Iterator[Atom]:
+        if isinstance(arg, Atom):
+            yield arg
+        elif isinstance(arg, Regex):
+            yield from arg.data
+        elif isinstance(arg, str):
+            yield from cls.atomize(arg)
+        elif isinstance(arg, (Sequence | Iterator)):
+            yield from mi.flatten(map(cls._parse_arg, arg))
+        else:
+            raise TypeError(f'Unsupported type for Regex initialization: {type(arg)}')
 
     # -------------------
     # `+` Primary Methods
@@ -177,16 +178,11 @@ class Regex:
         assert 'arrays' in text.fence_rgxs, f'Invalid buffer fences: {text.fence_rgxs}'
 
         # II. Use the Buffer's "pair" functionality to find matching parens
-        for span, start, body, end in text.pair_iterator(META_RGXS['group'], mode):
+        for span, start, body, _ in text.pair_iterator(META_RGXS['group'], mode):
             kind = GroupKind.read(start)
             if not mask or kind in mask:
                 yield GroupAtom(
-                    data=text[span[0] : span[1]],
-                    span=span,
-                    kind=kind,
-                    start=start,
-                    body=body,
-                    quantifier=Quantifier(end),
+                    data=text[span[0] : span[1]], span=span, kind=kind, start=start, body=body
                 )
 
     @classmethod
@@ -206,13 +202,8 @@ class Regex:
             text = Buffer.new(text, no_fence=True)
         assert isinstance(text, Buffer)
 
-        for span, _, body, end in text.pair_iterator(META_RGXS['set'], mode='roots'):
-            yield SetAtom(
-                data=text[span[0] : span[1]],
-                span=span,
-                body=body,
-                quantifier=Quantifier(end),
-            )
+        for span, _, body, _ in text.pair_iterator(META_RGXS['set'], mode='roots'):
+            yield SetAtom(data=text[span[0] : span[1]], span=span, body=body)
 
     # ------------------
     # `x` Public Methods
@@ -340,7 +331,7 @@ class Regex:
         Returns:
             The quantified regex pattern string.
         """
-        atoms = Regex.atomize(expr) if isinstance(expr, str) else expr
+        atoms = cls.atomize(expr) if isinstance(expr, str) else expr
         assert isinstance(atoms, cls), f'Unsupported type for quantify: {type(atoms)}'
 
         # Edge & null cases

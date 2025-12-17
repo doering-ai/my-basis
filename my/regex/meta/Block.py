@@ -2,7 +2,7 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import Self, Sequence, Iterator, Generator, Iterable
+from typing import Self, Sequence, Iterator, Generator, Iterable, Any
 import itertools as it
 import more_itertools as mi
 import functools as ft
@@ -42,27 +42,12 @@ class Block(pyd.BaseModel):
     def new(
         cls,
         *args: str | Atom | Regex | Sequence[Regex] | Iterator[Regex] | Self,
-        **kwargs: Regex | Quantifier,
+        **kwargs: Any,
     ) -> Self:
-        branches = []
-        for arg in args:
-            if isinstance(arg, cls):
-                # I. Copy from existing structures
-                branches.extend(arg.branches)
-            elif isinstance(arg, Atom):
-                # II. Singular branches
-                branches.append(Regex(arg))
-            elif isinstance(arg, (Sequence | Iterator)) and not isinstance(arg, str):
-                # III. Handle args that represent multiple branches
-                branches.extend(map(Regex, arg))
-            elif isinstance(arg, (Regex | str)):
-                # IV. Handle args that MAY represent multiple branches (using r'|')
-                atoms = Regex(arg)
-                branches.extend(atoms.split())
-            else:
-                raise TypeError(f'Unsupported type for Branches initialization: {type(arg)}')
-
-        return cls(branches=branches, **kwargs)  # type:ignore[arg-type]
+        return cls(
+            branches=list(mi.flatten(map(cls._parse_arg, args))),
+            **kwargs,
+        )
 
     def copy_context(self) -> Self:
         """Copy just the context (prefix, suffix, quantifier) of this block to a new instance."""
@@ -71,6 +56,30 @@ class Block(pyd.BaseModel):
     # -------------------
     # `-` Private Methods
     # -------------------
+    @classmethod
+    def _parse_arg(
+        cls, arg: str | Atom | Regex | Sequence[Regex] | Iterator[Regex] | Self
+    ) -> Generator[Regex, None, None]:
+        # I. Copy from existing structures
+        if isinstance(arg, cls):
+            yield from arg.branches
+
+        # II. Singular branches
+        elif isinstance(arg, Atom):
+            yield Regex(arg)
+
+        # III. Handle args that MAY represent multiple branches (using r'|')
+        elif isinstance(arg, (Regex, str)):
+            yield from Regex(arg).split()
+        elif isinstance(arg, (Sequence, Iterator)):
+            # Assume each Regex object is its own branch
+            for subarg in arg:
+                yield from cls._parse_arg(subarg)
+
+            # yield from Regex(*arg).split()
+        else:
+            raise TypeError(f'Unsupported type for Branches initialization: {type(arg)}')
+
     def supports_atomic_grouping(self) -> bool:
         """
         Decides whether the given branches can be safely grouped in an atomic group.
@@ -269,10 +278,8 @@ class Block(pyd.BaseModel):
     @classmethod
     def collapse_blocks_by_suffix(cls, blocks: list[Self]) -> list[Regex]:
         ret = []
-        print(f'collapse_blocks_by_suffix START: {blocks=}')
         for group in cls.group_blocks_by_suffix(*blocks):
             n = len(group)
-            print(f'collapse_blocks_by_suffix: {n=}, {group=}, {ret=}')
             if n == 0:
                 raise ValueError('Somehow collected an empty block group')
             if n == 1:
@@ -413,11 +420,13 @@ class Block(pyd.BaseModel):
 
         new_data: list[Regex] = []
         for branch in self.branches:
+            assert isinstance(branch, Regex)
             sub_branches: list[Regex] = []
             n_split = 0
 
             # I. Split any sets and groups we can find into nested branch objects
-            for atom in branch.data:
+            for atom in branch:
+                assert isinstance(atom, Atom)
                 if n_split < max_split and len(sub_block := self.expand_atom(atom)) > 1:
                     sub_branches.extend(sub_block.export_branches())
                 else:

@@ -103,14 +103,17 @@ class Atom(pyd.BaseModel):
     @ft.cached_property
     def quantifier(self) -> Quantifier:
         """Extracts the quantifier (if any) applied to this atom."""
-        if len(self) >= 2:
-            if self.is_group:
-                # I. Look for quantifier after the closing ')'
-                return Quantifier(self.data.rsplit(')', 1)[-1])
-            elif match := META_RGXS['quant'].search(self.data):
-                # II. Otherwise, just search with a regex that only matches at the end of the string
-                return Quantifier(match[0])
-        return Quantifier()
+        ret = ''
+        if len(self) <= 1:
+            pass
+        elif self.is_group:
+            ret = self.data.rsplit(')', 1)[-1]
+        elif self.is_set:
+            ret = self.data.rsplit(']', 1)[-1]
+        elif match := META_RGXS['quant'].search(self.data):
+            ret = match[0]
+
+        return Quantifier(ret)
 
     @ft.cached_property
     def is_optional(self) -> bool:

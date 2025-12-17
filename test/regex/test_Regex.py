@@ -203,8 +203,10 @@ class TestRegex:
             (r'a|b|c', [r'a', r'b', r'c']),
             (r'abc|def', [r'abc', r'def']),
             (r'(?:test)|foo', [r'(?:test)', r'foo']),
+            # NOOP
+            (r'abc', [r'abc']),
+            (r'(?:abc|cde)', [r'(?:abc|cde)']),
         ],
     )
     def test_split(self, expr: str, expected: list[str]):
-        result = list(cls(expr).split())
-        assert [str(r) for r in result] == expected
+        assert list(map(str, cls(expr).split())) == expected

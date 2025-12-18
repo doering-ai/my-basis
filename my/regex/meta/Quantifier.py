@@ -106,10 +106,13 @@ class Quantifier:
     # `x0` Overrides
     # --------------
     def __bool__(self) -> bool:
-        return bool(self.data)
+        return len(self.data) > 0
 
     def __str__(self) -> str:
         return self.data
+
+    def __repr__(self) -> str:
+        return f'Quantifier({self.data!r})'
 
     def __hash__(self) -> int:
         return hash(self.data)

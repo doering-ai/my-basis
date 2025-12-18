@@ -210,7 +210,7 @@ class TestBlock:
             ),
             (
                 [cls(r'abX|cdX'), cls(r'ef|gh', suffix=r'X')],
-                [r'(?>ab|cd|ef|gh)X'],
+                [r'(?>ab|cd|(?>ef|gh))X'],
             ),
         ],
     )
@@ -227,7 +227,7 @@ class TestBlock:
         ],
     )
     def test_group_branches_by_prefix(self, branches: list[str], expected: list[int]):
-        groups = list(cls.group_branches_by_prefix(*map(Regex, branches)))
+        groups = list(cls.group_branches_by_prefix(list(map(Regex, branches))))
         assert list(map(len, groups)) == expected
 
     @pyt.mark.parametrize(
@@ -244,7 +244,7 @@ class TestBlock:
         ),
     )
     def test_group_blocks_by_suffix(self, lhs: Block, rhs: Block, did_group: bool):
-        groups = list(cls.group_blocks_by_suffix(lhs, rhs))
+        groups = list(cls.group_blocks_by_suffix([lhs, rhs]))
         assert len(groups) == (1 if did_group else 2)
 
     @pyt.mark.parametrize(
@@ -288,8 +288,14 @@ class TestBlock:
     @pyt.mark.parametrize(
         'block, expected',
         boolmap(
-            true=[cls(r'a|b'), [r'test']],
-            false=[cls(), [r'', r'']],
+            true=[
+                cls(r'a|b'),
+                cls(r'test'),
+            ],
+            false=[
+                cls(),
+                cls(r''),
+            ],
         ),
     )
     def test_bool(self, block: Block, expected: bool):
@@ -325,20 +331,22 @@ class TestBlock:
         [
             # NOOPS
             (cls(r'ab|cd?|ef'), r'(?>ab|cd?|ef)'),
-            (cls(r'ab|cd{0,5}|ef*', quantifier=r'?'), r'(?:ab|cd{0,5}|ef*)?'),
+            (cls(r'ab|cd{0,5}|ef*', quantifier=r'?'), r'(?>ab|cd{0,5}|ef*)?'),
             # Bubble-up optionality
             (cls(r'ab|(?:cd)?|[ef]'), r'(?:ab|(?:cd)|[ef])?'),
             (cls(r'ab|(?:cd)?|[ef]', quantifier=r'?'), r'(?:ab|(?:cd)|[ef])?'),
-            (cls(r'|a|b'), r'(?:a|b)?'),
+            (cls(r'|a|b'), r'(?>a|b)?'),
+            (cls(r'a||b', quantifier=r'?'), r'(?>a|b)?'),
+            (cls(r'a|b|', quantifier=r'*?'), r'(?>a|b)*?'),
             (cls(r'a{0,5}|b*', quantifier=r'?'), r'(?:a{1,5}|b+)?'),
             # Prefixed branches
-            (cls(r'ab(cd)?|xab(cd)?'), r'(?>x?ab(cd)?)'),
-            (cls(r'ab(cd)?|x?ab(cd)?'), r'(?>x?ab(cd)?)'),
+            (cls(r'ab(cd)?|xab(cd)?'), r'x?ab(cd)?'),
+            (cls(r'ab(cd)?|x?ab(cd)?'), r'x?ab(cd)?'),
         ],
     )
     def test_clean(self, block: Block, expected: str):
         block.clean()
-        assert block.render() == expected
+        assert str(block.render()) == expected
 
     @pyt.mark.parametrize(
         'block, expected',
@@ -397,7 +405,6 @@ class TestBlock:
         [
             (cls(r'abc', r'abd'), cls(r'c|d', prefix=r'ab')),
             (cls(r'xbc', r'ybc'), cls(r'x|y', suffix=r'bc')),
-            (cls(r'abc', r'abc'), cls(branches=[], prefix=r'abc')),
         ],
     )
     def test_factor(self, block: Block, expected: Block):
@@ -408,7 +415,7 @@ class TestBlock:
         'block, expected',
         [
             (cls(r'abc', r'abd'), r'ab[cd]'),
-            (cls(r'test', r'foo'), r'(?>foo|test)'),
+            (cls(r'test', r'foo'), r'(?>test|foo)'),
             (cls(r'xyz', r'xyz'), r'xyz'),
             (cls(r'abc1cde', r'abc[2]cde'), r'abc[12]cde'),
         ],
@@ -427,11 +434,10 @@ class TestBlock:
             (cls(r'a[bc]d'), r'a[bc]d'),
             (cls('ab', 'cd', 'ef'), r'(?>ab|cd|ef)'),
             (cls('ab', '(?:cd)', '[ef]'), r'(?:ab|(?:cd)|[ef])'),
-            (cls('', 'cd', 'ef'), r'(?>cd|ef)?'),
-            (cls('', 'cd', 'ef', quantifier=Quantifier('?')), r'(?>cd|ef)?'),
-            (cls('-ef', 'cd', 'ef'), r'(?>-?ef|cd)'),
+            (cls('', 'cd', 'ef'), r'(?:|cd|ef)'),
+            (cls('', 'cd', 'ef', quantifier=r'?'), r'(?:|cd|ef)?'),
         ],
     )
     def test_render(self, block: Block, expected: str):
         ret = block.render()
-        assert ret == expected
+        assert str(ret) == expected

@@ -217,7 +217,7 @@ class Regex:
         return ''.join(map(str, self.data))
 
     def __repr__(self) -> str:
-        return f'{self.data!r}'
+        return f"r'{self}'"
 
     def __hash__(self) -> int:
         return hash(tuple(self.data))

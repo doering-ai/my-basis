@@ -54,19 +54,19 @@ class Block(pyd.BaseModel):
         max_expand: int = 4,
         **kwargs: Any,
     ) -> None:
-        if branches is None:
-            branches = []
+        data: dict = dict(branches=branches or [])
         if args:
-            branches.extend(mi.flatten(map(self._parse_arg, args)))
+            data['branches'].extend(mi.flatten(map(self._parse_arg, args)))
+        if prefix != '':
+            data['prefix'] = Regex(prefix)
+        if suffix != '':
+            data['suffix'] = Regex(suffix)
+        if quantifier != '':
+            data['quantifier'] = Quantifier(quantifier)
+        if max_expand != 4:
+            data['max_expand'] = max_expand
 
-        super().__init__(
-            branches=branches,
-            prefix=Regex(prefix),
-            suffix=Regex(suffix),
-            quantifier=Quantifier(quantifier),
-            max_expand=max_expand,
-            **kwargs,
-        )
+        super().__init__(**data, **kwargs)
 
     @pyd.model_validator(mode='after')
     def _validate_branches(self) -> Self:
@@ -164,7 +164,7 @@ class Block(pyd.BaseModel):
         return bool(lhs and rhs) and len(rhs) == len(lhs) + 1 and rhs[1:] == lhs
 
     @classmethod
-    def group_branches_by_prefix(cls, *branches: Regex) -> Generator[list[Regex], None, None]:
+    def group_branches_by_prefix(cls, branches: list[Regex]) -> Generator[list[Regex], None, None]:
         """
         Group the given branches into buckets by their common prefixes (if any exist).
         It is assumed that branches are already given in a meaningful (and likely alphabetical)
@@ -177,7 +177,7 @@ class Block(pyd.BaseModel):
         yield from mi.split_when(branches, _split)
 
     @classmethod
-    def group_blocks_by_suffix(cls, *blocks: Self) -> Generator[list[Self], None, None]:
+    def group_blocks_by_suffix(cls, blocks: list[Self]) -> Generator[Self, None, None]:
         """
         Group the given blocks by their common suffixes (if any exist).
         Uses the main body branches of a block for this purpose if it lacks a suffix.
@@ -185,10 +185,10 @@ class Block(pyd.BaseModel):
         Yields:
             Lists of Block instances, each representing a contiguous subset of the given blocks.
         """
-        _split = lambda lhs, rhs: not (
-            lhs.last and rhs.last and cls.greatest_common_suffix(*lhs.last, *rhs.last)
-        )
-        yield from map(list, mi.split_when(blocks, _split))
+        _split = lambda lhs, rhs: not cls.greatest_common_suffix(*lhs, *rhs)
+        serialized_blocks = list(map(cls.serialize, blocks))
+        for branch_group in mi.split_when(serialized_blocks, _split):
+            yield cls.new(*mi.flatten(branch_group))
 
     # -------------------
     # `+` Primary Methods
@@ -331,25 +331,9 @@ class Block(pyd.BaseModel):
             The optimized list of regex branches, isomorphic to the original set of blocks.
         """
         ret = []
-        for group in cls.group_blocks_by_suffix(*blocks):
-            assert group, 'Somehow collected an empty block group.'
-            if len(group) == 1:
-                # I. Render monoblock groups directly
-                block = group[0]
-                ret.extend([block.render()] if block.has_context else block.branches)
-            else:
-                # II. Factor out shared suffixes between blocks
-                shared_suffix = cls.greatest_common_suffix(*(br.last for br in group))
-                assert (n_suf := len(shared_suffix)), 'Grouped blocks with no shared suffix.'
-                for block in group:
-                    if block.suffix:
-                        assert len(block.suffix) >= n_suf, 'Shared suffix longer than block suffix.'
-                        block.suffix = block.suffix[:-n_suf]
-                    else:
-                        block.branches = [br[:-n_suf] for br in block.branches]
-
-                new_block = cls(branches=[block.render() for block in group], suffix=shared_suffix)
-                ret.append(new_block.render())
+        for group_block in cls.group_blocks_by_suffix(blocks):
+            group_block.factor()
+            ret.extend(group_block.serialize())
         return ret
 
     def make_optional(self) -> bool:
@@ -379,7 +363,8 @@ class Block(pyd.BaseModel):
         return str(self.render())
 
     def __repr__(self) -> str:
-        return str(self)
+        set_fields = [f'{key}={getattr(self, key)!r}' for key in self.model_fields_set]
+        return f'Block({", ".join(set_fields)})'
 
     def __hash__(self) -> int:
         return hash(str(self))
@@ -388,9 +373,14 @@ class Block(pyd.BaseModel):
         return any(map(bool, self.branches))
 
     def __eq__(self, other: object) -> bool:
-        if not isinstance(other, Block):
-            return False
-        return str(self) == str(other)
+        return (
+            isinstance(other, Block)
+            and len(self) == len(other)
+            and self.branches == other.branches
+            and self.prefix == other.prefix
+            and self.suffix == other.suffix
+            and self.quantifier == other.quantifier
+        )
 
     @ft.singledispatchmethod
     def __getitem__(self, key):
@@ -443,19 +433,27 @@ class Block(pyd.BaseModel):
             A quantifier that can be applied to the whole set of branches.
         """
         to_drop: set[int] = set()
+        is_optional = self.quantifier.is_optional
+        can_be_optional = self.quantifier.as_optional()
+        print(f'`Block.clean()` {is_optional=}, {can_be_optional=}')
 
         # I. Identify branches to drop or combine
         for i, branch in enumerate(self.branches):
+            print(f'`Block.clean()` {i=!r}, {branch=!r}, len(branch)={len(branch)}')
             if not branch:
                 # I.i. Empty branch -- whole thing is now optional, if that's possible
                 if self.make_optional():
+                    print('\tDropping empty branch')
                     to_drop.add(i)
             elif len(branch) == 1:
                 # I.ii. Single atom -- check for optionality
-                if branch.one.is_optional and self.make_optional():
-                    self.branches[i] = Regex(branch.one.as_required())
+                atom = branch.one
+                print(f'\tChecking for optionality: {atom=!r}')
+                if atom.is_optional and self.make_optional():
+                    self.branches[i] = Regex(atom.as_required())
             else:
                 # I.iii. Look for a copy of this branch w/ a prefix
+                print('\tLooking for prefixes')
                 for j, other_branch in enumerate(self.branches):
                     if j in to_drop or j == i:
                         continue
@@ -490,8 +488,8 @@ class Block(pyd.BaseModel):
         Factor out common prefixes and suffixes from the branches in the main data structure,
         modifying the object's member variables.
         """
-        # 0. Return immediately if this is a single branch, or if we already are factored
-        if self.prefix or self.suffix or len(self) <= 1:
+        # 0. Return immediately if this is a single branch
+        if len(self) <= 1:
             return self
 
         # I. Determine the prefix for this block (which should always exist if this func is called)
@@ -543,10 +541,12 @@ class Block(pyd.BaseModel):
             self.branches = cls.condense_atomic_branches(self.branches)
         else:
             # II.iii. Main case: recurse into groups that share a prefix, rebuilding the whole tree
-            child_blocks = []
-            for branches in cls.group_branches_by_prefix(*self.branches):
-                child_blocks.append(cls(branches=branches).condense())
-            self.branches = cls.condense_blocks(child_blocks)
+            children = []
+            for branches in cls.group_branches_by_prefix(self.branches):
+                child = cls(branches=branches)
+                child.condense()
+                children.append(child)
+            self.branches = cls.condense_blocks(children)
 
         return self
 
@@ -565,17 +565,25 @@ class Block(pyd.BaseModel):
         """
         # I. Clean the branch list, identifying optional branches and pre-combining where possible
         if not self:
-            raise ValueError('Cannot render empty Branches object')
+            body = Regex.empty()
         elif len(self) == 1:
             # II.i. Singular branch -- no need to choose a mark
-            ret = self.branches[0]
+            body = self.branches[0]
         else:
             # II.ii. Determine whether we can safely use an atomic grouping here
             start = '(?>' if self.supports_atomic_grouping() else '(?:'
-            ret = Regex(f'{start}{r"|".join(map(str, self.branches))})')
+            body = Regex(f'{start}{r"|".join(map(str, self.branches))})')
 
         # III. Add contextual details (prefix, suffix, quantifier)
-        return self.contextualize(ret)
+        return self.contextualize(body)
+
+    def serialize(self) -> list[Regex]:
+        """
+        Serialize this block into a list of regex branches with context applied.
+        This output is intended for consumption *by other blocks*, rather than callers building
+        expressions.
+        """
+        return [self.render()] if self.has_context else self.branches
 
     def export_branches(self) -> list[Regex]:
         """Export just the branches of this block."""

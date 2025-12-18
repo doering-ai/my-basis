@@ -276,7 +276,9 @@ class Regex:
         return iter(self.data)
 
     def __eq__(self, other: object) -> bool:
-        if isinstance(other, (str, Atom, Sequence, Regex)):
+        if isinstance(other, Regex):
+            return self.data == other.data
+        if isinstance(other, (str, Atom, Sequence)):
             return self.data == self.__class__(other).data
         else:
             return False

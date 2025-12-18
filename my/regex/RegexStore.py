@@ -479,9 +479,10 @@ class RegexStore(pyd.BaseModel):
         Return:
             The corresponding optimized branching tree regex expression.
         """
-        composed_content = [self.compose(item, sep='|') for item in data]
-        block = Block.expand_branches(composed_content)
-        return str(block.optimize())
+        composed_content = {self.compose(item, sep='|') for item in data}
+        block = Block.new(*sorted(composed_content))
+        block.expand()
+        return str(block.condense())
 
     # -------------------
     # `+` Primary Methods

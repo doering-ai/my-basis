@@ -44,6 +44,35 @@ class Block(pyd.BaseModel):
     # -------------------
     # `0` Initial Methods
     # -------------------
+    def __init__(
+        self,
+        *args: str | Atom | Regex | Sequence[Regex] | Iterator[Regex] | Self,
+        prefix: str | Atom | Regex = '',
+        branches: list[Regex] | None = None,
+        suffix: str | Atom | Regex = '',
+        quantifier: str | Quantifier = '',
+        max_expand: int = 4,
+        **kwargs: Any,
+    ) -> None:
+        if branches is None:
+            branches = []
+        if args:
+            branches.extend(mi.flatten(map(self._parse_arg, args)))
+
+        super().__init__(
+            branches=branches,
+            prefix=Regex(prefix),
+            suffix=Regex(suffix),
+            quantifier=Quantifier(quantifier),
+            max_expand=max_expand,
+            **kwargs,
+        )
+
+    @pyd.model_validator(mode='after')
+    def _validate_branches(self) -> Self:
+        self.branches = list(mi.unique_everseen(self.branches))
+        return self
+
     @classmethod
     def new(
         cls,
@@ -204,18 +233,22 @@ class Block(pyd.BaseModel):
         """
         Split a group atom into branches with shared prefixes, if possible.
         """
-        # 0. Validate
+        # 0. Validate and normalize arguments
         assert isinstance(atom, GroupAtom), f'Expected group atom, got: {atom!r}'
+        kwargs: dict = dict(max_expand=self.max_expand)
+        if atom.inline_flags:
+            kwargs['prefix'] = Regex(atom.inline_flags)
+
+        # I. Don't try to split complex groups
         if not atom.quantifier.is_simple or atom.kind not in GroupKind._SPLITTABLE:
-            return self.new(atom)
+            return self.new(atom, **kwargs)
 
-        # I. Split the group's contents into branches
-        block = self.new(atom.body, prefix=Regex(atom.inline_flags))
-        block.expand()
+        # II. Split the group's contents into branches, then recursively expand them
+        block = self.new(atom.body, **kwargs).expand()
 
-        # II. Expand out an optional quantifier into a new, empty branch
+        # III. Expand out an optional quantifier into a new, empty branch
         if atom.is_optional and all(block.branches):
-            block.branches.append(Regex.empty())
+            block.branches.insert(0, Regex.empty())
 
         return block
 
@@ -291,28 +324,38 @@ class Block(pyd.BaseModel):
         return list(map(Regex, [f'[{new_set_body}]', *complex_branches]))
 
     @classmethod
-    def condense_blocks_by_suffix(cls, blocks: list[Self]) -> list[Regex]:
+    def condense_blocks(cls, blocks: list[Self]) -> list[Regex]:
+        """
+        Condense a collection of blocks (branching expressions) back into a single set of branches,
+        factoring out shared suffixes along the way where possible.
+
+        We don't check for shared prefixes because those would've been handled already as part of
+        the primary factor() step -- each block represents a prefix group.
+
+        Args:
+            blocks: The list of Block instances to condense.
+        Returns:
+            The optimized list of regex branches, isomorphic to the original set of blocks.
+        """
         ret = []
         for group in cls.group_blocks_by_suffix(*blocks):
-            n = len(group)
-            if n == 0:
-                raise ValueError('Somehow collected an empty block group')
-            if n == 1:
+            assert group, 'Somehow collected an empty block group.'
+            if len(group) == 1:
+                # I. Render monoblock groups directly
                 ret.append(group[0].render())
             else:
-                # II. Factor out shared suffixes between *blocks* (usually only checking branches
-                #     within them, as in `factor()`)
+                # II. Factor out shared suffixes between blocks
                 shared_suffix = cls.greatest_common_suffix(*(br.last for br in group))
                 assert (n_suf := len(shared_suffix)), 'Grouped blocks with no shared suffix.'
                 for block in group:
                     if block.suffix:
+                        assert len(block.suffix) >= n_suf, 'Shared suffix longer than block suffix.'
                         block.suffix = block.suffix[:-n_suf]
                     else:
                         block.branches = [br[:-n_suf] for br in block.branches]
 
-                # III. Render the final result with the suffix at the end
-                sub_branches = [block.render() for block in group]
-                ret.append(f'(?:{sub_branches})', *shared_suffix)
+                new_block = cls(branches=[block.render() for block in group], suffix=shared_suffix)
+                ret.append(new_block.render())
         return ret
 
     def make_optional(self) -> bool:
@@ -345,10 +388,15 @@ class Block(pyd.BaseModel):
         return f'{self.branches!r}'
 
     def __hash__(self) -> int:
-        return hash(self.branches)
+        return hash(str(self))
 
     def __bool__(self) -> bool:
         return any(map(bool, self.branches))
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Block):
+            return False
+        return str(self) == str(other)
 
     @ft.singledispatchmethod
     def __getitem__(self, key):
@@ -438,19 +486,6 @@ class Block(pyd.BaseModel):
             self.sort()
         return self
 
-    @classmethod
-    def expand_branches(cls, branches: Iterable[str]) -> Self:
-        """
-        Parse the given branches into a block, then expand its contents to be fully explicit.
-
-        Args:
-            branches: An iterable of branch strings to expand.
-        Returns:
-            A new block instance with expanded branches.
-        """
-        block = cls.new(*sorted(set(branches)))
-        return block.expand()
-
     def factor(self) -> Self:
         """
         Factor out common prefixes and suffixes from the branches in the main data structure,
@@ -509,10 +544,10 @@ class Block(pyd.BaseModel):
             self.branches = cls.condense_atomic_branches(self.branches)
         else:
             # II.iii. Main case: recurse into groups that share a prefix, rebuilding the whole tree
-            children = []
+            child_blocks = []
             for branches in cls.group_branches_by_prefix(*self.branches):
-                children.append(cls(branches=branches).condense())
-            self.branches = cls.condense_blocks_by_suffix(children)
+                child_blocks.append(cls(branches=branches).condense())
+            self.branches = cls.condense_blocks(child_blocks)
 
         return self
 

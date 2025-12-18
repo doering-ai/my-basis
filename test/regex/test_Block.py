@@ -3,13 +3,14 @@
 ############
 ### STANDARD
 from typing import Any
+import itertools as it
 
 ### EXTERNAL
 import pytest as pyt
 
 ### INTERNAL
 from ..conftest import boolmap
-from my.regex import Quantifier, Atom, Regex, Block
+from my.regex import Quantifier, Atom, GroupAtom, SetAtom, Regex, Block
 
 cls = Block
 
@@ -141,45 +142,22 @@ class TestBlock:
     @pyt.mark.parametrize(
         'expr, expected',
         [
+            # NOOP
+            (r'a', ['a']),
+            (r'\P{s}', [r'\P{s}']),
+            (r'(?:ab)', [r'(?:ab)']),
             # Groups
             (r'(?:ab)?', ['', r'ab']),
             (r'(ab)?', ['', r'(ab)']),
             (r'(?:a|b)', [r'a', r'b']),
             (r'(?:footnotes|reliable)', ['footnotes', 'reliable']),
             (r'(?i-s:ab)?', ['', r'(?i-s)ab']),
-        ],
-    )
-    def test_expand_group(self, expr: str, expected: list[str]):
-        from my.regex import GroupAtom
-
-        block = cls.expand_group(GroupAtom(data=expr))
-        result = [str(br) for br in block.branches]
-        assert set(result) == set(expected)
-
-    @pyt.mark.parametrize(
-        'expr, expected',
-        [
+            # Sets
             (r'[ab]?', ['', 'a', 'b']),
             (r'[+*?]', [r'\+', r'\*', r'\?']),
             (r'[()|]', [r'\(', r'\)', r'\|']),
             (r'[.^$]', [r'\.', r'\^', r'\$']),
-        ],
-    )
-    def test_expand_set(self, expr: str, expected: list[str]):
-        from my.regex import SetAtom
-
-        block = cls.expand_set(SetAtom(data=expr))
-        result = [str(br) for br in block.branches]
-        assert set(result) == set(expected)
-
-    @pyt.mark.parametrize(
-        'expr, expected',
-        [
-            # No-op
-            (r'a', ['a']),
-            (r'\P{s}', [r'\P{s}']),
-            (r'(?:ab)', [r'(?:ab)']),
-            # Optionals
+            # Optional elements
             (r'(?:ab[cd]?e)', ['abe', 'abce', 'abde']),
             (r'(?:ac?ez)', ['aez', 'acez']),
             (r'(?:(?:i-)?sup)', ['i-sup', 'sup']),
@@ -187,9 +165,10 @@ class TestBlock:
         ],
     )
     def test_expand_atom(self, expr: str, expected: list[str]):
-        block = cls.expand_atom(Atom(expr))
-        assert len(block) == len(expected)
-        assert set(map(str, block.branches)) == set(expected)
+        old_block = cls.new(expr)
+        assert len(old_block) == 1
+        new_block = old_block.expand_atom(old_block.branches[0].one)
+        assert set(map(str, new_block.branches)) == set(expected)
 
     @pyt.mark.parametrize(
         'atoms, expected',
@@ -200,45 +179,55 @@ class TestBlock:
             ([r'(?:x)', r'[yz]', r'[^[:lower:]]', r'[A-Z]'], r'(?:[yz]|(?:x)|[^[:lower:]]|[A-Z])'),
         ],
     )
-    def test_collapse_atoms(self, atoms: list[str], expected: str):
-        assert cls.collapse_atoms(*map(Atom, atoms)) == expected
+    def test_condense_atomic_branches(self, atoms: list[str], expected: str):
+        assert cls.condense_atomic_branches(*map(Atom, atoms)) == expected
 
     @pyt.mark.parametrize(
         'blocks, expected',
         [
-            ([[r'ab', r'cd'], [r'ef', r'gh']], [[r'ab', r'cd'], [r'ef', r'gh']]),
+            # NOOP
+            (
+                [[r'ab', r'cd'], [r'ef', r'gh']],
+                [[r'ab', r'cd'], [r'ef', r'gh']],
+            ),
+            (
+                [[r'a', r'b'], [r'ef', r'gh']],
+                [[r'ab', r'cd'], [r'ef', r'gh']],
+            ),
         ],
     )
-    def test_collapse_blocks_by_suffix(self, blocks: list[list[str]], expected: list[list[str]]):
-        block_objs = [cls.new(*b) for b in blocks]
-        results = cls.collapse_blocks_by_suffix(block_objs)
-        # Just verify it returns a list for now
-        assert isinstance(results, list)
+    def test_condense_blocks(self, blocks: list[list[str]], expected: list[str]):
+        results = cls.condense_blocks(list(it.starmap(cls.new, blocks)))
+        assert results == expected
 
     @pyt.mark.parametrize(
-        'branches, expected_count',
+        'branches, expected',
         [
-            ([r'abc', r'abd', r'xyz'], 2),
-            ([r'test', r'foo'], 2),
-            ([r'same', r'same'], 1),
+            ([r'abc', r'abd', r'xyz'], [2, 1]),
+            ([r'test', r'foo'], [1, 1]),
+            ([r'same', r'same'], [2]),
         ],
     )
-    def test_group_branches_by_prefix(self, branches: list[str], expected_count: int):
-        branch_objs = [Regex(b) for b in branches]
-        groups = list(cls.group_branches_by_prefix(*branch_objs))
-        assert len(groups) == expected_count
+    def test_group_branches_by_prefix(self, branches: list[str], expected: list[int]):
+        groups = list(cls.group_branches_by_prefix(*map(Regex, branches)))
+        assert list(map(len, groups)) == expected
 
     @pyt.mark.parametrize(
-        'blocks, expected_count',
-        [
-            ([[r'abc'], [r'xbc']], 1),
-            ([[r'abc'], [r'xyz']], 2),
-        ],
+        'lhs, rhs, did_group',
+        boolmap(
+            true=[
+                (cls.new(r'abc'), cls.new(r'xbc')),
+                (cls.new(r'abc', r'dbc'), cls.new(r'efg', r'hij', suffix=Regex(r'kbc'))),
+            ],
+            false=[
+                (cls.new(r'abc'), cls.new(r'abz')),
+                (cls.new(r'abc', r'ybc'), cls.new(r'abz')),
+            ],
+        ),
     )
-    def test_group_blocks_by_suffix(self, blocks: list[list[str]], expected_count: int):
-        block_objs = [cls.new(*b) for b in blocks]
-        groups = list(cls.group_blocks_by_suffix(*block_objs))
-        assert len(groups) == expected_count
+    def test_group_blocks_by_suffix(self, lhs: Block, rhs: Block, did_group: bool):
+        groups = list(cls.group_blocks_by_suffix(lhs, rhs))
+        assert len(groups) == (1 if did_group else 2)
 
     @pyt.mark.parametrize(
         'quantifier, expected',
@@ -268,109 +257,99 @@ class TestBlock:
     # `x0` Overrides
     # --------------
     @pyt.mark.parametrize(
-        'branches, expected',
+        'block, expected',
         [
-            ([r'a', r'b', r'c'], 3),
-            ([r'ab', r'cd'], 2),
-            ([], 0),
+            (cls(r'a|b|c'), 3),
+            (cls(r'ab|cd'), 2),
+            (cls(), 0),
         ],
     )
-    def test_len(self, branches: list[str], expected: int):
-        assert len(cls.new(*branches)) == expected
+    def test_len(self, block: Block, expected: int):
+        assert len(block) == expected
 
     @pyt.mark.parametrize(
-        'branches, expected',
+        'block, expected',
         boolmap(
-            true=[[r'a', r'b'], [r'test']],
-            false=[[], [r'', r'']],
+            true=[cls(r'a|b'), [r'test']],
+            false=[cls(), [r'', r'']],
         ),
     )
-    def test_bool(self, branches: list[str], expected: bool):
-        assert bool(cls.new(*branches)) == expected
+    def test_bool(self, block: Block, expected: bool):
+        assert bool(block) == expected
 
     @pyt.mark.parametrize(
-        'branches, index, expected',
+        'block, expected',
         [
-            ([r'a', r'b', r'c'], 0, r'a'),
-            ([r'a', r'b', r'c'], 1, r'b'),
-            ([r'a', r'b', r'c'], 2, r'c'),
+            (cls(r'ab|cd'), [r'ab', r'cd']),
+            (cls(r'ab|cd', suffix=r'ef'), [r'ef']),
+            (cls(), []),
         ],
     )
-    def test_getitem(self, branches: list[str], index: int, expected: str):
-        assert str(cls.new(*branches)[index]) == expected
-
-    @pyt.mark.parametrize(
-        'branches, suffix, expected',
-        [
-            ([r'ab', r'cd'], r'', [r'ab', r'cd']),
-            ([r'ab', r'cd'], r'ef', [r'ef']),
-        ],
-    )
-    def test_last(self, branches: list[str], suffix: str, expected: list[str]):
-        block = cls.new(*branches, suffix=Regex(suffix))
-        result = [str(e) for e in block.last]
-        assert result == expected
+    def test_last(self, block: Block, expected: list[str]):
+        assert list(map(str, block.last)) == expected
 
     # --------------
     # `x1` Modifiers
     # --------------
     @pyt.mark.parametrize(
-        'branches, expected',
+        'block, expected',
         [
-            ([r'c', r'a', r'b'], [r'a', r'b', r'c']),
-            ([r'xyz', r'abc', r'def'], [r'abc', r'def', r'xyz']),
+            (cls(r'c|a|b'), r'a|b|c'),
+            (cls(r'xyz|abc|def'), r'abc|def|xyz'),
         ],
     )
-    def test_sort(self, branches: list[str], expected: list[str]):
-        block = cls.new(*branches)
+    def test_sort(self, block: Block, expected: str):
         block.sort()
-        assert [str(br) for br in block.branches] == expected
+        assert block.render() == expected
 
     @pyt.mark.parametrize(
-        'branches, quant, expected, exp_quant',
+        'block, expected',
         [
-            # non-atomic
-            ([r'ab', r'cd?', r'ef'], r'', [r'ab', r'cd?', r'ef'], r''),
-            ([r'ab', r'cd{0,5}', r'ef*'], r'?', [r'ab', r'cd{0,5}', r'ef*'], r''),
-            # Optional, atomic
-            ([r'ab', r'(?:cd)?', r'[ef]'], r'', [r'ab', r'(?:cd)', r'[ef]'], r'?'),
-            ([r'ab', r'(?:cd)?', r'[ef]'], r'?', [r'ab', r'(?:cd)', r'[ef]'], r'?'),
-            ([r'', r'cd', r'ef'], r'', [r'cd', r'ef'], r'?'),
-            ([r'(?:cd){0,5}', r'(?:ef)*'], r'?', [r'(?:cd){1,5}', r'(?:ef)+'], r'?'),
+            # NOOPS
+            (cls(r'ab|cd?|ef'), r'ab|cd?|ef'),
+            (cls(r'ab|cd{0,5}|ef*', quantifier=r'?'), r'(?:ab|cd{0,5}|ef*)?'),
+            # Bubble-up optionality
+            (cls(r'ab|(?:cd)?|[ef]'), r'(?:ab|(?:cd)|[ef])?'),
+            (cls(r'ab|(?:cd)?|[ef]', quantifier=r'?'), r'(?:ab|(?:cd)|[ef])?'),
+            (cls(r'|a|b'), r'(?:a|b)?'),
+            (cls(r'a{0,5}|b*', quantifier=r'?'), r'(?:a{1,5}|b+)?'),
             # Prefixed branches
-            ([r'ab(cd)?', r'xab(cd)?'], '', [r'x?ab(cd)?'], r''),
+            (cls(r'ab(cd)?|xab(cd)?'), r'x?ab(cd)?'),
+            (cls(r'ab(cd)?|x?ab(cd)?'), r'x?ab(cd)?'),
         ],
     )
-    def test_clean(self, branches: list[str], quant: str, expected: list[str], exp_quant: str):
-        block = cls.new(*branches, quantifier=Quantifier(quant))
+    def test_clean(self, block: Block, expected: str):
         block.clean()
-        assert list(map(str, block.branches)) == expected
-        assert block.quantifier == exp_quant
+        assert block.render() == expected
 
     @pyt.mark.parametrize(
-        'expr, expected',
+        'block, expected',
         [
-            (r'a[bc]d', 2),
-            (r'a(?:b|c)d', 2),
-            (r'a(?:b|c)(?>d|e)', ['abd', 'abe', 'acd', 'ace']),
-            (r'a(?:b|c)|(?:d|e)', 4),
+            (cls(r'a[bc]d'), 2),
+            (cls(r'a(?:b|c)d'), 2),
+            (cls(r'a(?:b|c)(?>d|e)'), ['abd', 'abe', 'acd', 'ace']),
+            (cls(r'a(?:b|c)|(?:d|e)'), 4),
             # Nested
-            (r'a(?:b|[cd]e)z', 3),
-            (r'[cd]?e', [r'ce', r'de', r'e']),
-            (r'a(?:b|[cd]?e)z', 4),
-            (r'a(?:b|c(?>d|t?[de]?))z', ['abz', 'acdz', 'actdz', 'acz', 'actz', 'acez', 'actez']),
-            # Optionals
-            (r'ab?cd?ef?g', 8),
-            (r'ab?cd?ef?gh?i', 16),
-            (r'ab?cd?ef?gh?ij?k', 16),
-            # Sets
-            (r'[abc]?[def]', 12),
-            (r'[+*?]', [r'\+', r'\*', r'\?']),
-            (r'[()|]', [r'\(', r'\)', r'\|']),
-            (r'[.^$]', [r'\.', r'\^', r'\$']),
-            # Live examples
+            (cls(r'a(?:b|[cd]e)z'), 3),
+            (cls(r'[cd]?e'), [r'ce', r'de', r'e']),
+            (cls(r'a(?:b|[cd]?e)z'), 4),
             (
-                r'(?:[ib]-)?(?:small-)?su[bp]',
+                cls(r'a(?:b|c(?>d|t?[de]?))z'),
+                ['abz', 'acdz', 'actdz', 'acz', 'actz', 'acez', 'actez'],
+            ),
+            # Optionals
+            (cls(r'ab?cd?ef?g'), 8),
+            (cls(r'ab?cd?ef?gh?i'), 16),
+            (cls(r'ab?cd?ef?gh?ij?k'), 16),
+            # Sets
+            (cls(r'[abc]?[def]'), 12),
+            (cls(r'[+*?]'), [r'\+', r'\*', r'\?']),
+            (cls(r'[()|]'), [r'\(', r'\)', r'\|']),
+            (cls(r'[.^$]'), [r'\.', r'\^', r'\$']),
+            # Live examples
+            (cls(r'confirm(?:ation)?'), [r'confirm', 'confirmation']),
+            (
+                cls(r'(?:[ib]-)?(?:small-)?su[bp]'),
                 [
                     'i-small-sub',
                     'i-small-sup',
@@ -386,36 +365,45 @@ class TestBlock:
                     'sup',
                 ],
             ),
-            (r'confirm(?:ation)?', [r'confirm', 'confirmation']),
         ],
     )
-    def test_expand(self, expr: str, expected: int | list[str]):
-        block = cls.new(expr)
+    def test_expand(self, block: Block, expected: int | list[str]):
         block.expand()
         if isinstance(expected, int):
             assert len(block) == expected
         else:
-            assert {str(br) for br in block.branches} == set(expected)
+            assert set(map(str, block.branches)) == set(expected)
 
     @pyt.mark.parametrize(
-        'branches, expected_prefix, expected_suffix',
+        'block, expected',
         [
-            ([r'abc', r'abd'], r'ab', r''),
-            ([r'xbc', r'ybc'], r'', r'bc'),
-            ([r'abc', r'abc'], r'abc', r''),
+            (cls(r'abc', r'abd'), cls(r'c|d', prefix=r'ab')),
+            (cls(r'xbc', r'ybc'), cls(r'x|y', suffix=r'bc')),
+            (cls(r'abc', r'abc'), cls(branches=[], prefix=r'abc')),
         ],
     )
-    def test_factor(self, branches: list[str], expected_prefix: str, expected_suffix: str):
-        block = cls.new(*branches)
+    def test_factor(self, block: Block, expected: Block):
         block.factor()
-        assert str(block.prefix) == expected_prefix
-        assert str(block.suffix) == expected_suffix
+        assert block == expected
+
+    @pyt.mark.parametrize(
+        'block, expected',
+        [
+            (cls(r'abc', r'abd'), r'ab[cd]'),
+            (cls(r'test', r'foo'), r'(?:foo|test)'),
+            (cls(r'xyz', r'xyz'), r'xyz'),
+            (cls(r'abc1cde', r'abc[2]cde'), r'abc[12]cde'),
+        ],
+    )
+    def test_condense(self, block: Block, expected: str):
+        block.condense()
+        assert str(block.render()) == expected
 
     # ------------------
     # `x2` Serialization
     # ------------------
     @pyt.mark.parametrize(
-        'branches, kwargs, expected',
+        'block, expected',
         [
             (['ab', 'cd', 'ef'], dict(), '(?>ab|cd|ef)'),
             (['ab', '(?:cd)', '[ef]'], dict(), '(?:ab|(?:cd)|[ef])'),
@@ -424,24 +412,6 @@ class TestBlock:
             (['-ef', 'cd', 'ef'], dict(), '(?>-?ef|cd)'),
         ],
     )
-    def test_render(self, branches: list[str], kwargs: dict, expected: str):
-        block = cls.new(*branches, **kwargs)
+    def test_render(self, block: Block, expected: str):
         ret = block.render()
         assert ret == expected
-
-    # ------------------
-    # `x3` Top-level API
-    # ------------------
-    @pyt.mark.parametrize(
-        'branches, expected',
-        [
-            ([r'abc', r'abd'], r'ab[cd]'),
-            ([r'test', r'foo'], r'(?:foo|test)'),
-        ],
-    )
-    def test_optimize(self, branches: list[str], expected: str):
-        block = cls.new(*branches)
-        block.optimize()
-        result = str(block.render())
-        # Just verify it returns a string for now
-        assert isinstance(result, str)

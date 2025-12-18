@@ -36,4 +36,4 @@ class SetAtom(Atom):
 
     @ft.cached_property
     def is_simple(self) -> bool:
-        return super().is_simple and not bool(META_RGXS['set_operator'].search(self.body))
+        return super().is_simple and not self._has_set_operator(self.body)

@@ -136,12 +136,7 @@ class Atom(pyd.BaseModel):
         Determine if this atom is 'simple', i.e. a single symbol with no grouping, set, or complex
         quantifier. Useful for isomorphic transformations.
         """
-        return (
-            bool(self)
-            and self.quantifier.is_simple
-            and not self.is_group
-            and not (self.is_set and self._has_set_operator(self.data))
-        )
+        return bool(self) and self.quantifier.is_simple
 
     # ------------
     # `x2` Methods

@@ -224,7 +224,7 @@ class Regex:
         return hash(tuple(self.data))
 
     def __bool__(self) -> bool:
-        return len(self.data) > 0 and any(map(bool, self.data))
+        return any(map(bool, self.data))
 
     @ft.singledispatchmethod
     def __getitem__(self, key):

@@ -111,7 +111,7 @@ class GroupAtom(Atom):
 
     @ft.cached_property
     def is_simple(self) -> bool:
-        return super().is_simple and self.kind in GroupKind._SIMPLE and self.quantifier.is_simple
+        return super().is_simple and self.kind in GroupKind._SIMPLE
 
     @ft.cached_property
     def inline_flags(self) -> Atom:

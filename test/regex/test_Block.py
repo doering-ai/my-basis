@@ -93,28 +93,42 @@ class TestBlock:
         assert str(result) == expected
 
     @pyt.mark.parametrize(
-        'branches, expected',
+        'branches, suffix, expected',
         boolmap(
-            false=[
-                [],
-            ],
             true=[
-                [],
+                ([], r''),
+                ([r''], r''),
+                ([r'a', r'b', r'c'], r''),
+                ([r'a', r'\[b\]', r'c'], r''),
+                ([r'a', r'\(?:b\)', r'c'], r''),
+                ([r'a', r'(?:b)', r'(?>c)'], r''),
+                ([r'a', r'b[b]', r'c'], r''),
+            ],
+            false=[
+                ([r'a++', r'[b]', r'c'], r''),
+                ([r'a', r'[b]', r'c'], r''),
+                ([r'a', r'(?:b)++', r'c'], r''),
+                ([r'a', r'(?:b)', r'c'], r''),
+                ([r'a', r'b[b]', r'c'], r'd'),
             ],
         ),
     )
-    def test_supports_atomic_grouping(self, branches: list[str], expected: bool):
-        block = cls.new(*branches)
+    def test_supports_atomic_grouping(self, branches: list[str], suffix: str, expected: bool):
+        block = cls.new(*branches, suffix=Regex(suffix))
         assert block.supports_atomic_grouping() == expected
 
     @pyt.mark.parametrize(
         'lhs, rhs, expected',
         boolmap(
-            false=[
-                ('', ''),
-            ],
             true=[
-                ('', ''),
+                (r'abc', r'xabc'),
+                (r'(?:abc)def', r'x(?:abc)def'),
+                (r'abc', r'x?abc'),
+            ],
+            false=[
+                (r'', r''),
+                (r'xabc', r'abc'),
+                (r'abc', r'xabcd'),
             ],
         ),
     )
@@ -227,17 +241,25 @@ class TestBlock:
         assert len(groups) == expected_count
 
     @pyt.mark.parametrize(
-        'branches, quantifier, expected',
+        'quantifier, expected',
         [
-            ([r'a', r'b'], '', True),
-            ([r'a', r'b'], '?', True),
-            ([r'a', r'b'], '+', False),
+            (r'', r'?'),
+            (r'?', r'?'),
+            (r'+', r'*'),
+            (r'*', r'*'),
+            (r'++', r'*+'),
+            (r'{1,5}?', r'{0,5}?'),
+            (r'{2,5}?', None),
         ],
     )
-    def test_make_optional(self, branches: list[str], quantifier: str, expected: bool):
-        block = cls.new(*branches, quantifier=Quantifier(quantifier))
+    def test_make_optional(self, quantifier: str, expected: str | None):
+        block = cls.new('a', 'b', quantifier=Quantifier(quantifier))
         result = block.make_optional()
-        assert result == expected
+        if expected is None:
+            assert result is False
+        else:
+            assert result is True
+            assert block.quantifier == expected
 
     # ------------------
     # `x` Public Methods

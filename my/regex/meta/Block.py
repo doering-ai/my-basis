@@ -30,10 +30,16 @@ class Block(pyd.BaseModel):
         Block("(?:br1|br2|br3)") -> {prefix: 'br', branches: ['1', '2', '3'], suffix: ''} .
     """
 
-    prefix: Regex = Regex()
+    # Primary data
     branches: list[Regex] = []
+
+    # Context data
+    prefix: Regex = Regex()
     suffix: Regex = Regex()
     quantifier: Quantifier = Quantifier()
+
+    # Options
+    max_expand: int = 4
 
     # -------------------
     # `0` Initial Methods
@@ -127,11 +133,7 @@ class Block(pyd.BaseModel):
     @staticmethod
     def _atom_supports_atomic_grouping(atom: Atom) -> bool:
         """Determines if the given atom can be safely included in a (new) atomic group."""
-        return (
-            atom.quantifier.is_simple
-            and not isinstance(atom, SetAtom)
-            and (not isinstance(atom, GroupAtom) or atom.is_simple)
-        )
+        return atom.is_simple and not isinstance(atom, SetAtom)
 
     @staticmethod
     def _is_clone_with_prefix(lhs: Regex, rhs: Regex) -> bool:
@@ -167,18 +169,48 @@ class Block(pyd.BaseModel):
     # -------------------
     # `+` Primary Methods
     # -------------------
-    @classmethod
-    def expand_group(cls, atom: Atom) -> Self:
+    def expand_branch(self, branch: Regex) -> Generator[Regex, None, None]:
+        """
+        Expand the given branch into (potentially) multiple branches by expanding any expandable
+        atoms within it. If no atoms within are expandable, it will naturally return the same
+        branch that was passed in, unchanged.
+
+        Args:
+            branch: The branch to expand.
+        Yields:
+            Every possible permutation we can make with the expanded contents of that branch, that
+            are still nonetheless isomorphic to the original branch when taken as a set.
+        """
+
+        # I. Build a list of positional subblocks, representing the possible values of each atom
+        count = 0
+        atom_blocks: list[list[Regex]] = []
+        for atom in branch:
+            if count < self.max_expand and len(atom_block := self.expand_atom(atom)) > 1:
+                # I.i. Expand this atom into a multiple branches
+                atom_blocks.append(atom_block.export_branches())
+                count += 1
+            else:
+                # I.ii. Else just store it as one single-atom branch
+                atom_blocks.append([Regex(atom)])
+
+        # II. If any atoms were split, yield all possible permutations of the overall branch
+        if count:
+            yield from map(Regex, it.product(*atom_blocks))
+        else:
+            yield branch
+
+    def expand_group(self, atom: Atom) -> Self:
         """
         Split a group atom into branches with shared prefixes, if possible.
         """
         # 0. Validate
         assert isinstance(atom, GroupAtom), f'Expected group atom, got: {atom!r}'
         if not atom.quantifier.is_simple or atom.kind not in GroupKind._SPLITTABLE:
-            return cls.new(atom)
+            return self.new(atom)
 
         # I. Split the group's contents into branches
-        block = cls.new(atom.body, prefix=Regex(atom.inline_flags))
+        block = self.new(atom.body, prefix=Regex(atom.inline_flags))
         block.expand()
 
         # II. Expand out an optional quantifier into a new, empty branch
@@ -200,23 +232,23 @@ class Block(pyd.BaseModel):
             result.append(Regex.empty())
 
         # II. Atomize the set body into individual atomic branches
-        result.extend(map(Regex, Regex.atomize(atom.body)))
+        body_atoms = Regex.atomize(atom.body)
+        result.extend(map(Regex, body_atoms))
 
         return cls.new(*result, quantifier=atom.quantifier.as_required())
 
-    @classmethod
-    def expand_atom(cls, atom: Atom) -> Self:
+    def expand_atom(self, atom: Atom) -> Self:
         if atom.is_group:
-            return cls.expand_group(atom)
+            return self.expand_group(atom)
         elif atom.is_set:
-            return cls.expand_set(atom)
+            return self.expand_set(atom)
         elif atom.is_optional:
-            return cls.new(Regex.empty(), Regex(atom.as_required()))
+            return self.new(Regex.empty(), Regex(atom.as_required()))
         else:
-            return cls.new(atom)
+            return self.new(atom)
 
     @classmethod
-    def collapse_atoms(cls, *args: Atom | Regex) -> Regex:
+    def condense_atomic_branches(cls, branches: list[Regex]) -> list[Regex]:
         """
         Given a collection of single atoms, attempt to combine them into a more succint set-based
         expression.
@@ -225,58 +257,41 @@ class Block(pyd.BaseModel):
         atomic.
 
         Examples:
-            _collapse_atomic_branches(['a', 'b', '']) -> '[ab]?'
-            _collapse_atomic_branches(['(?:one)', '(?:two)', 'a', 'b', '']) -> '(?:one|two|[ab])?'
+            _condense_atomic_branches(['a', 'b', '']) -> '[ab]?'
+            _condense_atomic_branches(['(?:one)', '(?:two)', 'a', 'b', '']) -> '(?:one|two|[ab])?'
 
         Args:
             atoms: A list of valid atom strings.
         Returns:
             The optimized regex pattern string.
         """
-        # 0. Normalize args
-        atoms = [(arg.one if isinstance(arg, Regex) else arg) for arg in args]
+        # I. Validate that this block only has single-atom branches
+        atoms = [br.one for br in branches]
 
-        # I. Determine if the resulting atom should be optional
-        to_drop = set()
-        is_optional = False
-        for i, atom in enumerate(atoms):
-            if atom.quantifier == '?':
-                atoms[i] = atom.quantify('')
-                is_optional = True
-            elif not atom:
-                to_drop.add(i)
-                is_optional = True
-        if to_drop:
-            atoms = ut.drop_at(atoms, to_drop)
+        # II. Separate out the "simple" branches, e.g. plain sets, individual characters, etc.
+        #     Note that for this purpose, clean() should have removed any simply-quantified (AKA
+        #     optional) branches already *if* that were possible, so they should not be re-handled
+        #     here, but rather ignored as complex.
+        complex_branches, simple_branches = map(
+            list,
+            mi.partition(lambda a: a.is_simple and not (a.is_group or a.quantifier), atoms),
+        )
 
-        # II. Separate chars and simple sets from groups and complex sets
-        complex_atoms, simple_atoms = map(list, mi.partition(lambda atom: atom.is_simple, atoms))
+        if len(simple_branches) <= 1:
+            return branches
 
-        # III. Combine the simple results
-        branches: list[Atom]
-        if not simple_atoms:
-            # III.i. Null case
-            branches = []
-        elif len(simple_atoms) == 1:
-            # III.ii. Singular case
-            branches = [simple_atoms[0]]
-        else:
-            # III.iii. Main case: create a single set atom representing all these branches
-            chars, sets = map(set, mi.partition(lambda atom: atom.is_set, simple_atoms))
-            set_branches = chars
-            if sets:
-                for set_atom in sets:
-                    set_branches |= {branch.one for branch in cls.expand_set(set_atom).branches}
-            branches = [Atom(f'[{"".join(map(str, sorted(set_branches)))}]')]
+        # III. Combine multiple simple branches into a single set
+        non_sets, sets = map(set, mi.partition(lambda atom: atom.is_set, simple_branches))
+        all_members = non_sets | {
+            branch.one for _set in sets for branch in cls.expand_set(_set).branches
+        }
+        new_set_body = ''.join(map(str, sorted(all_members)))
 
-        # III. Render the resulting set alternated w/ the complex branches
-        new_branch_obj = cls.new(*branches, *complex_atoms)
-        if is_optional:
-            assert new_branch_obj.make_optional(), 'Failed to make new, unquantified block optional'
-        return new_branch_obj.render()
+        # IV. Save the results to this object
+        return list(map(Regex, [f'[{new_set_body}]', *complex_branches]))
 
     @classmethod
-    def collapse_blocks_by_suffix(cls, blocks: list[Self]) -> list[Regex]:
+    def condense_blocks_by_suffix(cls, blocks: list[Self]) -> list[Regex]:
         ret = []
         for group in cls.group_blocks_by_suffix(*blocks):
             n = len(group)
@@ -405,45 +420,22 @@ class Block(pyd.BaseModel):
             self.branches = ut.drop_at(self.branches, to_drop)
         return self
 
-    def expand(self, max_split: int = 4) -> Self:
+    def expand(self) -> Self:
         """
         Recursively "expand" all branching clauses in this block, creating multiple explicit cases
         where there was previously implicit behavior.
 
+        Examples:
+            - expand(r'confirm(?:ation)?') -> r'(?:confirm|confirmation)'
+            - expand(r'a[bc]d') -> r'(?:abd|acd)'
         Args:
-            max_split: The maximum number of atoms to split per branch (default: 4).
+            max_per_branch: The maximum number of atoms to split per branch (default: 4).
         Returns:
             The modified block instance with expanded branches.
         """
-        if not self:
-            return self
-
-        new_data: list[Regex] = []
-        for branch in self.branches:
-            assert isinstance(branch, Regex)
-            sub_branches: list[Regex] = []
-            n_split = 0
-
-            # I. Split any sets and groups we can find into nested branch objects
-            for atom in branch:
-                assert isinstance(atom, Atom)
-                if n_split < max_split and len(sub_block := self.expand_atom(atom)) > 1:
-                    sub_branches.extend(sub_block.export_branches())
-                else:
-                    sub_branches.append(Regex(atom))
-
-            # II. Reconstruct the branches from the expanded atoms
-            if len(sub_branches) > len(branch):
-                # II.i. If any atoms were split, record all possible permutations
-                all_branches = it.product(*(br.data for br in sub_branches))
-                new_data.extend(map(Regex, all_branches))
-            else:
-                # II.ii. For all non-splittable atoms, just add them as-is
-                new_data.append(branch)
-
-        # III. Save to instance variables and sort the results (allowed b/c they're alternated)
-        self.branches = new_data
-        self.sort()
+        if self:
+            self.branches = list(mi.flatten(map(self.expand_branch, self.branches)))
+            self.sort()
         return self
 
     @classmethod
@@ -488,7 +480,7 @@ class Block(pyd.BaseModel):
 
         return self
 
-    def optimize(self) -> Self:
+    def condense(self) -> Self:
         """
         Construct an optimized regex from branches by factoring common prefixes and suffixes.
 
@@ -507,24 +499,20 @@ class Block(pyd.BaseModel):
         self.clean()
 
         # II. Recursively replace the block's body with an equivalent tree
-        if len(self) == 1:
-            # II.i. Singular case: recurse into child groups
-            # branch = self.branches[0]
-            # for i, atom in enumerate(branch):
-            #     if atom.is_group:
-            #         # II.i. Recurse into any groups found here
-            #         sub_block = cls.expand_group(atom).optimize()
-            #         branch[i] = sub_block.render()
+        if not self:
+            return self
+        elif len(self) == 1:
+            # II.i. Singular case: NOOP if expand() didn't create multiple branches at this level
             pass
         elif self.max_length == 1:
-            # II.ii. Atomic case: join them directly, as there are unique opportunities
-            self.branches = [cls.collapse_atoms(*self.branches)]
+            # II.ii. Atomic case: attempt to join mono-atom branches into a single set
+            self.branches = cls.condense_atomic_branches(self.branches)
         else:
-            # II.iii. Main case: recurse into groups that share a prefix, then factor out shared
-            #         suffixes of those results before returning
-            prefix_groups = cls.group_branches_by_prefix(*self.branches)
-            children = [cls(branches=branches).optimize() for branches in prefix_groups]
-            self.branches = cls.collapse_blocks_by_suffix(children)
+            # II.iii. Main case: recurse into groups that share a prefix, rebuilding the whole tree
+            children = []
+            for branches in cls.group_branches_by_prefix(*self.branches):
+                children.append(cls(branches=branches).condense())
+            self.branches = cls.condense_blocks_by_suffix(children)
 
         return self
 

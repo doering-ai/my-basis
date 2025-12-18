@@ -30,9 +30,14 @@ class SetAtom(Atom):
             self.body = self.data[1:].rsplit(']', 1)[0]
 
         # Escape special characters found within the set
-        self.body = META_RGXS['special_characters'].sub(r'\\\1', self.body)
 
         return self
+
+    @ft.cached_property
+    def members(self) -> list[Atom]:
+        assert self.is_simple, f'Cannot directly get members of non-simple SetAtom: {self.data}'
+        escaped_body = META_RGXS['special_characters'].sub(r'\\\1', self.body)
+        return list(Atom.plain_atomize(escaped_body))
 
     @ft.cached_property
     def is_simple(self) -> bool:

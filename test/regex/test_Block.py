@@ -167,34 +167,56 @@ class TestBlock:
         assert set(map(str, new_block.branches)) == set(expected)
 
     @pyt.mark.parametrize(
-        'atoms, expected',
+        'block, expected',
         [
-            (['z', 'y', 'x'], '[xyz]'),
-            (['z', '[yx]'], '[xyz]'),
-            ([r'[\P{S}z]', '[yx]'], r'[\P{S}xyz]'),
-            ([r'(?:x)', r'[yz]', r'[^[:lower:]]', r'[A-Z]'], r'(?:[yz]|(?:x)|[^[:lower:]]|[A-Z])'),
+            (cls(r'z|y|x'), ['[xyz]']),
+            (cls(r'z|[yx]'), ['[xyz]']),
+            (cls(r'[\P{S}z]|[yx]'), [r'[\P{S}xyz]']),
+            (
+                cls(r'(?:a)|x|[yz]|[^[:lower:]]|[A-Z]'),
+                [r'[xyz]', r'(?:a)', r'[^[:lower:]]', r'[A-Z]'],
+            ),
         ],
     )
-    def test_condense_atomic_branches(self, atoms: list[str], expected: str):
-        assert cls.condense_atomic_branches(*map(Atom, atoms)) == expected
+    def test_condense_atomic_branches(self, block: Block, expected: list[str]):
+        result = cls.condense_atomic_branches(block.branches)
+        assert list(map(str, result)) == expected
 
     @pyt.mark.parametrize(
         'blocks, expected',
         [
-            # NOOP
+            # Basic case (rare in practice)
             (
-                [[r'ab', r'cd'], [r'ef', r'gh']],
-                [[r'ab', r'cd'], [r'ef', r'gh']],
+                [cls(r'ab|cd'), cls(r'ef|gh')],
+                [r'ab', r'cd', r'ef', r'gh'],
+            ),
+            # With context (prefix, suffix, and/or quantifier)
+            (
+                [cls(r'ab|cd', prefix=r'xyz'), cls(r'ef|gh')],
+                [r'xyz(?>ab|cd)', r'ef', r'gh'],
             ),
             (
-                [[r'a', r'b'], [r'ef', r'gh']],
-                [[r'ab', r'cd'], [r'ef', r'gh']],
+                [cls(r'ab|cd'), cls(r'ef|gh', suffix='xyz')],
+                [r'ab', r'cd', r'(?>ef|gh)xyz'],
+            ),
+            (
+                [cls(r'ab|cd', quantifier=r'+'), cls(r'ef|gh')],
+                [r'(?>ab|cd)+', r'ef', r'gh'],
+            ),
+            # With shared suffix b/w blocks
+            (
+                [cls(r'abX|cdX'), cls(r'efX|ghX')],
+                [r'(?>ab|cd|ef|gh)X'],
+            ),
+            (
+                [cls(r'abX|cdX'), cls(r'ef|gh', suffix=r'X')],
+                [r'(?>ab|cd|ef|gh)X'],
             ),
         ],
     )
-    def test_condense_blocks(self, blocks: list[list[str]], expected: list[str]):
-        results = cls.condense_blocks(list(it.starmap(cls.new, blocks)))
-        assert results == expected
+    def test_condense_blocks(self, blocks: list[Block], expected: list[str]):
+        results = cls.condense_blocks(blocks)
+        assert list(map(str, results)) == expected
 
     @pyt.mark.parametrize(
         'branches, expected',

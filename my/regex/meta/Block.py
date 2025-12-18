@@ -260,9 +260,7 @@ class Block(pyd.BaseModel):
             result.append(Regex.empty())
 
         # II. Atomize the set body into individual atomic branches
-        body_atoms = Regex.atomize(atom.body)
-        result.extend(map(Regex, body_atoms))
-
+        result.extend(map(Regex, atom.members))
         return cls.new(*result, quantifier=atom.quantifier.as_required())
 
     def expand_atom(self, atom: Atom) -> Self:
@@ -337,7 +335,8 @@ class Block(pyd.BaseModel):
             assert group, 'Somehow collected an empty block group.'
             if len(group) == 1:
                 # I. Render monoblock groups directly
-                ret.append(group[0].render())
+                block = group[0]
+                ret.extend([block.render()] if block.has_context else block.branches)
             else:
                 # II. Factor out shared suffixes between blocks
                 shared_suffix = cls.greatest_common_suffix(*(br.last for br in group))
@@ -420,6 +419,11 @@ class Block(pyd.BaseModel):
     def last(self) -> list[Regex]:
         """Returns all the atoms tied for the final position in this object."""
         return [self.suffix] if self.suffix else self.branches
+
+    @property
+    def has_context(self) -> bool:
+        """Returns True if this block has any contextual details (prefix, suffix, quantifier)."""
+        return bool(self.prefix or self.suffix or self.quantifier)
 
     # --------------
     # `x2` Modifiers

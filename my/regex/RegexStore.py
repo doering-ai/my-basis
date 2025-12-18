@@ -471,18 +471,27 @@ class RegexStore(pyd.BaseModel):
 
     def compose_tree(self, data: RegexList) -> str:
         """
-        Compose an optimized branching tree from a list of regex values.
-        See define_router_tree().
+        Compose an optimized/"condensed" version of the give regex branches.
 
         Args:
-            data: List of regex values passed from a caller's defintion.
+            data: List of branched regex expressions.
         Return:
             The corresponding optimized branching tree regex expression.
         """
-        composed_content = {self.compose(item, sep='|') for item in data}
-        block = Block.new(*sorted(composed_content))
+        # 0. Finish composing definitions below this one into valid expressions
+        rendered_branches = [self.compose(branch, sep='|') for branch in data]
+
+        # I. Initialize a "block" object containing these branches
+        block = Block.new(*rendered_branches).sort()
+
+        # II. Recursively "expand" all the branches, replacing them with more verbose equivalents
         block.expand()
-        return str(block.condense())
+
+        # III. Recursively "condense" the expanded branches by factoring out shared elements
+        block.condense()
+
+        # IV. Return the rendered union of these branches (e.g. `(?:a|b|c)`)
+        return str(block.render())
 
     # -------------------
     # `+` Primary Methods

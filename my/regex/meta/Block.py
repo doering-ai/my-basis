@@ -2,7 +2,7 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import Self, Sequence, Iterator, Generator, Iterable, Any
+from typing import Self, Sequence, Iterator, Generator, Any
 import itertools as it
 import more_itertools as mi
 import functools as ft
@@ -129,7 +129,7 @@ class Block(pyd.BaseModel):
         else:
             search_space = (branch.first for branch in self.branches)
 
-        return all(map(self._atom_supports_atomic_grouping, search_space))
+        return all(atom.is_simple and not isinstance(atom, SetAtom) for atom in search_space)
 
     def contextualize(self, data: Regex) -> Regex:
         """Add the context (prefix, suffix, quantifier) to the given atoms, usually a branch."""
@@ -158,11 +158,6 @@ class Block(pyd.BaseModel):
         # Reverse the contents before and after invoking the `common_prefix` library function
         common_suffix = tuple(mi.longest_common_prefix(map(reversed, args)))
         return Regex(reversed(common_suffix))
-
-    @staticmethod
-    def _atom_supports_atomic_grouping(atom: Atom) -> bool:
-        """Determines if the given atom can be safely included in a (new) atomic group."""
-        return atom.is_simple and not isinstance(atom, SetAtom)
 
     @staticmethod
     def _is_clone_with_prefix(lhs: Regex, rhs: Regex) -> bool:
@@ -385,7 +380,7 @@ class Block(pyd.BaseModel):
         return str(self.render())
 
     def __repr__(self) -> str:
-        return f'{self.branches!r}'
+        return str(self)
 
     def __hash__(self) -> int:
         return hash(str(self))

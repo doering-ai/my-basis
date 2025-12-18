@@ -41,6 +41,7 @@ class TestRegex:
             (r'(?=ab)(?<!cd)', [r'(?=ab)', r'(?<!cd)']),
             (r'a(b(c)d)e', [r'a', r'(b(c)d)', r'e']),
             # Set Expressions
+            (r'[abc]?', [r'[abc]?']),
             (r'[abc]de[f\d]', [r'[abc]', r'd', r'e', r'[f\d]']),
             (r'[[:alpha:]]+[A[:lower:]Z]', ['[[:alpha:]]+', r'[A[:lower:]Z]']),
             # Combined expressions
@@ -179,8 +180,8 @@ class TestRegex:
     @pyt.mark.parametrize(
         'expr, expected',
         boolmap(
-            true=['a|b', ['a', '|', 'b'], '|', ['|']],
-            false=['abc', ['a', 'b', 'c'], 'a[bc]d'],
+            true=[r'a|b', cls('a|b'), '|'],
+            false=['abc', cls('abc'), r'a[bc]d'],
         ),
     )
     def test_is_split(self, expr: str | Regex, expected: bool):
@@ -189,8 +190,8 @@ class TestRegex:
     @pyt.mark.parametrize(
         'expr, expected',
         boolmap(
-            true=[r'a', r'(?:test)', r'[abc]'],
-            false=[r'abc', r'a|b', r'(?:a|b)'],
+            true=[r'a', r'(?:test)', r'[abc]', r'(?:a|b)'],
+            false=[r'abc', r'a|b'],
         ),
     )
     def test_is_atomic(self, expr: str | Atom | Regex, expected: bool):

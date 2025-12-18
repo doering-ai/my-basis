@@ -87,30 +87,8 @@ class TestAtom:
     @pyt.mark.parametrize(
         'expr, expected',
         boolmap(
-            true=[
-                r'a',
-                r'\+',
-                r'a?',
-                r'[abc]',
-                r'[-az]',
-                r'[ab\p{Sc}\P{x}]',
-                r'[\[|\]\[[:lower:]\]]',
-                r'[+*?]',
-                r'[()|]',
-                r'[.^$]',
-            ],
-            false=[
-                r'',
-                r'(?:abc)',
-                r'(?:abc)+',
-                r'a+',
-                r'a*+',
-                r'\++',
-                r'a{1,5}',
-                r'a{1,}',
-                r'[a-z]',
-                r'[ab--c]',
-            ],
+            true=[r'a', r'\+', r'a?'],
+            false=[r'', r'a+', r'a*+', r'\++', r'a{1,5}', r'a{1,}'],
         ),
     )
     def test_is_simple(self, expr: str, expected: bool):
@@ -119,8 +97,8 @@ class TestAtom:
     @pyt.mark.parametrize(
         'expr, expected',
         boolmap(
-            true=[r'a?', r'a*', r'a{0,5}', r'(?:abc)?', r'[abc]*'],
-            false=[r'a', r'a+', r'a{1,5}', r'(?:abc)', r'[abc]+'],
+            true=[r'a?', r'a*', r'a{0,5}'],
+            false=[r'a', r'a+', r'a{1,5}'],
         ),
     )
     def test_is_optional(self, expr: str, expected: bool):

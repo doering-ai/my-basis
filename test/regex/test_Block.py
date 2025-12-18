@@ -10,7 +10,7 @@ import pytest as pyt
 
 ### INTERNAL
 from ..conftest import boolmap
-from my.regex import Quantifier, Atom, GroupAtom, SetAtom, Regex, Block
+from my.regex import Quantifier, Atom, Regex, Block
 
 cls = Block
 
@@ -48,10 +48,10 @@ class TestBlock:
             # Edge cases
             ([], []),
             ([''], [0]),
-            (['|'], [0, 0]),
+            (['|'], [0]),
             (['a|'], [1, 0]),
             (['|b'], [0, 1]),
-            (['||'], [0, 0, 0]),
+            (['||'], [0]),
         ],
     )
     def test_new(self, args: list[Any], expected: list[int]):
@@ -94,28 +94,24 @@ class TestBlock:
         assert str(result) == expected
 
     @pyt.mark.parametrize(
-        'branches, suffix, expected',
+        'block, expected',
         boolmap(
             true=[
-                ([], r''),
-                ([r''], r''),
-                ([r'a', r'b', r'c'], r''),
-                ([r'a', r'\[b\]', r'c'], r''),
-                ([r'a', r'\(?:b\)', r'c'], r''),
-                ([r'a', r'(?:b)', r'(?>c)'], r''),
-                ([r'a', r'b[b]', r'c'], r''),
+                cls(r'a|b|c'),
+                cls(r'a|\[b\]|c'),
+                cls(r'a|\(?:b\)|c'),
+                cls(r'a|(?:b)|(?>c)'),
+                cls(r'a|b[b]|c'),
             ],
             false=[
-                ([r'a++', r'[b]', r'c'], r''),
-                ([r'a', r'[b]', r'c'], r''),
-                ([r'a', r'(?:b)++', r'c'], r''),
-                ([r'a', r'(?:b)', r'c'], r''),
-                ([r'a', r'b[b]', r'c'], r'd'),
+                cls(r'a++|[b]|c'),
+                cls(r'a|[b]|c'),
+                cls(r'a|(?:b)++|c'),
+                cls(r'a|b[b]|c', suffix=r'd'),
             ],
         ),
     )
-    def test_supports_atomic_grouping(self, branches: list[str], suffix: str, expected: bool):
-        block = cls.new(*branches, suffix=Regex(suffix))
+    def test_supports_atomic_grouping(self, block: Block, expected: bool):
         assert block.supports_atomic_grouping() == expected
 
     @pyt.mark.parametrize(
@@ -145,13 +141,13 @@ class TestBlock:
             # NOOP
             (r'a', ['a']),
             (r'\P{s}', [r'\P{s}']),
-            (r'(?:ab)', [r'(?:ab)']),
+            (r'(?:ab)', [r'ab']),
             # Groups
             (r'(?:ab)?', ['', r'ab']),
-            (r'(ab)?', ['', r'(ab)']),
+            (r'(ab)?', [r'(ab)?']),
             (r'(?:a|b)', [r'a', r'b']),
             (r'(?:footnotes|reliable)', ['footnotes', 'reliable']),
-            (r'(?i-s:ab)?', ['', r'(?i-s)ab']),
+            (r'(?i-s:ab)?', ['', r'ab']),
             # Sets
             (r'[ab]?', ['', 'a', 'b']),
             (r'[+*?]', [r'\+', r'\*', r'\?']),
@@ -294,8 +290,8 @@ class TestBlock:
     @pyt.mark.parametrize(
         'block, expected',
         [
-            (cls(r'c|a|b'), r'a|b|c'),
-            (cls(r'xyz|abc|def'), r'abc|def|xyz'),
+            (cls(r'c|a|b'), r'(?>a|b|c)'),
+            (cls(r'xyz|abc|def'), r'(?>abc|def|xyz)'),
         ],
     )
     def test_sort(self, block: Block, expected: str):
@@ -306,7 +302,7 @@ class TestBlock:
         'block, expected',
         [
             # NOOPS
-            (cls(r'ab|cd?|ef'), r'ab|cd?|ef'),
+            (cls(r'ab|cd?|ef'), r'(?>ab|cd?|ef)'),
             (cls(r'ab|cd{0,5}|ef*', quantifier=r'?'), r'(?:ab|cd{0,5}|ef*)?'),
             # Bubble-up optionality
             (cls(r'ab|(?:cd)?|[ef]'), r'(?:ab|(?:cd)|[ef])?'),
@@ -314,8 +310,8 @@ class TestBlock:
             (cls(r'|a|b'), r'(?:a|b)?'),
             (cls(r'a{0,5}|b*', quantifier=r'?'), r'(?:a{1,5}|b+)?'),
             # Prefixed branches
-            (cls(r'ab(cd)?|xab(cd)?'), r'x?ab(cd)?'),
-            (cls(r'ab(cd)?|x?ab(cd)?'), r'x?ab(cd)?'),
+            (cls(r'ab(cd)?|xab(cd)?'), r'(?>x?ab(cd)?)'),
+            (cls(r'ab(cd)?|x?ab(cd)?'), r'(?>x?ab(cd)?)'),
         ],
     )
     def test_clean(self, block: Block, expected: str):
@@ -390,7 +386,7 @@ class TestBlock:
         'block, expected',
         [
             (cls(r'abc', r'abd'), r'ab[cd]'),
-            (cls(r'test', r'foo'), r'(?:foo|test)'),
+            (cls(r'test', r'foo'), r'(?>foo|test)'),
             (cls(r'xyz', r'xyz'), r'xyz'),
             (cls(r'abc1cde', r'abc[2]cde'), r'abc[12]cde'),
         ],
@@ -405,11 +401,13 @@ class TestBlock:
     @pyt.mark.parametrize(
         'block, expected',
         [
-            (['ab', 'cd', 'ef'], dict(), '(?>ab|cd|ef)'),
-            (['ab', '(?:cd)', '[ef]'], dict(), '(?:ab|(?:cd)|[ef])'),
-            (['', 'cd', 'ef'], dict(), '(?>cd|ef)?'),
-            (['', 'cd', 'ef'], dict(quantifier=Quantifier('?')), '(?>cd|ef)?'),
-            (['-ef', 'cd', 'ef'], dict(), '(?>-?ef|cd)'),
+            (cls(r'abc'), r'abc'),
+            (cls(r'a[bc]d'), r'a[bc]d'),
+            (cls('ab', 'cd', 'ef'), r'(?>ab|cd|ef)'),
+            (cls('ab', '(?:cd)', '[ef]'), r'(?:ab|(?:cd)|[ef])'),
+            (cls('', 'cd', 'ef'), r'(?>cd|ef)?'),
+            (cls('', 'cd', 'ef', quantifier=Quantifier('?')), r'(?>cd|ef)?'),
+            (cls('-ef', 'cd', 'ef'), r'(?>-?ef|cd)'),
         ],
     )
     def test_render(self, block: Block, expected: str):

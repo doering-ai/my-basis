@@ -57,30 +57,29 @@ class Regex:
         if isinstance(expr, cls):
             return iter(expr.data)
 
-        expr = str(expr)
-        n = len(expr)
+        g_prev = 0
+        for group_atom in cls.group_iterator(expr, mode='roots'):
+            g0, g1 = group_atom.span
+            if g0 > g_prev:
+                yield from cls._set_atomize(expr[g_prev:g0])
+            g_prev = g1
+            yield group_atom
 
-        # I. First, find all the "root" (top-level) groups in the expression
-        buf = RegexBuffer(expr)
-        group_atoms = list(cls.group_iterator(buf, mode='roots'))
-        group_spans = [group.span for group in group_atoms]
+        if g_prev < len(expr):
+            yield from cls._set_atomize(expr[g_prev:])
 
-        # II. Next, reuse the work already done by Buffer to find character sets (for exclusion)
-        set_spans = [span for span in buf.fence_spans if not span.intersects(group_spans)]
-        assert all(set_spans), f'Identified empty set spans, which is impossible: {set_spans}'
-        set_atoms = [SetAtom(data=expr[span[0] : span[1]], span=span) for span in set_spans]
+    @classmethod
+    def _set_atomize(cls, expr: str) -> Generator[Atom, None, None]:
+        s_prev = 0
+        for set_atom in cls.set_iterator(expr):
+            s0, s1 = set_atom.span
+            if s0 > s_prev:
+                yield from Atom.plain_atomize(expr[s_prev:s0])
+            s_prev = s1
+            yield set_atom
 
-        # III. Yield each atom found above, interspersed with the plain atoms found between them
-        x_prev = 0
-        for atom in sorted(group_atoms + set_atoms, key=lambda atom: atom.span):
-            x0, x1 = atom.span
-            if x0 > x_prev:
-                yield from Atom.plain_atomize(expr[x_prev:x0])
-            yield atom
-            x_prev = x1
-
-        if x_prev < n:
-            yield from Atom.plain_atomize(expr[x_prev:])
+        if s_prev < len(expr):
+            yield from Atom.plain_atomize(expr[s_prev:])
 
     @classmethod
     def empty(cls) -> Self:
@@ -333,7 +332,7 @@ class Regex:
         Returns:
             The quantified regex pattern string.
         """
-        atoms = cls.atomize(expr) if isinstance(expr, str) else expr
+        atoms = cls(expr) if isinstance(expr, str) else expr
         assert isinstance(atoms, cls), f'Unsupported type for quantify: {type(atoms)}'
 
         # Edge & null cases

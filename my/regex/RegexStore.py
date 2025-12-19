@@ -16,7 +16,7 @@ from regex import Match, Pattern, RegexFlag
 from ..utils import ut
 from ..types import Buffer
 from ..typing import typist
-from .meta import Atom, GroupAtom, Regex, Block, GroupKind, META_RGXS
+from .meta import Atom, GroupAtom, Regex, Tree, GroupKind, META_RGXS
 from .MatchData import MatchData
 from .ParseData import ParseData
 
@@ -253,7 +253,7 @@ class RegexStore(pyd.BaseModel):
             return f'\t{expr}'
 
         sections: list[str] = []
-        block = Block.new(expr)
+        block = Tree.new(expr)
         for branch in block.branches:
             lines: list[str] = []
             for atom in branch:
@@ -482,7 +482,7 @@ class RegexStore(pyd.BaseModel):
         rendered_branches = [self.compose(branch, sep='|') for branch in data]
 
         # I. Initialize a "block" object containing these branches
-        block = Block.new(*rendered_branches).sort()
+        block = Tree.new(*sorted(rendered_branches))
 
         # II. Recursively "expand" all the branches, replacing them with more verbose equivalents
         block.expand()

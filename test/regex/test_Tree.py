@@ -10,15 +10,15 @@ import pytest as pyt
 
 ### INTERNAL
 from ..conftest import boolmap
-from my.regex import Quantifier, Atom, Regex, Block
+from my.regex import Quantifier, Atom, Regex, Tree
 
-cls = Block
+cls = Tree
 
 
 ############
 ### BODY ###
 ############
-class TestBlock:
+class TestTree:
     # -------------------
     # `0` Initial Methods
     # -------------------
@@ -94,7 +94,7 @@ class TestBlock:
         assert str(result) == expected
 
     @pyt.mark.parametrize(
-        'block, expected',
+        'tree, expected',
         boolmap(
             true=[
                 cls(r'a|b|c'),
@@ -111,8 +111,8 @@ class TestBlock:
             ],
         ),
     )
-    def test_supports_atomic_grouping(self, block: Block, expected: bool):
-        assert block.supports_atomic_grouping() == expected
+    def test_supports_atomic_grouping(self, tree: Tree, expected: bool):
+        assert tree.supports_atomic_grouping() == expected
 
     @pyt.mark.parametrize(
         'lhs, rhs, expected',
@@ -167,7 +167,7 @@ class TestBlock:
         assert set(map(str, new_block.branches)) == set(expected)
 
     @pyt.mark.parametrize(
-        'block, expected',
+        'tree, expected',
         [
             (cls(r'z|y|x'), ['[xyz]']),
             (cls(r'z|[yx]'), ['[xyz]']),
@@ -178,8 +178,8 @@ class TestBlock:
             ),
         ],
     )
-    def test_condense_atomic_branches(self, block: Block, expected: list[str]):
-        result = cls.condense_atomic_branches(block.branches)
+    def test_condense_atomic_branches(self, tree: Tree, expected: list[str]):
+        result = cls.condense_atomic_branches(tree.branches)
         assert list(map(str, result)) == expected
 
     @pyt.mark.parametrize(
@@ -214,7 +214,7 @@ class TestBlock:
             ),
         ],
     )
-    def test_condense_blocks(self, blocks: list[Block], expected: list[str]):
+    def test_condense_blocks(self, blocks: list[Tree], expected: list[str]):
         results = cls.condense_blocks(blocks)
         assert list(map(str, results)) == expected
 
@@ -243,30 +243,40 @@ class TestBlock:
             ],
         ),
     )
-    def test_group_blocks_by_suffix(self, lhs: Block, rhs: Block, did_group: bool):
+    def test_group_blocks_by_suffix(self, lhs: Tree, rhs: Tree, did_group: bool):
         groups = list(cls.group_blocks_by_suffix([lhs, rhs]))
         assert len(groups) == (1 if did_group else 2)
 
     @pyt.mark.parametrize(
-        'quantifier, expected',
+        'tree, quantifier, overwrite, expected',
         [
-            (r'', r'?'),
-            (r'?', r'?'),
-            (r'+', r'*'),
-            (r'*', r'*'),
-            (r'++', r'*+'),
-            (r'{1,5}?', r'{0,5}?'),
-            (r'{2,5}?', None),
+            (cls(r'a', r'b', r'c'), r'', False, r'(?>a|b|c)'),  # noop
+            (cls(r'a'), r'?', False, r'a?'),  # make just monobranch optional
+            (cls(r'a', r'b'), r'?', False, r'(?>a|b)?'),  # make multibranch ptional
+            # Make Optional
+            (cls(r'a', r'b', quantifier=r'++'), r'?', False, r'(?>a|b)*+'),
+            (cls(r'a', r'b', quantifier=r'{1,5}'), r'?', False, r'(?>a|b){0,5}'),
+            (cls(r'a', r'b', quantifier=r'{2,5}'), r'?', False, None),
+            (cls(r'a', r'b', quantifier=r'{2,5}'), r'?', True, r'(?>a|b)?'),
+            # Inner vs. Outer
+            (cls(r'a', r'b', prefix=r'xX'), r'?', False, r'xX(?>a|b)?'),
+            (cls(r'a', r'b', suffix=r'Xx'), r'?', False, r'(?>a|b)?Xx'),
+            (cls(r'a', r'b', suffix=r'Xx', inner_quant=r'{1,5}'), r'?', False, r'(?>a|b){0,5}Xx'),
+            (cls(r'a', r'b', suffix=r'Xx', inner_quant=r'{2,5}'), r'?', False, None),
+            (cls(r'a', r'b', suffix=r'Xx', inner_quant=r'{2,5}'), r'?', True, r'(?>a|b)?Xx'),
+            (cls(r'a', r'b', suffix=r'Xx', quantifier=r'++'), r'?', False, r'(?:(?>a|b)?Xx)++'),
+            (cls(r'a', r'b', quantifier=r'{2,5}'), r'?', False, r'(?:(?>a|b)?Xx)++'),
         ],
     )
-    def test_make_optional(self, quantifier: str, expected: str | None):
-        block = cls.new('a', 'b', quantifier=Quantifier(quantifier))
-        result = block.make_optional()
+    def test_set_quantifier(
+        self, tree: Tree, quantifier: str, overwrite: bool, expected: str | None
+    ):
+        did_set = tree.set_quantifier(quantifier, overwrite)
         if expected is None:
-            assert result is False
+            assert did_set is False
         else:
-            assert result is True
-            assert block.quantifier == expected
+            assert did_set is True
+            assert tree.render() == expected
 
     # ------------------
     # `x` Public Methods
@@ -275,18 +285,18 @@ class TestBlock:
     # `x0` Overrides
     # --------------
     @pyt.mark.parametrize(
-        'block, expected',
+        'tree, expected',
         [
             (cls(r'a|b|c'), 3),
             (cls(r'ab|cd'), 2),
             (cls(), 0),
         ],
     )
-    def test_len(self, block: Block, expected: int):
-        assert len(block) == expected
+    def test_len(self, tree: Tree, expected: int):
+        assert len(tree) == expected
 
     @pyt.mark.parametrize(
-        'block, expected',
+        'tree, expected',
         boolmap(
             true=[
                 cls(r'a|b'),
@@ -298,36 +308,25 @@ class TestBlock:
             ],
         ),
     )
-    def test_bool(self, block: Block, expected: bool):
-        assert bool(block) == expected
+    def test_bool(self, tree: Tree, expected: bool):
+        assert bool(tree) == expected
 
     @pyt.mark.parametrize(
-        'block, expected',
+        'tree, expected',
         [
             (cls(r'ab|cd'), [r'ab', r'cd']),
             (cls(r'ab|cd', suffix=r'ef'), [r'ef']),
             (cls(), []),
         ],
     )
-    def test_last(self, block: Block, expected: list[str]):
-        assert list(map(str, block.last)) == expected
+    def test_last(self, tree: Tree, expected: list[str]):
+        assert list(map(str, tree.last)) == expected
 
     # --------------
     # `x1` Modifiers
     # --------------
     @pyt.mark.parametrize(
-        'block, expected',
-        [
-            (cls(r'c|a|b'), r'(?>a|b|c)'),
-            (cls(r'xyz|abc|def'), r'(?>abc|def|xyz)'),
-        ],
-    )
-    def test_sort(self, block: Block, expected: str):
-        block.sort()
-        assert block.render() == expected
-
-    @pyt.mark.parametrize(
-        'block, expected',
+        'tree, expected',
         [
             # NOOPS
             (cls(r'ab|cd?|ef'), r'(?>ab|cd?|ef)'),
@@ -339,17 +338,23 @@ class TestBlock:
             (cls(r'a||b', quantifier=r'?'), r'(?>a|b)?'),
             (cls(r'a|b|', quantifier=r'*?'), r'(?>a|b)*?'),
             (cls(r'a{0,5}|b*', quantifier=r'?'), r'(?:a{1,5}|b+)?'),
+            (cls(r'', r'ed', r'ing', prefix=r'Publish'), r'Publish(?>ed|ing)?'),
             # Prefixed branches
             (cls(r'ab(cd)?|xab(cd)?'), r'x?ab(cd)?'),
             (cls(r'ab(cd)?|x?ab(cd)?'), r'x?ab(cd)?'),
+            # Live examples
+            (
+                cls(r'p', r'PP', r'Pp', r'p?p', prefix=r'xX', suffix=r'Xx'),
+                r'(?:)',
+            ),
         ],
     )
-    def test_clean(self, block: Block, expected: str):
-        block.clean()
-        assert str(block.render()) == expected
+    def test_clean(self, tree: Tree, expected: str):
+        tree.clean()
+        assert str(tree.render()) == expected
 
     @pyt.mark.parametrize(
-        'block, expected',
+        'tree, expected',
         [
             (cls(r'a[bc]d'), 2),
             (cls(r'a(?:b|c)d'), 2),
@@ -393,26 +398,26 @@ class TestBlock:
             ),
         ],
     )
-    def test_expand(self, block: Block, expected: int | list[str]):
-        block.expand()
+    def test_expand(self, tree: Tree, expected: int | list[str]):
+        tree.expand()
         if isinstance(expected, int):
-            assert len(block) == expected
+            assert len(tree) == expected
         else:
-            assert set(map(str, block.branches)) == set(expected)
+            assert set(map(str, tree.branches)) == set(expected)
 
     @pyt.mark.parametrize(
-        'block, expected',
+        'tree, expected',
         [
-            (cls(r'abc', r'abd'), cls(r'c|d', prefix=r'ab')),
-            (cls(r'xbc', r'ybc'), cls(r'x|y', suffix=r'bc')),
+            (cls(r'abcc', r'abdd'), cls(r'cc|dd', prefix=r'ab')),
+            (cls(r'xbc', r'ybc'), cls(r'[xy]', suffix=r'bc')),
         ],
     )
-    def test_factor(self, block: Block, expected: Block):
-        block.factor()
-        assert block == expected
+    def test_factor(self, tree: Tree, expected: Tree):
+        tree.factor()
+        assert tree == expected
 
     @pyt.mark.parametrize(
-        'block, expected',
+        'tree, expected',
         [
             (cls(r'abc', r'abd'), r'ab[cd]'),
             (cls(r'test', r'foo'), r'(?>test|foo)'),
@@ -420,15 +425,15 @@ class TestBlock:
             (cls(r'abc1cde', r'abc[2]cde'), r'abc[12]cde'),
         ],
     )
-    def test_condense(self, block: Block, expected: str):
-        block.condense()
-        assert str(block.render()) == expected
+    def test_condense(self, tree: Tree, expected: str):
+        tree.condense()
+        assert str(tree.render()) == expected
 
     # ------------------
     # `x2` Serialization
     # ------------------
     @pyt.mark.parametrize(
-        'block, expected',
+        'tree, expected',
         [
             (cls(r'abc'), r'abc'),
             (cls(r'a[bc]d'), r'a[bc]d'),
@@ -438,6 +443,6 @@ class TestBlock:
             (cls('', 'cd', 'ef', quantifier=r'?'), r'(?:|cd|ef)?'),
         ],
     )
-    def test_render(self, block: Block, expected: str):
-        ret = block.render()
+    def test_render(self, tree: Tree, expected: str):
+        ret = tree.render()
         assert str(ret) == expected

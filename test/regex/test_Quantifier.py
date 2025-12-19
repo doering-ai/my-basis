@@ -40,10 +40,10 @@ class TestQuantifier:
             (r'?', r'?'),
             (r'*', r'*'),
             (r'+', r'*'),
-            (r'{1,5}', r'{0,5}'),
             (r'{1,}', r'{0,}'),
+            (r'{1,5}', r'{0,5}'),
+            (r'{2,}', None),
             (r'{2,5}', None),
-            (r'', None),
         ],
     )
     def test_as_optional(self, data: str, expected: str | None):
@@ -60,7 +60,7 @@ class TestQuantifier:
             (r'+', r'+'),
             (r'*', r'+'),
             (r'?', r''),
-            (r'{0,5})', r'{1,5}'),
+            (r'{0,5}', r'{1,5}'),
             (r'*?', r'+?'),
         ],
     )

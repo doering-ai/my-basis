@@ -13,6 +13,7 @@ import regex as re
 
 ### INTERNAL
 from my.types import Span, Buffer
+from ..conftest import boolmap
 
 ############
 ### DATA ###
@@ -76,22 +77,14 @@ class TestBuffer:
 
     @pyt.mark.parametrize(
         'span, expected',
-        [
-            ((0, 2), False),  # not fenced
-            ((0, 3), True),  # ends in fence
-            ((2, 3), True),  # inside fence
-            ((2, 6), True),  # is fence
-            ((1, 7), False),  # contains fence
-            ((6, 8), False),  # between fences
-            ((6, 11), True),  # is fence at end
-            # OOB:
-            ((8, 99), True),
-            ((11, 99), False),
-        ],
+        boolmap(
+            true=[Span(0, 3), Span(2, 3), Span(2, 6), Span(6, 11), Span(8, 99)],
+            false=[Span(0, 2), Span(1, 7), Span(6, 8), Span(11, 99)],
+        ),
     )
-    def test_is_fenced(self, span: tuple[int, int], expected: bool):
+    def test_is_fenced(self, span: Span, expected: bool):
         buf = DefBuf('01`34`67`9`')
-        assert buf.is_fenced(Span(span)) == expected
+        assert buf._is_fenced(span) == expected
 
     @pyt.mark.parametrize(
         'text, mode, expected',

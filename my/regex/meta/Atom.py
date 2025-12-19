@@ -2,7 +2,7 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import Self, Generator, Any
+from typing import Self, Generator, Any, Literal
 import functools as ft
 
 ### EXTERNAL
@@ -45,10 +45,6 @@ class Atom(pyd.BaseModel):
     # `-` Private Methods
     # -------------------
     @staticmethod
-    def _normalize_other_atom(param: object) -> str:
-        return param.data if isinstance(param, Atom) else str(param)
-
-    @staticmethod
     def _has_set_operator(data) -> bool:
         return bool(META_RGXS['set_operator'].search(data))
 
@@ -74,21 +70,21 @@ class Atom(pyd.BaseModel):
         return hash(self.data)
 
     def __eq__(self, other: object) -> bool:
-        return self.data == self._normalize_other_atom(other)
+        return self.data == str(other)
 
     def __lt__(self, other: object) -> bool:
-        return self.data < self._normalize_other_atom(other)
+        return self.data < str(other)
 
     def __contains__(self, item: object) -> bool:
-        return self._normalize_other_atom(item) in self.data
+        return str(item) in self.data
 
     def __add__(self, other: object) -> Self:
         cls = self.__class__
-        return cls(self.data + self._normalize_other_atom(other))
+        return cls(self.data + str(other))
 
     def __radd__(self, other: object) -> Self:
         cls = self.__class__
-        return cls(self._normalize_other_atom(other) + self.data)
+        return cls(str(other) + self.data)
 
     def __bool__(self) -> bool:
         return bool(self.data)
@@ -116,6 +112,10 @@ class Atom(pyd.BaseModel):
         return Quantifier(ret)
 
     @ft.cached_property
+    def base(self) -> str:
+        return self.data[: -len(self.quantifier)] if self.quantifier else self.data
+
+    @ft.cached_property
     def is_optional(self) -> bool:
         """Determines if this atom has an optional quantifier (e.g. '?', '*', '{0,3}')."""
         return self.quantifier.is_optional
@@ -141,7 +141,7 @@ class Atom(pyd.BaseModel):
     # ------------
     # `x2` Methods
     # ------------
-    def quantify(self, quantifier: str | Quantifier, overwrite: bool = True) -> Self:
+    def quantify(self, quantifier: str | Quantifier, overwrite: bool = True) -> Self | None:
         """
         Create a copy of this atom with the given quantifier applied.
 
@@ -151,26 +151,23 @@ class Atom(pyd.BaseModel):
         Returns:
             The quantified atom (the original object is NOT modified).
         """
-        val = self.data
-        if n_quant := len(self.quantifier):
-            if self.quantifier == quantifier and quantifier in ('?', '*', '+'):
-                # I.i. Skip redundant quantifiers
-                return self
-            elif overwrite:
-                # I.ii. Remove the existing quantifier
-                val = val[:-n_quant]
-            elif quantifier:
-                # I.iii. Add the new quantifier to the whole existing atom with a wrapping group
-                val = f'(?:{val})'
-        return self.__class__(val + str(quantifier))
-
-    def as_optional(self) -> Self:
-        """Generate a copy of this atom with its quantifier made optional (default '?')."""
-        if opt := self.quantifier.as_optional():
-            return self.quantify(opt)
+        cls = self.__class__
+        new = Quantifier(quantifier)
+        if overwrite:
+            return cls(f'{self.base}{new}')
+        elif self.quantifier == new and new in ('?', '*', '+', ''):
+            return self
+        elif (joined := self.quantifier | new) is not None:
+            return cls(f'{self.base}{joined}')
         else:
-            return self.quantify('?', overwrite=False)
+            return None
+
+    def as_optional(self) -> Self | None:
+        """Generate a copy of this atom with its quantifier made optional (default '?')."""
+        return self.quantify(r'?', overwrite=False)
 
     def as_required(self) -> Self:
         """Generate a copy of this atom with its quantifier made non-optional (default '')."""
-        return self.quantify(self.quantifier.as_required())
+        ret = self.quantify(self.quantifier.as_required(), overwrite=True)
+        assert ret is not None
+        return ret

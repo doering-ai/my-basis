@@ -23,7 +23,7 @@ from .Regex import Regex
 ############
 ### DATA ###
 ############
-class Block(pyd.BaseModel):
+class Tree(pyd.BaseModel):
     """
     A collection of alternative "branches" for a regex position.
     Examples:
@@ -37,6 +37,7 @@ class Block(pyd.BaseModel):
     prefix: Regex = Regex()
     suffix: Regex = Regex()
     quantifier: Quantifier = Quantifier()
+    inner_quant: Quantifier = Quantifier()
 
     # Options
     max_expand: int = 4
@@ -51,6 +52,7 @@ class Block(pyd.BaseModel):
         branches: list[Regex] | None = None,
         suffix: str | Atom | Regex = '',
         quantifier: str | Quantifier = '',
+        inner_quant: str | Quantifier = '',
         max_expand: int = 4,
         **kwargs: Any,
     ) -> None:
@@ -63,6 +65,8 @@ class Block(pyd.BaseModel):
             data['suffix'] = Regex(suffix)
         if quantifier != '':
             data['quantifier'] = Quantifier(quantifier)
+        if inner_quant != '':
+            data['inner_quant'] = Quantifier(inner_quant)
         if max_expand != 4:
             data['max_expand'] = max_expand
 
@@ -131,14 +135,17 @@ class Block(pyd.BaseModel):
 
         return all(atom.is_simple and not isinstance(atom, SetAtom) for atom in search_space)
 
-    def contextualize(self, data: Regex) -> Regex:
-        """Add the context (prefix, suffix, quantifier) to the given atoms, usually a branch."""
-        if self.prefix or self.suffix:
-            data = self.prefix + data + self.suffix
-
-        if self.quantifier:
-            data = Regex.quantify(data, self.quantifier)
-        return data
+    @staticmethod
+    def _is_set_eligible(atom: Atom | Regex) -> bool:
+        """
+        Determine if the given atom can be isomorphically added to a (simple) character set.
+        Note that for this purpose, clean() should have removed any simply-quantified (AKA optional)
+        branches already *if* that were possible, so they should not be re-handled here, but rather
+        ignored as complex.
+        """
+        if isinstance(atom, Regex):
+            atom = atom.one
+        return atom.is_simple and not (atom.is_group or atom.quantifier)
 
     @staticmethod
     def greatest_common_prefix(*args: Regex) -> Regex:
@@ -189,6 +196,52 @@ class Block(pyd.BaseModel):
         serialized_blocks = list(map(cls.serialize, blocks))
         for branch_group in mi.split_when(serialized_blocks, _split):
             yield cls.new(*mi.flatten(branch_group))
+
+    def set_quantifier(self, quantifier: str | Quantifier, overwrite: bool = False) -> bool:
+        """
+        Attempt to set the quantifier for this block to an optional version of itself.
+
+        Determines whether to write to the main quantifier (wrapping everything) or the "inner"
+        quantifier, which just applies to the branches themselves. If the tree has no context
+        (i.e. prefix or suffix), then the main quantifier is used. Otherwise, it is assumed that
+        the caller wants to promote/'bubble-up' a qualifier from the branches, so the inner
+        quantifier is targeted instead.
+
+        To change the primary quantifier for sure, write to the field directly.
+
+        Args:
+            quantifier: The quantifier to apply.
+            overwrite: If True, overwrite any existing quantifier instead of combining.
+        Returns:
+            True if the quantifier is optional, False if this is not possible (e.g. '{3,5}')
+        """
+        has_context = self.prefix or self.suffix
+        field = 'inner_quant' if has_context else 'quantifier'
+        value = getattr(self, field)
+        new = Quantifier(quantifier)
+
+        if value == new:
+            return True
+        elif overwrite:
+            setattr(self, field, new)
+            return True
+        elif (prod := value | new) is not None:
+            setattr(self, field, prod)
+            return True
+        else:
+            return False
+
+    def contextualize(self, data: Regex) -> Regex:
+        """Add the context (prefix, suffix, quantifier) to the given atoms, usually a branch."""
+        if self.inner_quant:
+            data = data.quantify(self.inner_quant)
+
+        if self.prefix or self.suffix:
+            data = self.prefix + data + self.suffix
+
+        if self.quantifier:
+            data = data.quantify(self.quantifier)
+        return data
 
     # -------------------
     # `+` Primary Methods
@@ -295,26 +348,18 @@ class Block(pyd.BaseModel):
         atoms = [br.one for br in branches]
 
         # II. Separate out the "simple" branches, e.g. plain sets, individual characters, etc.
-        #     Note that for this purpose, clean() should have removed any simply-quantified (AKA
-        #     optional) branches already *if* that were possible, so they should not be re-handled
-        #     here, but rather ignored as complex.
-        complex_branches, simple_branches = map(
-            list,
-            mi.partition(lambda a: a.is_simple and not (a.is_group or a.quantifier), atoms),
-        )
-
-        if len(simple_branches) <= 1:
+        rest, eligible = map(list, mi.partition(cls._is_set_eligible, atoms))
+        if len(eligible) < 2:
             return branches
 
         # III. Combine multiple simple branches into a single set
-        non_sets, sets = map(set, mi.partition(lambda atom: atom.is_set, simple_branches))
-        all_members = non_sets | {
-            branch.one for _set in sets for branch in cls.expand_set(_set).branches
-        }
+        plain_atoms, set_atoms = map(set, mi.partition(lambda atom: atom.is_set, eligible))
+        expanded_sets = list(mi.flatten(cls.expand_set(a).branches for a in set_atoms))
+        all_members = plain_atoms | {branch.one for branch in expanded_sets}
         new_set_body = ''.join(map(str, sorted(all_members)))
 
         # IV. Save the results to this object
-        return list(map(Regex, [f'[{new_set_body}]', *complex_branches]))
+        return list(map(Regex, sorted([f'[{new_set_body}]', *rest])))
 
     @classmethod
     def condense_blocks(cls, blocks: list[Self]) -> list[Regex]:
@@ -331,24 +376,11 @@ class Block(pyd.BaseModel):
             The optimized list of regex branches, isomorphic to the original set of blocks.
         """
         ret = []
-        for group_block in cls.group_blocks_by_suffix(blocks):
-            group_block.factor()
-            ret.extend(group_block.serialize())
+        for block in cls.group_blocks_by_suffix(blocks):
+            if len(block) > 1 and block.max_length > 1:
+                block.factor()
+            ret.extend(block.serialize())
         return ret
-
-    def make_optional(self) -> bool:
-        """
-        Attempt to set the quantifier for this block to an optional version of itself.
-
-        Returns:
-            True if the quantifier is optional, False if this is not possible (e.g. '{3,5}')
-        """
-        if self.quantifier.is_optional:
-            return True
-        elif (new_quant := self.quantifier.as_optional()) is not None:
-            self.quantifier = new_quant
-            return True
-        return False
 
     # ------------------
     # `x` Public Methods
@@ -374,7 +406,7 @@ class Block(pyd.BaseModel):
 
     def __eq__(self, other: object) -> bool:
         return (
-            isinstance(other, Block)
+            isinstance(other, Tree)
             and len(self) == len(other)
             and self.branches == other.branches
             and self.prefix == other.prefix
@@ -410,19 +442,9 @@ class Block(pyd.BaseModel):
         """Returns all the atoms tied for the final position in this object."""
         return [self.suffix] if self.suffix else self.branches
 
-    @property
-    def has_context(self) -> bool:
-        """Returns True if this block has any contextual details (prefix, suffix, quantifier)."""
-        return bool(self.prefix or self.suffix or self.quantifier)
-
     # --------------
     # `x2` Modifiers
     # --------------
-    def sort(self) -> Self:
-        """Ensure that all branches are unique and sorted."""
-        self.branches = list(sorted(set(self.branches)))
-        return self
-
     def clean(self) -> Self:
         """
         Clean the given branches by removing empty branches and combining optional ones.
@@ -433,33 +455,30 @@ class Block(pyd.BaseModel):
             A quantifier that can be applied to the whole set of branches.
         """
         to_drop: set[int] = set()
-        is_optional = self.quantifier.is_optional
-        can_be_optional = self.quantifier.as_optional()
-        print(f'`Block.clean()` {is_optional=}, {can_be_optional=}')
+        print(f'\t2. Block.clean():\t{self!r}')
 
         # I. Identify branches to drop or combine
         for i, branch in enumerate(self.branches):
-            print(f'`Block.clean()` {i=!r}, {branch=!r}, len(branch)={len(branch)}')
             if not branch:
                 # I.i. Empty branch -- whole thing is now optional, if that's possible
-                if self.make_optional():
-                    print('\tDropping empty branch')
+                if self.set_quantifier(r'?'):
                     to_drop.add(i)
             elif len(branch) == 1:
                 # I.ii. Single atom -- check for optionality
                 atom = branch.one
-                print(f'\tChecking for optionality: {atom=!r}')
-                if atom.is_optional and self.make_optional():
-                    self.branches[i] = Regex(atom.as_required())
+                if atom.is_optional and self.set_quantifier(r'?'):
+                    self.branches[i][0] = atom.as_required()
             else:
-                # I.iii. Look for a copy of this branch w/ a prefix
-                print('\tLooking for prefixes')
-                for j, other_branch in enumerate(self.branches):
-                    if j in to_drop or j == i:
+                # I.iii. Look for a copy of this branch with a monoatomic prefix or suffix
+                for j, other in enumerate(self.branches):
+                    if j in to_drop or len(other) != len(branch) + 1:
                         continue
-                    elif self._is_clone_with_prefix(branch, other_branch):
+                    elif other[1:] == branch:
                         to_drop.add(i)
-                        other_branch[0] = other_branch[0].as_optional()
+                        other[0] = other[0].as_optional()
+                    elif other[:-1] == branch:
+                        to_drop.add(i)
+                        other[-1] = other[-1].as_optional()
 
         if to_drop:
             self.branches = ut.drop_at(self.branches, to_drop)
@@ -480,7 +499,7 @@ class Block(pyd.BaseModel):
         """
         if self:
             self.branches = list(mi.flatten(map(self.expand_branch, self.branches)))
-            self.sort()
+            self.branches.sort()
         return self
 
     def factor(self) -> Self:
@@ -488,8 +507,9 @@ class Block(pyd.BaseModel):
         Factor out common prefixes and suffixes from the branches in the main data structure,
         modifying the object's member variables.
         """
+        print(f'\t1. Block.factor():\t{self!r}')
         # 0. Return immediately if this is a single branch
-        if len(self) <= 1:
+        if len(self) <= 1 or self.max_length <= 1:
             return self
 
         # I. Determine the prefix for this block (which should always exist if this func is called)
@@ -502,13 +522,18 @@ class Block(pyd.BaseModel):
             self.branches = [branch[: -len(suffix)] for branch in self.branches]
             self.suffix = suffix + self.suffix
 
-        # III. Check for a shared quantifier
-        if not self.quantifier and self.max_length == 1:
-            quantifiers = {branch.one.quantifier for branch in self.branches if branch}
-            if len(quantifiers) == 1 and (common_quantifier := quantifiers.pop()):
-                self.quantifier = common_quantifier
-                for branch in self.branches:
-                    branch[0] = branch[0].quantify('')
+        # III. Apply optimizations to newly mono-atomic branches
+        if self.max_length == 1:
+            # III.i. Factor out a quantifier shared between all branches
+            if not self.quantifier:
+                quantifiers = {branch.one.quantifier for branch in self.branches if branch}
+                if len(quantifiers) == 1 and self.set_quantifier(quantifiers.pop()):
+                    self.branches = [branch.quantify('') for branch in self.branches]
+
+            # III.ii. Condense simple branches into sets
+            if any(map(self._is_set_eligible, self.branches)):
+                self.branches = self.condense_atomic_branches(self.branches)
+                print(f'\t\t1.2. Block.factor() [atomic]:\t{self!r}')
 
         return self
 
@@ -527,8 +552,11 @@ class Block(pyd.BaseModel):
         cls = self.__class__
 
         # I. Prepare the block; the main stage is the "factor" step, where prefixes are found
+        print(f'Block.condense():\t{self!r}')
         self.factor()
         self.clean()
+        self.branches.sort()
+        print(f'\t3. condense() post:\t{self!r}')
 
         # II. Recursively replace the block's body with an equivalent tree
         if not self:
@@ -583,7 +611,12 @@ class Block(pyd.BaseModel):
         This output is intended for consumption *by other blocks*, rather than callers building
         expressions.
         """
-        return [self.render()] if self.has_context else self.branches
+        if len(self) == 0:
+            return []
+        elif self.prefix or self.suffix or self.quantifier or self.inner_quant:
+            return [self.render()]
+        else:
+            return self.branches
 
     def export_branches(self) -> list[Regex]:
         """Export just the branches of this block."""

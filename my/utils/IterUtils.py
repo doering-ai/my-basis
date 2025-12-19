@@ -145,10 +145,20 @@ class IterUtils:
         default: Key | None = None,
     ) -> Key | None:
         """
-        Find the first key in the mapping for which the predicate returns True.
-        If no such key exists, return None.
+        Find the first key in the mapping for which the predicate on the corresponding value returns
+        true.
+
+        Args:
+            items: Mapping or iterable of (key, value) pairs to search.
+            predicate: Predicate function or value to match (default: truthiness check).
+            default: Default value to return if no match found (default: None).
+        Returns:
+            First matching key, or default if none found.
         """
-        predicate = predicate if callable(predicate) else predicate.__eq__
+        if not callable(predicate):
+            cmp_obj = predicate
+            predicate = lambda value: (cmp_obj == value) is True
+
         return next(
             (key for key, value in cls.map_items(items) if predicate(value)),  # type:ignore
             default,
@@ -299,6 +309,7 @@ class IterUtils:
         Returns:
             Wrapped function that repeats until num_changes is 0.
         """
+
         @ft.wraps(func)
         def wrapper(cls: C, value: T, **kwargs: Any) -> tuple[int, T]:
             run_results: list[int] = []

@@ -26,6 +26,7 @@ class MyEnum(Enum):
     Provides arithmetic operations for numeric enums and bitwise operations for Flags.
     Implements total ordering and string conversion with configurable aliases.
     """
+
     @classmethod
     def read(cls, value: str | int | list | Self) -> Self:
         """
@@ -142,8 +143,9 @@ class MyEnum(Enum):
             other = cls.read(other)
 
         lhs = self.base
+        rhs = other.base  # type: ignore
         if isinstance(lhs.value, int | float):
-            return lhs.value < other.base.value
+            return lhs.value < rhs.value
         else:
             # Else find each of the members index in the overall ordering
             members = list(self.__class__)

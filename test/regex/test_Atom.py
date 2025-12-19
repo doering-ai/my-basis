@@ -45,6 +45,19 @@ class TestAtom:
     # ------------------
     # `x` Public Methods
     # ------------------
+    @pyt.mark.parametrize(
+        'lesser, greater',
+        [
+            (r'P', r'p'),
+            (r'P', r'p?'),
+            (r'p', r'p?'),
+            (r'p?', r'q'),
+        ],
+    )
+    def test_lt(self, lesser: str, greater: str):
+        assert cls(lesser) < cls(greater)
+        assert not cls(lesser) > cls(greater)
+
     # ---------------
     # `x1` Properties
     # ---------------
@@ -113,18 +126,22 @@ class TestAtom:
             (r'a', r'+', True, r'a+'),
             (r'a', r'*', True, r'a*'),
             (r'a', r'?', True, r'a?'),
-            (r'a', r'{2,5}', True, r'a{2,5}'),
             (r'a+', r'*', True, r'a*'),
             (r'a+', r'?', True, r'a?'),
             (r'a+', r'+', True, r'a+'),
-            (r'a+', r'*', False, r'(?:a+)*'),
-            (r'(?:abc)', r'+', True, r'(?:abc)+'),
-            (r'(?:abc)+', r'*', True, r'(?:abc)*'),
-            (r'(?:abc)+', r'?', False, r'(?:(?:abc)+)?'),
+            (r'a', r'{2,5}', True, r'a{2,5}'),
+            (r'a{2,5}', r'?', True, r'a?'),
+            (r'a{1,5}', r'?', False, r'a{0,5}'),
+            (r'a{2,5}', r'?', False, None),
         ],
     )
-    def test_quantify(self, expr: str, quantifier: str, overwrite: bool, expected: str):
-        assert cls(expr).quantify(quantifier, overwrite) == expected
+    def test_quantify(self, expr: str, quantifier: str, overwrite: bool, expected: str | None):
+        old = cls(expr)
+        new = old.quantify(quantifier, overwrite)
+        if expected is None:
+            assert new is None
+        else:
+            assert new == expected
 
     @pyt.mark.parametrize(
         'expr, expected',

@@ -2,7 +2,7 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import ClassVar, Self
+from typing import ClassVar, Self, Literal
 import functools as ft
 
 ### EXTERNAL
@@ -19,6 +19,7 @@ from .meta_patterns import META_RGXS
 @ft.total_ordering
 class Quantifier:
     RGX: ClassVar[re.Pattern] = META_RGXS['quant']
+    Modes: ClassVar = Literal['try', 'overwrite', 'join']
 
     data: str = ''
 
@@ -145,6 +146,9 @@ class Quantifier:
 
     def __getitem__(self, key: slice | int) -> str:
         return self.data[key]
+
+    def __or__(self, other: str | Self) -> Self | None:
+        return self.join(other)
 
     # ---------------
     # `x1` Properties

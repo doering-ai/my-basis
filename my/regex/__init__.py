@@ -1,4 +1,4 @@
-from .meta import META_RGXS, Quantifier, GroupKind, Atom, GroupAtom, SetAtom, Regex, Block
+from .meta import META_RGXS, Quantifier, GroupKind, Atom, GroupAtom, SetAtom, Regex, Tree
 from .MatchData import MatchData
 from .ParseData import ParseData
 from .RegexStore import RegexStore, RegexParser, RegexTup, RegexList, RegexVal, RegexDef
@@ -15,7 +15,7 @@ __all__ = [
     'GroupAtom',
     'SetAtom',
     'Regex',
-    'Block',
+    'Tree',
     'Quantifier',
     'META_RGXS',
     'MatchData',

@@ -12,8 +12,8 @@ from pydantic_core import core_schema as pyds
 
 ### INTERNAL
 from ...types import Buffer
-from .GroupKind import GroupKind
 from .meta_patterns import META_RGXS
+from .GroupKind import GroupKind
 from .Quantifier import Quantifier
 from .Atom import Atom
 from .GroupAtom import GroupAtom
@@ -266,8 +266,11 @@ class Regex:
             raise TypeError(f'Unsupported type for Regex addition: {type(other)}')
 
     def __lt__(self, other: object) -> bool:
-        if isinstance(other, (str, Atom, Sequence, Regex)):
-            return self.data < self.__class__(other).data
+        cls = self.__class__
+        if isinstance(other, (str, Atom, Sequence)):
+            other = cls(other)
+        if isinstance(other, cls):
+            return self.data < other.data
         else:
             raise TypeError(f'Unsupported type for Regex comparison: {type(other)}')
 
@@ -315,13 +318,7 @@ class Regex:
     # ------------
     # `x2` Methods
     # ------------
-    @classmethod
-    def quantify(
-        cls,
-        expr: str | Self,
-        quantifier: str | Quantifier,
-        overwrite: bool = False,
-    ) -> Self:
+    def quantify(self, quantifier: str | Quantifier, overwrite: bool = False) -> Self:
         """
         Create a version of the given pattern that has the request quantifier applied.
         Handles patterns that need to be wrapped before a quantifier is applied.
@@ -332,19 +329,17 @@ class Regex:
         Returns:
             The quantified regex pattern string.
         """
-        atoms = cls(expr) if isinstance(expr, str) else expr
-        assert isinstance(atoms, cls), f'Unsupported type for quantify: {type(atoms)}'
+        cls = self.__class__
+        quantifier = Quantifier(quantifier)
 
         # Edge & null cases
-        if not atoms:
-            return cls()
-        elif not quantifier:
-            return atoms
-        elif len(atoms) == 1:
-            return cls(atoms.first.quantify(quantifier, overwrite=overwrite))
-
-        # Base case: Must wrap multi-atom expression in a new group
-        return cls(Atom(f'(?:{atoms}){quantifier}'))
+        if not self:
+            return self
+        elif len(self) == 1 and (new := self.one.quantify(quantifier, overwrite)) is not None:
+            return cls(new)
+        else:
+            # Base case: Must wrap multi-atom expression in a new group
+            return cls(f'(?:{self}){quantifier}')
 
     @classmethod
     def is_split(cls, expr: str | Atom | Self) -> bool:

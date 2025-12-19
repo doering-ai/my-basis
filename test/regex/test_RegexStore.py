@@ -92,12 +92,13 @@ class TestRegexStore:
     @pyt.mark.parametrize(
         'data, expected',
         [
-            (['Alpha', 'Zeta', 'Beta'], r'(?>Alph|Bet|Zet)a'),
-            (['Publish', 'Publishing', 'Published'], r'Publish(?>ed|ing)?'),
-            (['Publisher', 'Publishing', 'Published'], r'Publish(?>e[dr]|ing)'),
+            (['Alpha', 'Zeta', 'Beta'], r'(?:Alph|[BZ]et)a'),
             (['abcx', 'abcy'], r'abc[xy]'),
             (['abxc', 'abyc'], r'ab[xy]c'),
             (['axbc', 'aybc'], r'a[xy]bc'),
+            (['is', 'in', 'into'], r'i(?>n(?:to)?|s)'),
+            (['Publish', 'Publishing', 'Published'], r'Publish(?>ed|ing)?'),
+            (['Publisher', 'Publishing', 'Published'], r'Publish(?>e[dr]|ing)'),
             (
                 [
                     'Books',
@@ -120,12 +121,14 @@ class TestRegexStore:
                     r'P(?>(?>icture|r(?>es|oduction))s|ubli(?>cations|sh(?>ers|ing)))|Studios|UP)'
                 ),
             ),
-            (['is', 'in', 'into'], r'i(?>n(?:to)?|s)'),
             (
                 [r'no-(?:footnotes|reliable-sources|significant-coverage)'],
                 r'no-(?>(?>footnot|reliable-sourc)es|significant-coverage)',
             ),
-            ([r'(?P=_ws)(?:p?p|P[Pp])\.(?!\S)'], r'(?P=_ws)(?:P[Pp]|pp?)\.(?!\S)'),
+            (
+                [r'(?P=_ws)(?:p?p|P[Pp])\.(?!\S)'],
+                r'(?P=_ws)(?:P[Pp]|pp?)\.(?!\S)',
+            ),
         ],
     )
     def test_compose_tree(self, data: RegexList, expected: str, store: RegexStore):

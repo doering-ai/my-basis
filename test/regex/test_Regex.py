@@ -113,6 +113,18 @@ class TestRegex:
         atoms[index] = value
         assert str(atoms) == expected
 
+    @pyt.mark.parametrize(
+        'lesser, greater',
+        [
+            (r'PP', r'Pp'),
+            (r'Pp', r'p'),
+            (r'p', r'p?p'),
+        ],
+    )
+    def test_lt(self, lesser: str, greater: str):
+        assert cls(lesser) < cls(greater)
+        assert not cls(lesser) > cls(greater)
+
     # ---------------
     # `x1` Properties
     # ---------------
@@ -168,14 +180,20 @@ class TestRegex:
     @pyt.mark.parametrize(
         'expr, quantifier, overwrite, expected',
         [
-            (r'a', r'+', False, r'a+'),
-            (r'abc', r'*', False, r'(?:abc)*'),
-            (r'(?:test)', r'?', False, r'(?:test)?'),
             (r'', r'+', False, r''),
+            (r'a', r'+', False, r'a+'),
+            (r'a+', r'?', False, r'a*'),
+            (r'abc', r'*', False, r'(?:abc)*'),
+            (r'a+b+c+', r'?', False, r'(?:a+b+c+)?'),
+            (r'(?:test)+', r'?', False, r'(?:test)*'),
+            (r'a{2,5}', r'?', True, r'a?'),
+            (r'a{2,5}', r'?', False, r'(?:a{2,5})?'),
         ],
     )
     def test_quantify(self, expr: str, quantifier: str, overwrite: bool, expected: str):
-        assert str(cls.quantify(expr, quantifier, overwrite)) == expected
+        old = cls(expr)
+        new = old.quantify(quantifier, overwrite)
+        assert str(new) == expected
 
     @pyt.mark.parametrize(
         'expr, expected',

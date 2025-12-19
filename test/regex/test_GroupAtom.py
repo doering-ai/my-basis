@@ -34,12 +34,13 @@ class TestGroupAtom:
             (r'(?!test)', GroupKind.NOT_AHEAD, '(?!', 'test', ''),
             (r'(?<=test)', GroupKind.BEHIND, '(?<=', 'test', ''),
             (r'(?<!test)', GroupKind.NOT_BEHIND, '(?<!', 'test', ''),
-            (r'(?P<name>value)', GroupKind.PARAM, '(?P<', 'value', ''),
+            (r'(?P<name>value)', GroupKind.PARAM, '(?P<name>', 'value', ''),
+            (r'(?P=name)', GroupKind.INVOC, '(?P=name', '', ''),
             # Quantifiers
             (r'(?:abc)+', GroupKind.PLAIN, '(?:', 'abc', '+'),
             (r'(?:abc)*?', GroupKind.PLAIN, '(?:', 'abc', r'*?'),
             (r'(?:abc){2,5}', GroupKind.PLAIN, '(?:', 'abc', r'{2,5}'),
-            (r'(?(DEFINE)(?P<name>value))', GroupKind.PARAM, '(?(DEFINE', '(?P<name>value)', ''),
+            (r'(?(DEFINE)(?P<name>value))', GroupKind.DEFINE, '(?(DEFINE)', '(?P<name>value)', ''),
         ],
     )
     def test_init(self, data: str, kind: GroupKind, start: str, body: str, quant: str):
@@ -97,13 +98,13 @@ class TestGroupAtom:
             true=[
                 r'(?:a)',
                 r'(?:ab)',
+                r'(?:a|b)',
                 r'(?>test)',
+                r'(?>test)?',
             ],
             false=[
                 r'(?:a)+',
                 r'(?:ab)*',
-                r'(?>test)?',
-                r'(?:a|b)',
                 r'(capture)',
                 r'(?P<name>value)',
             ],

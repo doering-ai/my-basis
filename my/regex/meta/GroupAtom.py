@@ -12,7 +12,6 @@ import pydantic as pyd
 from ...types import Span, Buffer
 from .meta_patterns import META_RGXS
 from .GroupKind import GroupKind
-from .Quantifier import Quantifier
 from .Atom import Atom
 
 
@@ -50,19 +49,7 @@ class GroupAtom(Atom):
 
         # I. Setup fields from scratch if we just have data
         if len(self.data) > 2 and not self.body:
-            # I.i. Separate out the opening syntax (e.g. `(?:`)
-            match = META_RGXS['group'].match(self.data)
-            assert match is not None, f'Invalid group: {self.data}'
-            self.start = match.group('start')
-            assert self.start, f'Invalid group start: {self.start}'
-
-            # I.ii. Infer the kind
-            self.kind = GroupKind.read(self.start)
-            assert self.kind != NO_KIND, f'Unrecognized group kind: {self.start}'
-
-            # I.iii. Separate out the closing paren and quantifier (if present)
-            rest = self.data[len(self.start) :]
-            self.body = rest.rsplit(')', 1)[0]
+            self.read_data()
 
         if self.kind in GroupKind._NAMED and not self.name:
             self.infer_name()
@@ -75,14 +62,31 @@ class GroupAtom(Atom):
     # -------------------
     # `-` Private Methods
     # -------------------
+    def read_data(self) -> None:
+        # I.i. Separate out the opening syntax (e.g. `(?:`)
+        match = META_RGXS['group'].match(self.data)
+        assert match is not None, f'Invalid group: {self.data}'
+        self.start = match.group('start')
+        assert self.start, f'Invalid group start: {self.start}'
+
+        # I.ii. Infer the kind
+        self.kind = GroupKind.read(self.start)
+        assert self.kind != NO_KIND, f'Unrecognized group kind: {self.start}'
+
+        # I.iii. Separate out the closing paren and quantifier (if present)
+        rest = self.data[len(self.start) :]
+        self.body = rest.rsplit(')', 1)[0]
+
     def infer_name(self) -> None:
         if self.kind == GroupKind.PARAM:
             # I. Named capture groups's names are part of 'start', not 'body'
             assert '>' in self.body, f'Invalid named capture self: {self.body}'
             self.name, self.body = self.body.split('>', 1)
+            self.start += f'{self.name}>'
         elif self.kind == GroupKind.INVOC:
             # II. Invocations have no body
             self.name, self.body = self.body, ''
+            self.start += self.name
 
     def infer_flags(self) -> None:
         if self.start.endswith(':'):
@@ -102,10 +106,6 @@ class GroupAtom(Atom):
     # ------------------
     # `x` Public Methods
     # ------------------
-    def __str__(self) -> str:
-        assert self.kind != GroupKind(0), 'Cannot stringify group with no kind.'
-        return rf'{self.start}{self.body}){self.quantifier}'
-
     def __hash__(self) -> int:
         return hash(str(self))
 

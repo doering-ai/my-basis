@@ -5,7 +5,7 @@ from .Atom import Atom
 from .GroupAtom import GroupAtom
 from .SetAtom import SetAtom
 from .Regex import Regex
-from .Block import Block
+from .Tree import Tree
 
 __all__ = [
     'META_RGXS',
@@ -20,6 +20,5 @@ __all__ = [
     'GroupAtom',
     'SetAtom',
     'Regex',
-    'Block',
-    'Branches',
+    'Tree',
 ]

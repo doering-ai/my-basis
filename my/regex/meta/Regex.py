@@ -41,7 +41,7 @@ class Regex:
     # `0` Initial Methods
     # -------------------
     def __init__(self, *args: str | Atom | Sequence[Atom] | Iterator[Atom] | Self) -> None:
-        self.data = list(mi.flatten(map(self._parse_arg, args)))
+        self.data = list(filter(bool, mi.flatten(map(self._parse_arg, args))))
 
     @classmethod
     def atomize(cls, expr: str | Buffer | Self) -> Generator[Atom, None, None]:
@@ -267,10 +267,10 @@ class Regex:
 
     def __lt__(self, other: object) -> bool:
         cls = self.__class__
-        if isinstance(other, (str, Atom, Sequence)):
-            other = cls(other)
         if isinstance(other, cls):
             return self.data < other.data
+        elif isinstance(other, (str, Atom, Sequence)):
+            return self.data < cls(other).data
         else:
             raise TypeError(f'Unsupported type for Regex comparison: {type(other)}')
 
@@ -278,10 +278,11 @@ class Regex:
         return iter(self.data)
 
     def __eq__(self, other: object) -> bool:
-        if isinstance(other, Regex):
+        cls = self.__class__
+        if isinstance(other, cls):
             return self.data == other.data
-        if isinstance(other, (str, Atom, Sequence)):
-            return self.data == self.__class__(other).data
+        elif isinstance(other, (str, Atom, Sequence)):
+            return self.data == cls(other).data
         else:
             return False
 

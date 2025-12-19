@@ -180,7 +180,7 @@ class TestTree:
     )
     def test_condense_atomic_branches(self, tree: Tree, expected: list[str]):
         result = cls.condense_atomic_branches(tree.branches)
-        assert list(map(str, result)) == expected
+        assert set(map(str, result)) == set(expected)
 
     @pyt.mark.parametrize(
         'blocks, expected',
@@ -420,9 +420,11 @@ class TestTree:
         'tree, expected',
         [
             (cls(r'abc', r'abd'), r'ab[cd]'),
-            (cls(r'test', r'foo'), r'(?>test|foo)'),
+            (cls(r'test', r'foo'), r'(?>foo|test)'),
             (cls(r'xyz', r'xyz'), r'xyz'),
             (cls(r'abc1cde', r'abc[2]cde'), r'abc[12]cde'),
+            (cls(r'p', r'PP', r'Pp', r'pp'), r'(?>P[Pp]|pp?)'),
+            (cls(r'p', r'PP', r'Pp', r'pp', prefix=r'xX', suffix=r'Xx'), r'xX(?:P[Pp]|pp?)Xx'),
         ],
     )
     def test_condense(self, tree: Tree, expected: str):

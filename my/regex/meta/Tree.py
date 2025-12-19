@@ -455,7 +455,6 @@ class Tree(pyd.BaseModel):
             A quantifier that can be applied to the whole set of branches.
         """
         to_drop: set[int] = set()
-        print(f'\t2. Block.clean():\t{self!r}')
 
         # I. Identify branches to drop or combine
         for i, branch in enumerate(self.branches):
@@ -507,7 +506,6 @@ class Tree(pyd.BaseModel):
         Factor out common prefixes and suffixes from the branches in the main data structure,
         modifying the object's member variables.
         """
-        print(f'\t1. Block.factor():\t{self!r}')
         # 0. Return immediately if this is a single branch
         if len(self) <= 1 or self.max_length <= 1:
             return self
@@ -533,7 +531,6 @@ class Tree(pyd.BaseModel):
             # III.ii. Condense simple branches into sets
             if any(map(self._is_set_eligible, self.branches)):
                 self.branches = self.condense_atomic_branches(self.branches)
-                print(f'\t\t1.2. Block.factor() [atomic]:\t{self!r}')
 
         return self
 
@@ -552,11 +549,9 @@ class Tree(pyd.BaseModel):
         cls = self.__class__
 
         # I. Prepare the block; the main stage is the "factor" step, where prefixes are found
-        print(f'Block.condense():\t{self!r}')
         self.factor()
-        self.clean()
         self.branches.sort()
-        print(f'\t3. condense() post:\t{self!r}')
+        self.clean()
 
         # II. Recursively replace the block's body with an equivalent tree
         if not self:

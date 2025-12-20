@@ -35,7 +35,6 @@ class SetAtom(Atom):
 
     @ft.cached_property
     def members(self) -> list[Atom]:
-        assert self.is_simple, f'Cannot directly get members of non-simple SetAtom: {self.data}'
         escaped_body = META_RGXS['special_characters'].sub(r'\\\1', self.body)
         return list(Atom.plain_atomize(escaped_body))
 

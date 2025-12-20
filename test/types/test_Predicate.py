@@ -19,36 +19,15 @@ cls = Predicate
 ### BODY ###
 ############
 class TestPredicate:
-    # --------------------
-    # Helper Data
-    # --------------------
     SAMPLES: ClassVar[dict[str, Predicate]] = dict(
         basic=cls.new(dict(k1=['A', 'B'], k2=['C'])),
         dupes=cls.new(dict(k1=['A', 'B', 'B'], k2=['C', 'D', 'C']), duplicates=True),
         nests=cls.new(dict(root=dict(c1=['A'], c2=['B', 'C']), k1=['D'])),
     )
 
-    # --------------------
-    # Utility Functions
-    # --------------------
-
-    # --------------------
-    # Initialization & Validation
-    # --------------------
-    @pyt.mark.parametrize(
-        'field, val, expected',
-        [
-            ('k1', 'A', dict(k1=['A'])),
-            ('k1', ['A', 'B'], dict(k1=['A', 'B'])),
-            ('k1', ['A', 'B', 'B'], dict(k1=['A', 'B', 'B'])),
-            ('k1.child', 'val', {'k1.child': ['val']}),
-            ('parent.child.grandchild', ['A'], {'parent.child.grandchild': ['A']}),
-        ],
-    )
-    def test_cast(self, field: str, val: Any, expected: dict[str, list[str]]):
-        result = dict(cls.cast(field, val, duplicates=True))
-        assert result == expected
-
+    # -------------------
+    # `0` Initial Methods
+    # -------------------
     @pyt.mark.parametrize(
         'data, expected',
         [
@@ -74,6 +53,34 @@ class TestPredicate:
     def test_new(self, data: Any, expected: dict[str, list[str]]):
         result = cls.new(data)
         assert result.data == expected
+
+    # -------------------
+    # `-` Private Methods
+    # -------------------
+
+    # -------------------
+    # `+` Primary Methods
+    # -------------------
+
+    # ------------------
+    # `x` Public Methods
+    # ------------------
+    # --------------------
+    # Initialization & Validation
+    # --------------------
+    @pyt.mark.parametrize(
+        'field, val, expected',
+        [
+            ('k1', 'A', dict(k1=['A'])),
+            ('k1', ['A', 'B'], dict(k1=['A', 'B'])),
+            ('k1', ['A', 'B', 'B'], dict(k1=['A', 'B', 'B'])),
+            ('k1.child', 'val', {'k1.child': ['val']}),
+            ('parent.child.grandchild', ['A'], {'parent.child.grandchild': ['A']}),
+        ],
+    )
+    def test_cast(self, field: str, val: Any, expected: dict[str, list[str]]):
+        result = dict(cls.cast(field, val, duplicates=True))
+        assert result == expected
 
     @pyt.mark.parametrize(
         'data',

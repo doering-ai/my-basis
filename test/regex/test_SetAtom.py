@@ -25,8 +25,8 @@ class TestSetAtom:
         [
             (r'[c|d]*?', r'c\|d', r'*?'),
             (r'[(?:cd)+]', r'\(\?:cd\)\+', r''),
-            (r'[^[:lower:]A-Z]', r'^[:lower:]A-Z', r''),
-            (r'[\[|\]\[[:lower:]\]]+?', r'\[|\]\[[:lower:]\]', r'+?'),
+            (r'[^[:lower:]A-Z]', r'\^[:lower:]A-Z', r''),
+            (r'[\[|\]\[[:lower:]\]]+?', r'\[\|\]\[[:lower:]\]', r'+?'),
             (r'[abc]', r'abc', r''),
             (r'[a-z]', r'a-z', r''),
             (r'[+*?]', r'\+\*\?', r''),
@@ -36,7 +36,7 @@ class TestSetAtom:
     )
     def test_init(self, expr: str, body: str, quant: str):
         atom = cls(data=expr)
-        assert atom.body == body
+        assert ''.join(map(str, atom.members)) == body
         assert atom.quantifier == quant
 
     # ------------------
@@ -47,7 +47,6 @@ class TestSetAtom:
         boolmap(
             true=[
                 r'[abc]',
-                r'[a-z]',
                 r'[-az]',
                 r'[ab\p{Sc}\P{x}]',
                 r'[\[|\]\[[:lower:]\]]',

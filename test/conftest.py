@@ -57,19 +57,13 @@ def mock_posix(monkeypatch) -> Callable[[], datetime]:
 # --------------
 # III. Utilities
 # --------------
-def _normalize_tuples(args: list) -> list[tuple]:
-    """Normalize input into a list of tuples.
-
-    Args:
-        args (list[T] | T): Input arguments.
-
-    Returns:
-        list[tuple]: Normalized list of tuples.
-    """
-    return [(arg if isinstance(arg, tuple) else (arg,)) for arg in args]
+def to_tuple(arg: object, base_type: type) -> tuple:
+    return (arg,) if (not isinstance(arg, tuple) or isinstance(arg, base_type)) else arg
 
 
-def boolmap(*, false: list, true: list) -> list[tuple]:
+def boolmap(
+    *, false: list | None = None, true: list | None = None, base_type: type = str
+) -> list[tuple]:
     """Generate parameter sets for boolean tests.
 
     Args:
@@ -80,6 +74,6 @@ def boolmap(*, false: list, true: list) -> list[tuple]:
         list[tuple]: Combined list of argument tuples with expected boolean results.
     """
     return [
-        *(f + (False,) for f in _normalize_tuples(false)),
-        *(t + (True,) for t in _normalize_tuples(true)),
+        *(to_tuple(param, base_type) + (False,) for param in (false or [])),
+        *(to_tuple(param, base_type) + (True,) for param in (true or [])),
     ]

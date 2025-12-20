@@ -250,22 +250,21 @@ class TestTree:
     @pyt.mark.parametrize(
         'tree, quantifier, overwrite, expected',
         [
-            (cls(r'a', r'b', r'c'), r'', False, r'(?>a|b|c)'),  # noop
+            (cls(r'a|b|c'), r'', False, r'(?>a|b|c)'),  # noop
             (cls(r'a'), r'?', False, r'a?'),  # make just monobranch optional
-            (cls(r'a', r'b'), r'?', False, r'(?>a|b)?'),  # make multibranch ptional
+            (cls(r'a|b'), r'?', False, r'(?>a|b)?'),  # make multibranch ptional
             # Make Optional
-            (cls(r'a', r'b', quantifier=r'++'), r'?', False, r'(?>a|b)*+'),
-            (cls(r'a', r'b', quantifier=r'{1,5}'), r'?', False, r'(?>a|b){0,5}'),
-            (cls(r'a', r'b', quantifier=r'{2,5}'), r'?', False, None),
-            (cls(r'a', r'b', quantifier=r'{2,5}'), r'?', True, r'(?>a|b)?'),
+            (cls(r'a|b', quantifier=r'++'), r'?', False, r'(?>a|b)*+'),
+            (cls(r'a|b', quantifier=r'{1,5}'), r'?', False, r'(?>a|b){0,5}'),
+            (cls(r'a|b', quantifier=r'{2,5}'), r'?', False, None),
+            (cls(r'a|b', quantifier=r'{2,5}'), r'?', True, r'(?>a|b)?'),
             # Inner vs. Outer
-            (cls(r'a', r'b', prefix=r'xX'), r'?', False, r'xX(?>a|b)?'),
-            (cls(r'a', r'b', suffix=r'Xx'), r'?', False, r'(?>a|b)?Xx'),
-            (cls(r'a', r'b', suffix=r'Xx', inner_quant=r'{1,5}'), r'?', False, r'(?>a|b){0,5}Xx'),
-            (cls(r'a', r'b', suffix=r'Xx', inner_quant=r'{2,5}'), r'?', False, None),
-            (cls(r'a', r'b', suffix=r'Xx', inner_quant=r'{2,5}'), r'?', True, r'(?>a|b)?Xx'),
-            (cls(r'a', r'b', suffix=r'Xx', quantifier=r'++'), r'?', False, r'(?:(?>a|b)?Xx)++'),
-            (cls(r'a', r'b', quantifier=r'{2,5}'), r'?', False, r'(?:(?>a|b)?Xx)++'),
+            (cls(r'a|b', prefix=r'xX'), r'?', False, r'xX(?>a|b)?'),
+            (cls(r'a|b', suffix=r'Xx'), r'?', False, r'(?>a|b)?Xx'),
+            (cls(r'a|b', suffix=r'Xx', inner_quant=r'{1,5}'), r'?', False, r'(?>a|b){0,5}Xx'),
+            (cls(r'a|b', suffix=r'Xx', inner_quant=r'{2,5}'), r'?', False, None),
+            (cls(r'a|b', suffix=r'Xx', inner_quant=r'{2,5}'), r'?', True, r'(?>a|b)?Xx'),
+            (cls(r'a|b', suffix=r'Xx', quantifier=r'++'), r'?', False, r'(?:(?>a|b)?Xx)++'),
         ],
     )
     def test_set_quantifier(
@@ -344,8 +343,8 @@ class TestTree:
             (cls(r'ab(cd)?|x?ab(cd)?'), r'x?ab(cd)?'),
             # Live examples
             (
-                cls(r'p', r'PP', r'Pp', r'p?p', prefix=r'xX', suffix=r'Xx'),
-                r'(?:)',
+                cls(r'PP', r'Pp', r'p', r'pp', prefix=r'xX', suffix=r'Xx'),
+                r'xX(?>PP|Pp|pp?)Xx',
             ),
         ],
     )

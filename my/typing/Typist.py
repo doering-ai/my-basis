@@ -217,11 +217,22 @@ class Typist(pyd.BaseModel):
         else:
             return tuple()
 
-    # ----------------------
-    # FUNCTION INTROSPECTION
-    # ----------------------
+    # ---------------------------
+    # `-1` Function Introspection
+    # ---------------------------
     def _accepts(self, sig: Callable | inspect.Signature, value: object) -> bool | str | None:
-        """Inspect a function"""
+        """
+        Characterize the given function's ability to accept the given value.
+
+        Args:
+            sig: The function or signature to inspect.
+            value: The value to check for acceptance.
+        Returns:
+            - True if the function accepts the value as a positional argument.
+            - The name of the keyword argument if the function accepts the value as a kwarg.
+            - False if the function is missing required positional arguments before a match.
+            - None if the function does not accept the value at all.
+        """
         # I. Coerce to signature if needed
         if not isinstance(sig, inspect.Signature):
             assert callable(sig), f'Invalid function provided: {sig}'
@@ -702,19 +713,6 @@ class Typist(pyd.BaseModel):
 
         return text
 
-    def flex_call(self, func: Callable, value: object) -> tuple[bool, Any]:
-        """Attempt to call a function with the given value."""
-        sig = inspect.signature(func)
-        slot = self._accepts(sig, value)
-        if isinstance(slot, bool):
-            return slot, (func(value) if slot else None)
-        elif isinstance(slot, str):
-            return True, func(**{slot: value})
-        elif self._accepts_kwargs(sig) and (items := ut.map_items(value)):
-            return True, func(**dict(items))
-
-        return False, None
-
     # ------------------
     # `x` Public Methods
     # ------------------
@@ -787,6 +785,23 @@ class Typist(pyd.BaseModel):
             return False
 
         return all(it.starmap(isinstance, zip(value, args, strict=True)))
+
+    def flex_call(self, func: Callable, value: object) -> tuple[bool, Any]:
+        """Attempt to call a function with the given value."""
+        sig = inspect.signature(func)
+        slot = self._accepts(sig, value)
+        if isinstance(slot, bool):
+            # I. Positional argument
+            if slot:
+                return True, func(value)
+        elif isinstance(slot, str):
+            # II. Single keyword argument
+            return True, func(**{slot: value})
+        elif self._accepts_kwargs(sig) and (items := ut.map_items(value)):
+            # III. Spread argument across **kwargs
+            return True, func(**dict(items))
+
+        return False, None
 
     # -------------------
     # DATA TRANSFORMATION

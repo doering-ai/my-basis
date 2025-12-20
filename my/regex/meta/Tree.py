@@ -458,26 +458,27 @@ class Tree(pyd.BaseModel):
 
         # I. Identify branches to drop or combine
         for i, branch in enumerate(self.branches):
+            n = len(branch)
             if not branch:
                 # I.i. Empty branch -- whole thing is now optional, if that's possible
                 if self.set_quantifier(r'?'):
                     to_drop.add(i)
-            elif len(branch) == 1:
+            elif n == 1 and branch.one.is_optional and self.set_quantifier(r'?'):
                 # I.ii. Single atom -- check for optionality
-                atom = branch.one
-                if atom.is_optional and self.set_quantifier(r'?'):
-                    self.branches[i][0] = atom.as_required()
+                branch[0] = branch.one.as_required()
             else:
                 # I.iii. Look for a copy of this branch with a monoatomic prefix or suffix
-                for j, other in enumerate(self.branches):
-                    if j in to_drop or len(other) != len(branch) + 1:
-                        continue
-                    elif other[1:] == branch:
-                        to_drop.add(i)
-                        other[0] = other[0].as_optional()
-                    elif other[:-1] == branch:
-                        to_drop.add(i)
-                        other[-1] = other[-1].as_optional()
+                candidates = [
+                    other
+                    for j, other in enumerate(self.branches)
+                    if (j != i and j not in to_drop and len(other) == n + 1)
+                ]
+                if suffixed := next((br for br in candidates if br[:-1] == branch), None):
+                    to_drop.add(i)
+                    suffixed[-1] = suffixed[-1].as_optional()
+                elif prefixed := next((br for br in candidates if br[1:] == branch), None):
+                    to_drop.add(i)
+                    prefixed[0] = prefixed[0].as_optional()
 
         if to_drop:
             self.branches = ut.drop_at(self.branches, to_drop)
@@ -549,9 +550,8 @@ class Tree(pyd.BaseModel):
         cls = self.__class__
 
         # I. Prepare the block; the main stage is the "factor" step, where prefixes are found
-        self.factor()
-        self.branches.sort()
-        self.clean()
+        self.sort().factor()
+        self.sort().clean()
 
         # II. Recursively replace the block's body with an equivalent tree
         if not self:
@@ -571,6 +571,11 @@ class Tree(pyd.BaseModel):
                 children.append(child)
             self.branches = cls.condense_blocks(children)
 
+        return self
+
+    def sort(self) -> Self:
+        """Sort the branches in this block in ascending order."""
+        self.branches.sort()
         return self
 
     # ------------------

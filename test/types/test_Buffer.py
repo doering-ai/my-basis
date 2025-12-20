@@ -78,8 +78,20 @@ class TestBuffer:
     @pyt.mark.parametrize(
         'span, expected',
         boolmap(
-            true=[Span(0, 3), Span(2, 3), Span(2, 6), Span(6, 11), Span(8, 99)],
-            false=[Span(0, 2), Span(1, 7), Span(6, 8), Span(11, 99)],
+            true=[
+                Span(0, 3),
+                Span(2, 3),
+                Span(2, 6),
+                Span(6, 11),
+                Span(8, 99),
+            ],
+            false=[
+                Span(0, 2),
+                Span(1, 7),
+                Span(6, 8),
+                Span(11, 99),
+            ],
+            base_type=Span,
         ),
     )
     def test_is_fenced(self, span: Span, expected: bool):
@@ -142,25 +154,37 @@ class TestBuffer:
         assert buf.text[0] == 'start  middle  end'
 
     @pyt.mark.parametrize(
-        'source, span, delta, expected',
+        'source, span, delta, expected_pre, expected_post',
         [
             # Basic case
-            ([(0, 2), (3, 5), (6, 8)], (4, 5), -1, ([(0, 2)], [(5, 7)])),
+            (
+                [Span(0, 2), Span(3, 5), Span(6, 8)],
+                Span(4, 5),
+                -1,
+                [Span(0, 2)],
+                [Span(5, 7)],
+            ),
             # Insertion
-            ([(0, 3), (3, 5), (6, 8)], (3, 3), 4, ([(0, 3)], [(7, 9), (10, 12)])),
+            (
+                [Span(0, 3), Span(3, 5), Span(6, 8)],
+                Span(3, 3),
+                4,
+                [Span(0, 3)],
+                [Span(7, 9), Span(10, 12)],
+            ),
         ],
     )
     def test_split_spans(
         self,
-        source: list[tuple[int, int]],
-        span: tuple[int, int],
+        source: list[Span],
+        span: Span,
         delta: int,
-        expected: tuple[list[tuple[int, int]], list[tuple[int, int]]],
+        expected_pre: list[Span],
+        expected_post: list[Span],
     ):
-        exp_pre, exp_post = expected
-        pre, post = cls.split_spans(list(map(Span, source)), Span(span), delta)
-        assert np.all(pre == np.array(exp_pre, dtype=int))
-        assert np.all(post == np.array(exp_post, dtype=int))
+        pre, post = cls._split_spans(list(map(Span, source)), Span(span), delta)
+        assert np.all(pre == np.array(expected_pre, dtype=int))
+        assert np.all(post == np.array(expected_post, dtype=int))
 
     @pyt.mark.parametrize(
         'text, new, old, expected',

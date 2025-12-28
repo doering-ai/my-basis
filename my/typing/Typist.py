@@ -158,6 +158,17 @@ class Typist(pyd.BaseModel):
     # -------------------
     # `-` Private Methods
     # -------------------
+    def _sorter(self, origin: type, tvar: TypeArg) -> int:
+        ret = 10
+        if origin == tvar:
+            return -99
+
+        for t0, t1 in filter(all, zip(*map(self.parse, (origin, tvar)), strict=True)):
+            ret -= 1
+            if self.match(t0, t1):
+                ret -= 2
+        return ret
+
     @staticmethod
     def _parseable(target: TypeArg) -> TypeGuard[type | tuple[type, ...]]:
         if target is None:
@@ -179,17 +190,6 @@ class Typist(pyd.BaseModel):
                 for arg in getattr(typevar, '__args__', [])
             ),
         )
-
-    def _sorter(self, origin: type, tvar: TypeArg) -> int:
-        ret = 10
-        if origin == tvar:
-            return -99
-
-        for t0, t1 in filter(all, zip(*map(self.parse, (origin, tvar)), strict=True)):
-            ret -= 1
-            if self.match(t0, t1):
-                ret -= 2
-        return ret
 
     @staticmethod
     def _is_split(tvar: TypeArg) -> TypeGuard[tuple | UnionType | type]:
@@ -220,48 +220,6 @@ class Typist(pyd.BaseModel):
     # ---------------------------
     # `-1` Function Introspection
     # ---------------------------
-    def _accepts(self, sig: Callable | inspect.Signature, value: object) -> bool | str | None:
-        """
-        Characterize the given function's ability to accept the given value.
-
-        Args:
-            sig: The function or signature to inspect.
-            value: The value to check for acceptance.
-        Returns:
-            - True if the function accepts the value as a positional argument.
-            - The name of the keyword argument if the function accepts the value as a kwarg.
-            - False if the function is missing required positional arguments before a match.
-            - None if the function does not accept the value at all.
-        """
-        # I. Coerce to signature if needed
-        if not isinstance(sig, inspect.Signature):
-            assert callable(sig), f'Invalid function provided: {sig}'
-            sig = inspect.signature(sig)
-
-        # II. Walk through params until we find missing required params, or a matching valid one
-        ret = None
-        for i, (name, param) in enumerate(sig.parameters.items()):
-            # II.i. Determine param kind, and skip variable ones (*args & **kwargs)
-            is_pos = param.kind in {param.POSITIONAL_ONLY, param.POSITIONAL_OR_KEYWORD}
-            is_kwd = param.kind in {param.KEYWORD_ONLY, param.POSITIONAL_OR_KEYWORD}
-            if not is_pos or is_kwd:
-                continue
-
-            # II.ii. Flag the first match, or return false if a required param is missing
-            has_default = param.default is not inspect.Parameter.empty
-            if ret is None and self.check(value, param.annotation):
-                if is_kwd:
-                    ret = name
-                elif is_pos:
-                    if i == 0:
-                        ret = True
-                    elif not has_default:
-                        return False
-            elif not has_default:
-                return False
-
-        return ret
-
     def _accepts_kwargs(self, sig: Callable | inspect.Signature) -> bool:
         # I. Coerce to signature if needed
         if not isinstance(sig, inspect.Signature):
@@ -385,7 +343,7 @@ class Typist(pyd.BaseModel):
     def _cast_to_model(self, data: object, target: type[pyd.BaseModel]) -> object:
         if hasattr(target, 'new') and callable(target.new):
             # I. First, try to use the semi-standard `new()` method if available
-            success, ret = self.flex_call(target.new, data)
+            success, ret = self.invoke(target.new, data)
             if success:
                 return ret
 
@@ -397,7 +355,7 @@ class Typist(pyd.BaseModel):
 
     def _cast_to_enum(self, data: object, target: type[Enum]) -> object:
         if hasattr(target, 'read') and callable(target.read):
-            success, ret = self.flex_call(target.read, data)
+            success, ret = self.invoke(target.read, data)
             if success:
                 return ret
         elif isinstance(data, int):
@@ -716,9 +674,8 @@ class Typist(pyd.BaseModel):
     # ------------------
     # `x` Public Methods
     # ------------------
-
     # ---------------
-    # TYPE COMPARISON
+    # `x1` COMPARISON
     # ---------------
     def check(self, data: object, tvar: type[T] | tuple[type[T], ...]) -> TypeGuard[T]:
         """
@@ -786,26 +743,131 @@ class Typist(pyd.BaseModel):
 
         return all(it.starmap(isinstance, zip(value, args, strict=True)))
 
-    def flex_call(self, func: Callable, value: object) -> tuple[bool, Any]:
-        """Attempt to call a function with the given value."""
-        sig = inspect.signature(func)
-        slot = self._accepts(sig, value)
-        if isinstance(slot, bool):
-            # I. Positional argument
-            if slot:
-                return True, func(value)
-        elif isinstance(slot, str):
-            # II. Single keyword argument
-            return True, func(**{slot: value})
-        elif self._accepts_kwargs(sig) and (items := ut.map_items(value)):
-            # III. Spread argument across **kwargs
-            return True, func(**dict(items))
+    # -------------
+    # `x2` COERCION
+    # -------------
+    def cast(self, data: object, tvar: type[Value]) -> Value | None:
+        if data is None or tvar is None or not self._parseable(tvar):
+            # 0. Return null if the target is invalid
+            return None
+        elif self.check(data, tvar):
+            # I. Return the data as-is if it already matches the target type
+            return data  # type:ignore[return-value]
 
-        return False, None
+        # II. Return a no-op for unparseable targets
+        target, ktype, vtype = self.parse(tvar)
+        if not target:
+            return None
+
+        # III. When given abstract classes, arbitrarily choose a concrete type
+        elif target in [abc.Mapping, Mapping]:
+            if isinstance(data, Mapping) and (_t := self.parse(type(data))[0]):  # noqa: SIM108
+                target = _t
+            else:
+                target = dict
+        elif target in [abc.Sequence, abc.Collection, Iterable, Sequence, Collection]:
+            if isinstance(data, Collection) and (_t := self.parse(type(data))[0]):
+                target = _t
+            else:
+                target = list
+
+        # IV. Perform the actual casting
+        ret = self._cast(data, target, ktype, vtype)
+        return ret if isinstance(ret, target) else None  # type:ignore[return-value]
+
+    def flexcast(self, data: object, tvar: TypeArg) -> Any | None:
+        ret = None
+        if data is None or tvar is None or not self._parseable(tvar):
+            pass
+        elif self._is_split(tvar):
+            # I. If we're given options, try them all until one succeeds
+            if args := tvar if isinstance(tvar, tuple) else getattr(tvar, '__args__', []):
+                is_optional = None in args
+                args = tuple(filter(self._parseable, args))
+                origin = type(data)
+                for option in sorted(args, key=lambda a: self._sorter(origin, a)):
+                    try:
+                        ret = self.cast(data, option)
+                        if ret is not None:
+                            break
+                    except Exception:
+                        pass
+                if is_optional:
+                    return ret
+        else:
+            with ctx.suppress(Exception):
+                ret = self.cast(data, tvar)  # type:ignore
+
+        return ret if ret is not None else data
+
+    def cast_all(self, values: Iterable[Any], tvar: type[Value]) -> Iterator[Value]:
+        for value in values:
+            if (result := self.cast(value, tvar)) is not None:
+                yield result
+
+    def flexcast_all(self, values: Iterable[Any], tvar: TypeArg) -> Iterator[Any]:
+        for value in values:
+            if (result := self.flexcast(value, tvar)) is not None:
+                yield result
+
+    def setattr(self, obj: pyd.BaseModel, key: str, value: Any, tvar: TypeArg = None) -> bool:
+        """Set an attribute on an object, casting it to the appropriate type if necessary."""
+        # I. Infer the type to cast to, when possible
+        if tvar is None:
+            tvar = ut.instance_fields(type(obj)).get(key, None)
+
+        # II. When we have a parseable type, cast the value before setting
+        if tvar is not None and self._parseable(tvar):
+            value = self.flexcast(value, tvar)
+            if not self.check(value, tvar):
+                fire.error(f'Cannot setattr {type(obj).__name__}.{value} by casting to {tvar}.')
+                return False
+
+        # III. Directly set the value attribute on the object
+        setattr(obj, key, value)
+        return True
 
     # -------------------
-    # DATA TRANSFORMATION
+    # `x3` TRANSFORMATION
     # -------------------
+    def serialize(self, data: object, **kwargs) -> Any:
+        """Recursively transform the given object into serialization-ready, standardized types."""
+        # I. Immediately return atomic values as-is
+        if isinstance(data, Atomic):
+            return data
+
+        # II. Cast special types (times, enums, etc.) to strings
+        elif isinstance(data, Enum | TimeType):
+            return self._cast_to_atomic(data, str)
+
+        # III. Look for familiar functions on models, else treat them as dictionaries
+        if isinstance(data, pyd.BaseModel):
+            cases = kwargs.get('cases', {})
+            if handler := next((fn for k, fn in cases.items() if isinstance(data, k)), None):
+                # II.i. If the caller specified a special handler, call that instead
+                return handler(data)
+            elif hasattr(data, 'serialize') and callable(data.serialize):
+                # II.ii. Shortcut to a model-specific `serialize()` function
+                return data.serialize()
+            else:
+                # II.iii. Rely on the model's serializers and treat the result as a dict
+                if kwargs.get('_dump_all', False):
+                    data = data.model_dump()
+                else:
+                    data = data.model_dump(
+                        exclude_none=True, exclude_unset=True, exclude_defaults=True
+                    )
+
+        # IV. Handle collections by recursing over their elements
+        if isinstance(data, Collection):
+            _recur = ft.partial(self.serialize, **kwargs)
+            if isinstance(data, Series):
+                return list(map(_recur, data))
+            elif isinstance(data, Mapping):
+                return ut.val_map(_recur, data)
+
+        return data
+
     def assemble(self, base: dict, *args: dict, copy: bool = True) -> dict:
         """
         Combines dictionaries, keeping the keys from the left-hand side and overwriting them
@@ -892,50 +954,9 @@ class Typist(pyd.BaseModel):
         # V. If there's existing data, add it to the result before returning
         return distillate
 
-    # -------------
-    # SERIALIZATION
-    # -------------
-    def serialize(self, data: object, **kwargs) -> Any:
-        """Recursively transform the given object into serialization-ready, standardized types."""
-        # I. Immediately return atomic values as-is
-        if isinstance(data, Atomic):
-            return data
-
-        # II. Cast special types (times, enums, etc.) to strings
-        elif isinstance(data, Enum | TimeType):
-            return self._cast_to_atomic(data, str)
-
-        # III. Look for familiar functions on models, else treat them as dictionaries
-        if isinstance(data, pyd.BaseModel):
-            cases = kwargs.get('cases', {})
-            if handler := next((fn for k, fn in cases.items() if isinstance(data, k)), None):
-                # II.i. If the caller specified a special handler, call that instead
-                return handler(data)
-            elif hasattr(data, 'serialize') and callable(data.serialize):
-                # II.ii. Shortcut to a model-specific `serialize()` function
-                return data.serialize()
-            else:
-                # II.iii. Rely on the model's serializers and treat the result as a dict
-                if kwargs.get('_dump_all', False):
-                    data = data.model_dump()
-                else:
-                    data = data.model_dump(
-                        exclude_none=True, exclude_unset=True, exclude_defaults=True
-                    )
-
-        # IV. Handle collections by recursing over their elements
-        if isinstance(data, Collection):
-            _recur = ft.partial(self.serialize, **kwargs)
-            if isinstance(data, Series):
-                return list(map(_recur, data))
-            elif isinstance(data, Mapping):
-                return ut.val_map(_recur, data)
-
-        return data
-
-    # --------------
-    # FILESYSTEM I/O
-    # --------------
+    # ----------------
+    # `x4` PERSISTENCE
+    # ----------------
     def from_file(self, file: File | None) -> dict:
         if not file or not isinstance(file, Path) or not file.exists():
             return {}
@@ -1016,89 +1037,82 @@ class Typist(pyd.BaseModel):
             text = f'```json\n{text}\n```'
         return text
 
-    # -------------
-    # TYPE COERCION
-    # -------------
-    def cast(self, data: object, tvar: type[Value]) -> Value | None:
-        if data is None or tvar is None or not self._parseable(tvar):
-            # 0. Return null if the target is invalid
+    # ---------------
+    # `x5` INVOCATION
+    # ---------------
+    def invocable(
+        self, sig: Callable | inspect.Signature, *args: object, **kwargs: object
+    ) -> None | tuple[tuple[object, ...], dict[str, object]]:
+        """
+        Check if a function can be called with the given arguments.
+
+        This method validates that the provided arguments can be bound to the function's
+        signature and optionally performs type checking on the arguments.
+
+        Args:
+            sig: The function or signature to inspect.
+            *args: Positional arguments to validate.
+            **kwargs: Keyword arguments to validate.
+
+        Returns:
+            A tuple of (args, kwargs) that can be used to call the function if binding succeeds,
+            or None if the function cannot be called with the given arguments.
+        """
+        # I. Coerce to signature if needed
+        if not isinstance(sig, inspect.Signature):
+            assert callable(sig), f'Invalid function provided: {sig}'
+            sig = inspect.signature(sig)
+
+        # II. Try to bind the arguments to the signature
+        try:
+            bound = sig.bind(*args, **kwargs)
+            bound.apply_defaults()
+        except TypeError:
+            # Binding failed - arguments don't match signature
             return None
-        elif self.check(data, tvar):
-            # I. Return the data as-is if it already matches the target type
-            return data  # type:ignore[return-value]
 
-        # II. Return a no-op for unparseable targets
-        target, ktype, vtype = self.parse(tvar)
-        if not target:
-            return None
+        # III. Perform type checking on the bound arguments
+        for param_name, param in sig.parameters.items():
+            if param.annotation is not inspect.Parameter.empty:
+                value = bound.arguments.get(param_name)
+                # Skip type checking for None values and varargs/varkwargs
+                if param.kind in {param.VAR_POSITIONAL, param.VAR_KEYWORD}:
+                    continue
+                if value is not None and not self.check(value, param.annotation):
+                    return None
 
-        # III. When given abstract classes, arbitrarily choose a concrete type
-        elif target in [abc.Mapping, Mapping]:
-            if isinstance(data, Mapping) and (_t := self.parse(type(data))[0]):  # noqa: SIM108
-                target = _t
-            else:
-                target = dict
-        elif target in [abc.Sequence, abc.Collection, Iterable, Sequence, Collection]:
-            if isinstance(data, Collection) and (_t := self.parse(type(data))[0]):
-                target = _t
-            else:
-                target = list
+        # IV. Return the original arguments (they passed validation)
+        return args, kwargs
 
-        # IV. Perform the actual casting
-        ret = self._cast(data, target, ktype, vtype)
-        return ret if isinstance(ret, target) else None  # type:ignore[return-value]
+    def invoke(self, func: Callable[[...], T], *args: object, **kwargs: object) -> tuple[bool, T | None]:
+        """
+        Attempt to call a function with the given arguments.
 
-    def flexcast(self, data: object, tvar: TypeArg) -> Any | None:
-        ret = None
-        if data is None or tvar is None or not self._parseable(tvar):
-            pass
-        elif self._is_split(tvar):
-            # I. If we're given options, try them all until one succeeds
-            if args := tvar if isinstance(tvar, tuple) else getattr(tvar, '__args__', []):
-                is_optional = None in args
-                args = tuple(filter(self._parseable, args))
-                origin = type(data)
-                for option in sorted(args, key=lambda a: self._sorter(origin, a)):
-                    try:
-                        ret = self.cast(data, option)
-                        if ret is not None:
-                            break
-                    except Exception:
-                        pass
-                if is_optional:
-                    return ret
-        else:
-            with ctx.suppress(Exception):
-                ret = self.cast(data, tvar)  # type:ignore
+        This method first validates the arguments using invocable(), then calls the function
+        if validation succeeds.
 
-        return ret if ret is not None else data
+        Args:
+            func: The function to call.
+            *args: Positional arguments to pass to the function.
+            **kwargs: Keyword arguments to pass to the function.
 
-    def cast_all(self, values: Iterable[Any], tvar: type[Value]) -> Iterator[Value]:
-        for value in values:
-            if (result := self.cast(value, tvar)) is not None:
-                yield result
+        Returns:
+            A tuple of (success, result) where success is True if the call succeeded,
+            and result is the return value of the function (or None if it failed).
+        """
+        # I. Check if the function can be called with the given arguments
+        validation = self.invocable(func, *args, **kwargs)
+        if validation is None:
+            return False, None
 
-    def flexcast_all(self, values: Iterable[Any], tvar: TypeArg) -> Iterator[Any]:
-        for value in values:
-            if (result := self.flexcast(value, tvar)) is not None:
-                yield result
-
-    def setattr(self, obj: pyd.BaseModel, key: str, value: Any, tvar: TypeArg = None) -> bool:
-        """Set an attribute on an object, casting it to the appropriate type if necessary."""
-        # I. Infer the type to cast to, when possible
-        if tvar is None:
-            tvar = ut.instance_fields(type(obj)).get(key, None)
-
-        # II. When we have a parseable type, cast the value before setting
-        if tvar is not None and self._parseable(tvar):
-            value = self.flexcast(value, tvar)
-            if not self.check(value, tvar):
-                fire.error(f'Cannot setattr {type(obj).__name__}.{value} by casting to {tvar}.')
-                return False
-
-        # III. Directly set the value attribute on the object
-        setattr(obj, key, value)
-        return True
+        # II. Unpack the validated arguments and call the function
+        validated_args, validated_kwargs = validation
+        try:
+            result = func(*validated_args, **validated_kwargs)
+            return True, result
+        except Exception as e:
+            fire.error(f'Failed to invoke {func.__name__} with args={validated_args}, kwargs={validated_kwargs}: {e}')
+            return False, None
 
 
 Typist.setup()

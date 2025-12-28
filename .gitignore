@@ -51,7 +51,6 @@ dmypy.json
 .python-version
 .venv/
 venv/
-env/
 /.pypirc
 
 # Notebooks

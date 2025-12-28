@@ -16,7 +16,9 @@ from ..conftest import boolmap
 ### BODY ###
 ############
 class TestSpan:
-    # Constructor tests
+    # -------------------
+    # `0` Initial Methods
+    # -------------------
     @pyt.mark.parametrize(
         'arg0, arg1, expected',
         [
@@ -74,38 +76,20 @@ class TestSpan:
             else:
                 Span(arg0, arg1)
 
-    # Parse method tests
-    @pyt.mark.parametrize(
-        'text, expected',
-        [
-            ('1 - 2', (1, 3)),
-            ('1-2', (1, 3)),
-            ('432-33', (432, 434)),
-            ('432-3', (432, 434)),
-            ('2265-77', (2265, 2278)),
-            ('1475-33', (1475, 1534)),
-            ('5', (5, 6)),
-            ('12345', (12345, 12346)),
-            ('invalid', (0, 0)),
-            ('1-2-3', (0, 0)),
-        ],
-    )
-    def test_parse_span(self, text: str, expected: tuple[int, int]):
-        assert Span.parse(text) == expected
+    # -------------------
+    # `-` Private Methods
+    # -------------------
 
-    # Property tests
-    @pyt.mark.parametrize(
-        'span, expected',
-        [
-            (Span(1, 5), 4),
-            (Span(0, 10), 10),
-            (Span(5, 5), 0),
-            (Span(100, 200), 100),
-        ],
-    )
-    def test_delta(self, span: Span, expected: int):
-        assert span.delta == expected
+    # -------------------
+    # `+` Primary Methods
+    # -------------------
 
+    # ------------------
+    # `x` Public Methods
+    # ------------------
+    # --------------
+    # `x0` Overrides
+    # --------------
     @pyt.mark.parametrize(
         'span, expected',
         [
@@ -119,18 +103,17 @@ class TestSpan:
     def test_str(self, span: Span, expected: bool):
         assert str(span) == expected
 
-    # Boolean tests
     @pyt.mark.parametrize(
         'span, expected',
         boolmap(
             true=[Span(1, 5), Span(0, 10)],
             false=[Span(0, 0), Span(5, 5)],
+            base_type=Span,
         ),
     )
     def test_bool(self, span: Span, expected: bool):
         assert bool(span) == expected
 
-    # Comparison tests
     @pyt.mark.parametrize(
         'lhs, rhs, expected',
         boolmap(
@@ -179,6 +162,8 @@ class TestSpan:
                 (Span(1, 5), Span(1, 5)),  # Identical
                 (Span(1, 5), Span(4, 8)),
                 (Span(1, 5), (3, 7)),
+                (Span(1, 5), (1, 2, 3)),
+                (Span(1, 5), [1, 2, 3]),
             ],
             false=[
                 (Span(1, 5), Span(5, 8)),  # Adjacent, no overlap
@@ -186,15 +171,13 @@ class TestSpan:
                 (Span(1, 5), (5, 8)),
                 # Invalid types
                 (Span(1, 5), 'string'),
-                (Span(1, 5), (1, 2, 3)),
-                (Span(1, 5), [1, 2, 3]),
             ],
+            base_type=Span,
         ),
     )
     def test_contains(self, primary: Span, other: object, expected: bool):
         assert (other in primary) == expected
 
-    # Addition tests
     @pyt.mark.parametrize(
         'p0, other, expected',
         [
@@ -216,7 +199,24 @@ class TestSpan:
         result = span + other
         assert result == expected
 
-    # Join tests
+    # ---------------
+    # `x1` Properties
+    # ---------------
+    @pyt.mark.parametrize(
+        'span, expected',
+        [
+            (Span(1, 5), 4),
+            (Span(0, 10), 10),
+            (Span(5, 5), 0),
+            (Span(100, 200), 100),
+        ],
+    )
+    def test_delta(self, span: Span, expected: int):
+        assert span.delta == expected
+
+    # ------------
+    # `x2` Methods
+    # ------------
     @pyt.mark.parametrize(
         'p0, p1, expected',
         [
@@ -238,7 +238,24 @@ class TestSpan:
         result = span.join((3, 7))
         assert result == (1, 7)
 
-    # Merge tests
+    @pyt.mark.parametrize(
+        'text, expected',
+        [
+            ('1 - 2', (1, 3)),
+            ('1-2', (1, 3)),
+            ('432-33', (432, 434)),
+            ('432-3', (432, 434)),
+            ('2265-77', (2265, 2278)),
+            ('1475-33', (1475, 1534)),
+            ('5', (5, 6)),
+            ('12345', (12345, 12346)),
+            ('invalid', (0, 0)),
+            ('1-2-3', (0, 0)),
+        ],
+    )
+    def test_parse(self, text: str, expected: tuple[int, int]):
+        assert Span.parse(text) == expected
+
     @pyt.mark.parametrize(
         'spans, expected',
         [

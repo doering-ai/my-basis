@@ -89,14 +89,16 @@ class Predicate(pyd.BaseModel):
 
     @pyd.model_serializer
     def serialize(
-        self, fields: Iterable[str] | None = None, tvar: type[T] | None = None
+        self,
+        fields: Iterable[str] | None = None,
+        tvar: type[T] | None = None,
     ) -> T | dict:
         """Cast data to one of a few supported types."""
         fields = fields if fields is not None else self.keys()
-        source = {field: self[field] for field in sorted(fields) if field in self}
+        source: dict[str, Any] = {field: self[field] for field in sorted(fields) if field in self}
 
         # I. Handle the nocast and empty cases
-        if not source or tvar is None:
+        if not source:
             return source
 
         # II. Handle trivial casting targets
@@ -108,9 +110,42 @@ class Predicate(pyd.BaseModel):
             ]  # type:ignore
         elif tvar is Predicate:
             return Predicate.new(source)  # type:ignore
+        elif tvar is None:
+            tvar = dict[str, Any]  # type:ignore
 
-        # III. Cast data to the requested type
-        return self._serialize_cast(source, tvar)
+        # III. Cast data to the requested type, often by expanding nested dicts
+        btype, ktype, vtype = typist.parse(tvar)
+        if ktype is str:
+            ktype = None
+        ret: dict = {}
+
+        if (
+            ktype is not None
+            or (vtype and not typist.match(vtype, Mapping))
+            or not ut.any_has_any(source.keys(), '.')
+        ):
+            # III. Skip nesting if the types or values don't permit it
+            ret = dict(
+                zip(
+                    typist.flexcast_all(source.keys(), ktype),
+                    typist.flexcast_all(source.values(), vtype),
+                    strict=True,
+                )
+            )
+        else:
+            # IV. Separate out and handle nested fields
+            leaves, nodes = map(list, mi.partition(lambda item: '.' in item[0], source.items()))
+            if leaves:
+                # IV.i. Handle leaves as above, without casting keys
+                ret |= {field: typist.flexcast(vals, vtype) for field, vals in leaves}
+
+            if nodes:
+                # IV.ii. Group into nested dictionaries based on the first key
+                node_items = list(sorted((tuple(key.split('.')), values) for key, values in nodes))
+                ret |= self._serialize_nested(node_items, vtype)
+
+        # V. Wrap the final product in the requested final type, if present
+        return typist.flexcast(ret, btype) if btype else ret  # type:ignore
 
     # -------------------
     # `-` Private Methods
@@ -122,7 +157,7 @@ class Predicate(pyd.BaseModel):
         for field, values in data.items():
             if isinstance(values, Mapping):
                 # I. Recursive case
-                ret[field] = cls._abbreviate(values)
+                ret[field] = cls._abbreviate(values)  # type: ignore
             else:
                 # II. Decast simple, atomic types (i.e. int, float, and bool)
                 if ut.any_has_any(values, '\n'):  # type: ignore
@@ -137,44 +172,6 @@ class Predicate(pyd.BaseModel):
     @staticmethod
     def _escape(text: str) -> str:
         return Predicate.RGXS['newline'].sub(r'\\n', text)
-
-    def _serialize_cast(self, source: dict[str, list[str]], req_tvar: type[T] | None = None) -> T:
-        """
-        Serialize a dictionary structure, casting keys and values to the requested types.
-        """
-        # II. Cast the keys and values appropriately
-        tvar, ktype, vtype = typist.parse(req_tvar)
-        if ktype is str:
-            ktype = None
-        ret: dict = {}
-
-        if (
-            ktype
-            or (vtype and not typist.match(vtype, Mapping))
-            or not ut.any_has_any(source.keys(), '.')
-        ):
-            # III. Skip nesting if the types or values don't permit it
-            ret = dict(
-                zip(
-                    typist.flexcast_all(source.keys(), ktype),
-                    typist.flexcast_all(source.values(), vtype),
-                    strict=False,
-                )
-            )
-        else:
-            # IV. Separate out and handle nested fields
-            leaves, nodes = map(list, mi.partition(lambda item: '.' in item[0], source.items()))
-            if leaves:
-                # IV.i. Handle leaves as above, without casting keys
-                ret = {field: typist.flexcast(vals, vtype) for field, vals in leaves}
-
-            if nodes:
-                # IV.ii. Group into nested dictionaries based on the first key
-                node_items = list(sorted((tuple(key.split('.')), values) for key, values in nodes))
-                ret |= self._serialize_nested(node_items, vtype)
-
-        # V. Wrap the final product in the requested final type, if present
-        return typist.flexcast(ret, tvar) if tvar else ret  # type:ignore
 
     def _serialize_nested(
         self, node_items: list[tuple[tuple[str, ...], list[str]]], tvar: TypeArg = None
@@ -224,6 +221,18 @@ class Predicate(pyd.BaseModel):
     # -------------------
     # `+` Primary Methods
     # -------------------
+    @classmethod
+    def cast(
+        cls,
+        field: str,
+        val: Any,
+        duplicates: bool = False,
+    ) -> Iterator[tuple[str, list[str]]]:
+        if isinstance(val, Mapping | Predicate):
+            yield from cls.import_map(val, field, duplicates)
+        else:
+            yield (field, cls.cast_to_list(val, duplicates))
+
     def to_yaml(self, **kwargs) -> str:
         return typist.to_yaml(self._abbreviate(self.serialize()), **kwargs)
 
@@ -247,18 +256,6 @@ class Predicate(pyd.BaseModel):
                 self.data[key].extend(val)
 
     @classmethod
-    def cast(
-        cls,
-        field: str,
-        val: Any,
-        duplicates: bool = False,
-    ) -> Iterator[tuple[str, list[str]]]:
-        if isinstance(val, Mapping | Predicate):
-            yield from cls.import_map(val, field, duplicates)
-        else:
-            yield (field, cls.cast_to_list(val, duplicates))
-
-    @classmethod
     def import_map(
         cls,
         data: 'Mapping|Predicate',
@@ -280,6 +277,15 @@ class Predicate(pyd.BaseModel):
     # ------------------
     # `x` Public Methods
     # ------------------
+    # --------------
+    # `x0` Overrides
+    # --------------
+    def __len__(self) -> int:
+        return len(self.data)
+
+    def __bool__(self) -> bool:
+        return bool(self.data)
+
     def __str__(self) -> str:
         return self.to_yaml()
 
@@ -303,9 +309,6 @@ class Predicate(pyd.BaseModel):
         """
         if field in self.data:
             del self.data[field]
-
-    def __bool__(self) -> bool:
-        return bool(self.data)
 
     def __contains__(self, obj: object) -> bool:
         if isinstance(obj, str):
@@ -413,10 +416,9 @@ class Predicate(pyd.BaseModel):
         ret -= other
         return ret
 
-    def __len__(self) -> int:
-        return len(self.data)
-
-    # Properties
+    # ---------------
+    # `x1` Properties
+    # ---------------
     @property
     def size(self) -> int:
         return sum(map(len, self.data.values()))
@@ -425,7 +427,9 @@ class Predicate(pyd.BaseModel):
     def keyset(self) -> set[str]:
         return set(self.data.keys())
 
-    # Helpers
+    # --------------
+    # `x2` Accessors
+    # --------------
     def has_any(self, *fields: str) -> bool:
         return any(field in self.data for field in fields)
 
@@ -472,6 +476,9 @@ class Predicate(pyd.BaseModel):
             ret = default
         return ret
 
+    # -------------
+    # `x3` Mutators
+    # -------------
     def add_to_set(self, field: str, value: Any):
         """
         Add a value to the set of values for a given field.

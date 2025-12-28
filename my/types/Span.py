@@ -110,17 +110,16 @@ class Span(tuple[int, int]):
         return hash(self[0]) ^ hash(self[1])
 
     def __contains__(self, value: object) -> bool:
-        p0, p1 = self
-        if p0 == p1:
+        if not self:
             return False
         elif isinstance(value, int):
             return self[0] <= value < self[1]
-        elif isinstance(value, list):
+        elif isinstance(value, Series):
+            if len(value) == 2:
+                p0, p1 = sorted(value)
+                if isinstance(p0, int) and isinstance(p1, int):
+                    return self[0] < p1 and self[1] > p0
             return any(v in self for v in value)
-        elif isinstance(value, tuple) and len(value) == 2:
-            i0, i1 = value
-            if isinstance(i0, int) and isinstance(i1, int):
-                return p0 < i1 and i0 < p1
         return False
 
     def __add__(self, other: object) -> 'Span':
@@ -153,6 +152,17 @@ class Span(tuple[int, int]):
             True if the spans overlap.
         """
         return other in self
+
+    def join(self, other: 'Span|tuple[int, int]') -> 'Span':
+        """
+        Create a span that encompasses both this span and another.
+
+        Args:
+            other: Span to join with.
+        Returns:
+            New span from the minimum start to maximum end.
+        """
+        return Span(min(self[0], other[0]), max(self[1], other[1]))
 
     @staticmethod
     def serialize(*args: 'Span|tuple[int, int]') -> str:
@@ -200,17 +210,6 @@ class Span(tuple[int, int]):
             return Span((int(text), int(text) + 1))
         else:
             return Span((0, 0))
-
-    def join(self, other: 'Span|tuple[int, int]') -> 'Span':
-        """
-        Create a span that encompasses both this span and another.
-
-        Args:
-            other: Span to join with.
-        Returns:
-            New span from the minimum start to maximum end.
-        """
-        return Span(min(self[0], other[0]), max(self[1], other[1]))
 
     @classmethod
     def merge(cls, *args: 'tuple[int, int]|Span') -> list['Span']:

@@ -5,7 +5,6 @@
 from typing import Callable, Iterable, Literal, ClassVar
 import textwrap
 import itertools as it
-import functools as ft
 
 ### EXTERNAL
 import regex as re
@@ -22,7 +21,12 @@ from .IterUtils import iter_utils
 ### BODY ###
 ############
 class TextUtils:
-    RGXS: ClassVar[dict[str, Pattern]] = {}
+    """
+    Utilities for text manipulation tasks, including a basic, dependency-free version of the Regex
+    functionality found at [`/my/regex`](/my/regex).
+    """
+
+    RGXS: ClassVar[dict[str, Pattern]] = {}  # written at bottom of file
 
     # ------------------------
     # `0` MANIPULATION & REGEX

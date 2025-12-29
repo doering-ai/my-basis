@@ -96,7 +96,7 @@ class TestSemanticUtils:
         ],
     )
     def test_format_amount(self, amount: int, unit: str, width: int, expected: str):
-        """Test formatting amounts with SI suffixes."""
+        assert unit in {'num', 'mem'}
         assert cls.format_amount(amount, unit, width) == expected
 
     # -----------------
@@ -139,13 +139,11 @@ class TestSemanticUtils:
         ],
     )
     def test_to_singular(self, plural: str, expected: str):
-        """Test converting plural words to singular."""
         assert cls.to_singular(plural) == expected
 
     def test_to_singular_invalid(self):
-        """Test to_singular raises ValueError for words that can't be singularized."""
-        with pyt.raises(ValueError, match="Failed to convert"):
-            cls.to_singular("notaword")
+        with pyt.raises(ValueError, match='Failed to convert'):
+            cls.to_singular('notaword')
 
     @pyt.mark.parametrize(
         'num, expected',
@@ -169,7 +167,6 @@ class TestSemanticUtils:
         ],
     )
     def test_to_ordinal(self, num: int | str, expected: str):
-        """Test converting numbers to ordinal strings."""
         assert cls.to_ordinal(num) == expected
 
     # ---------------
@@ -189,7 +186,6 @@ class TestSemanticUtils:
         ],
     )
     def test_validate_identifier(self, symbols: list[str], should_pass: bool):
-        """Test identifier validation for Python and TypeScript."""
         if should_pass:
             cls.validate_identifier(*symbols)
         else:

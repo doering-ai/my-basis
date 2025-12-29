@@ -23,8 +23,6 @@ from .utils import (
     semantic_utils,
     SyntaxUtils,
     syntax_utils,
-    CodeUtils,
-    code_utils,
 )
 from .caches import Cache, NestedCache, PickleCache, FileCache
 from .typing import Typist, typist, TypeArg, AutocastModel
@@ -73,8 +71,6 @@ __all__ = [
     'semantic_utils',
     'SyntaxUtils',
     'syntax_utils',
-    'CodeUtils',
-    'code_utils',
     # /caches/
     'Cache',
     'NestedCache',

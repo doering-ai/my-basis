@@ -19,14 +19,16 @@ cls = SystemUtils
 ############
 class TestSystemUtils:
     """
-    - NOTE: The following tests are skipped as they require complex setup, external dependencies,
+    NOTE: The following tests are skipped as they require complex setup, external dependencies,
     or would cause side effects:
+
         - test_terminal_linewrap        (requires TextUtils)
         - test_confirm                  (requires user input)
         - test_setup_py_logging         (creates files, complex setup)
         - test_setup_fire_logging       (requires Logfire token)
-        - test_setup_logging            (combines complex setup)
+        - test_setup_logging            (requires complex setup)
         - test_setup_metrics            (requires environment variables, Prometheus setup)
+        - test_measure_context          (requires complex contextmanager setup)
         - test_monitor                  (wrapper around logfire.instrument)
         - test_print_in_color           (requires zsh subprocess)
     """
@@ -35,34 +37,29 @@ class TestSystemUtils:
     # `0` DATE & TIME
     # ---------------
     def test_posix_none(self):
-        """Test posix with None returns current time."""
         result = cls.posix(None)
         assert isinstance(result, datetime)
         assert result.tzinfo == timezone.utc
 
     def test_posix_datetime(self):
-        """Test posix with datetime object."""
         dt = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
         result = cls.posix(dt)
         assert result == dt
         assert result.tzinfo == timezone.utc
 
     def test_posix_timestamp(self):
-        """Test posix with Unix timestamp."""
         timestamp = 1704110400  # 2024-01-01 12:00:00 UTC
         result = cls.posix(timestamp)
         assert isinstance(result, datetime)
         assert result.tzinfo == timezone.utc
 
     def test_posix_since(self):
-        """Test posix_since calculates time elapsed."""
         past = datetime.now(timezone.utc) - timedelta(seconds=5)
         result = cls.posix_since(past)
         assert isinstance(result, timedelta)
         assert result.total_seconds() >= 4  # At least 4 seconds (allowing for execution time)
 
     def test_posix_since_none(self):
-        """Test posix_since with None/falsy returns zero."""
         assert cls.posix_since(None) == timedelta(0)
         assert cls.posix_since(0) == timedelta(0)
 
@@ -70,7 +67,6 @@ class TestSystemUtils:
     # `1` FILESYSTEM
     # --------------
     def test_validate_dir(self, tmp_path):
-        """Test directory validation."""
         # Valid directory
         assert cls.validate_dir(tmp_path) is True
 
@@ -79,7 +75,6 @@ class TestSystemUtils:
             cls.validate_dir(tmp_path / 'nonexistent')
 
     def test_validate_file(self, tmp_path):
-        """Test file validation."""
         # Create a temporary file
         test_file = tmp_path / 'test.txt'
         test_file.write_text('test')
@@ -106,20 +101,17 @@ class TestSystemUtils:
         ],
     )
     def test_path_sub(self, path: Path, old: str, new: str, expected: Path):
-        """Test path component substitution."""
         assert cls.path_sub(path, old, new) == expected
 
     # ------------
     # `2` TERMINAL
     # ------------
     def test_get_terminal_width(self):
-        """Test getting terminal width."""
         width = cls.get_terminal_width()
         assert isinstance(width, int)
         assert width > 0
 
     def test_auto_confirm(self):
-        """Test enabling auto-confirm mode."""
         original = cls.AUTO_CONFIRM
         try:
             cls.auto_confirm()
@@ -141,7 +133,6 @@ class TestSystemUtils:
     def test_zsh_colorize(
         self, text: str, color: str, bold: bool, italic: bool, underline: bool, contains: str
     ):
-        """Test zsh color code wrapping."""
         result = cls.zsh_colorize(text, color, bold, italic, underline)
         if contains:
             assert contains in result
@@ -152,13 +143,11 @@ class TestSystemUtils:
     # `3` LOGGING
     # -----------
     def test_get_package_name(self):
-        """Test getting package name from metadata."""
         name = cls.get_package_name()
         assert isinstance(name, str)
         assert len(name) > 0
 
     def test_setup_warnings(self):
-        """Test warnings setup (should not error and set flag)."""
         original = cls.WARNINGS_SETUP
         try:
             cls.WARNINGS_SETUP = False
@@ -173,11 +162,7 @@ class TestSystemUtils:
     # -----------
     # `4` METRICS
     # -----------
-    # Note: measure_context has decorator ordering issues (@contextmanager + @classmethod)
-    # that make it difficult to test directly. Skipping this test.
-
     def test_instrument_sync(self):
-        """Test instrumenting synchronous function."""
         counter = {'test_func': 0}
 
         def test_func():
@@ -191,7 +176,6 @@ class TestSystemUtils:
 
     @pyt.mark.asyncio
     async def test_instrument_async(self):
-        """Test instrumenting asynchronous function."""
         counter = {'async_test': 0}
 
         async def async_test():

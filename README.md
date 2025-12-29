@@ -6,35 +6,30 @@ As a metric, the package imports 32 dependencies totalling around ~250 MB in unc
 
 ## Modules
 
-### Utility Functions
+### `0` Utility Functions
 
-#### System Utilities
+#### `00` Iteration Utilities
 
-##### Logging
+#### `01` Syntax Utilities
 
-##### Profiling
+`0` NORMALIZATION
+`1` ANNOTATION
 
-##### Command Line Interaction
-
-##### File System Validation
-
-#### Iteration Utilities
+#### `03` Semantic Utilities
 
 #### Text Utilities
 
 #### Code Utilities
 
-#### Semantic Utilities
+#### `02` System Utilities
 
-##### Roman Numerals
+##### `020` Logging
 
-##### General Pluralization
+##### `021` Profiling
 
-##### Human-Readable Counts
+##### `022` Command Line Interaction
 
-##### Python & Typescript Identifiers
-
-#### Syntax Utilities
+##### `023` File System Validation
 
 #### Enumerations
 
@@ -80,7 +75,7 @@ As a metric, the package imports 32 dependencies totalling around ~250 MB in unc
 
 Although you can of course use this package without using Pydantic yourself, you'll be missing out on a lot of the ergonomic benefits: basically every class is a Pydantic "model", and the logging functionality included in [`my/base/utils.py`](/my/base/utils.py) exclusively supports Pydantic's `Logfire`.
 
-### Built for Python 3.13+
+### Built for Python 3.12+
 
 It would be pretty trivial to make this library work with versions as old as 3.11, and I aim to do this when I find the time.
 Anything older than that would be quite the reach however, as the typing code uses 3.11 syntax throughout a relatively complex module.

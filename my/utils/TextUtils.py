@@ -129,7 +129,7 @@ class TextUtils:
         Returns:
             Pattern with spaces replaced by \\s* for flexible matching.
         """
-        return r'\s*'.join(' '.split(expr))
+        return r'\s*'.join(expr.split(' '))
 
     @staticmethod
     def multi_rgx(
@@ -209,8 +209,8 @@ class TextUtils:
         Returns:
             Unindented text.
         """
-        fn = ft.partial(re.compile(rf'^ {{1,{n * 4}}}').sub, '')
-        return '\n'.join(map(fn, text))
+        assert n > 0, 'Number of indent levels to remove must be > 0.'
+        return re.compile(rf'(?m)^ {{1,{n * 4}}}').sub('', text)
 
     @staticmethod
     def strip_quotes(string: str) -> str:

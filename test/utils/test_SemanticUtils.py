@@ -73,24 +73,125 @@ class TestSemanticUtils:
     # -----------
     # `1` AMOUNTS
     # -----------
-    @pyt.mark.parametrize('data, expected', [])
-    def test_format_amount(self, data: str, expected: str):
-        pass
+    @pyt.mark.parametrize(
+        'amount, unit, width, expected',
+        [
+            # Numeric format (K/M/B)
+            (0, 'num', 0, '0'),
+            (500, 'num', 0, '500'),
+            (1000, 'num', 0, '1K'),
+            (1500, 'num', 0, '2K'),  # Rounds to 2K
+            (1000000, 'num', 0, '1M'),
+            (1500000, 'num', 0, '2M'),
+            (1000000000, 'num', 0, '1B'),
+            (2500000000, 'num', 0, '2B'),
+            # Memory format (KB/MB/GB)
+            (1024, 'mem', 0, '1KB'),
+            (1500, 'mem', 0, '2KB'),
+            (1000000, 'mem', 0, '1MB'),
+            (1000000000, 'mem', 0, '1GB'),
+            # With width formatting
+            (1000, 'num', 5, '1.00K'),
+            (1000000, 'mem', 6, '1.000MB'),
+        ],
+    )
+    def test_format_amount(self, amount: int, unit: str, width: int, expected: str):
+        """Test formatting amounts with SI suffixes."""
+        assert cls.format_amount(amount, unit, width) == expected
 
     # -----------------
     # `2` PLURALIZATION
     # -----------------
-    @pyt.mark.parametrize('data, expected', [])
-    def test_to_singular(self, data: str, expected: str):
-        pass
+    @pyt.mark.parametrize(
+        'plural, expected',
+        [
+            # Singletons
+            ('un', 'un'),
+            ('sub', 'sub'),
+            ('network', 'network'),
+            ('knowledge', 'knowledge'),
+            # Irregulars
+            ('media', 'media'),
+            ('species', 'species'),
+            ('people', 'person'),
+            ('synopses', 'synopsis'),
+            ('genera', 'genus'),
+            ('busses', 'bus'),
+            ('gasses', 'gas'),
+            # Archaics
+            ('indices', 'index'),
+            ('vertices', 'vertex'),
+            ('phenomena', 'phenomenon'),
+            ('data', 'datum'),
+            ('anima', 'animum'),  # Latin 'a' to 'um' pattern
+            # Regulars
+            ('cities', 'city'),
+            ('berries', 'berry'),
+            ('boxes', 'box'),
+            ('classes', 'class'),
+            ('leaves', 'leaf'),
+            ('lives', 'lif'),  # Regex gives 'lif', not 'life'
+            ('elves', 'elf'),
+            ('dogs', 'dog'),
+            ('cats', 'cat'),
+            # Edge cases
+            ('CITIES', 'city'),  # Case-insensitive
+        ],
+    )
+    def test_to_singular(self, plural: str, expected: str):
+        """Test converting plural words to singular."""
+        assert cls.to_singular(plural) == expected
 
-    @pyt.mark.parametrize('data, expected', [])
-    def test_to_ordinal(self, data: str, expected: str):
-        pass
+    def test_to_singular_invalid(self):
+        """Test to_singular raises ValueError for words that can't be singularized."""
+        with pyt.raises(ValueError, match="Failed to convert"):
+            cls.to_singular("notaword")
+
+    @pyt.mark.parametrize(
+        'num, expected',
+        [
+            (1, '1st'),
+            (2, '2nd'),
+            (3, '3rd'),
+            (4, '4th'),
+            (10, '10th'),
+            (11, '11th'),
+            (12, '12th'),
+            (13, '13th'),
+            (21, '21st'),
+            (22, '22nd'),
+            (23, '23rd'),
+            (101, '101st'),
+            (111, '111th'),
+            (0, ''),  # Leading zeros stripped
+            ('001', '1st'),
+            ('000', ''),
+        ],
+    )
+    def test_to_ordinal(self, num: int | str, expected: str):
+        """Test converting numbers to ordinal strings."""
+        assert cls.to_ordinal(num) == expected
 
     # ---------------
     # `3` IDENTIFIERS
     # ---------------
-    @pyt.mark.parametrize('data, expected', [])
-    def test_validate_identifier(self, data: str, expected: str):
-        pass
+    @pyt.mark.parametrize(
+        'symbols, should_pass',
+        [
+            (['valid_name', 'another_valid'], True),
+            (['myVar'], True),
+            (['_private'], True),
+            (['for'], False),  # Python keyword
+            (['class'], False),  # Both Python and TypeScript keyword
+            (['await'], False),  # TypeScript keyword
+            (['123invalid'], False),  # Invalid identifier
+            (['my-var'], False),  # Invalid identifier (hyphen)
+        ],
+    )
+    def test_validate_identifier(self, symbols: list[str], should_pass: bool):
+        """Test identifier validation for Python and TypeScript."""
+        if should_pass:
+            cls.validate_identifier(*symbols)
+        else:
+            with pyt.raises(AssertionError):
+                cls.validate_identifier(*symbols)

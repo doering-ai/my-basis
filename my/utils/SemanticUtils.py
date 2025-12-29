@@ -182,6 +182,16 @@ class SemanticUtils:
 
     @staticmethod
     def to_ordinal(num: int | str) -> str:
+        """
+        Convert number to ordinal string (e.g., 1 -> '1st', 2 -> '2nd').
+
+        Args:
+            num: Integer or string representation of integer.
+        Returns:
+            Ordinal string with suffix (st/nd/rd/th), or empty string if input is '0' or empty.
+        Raises:
+            AssertionError: If input is not a valid integer string after stripping zeros.
+        """
         num = str(num).lstrip('0')
         if len(num) == 0:
             return ''

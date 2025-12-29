@@ -6,12 +6,11 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from shutil import get_terminal_size
 from time import perf_counter_ns
-from typing import Any, Callable, Iterable, ClassVar
+from typing import Any, Callable, ClassVar
 import asyncio as aio
 import contextlib as ctx
 import functools as ft
 import importlib.metadata as impm
-import itertools as it
 import logging as lg
 import logging.handlers as lgh
 import os

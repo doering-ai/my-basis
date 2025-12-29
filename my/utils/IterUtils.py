@@ -196,7 +196,15 @@ class IterUtils:
         items: Mapping[Key, Value] | Iterable[tuple[Key, Value]],
         pred: Callable[[Value], bool] = bool,
     ) -> Iterator[tuple[Key, Value]]:
-        """Filter a mapping by a predicate function."""
+        """
+        Filter a mapping by a predicate function on values.
+
+        Args:
+            items: Mapping or iterable of (key, value) pairs to filter.
+            pred: Predicate function applied to values (default: bool for truthiness).
+        Yields:
+            (key, value) tuples where value satisfies the predicate.
+        """
         yield from filter(lambda tup: pred(tup[1]), cls.map_items(items))
 
     @classmethod
@@ -254,7 +262,16 @@ class IterUtils:
         data: Mapping[Key, Value] | Iterable[tuple[Key, Value]] | Iterable[Key],
         drop: bool = False,
     ) -> dict[Key, T]:
-        """Map a function over the values of a mapping or iterable, returning a new dictionary."""
+        """
+        Map a function over values in a mapping or iterable, returning new dictionary.
+
+        Args:
+            func: Function to apply to each value.
+            data: Mapping, iterable of (key, value) pairs, or iterable of keys.
+            drop: If True, drop falsy values from result (default: False).
+        Returns:
+            Dictionary with function applied to values (or to items if data is simple iterable).
+        """
         if not data:
             return {}
         elif items := cls.map_items(data):  # type:ignore

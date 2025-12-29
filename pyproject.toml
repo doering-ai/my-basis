@@ -1,6 +1,6 @@
 [project]
 name = "MyBasis"
-version = "0.1.0"
+version = "0.9.0"
 description = "A shared repository of basic python utilties for clean, functional text processing."
 readme = "README.md"
 authors = [{ name = "Robb Doering", email = "robb@doering.ai" }]
@@ -68,3 +68,7 @@ module-root = ""
 
 [tool.ty.src]
 exclude = ["my/templates/"]
+
+[tool.pytest]
+addopts = ["--cov=my", "--cov-report=term-missing", "--cov-report=xml"]
+testpaths = ["test"]

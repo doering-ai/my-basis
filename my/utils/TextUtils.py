@@ -120,18 +120,6 @@ class TextUtils:
         return ret
 
     @staticmethod
-    def spaced_rgx(expr: str) -> str:
-        """
-        Convert space-separated expression to flexible whitespace regex.
-
-        Args:
-            expr: Space-separated expression.
-        Returns:
-            Pattern with spaces replaced by \\s* for flexible matching.
-        """
-        return r'\s*'.join(expr.split(' '))
-
-    @staticmethod
     def multi_rgx(
         *expressions: str | list[str],
         branching: bool = False,

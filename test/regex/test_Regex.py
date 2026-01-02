@@ -18,7 +18,7 @@ cls = Regex
 ############
 class TestRegex:
     # -------------------
-    # `0` Initial Methods
+    # `.` Initial Methods
     # -------------------
     @pyt.mark.parametrize(
         'args,expected',
@@ -85,10 +85,10 @@ class TestRegex:
         assert ret.quantifier == expected_quant
 
     # ------------------
-    # `x` Public Methods
+    # `*` Public Methods
     # ------------------
     # --------------
-    # `x0` Overrides
+    # `*0` Overrides
     # --------------
     @pyt.mark.parametrize(
         'expr, expected',
@@ -126,7 +126,7 @@ class TestRegex:
         assert not cls(lesser) > cls(greater)
 
     # ---------------
-    # `x1` Properties
+    # `*1` Properties
     # ---------------
     @pyt.mark.parametrize(
         'expr, expected',
@@ -175,7 +175,7 @@ class TestRegex:
         assert cls(expr).spans == expected
 
     # ------------
-    # `x2` Methods
+    # `*2` Methods
     # ------------
     @pyt.mark.parametrize(
         'expr, quantifier, overwrite, expected',

@@ -29,7 +29,7 @@ class MatchData(Predicate):
     duplicates: bool = True
 
     # -------------------
-    # `0` Initial Methods
+    # `.` Initial Methods
     # -------------------
     @pyd.model_validator(mode='before')
     @classmethod
@@ -80,7 +80,7 @@ class MatchData(Predicate):
         return len(self.text)
 
     # ------------------
-    # `x` Public Methods
+    # `*` Public Methods
     # ------------------
     def __repr__(self) -> str:
         if self.match is not None:

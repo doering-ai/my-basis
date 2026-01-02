@@ -41,7 +41,7 @@ class Predicate(pyd.BaseModel):
     overwrite: bool = False
 
     # -------------------
-    # `0` Initial Methods
+    # `.` Initial Methods
     # -------------------
     @classmethod
     def new(cls, data: Any | None = None, **kwargs) -> Self:
@@ -275,10 +275,10 @@ class Predicate(pyd.BaseModel):
                 yield (key, cls.cast_to_list(val, duplicates))
 
     # ------------------
-    # `x` Public Methods
+    # `*` Public Methods
     # ------------------
     # --------------
-    # `x0` Overrides
+    # `*0` Overrides
     # --------------
     def __len__(self) -> int:
         return len(self.data)
@@ -417,7 +417,7 @@ class Predicate(pyd.BaseModel):
         return ret
 
     # ---------------
-    # `x1` Properties
+    # `*1` Properties
     # ---------------
     @property
     def size(self) -> int:
@@ -428,7 +428,7 @@ class Predicate(pyd.BaseModel):
         return set(self.data.keys())
 
     # --------------
-    # `x2` Accessors
+    # `*2` Accessors
     # --------------
     def has_any(self, *fields: str) -> bool:
         return any(field in self.data for field in fields)
@@ -477,7 +477,7 @@ class Predicate(pyd.BaseModel):
         return ret
 
     # -------------
-    # `x3` Mutators
+    # `*3` Mutators
     # -------------
     def add_to_set(self, field: str, value: Any):
         """

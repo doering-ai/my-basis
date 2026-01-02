@@ -22,6 +22,7 @@ class ParseData(pyd.BaseModel):
     Holds captured values and their start positions while parsers are being applied.
     Supports merging, rearranging, and transforming captures based on parser functions.
     """
+
     # Dynamic values
     captures: dict[str, list[str]] = {}
     starts: dict[str, list[int]] = {}
@@ -32,7 +33,7 @@ class ParseData(pyd.BaseModel):
     start: list[int] = []
 
     # -------------------
-    # `0` Initial Methods
+    # `.` Initial Methods
     # -------------------
 
     # -------------------
@@ -132,7 +133,7 @@ class ParseData(pyd.BaseModel):
         self.captures[dest] = [val for _, val in effects]
 
     # ------------------
-    # `x` Public Methods
+    # `*` Public Methods
     # ------------------
     def __contains__(self, field: str) -> bool:
         return field in self.captures and field in self.starts

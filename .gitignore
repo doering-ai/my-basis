@@ -151,3 +151,4 @@ nosetests.xml
 
 # SublimeText
 Preferences.sublime-settings
+formatter.assets/

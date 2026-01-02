@@ -102,7 +102,7 @@ class Buffer(pyd.BaseModel):
     fence_rgx: ut.RegexField | None = pyd.Field(default=None, exclude=True)
 
     # -------------------
-    # `0` Initial Methods
+    # `.` Initial Methods
     # -------------------
     @pyd.model_validator(mode='after')
     def _setup_fencing(self) -> Self:
@@ -441,7 +441,7 @@ class Buffer(pyd.BaseModel):
             raise ValueError(err_text)
 
     # ------------------
-    # `x` Public Methods
+    # `*` Public Methods
     # ------------------
     @property
     def lines(self) -> list[str]:

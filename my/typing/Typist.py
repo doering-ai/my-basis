@@ -143,7 +143,7 @@ class Typist(pyd.BaseModel):
     splits: bool = False
 
     # -------------------
-    # `0` Initial Methods
+    # `.` Initial Methods
     # -------------------
     @classmethod
     def setup(cls) -> None:
@@ -672,10 +672,10 @@ class Typist(pyd.BaseModel):
         return text
 
     # ------------------
-    # `x` Public Methods
+    # `*` Public Methods
     # ------------------
     # ---------------
-    # `x1` COMPARISON
+    # `*1` COMPARISON
     # ---------------
     def check(self, data: object, tvar: type[T] | tuple[type[T], ...]) -> TypeGuard[T]:
         """
@@ -744,7 +744,7 @@ class Typist(pyd.BaseModel):
         return all(it.starmap(isinstance, zip(value, args, strict=True)))
 
     # -------------
-    # `x2` COERCION
+    # `*2` COERCION
     # -------------
     def cast(self, data: object, tvar: type[Value]) -> Value | None:
         if data is None or tvar is None or not self._parseable(tvar):
@@ -828,7 +828,7 @@ class Typist(pyd.BaseModel):
         return True
 
     # -------------------
-    # `x3` TRANSFORMATION
+    # `*3` TRANSFORMATION
     # -------------------
     def serialize(self, data: object, **kwargs) -> Any:
         """Recursively transform the given object into serialization-ready, standardized types."""
@@ -955,7 +955,7 @@ class Typist(pyd.BaseModel):
         return distillate
 
     # ----------------
-    # `x4` PERSISTENCE
+    # `*4` PERSISTENCE
     # ----------------
     def from_file(self, file: File | None) -> dict:
         if not file or not isinstance(file, Path) or not file.exists():
@@ -1038,7 +1038,7 @@ class Typist(pyd.BaseModel):
         return text
 
     # ---------------
-    # `x5` INVOCATION
+    # `*5` INVOCATION
     # ---------------
     def invocable(
         self, sig: Callable | inspect.Signature, *args: object, **kwargs: object
@@ -1084,7 +1084,9 @@ class Typist(pyd.BaseModel):
         # IV. Return the original arguments (they passed validation)
         return args, kwargs
 
-    def invoke(self, func: Callable[[...], T], *args: object, **kwargs: object) -> tuple[bool, T | None]:
+    def invoke(
+        self, func: Callable[[...], T], *args: object, **kwargs: object
+    ) -> tuple[bool, T | None]:
         """
         Attempt to call a function with the given arguments.
 
@@ -1111,7 +1113,9 @@ class Typist(pyd.BaseModel):
             result = func(*validated_args, **validated_kwargs)
             return True, result
         except Exception as e:
-            fire.error(f'Failed to invoke {func.__name__} with args={validated_args}, kwargs={validated_kwargs}: {e}')
+            fire.error(
+                f'Failed to invoke {func.__name__} with args={validated_args}, kwargs={validated_kwargs}: {e}'
+            )
             return False, None
 
 

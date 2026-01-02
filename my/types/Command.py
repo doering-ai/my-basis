@@ -29,7 +29,7 @@ class Command(pyd.BaseModel):
     pipe: 'Command' | None = None
 
     # -------------------
-    # `0` Initial Methods
+    # `.` Initial Methods
     # -------------------
     @pyd.model_validator(mode='after')
     def validate(self) -> Self:
@@ -124,7 +124,7 @@ class Command(pyd.BaseModel):
         return ret
 
     # ------------------
-    # `x` Public Methods
+    # `*` Public Methods
     # ------------------
     def sync_run(self, verbose: bool = False) -> tuple[int, str, str]:
         """

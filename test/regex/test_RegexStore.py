@@ -31,7 +31,7 @@ class TestRegexStore:
         )
 
     # -------------------
-    # `0` Initial Methods
+    # `.` Initial Methods
     # -------------------
     # TODO: more tests
     def test_new(self, store: RegexStore) -> None:
@@ -154,10 +154,10 @@ class TestRegexStore:
         pass
 
     # ------------------
-    # `x` Public Methods
+    # `*` Public Methods
     # ------------------
     # --------------
-    # `x0` Overrides
+    # `*0` Overrides
     # --------------
     def test_setitem(self):
         pass
@@ -187,7 +187,7 @@ class TestRegexStore:
         pass
 
     # -------------------------------
-    # `x1` Top-Level Matching Methods
+    # `*1` Top-Level Matching Methods
     # -------------------------------
     def test_match(self):
         pass
@@ -205,7 +205,7 @@ class TestRegexStore:
         pass
 
     # -------------------------
-    # `x2` Functional Utilities
+    # `*2` Functional Utilities
     # -------------------------
     def test_parse_invocations(self):
         pass
@@ -220,7 +220,7 @@ class TestRegexStore:
         pass
 
     # ---------------------------------------
-    # `x3` Performant "Router Tree" Functions
+    # `*3` Performant "Router Tree" Functions
     # ---------------------------------------
     def test_router_tree(self, store: RegexStore):
         store.define_router_tree('test', dict(alpha=r'[[:alpha:]]+', nums=r'\d+'))

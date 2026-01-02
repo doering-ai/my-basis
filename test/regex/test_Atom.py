@@ -18,7 +18,7 @@ cls = Atom
 ############
 class TestAtom:
     # -------------------
-    # `0` Initial Methods
+    # `.` Initial Methods
     # -------------------
     @pyt.mark.parametrize(
         'expr, expected',
@@ -43,7 +43,7 @@ class TestAtom:
     # -------------------
 
     # ------------------
-    # `x` Public Methods
+    # `*` Public Methods
     # ------------------
     @pyt.mark.parametrize(
         'lesser, greater',
@@ -59,7 +59,7 @@ class TestAtom:
         assert not cls(lesser) > cls(greater)
 
     # ---------------
-    # `x1` Properties
+    # `*1` Properties
     # ---------------
     @pyt.mark.parametrize(
         'expr, expected',
@@ -118,7 +118,7 @@ class TestAtom:
         assert cls(expr).is_optional == expected
 
     # ------------
-    # `x2` Methods
+    # `*2` Methods
     # ------------
     @pyt.mark.parametrize(
         'expr, quantifier, overwrite, expected',

@@ -30,7 +30,7 @@ class RegexDebugger(RegexStore):
     """
 
     # -------------------
-    # `0` Initial Methods
+    # `.` Initial Methods
     # -------------------
     @classmethod
     def new_debugger(cls, store: RegexStore) -> Self:
@@ -206,7 +206,7 @@ class RegexDebugger(RegexStore):
         return output
 
     # ------------------
-    # `x` Public Methods
+    # `*` Public Methods
     # ------------------
     def debug(
         self,

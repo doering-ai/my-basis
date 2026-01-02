@@ -18,7 +18,7 @@ cls = GroupAtom
 ############
 class TestGroupAtom:
     # -------------------
-    # `0` Initial Methods
+    # `.` Initial Methods
     # -------------------
     @pyt.mark.parametrize(
         'data, kind, start, body, quant',
@@ -78,7 +78,7 @@ class TestGroupAtom:
         assert atom.flags == expected_flags
 
     # ------------------
-    # `x` Public Methods
+    # `*` Public Methods
     # ------------------
     @pyt.mark.parametrize(
         'data, expected',

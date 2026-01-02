@@ -44,7 +44,7 @@ class GoogleSheet:
     gcreds: OAuthCredentials | TokenCredentials | None = None
 
     # -------------------
-    # `0` Initial Methods
+    # `.` Initial Methods
     # -------------------
     def __new__(cls):
         if cls.INST is None:
@@ -253,7 +253,7 @@ class GoogleSheet:
         self.gcreds = creds
 
     # ------------------
-    # `x` Public Methods
+    # `*` Public Methods
     # ------------------
     @property
     def is_connected(self) -> bool:

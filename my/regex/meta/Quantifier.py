@@ -24,7 +24,7 @@ class Quantifier:
     data: str = ''
 
     # -------------------
-    # `0` Initial Methods
+    # `.` Initial Methods
     # -------------------
     def __init__(self, data: str | Self = '') -> None:
         if isinstance(data, Quantifier):
@@ -101,10 +101,10 @@ class Quantifier:
             raise RuntimeError(f'Unhandled optional quantifier: {self.data!r}')
 
     # ------------------
-    # `x` Public Methods
+    # `*` Public Methods
     # ------------------
     # --------------
-    # `x0` Overrides
+    # `*0` Overrides
     # --------------
     def __bool__(self) -> bool:
         return len(self.data) > 0
@@ -151,7 +151,7 @@ class Quantifier:
         return self.join(other)
 
     # ---------------
-    # `x1` Properties
+    # `*1` Properties
     # ---------------
     @ft.cached_property
     def is_simple(self) -> bool:

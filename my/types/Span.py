@@ -28,7 +28,7 @@ class Span(tuple[int, int]):
     DELIM_RGX: ClassVar[re.Pattern] = re.compile(r' ?[-,\/]+ ?')
 
     # -------------------
-    # `0` Initial Methods
+    # `.` Initial Methods
     # -------------------
     def __new__(cls, arg0: Series | int | float | str | Self = -1, arg1: int | str = -1):
         if isinstance(arg0, Span):
@@ -76,10 +76,10 @@ class Span(tuple[int, int]):
     # -------------------
 
     # ------------------
-    # `x` Public Methods
+    # `*` Public Methods
     # ------------------
     # --------------
-    # `x0` Overrides
+    # `*0` Overrides
     # --------------
     def __repr__(self) -> str:
         return f'Span({self[0]}, {self[1]})'
@@ -132,7 +132,7 @@ class Span(tuple[int, int]):
         return self
 
     # ---------------
-    # `x1` Properties
+    # `*1` Properties
     # ---------------
     @property
     def delta(self) -> int:
@@ -140,7 +140,7 @@ class Span(tuple[int, int]):
         return self[1] - self[0]
 
     # ------------
-    # `x2` Methods
+    # `*2` Methods
     # ------------
     def intersects(self, other: tuple[int, int] | Self | list[Self]) -> bool:
         """

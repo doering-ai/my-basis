@@ -71,7 +71,15 @@ test = [
     "pytest>=8.4.1",
 ]
 
-docs = ["myst-parser>=4.0.1", "sphinx>=8.2.3"]
+docs = [
+    "myst-parser>=4.0.1",
+    "sphinx>=8.2.3",
+    "sphinx-hoverxref>=1.4.2",
+    "sphinx-last-updated-by-git>=0.3.8",
+    "sphinx-notfound-page>=1.1.0",
+    "sphinx-rtd-theme>=3.0.2",
+    "sphinxext-opengraph>=0.13.0",
+]
 
 [build-system]
 requires = ["uv_build>=0.8.13,<0.9.0"]

@@ -21,7 +21,7 @@ class Atom(pyd.BaseModel):
     data: str = r''
 
     # -------------------
-    # `0` Initial Methods
+    # `.` Initial Methods
     # -------------------
     def __init__(self, data: str | Self = '', *args: Any, **kwargs: Any) -> None:
         if isinstance(data, Atom):
@@ -52,10 +52,10 @@ class Atom(pyd.BaseModel):
     # `+` Primary Methods
     # -------------------
     # ------------------
-    # `x` Public Methods
+    # `*` Public Methods
     # ------------------
     # --------------
-    # `x0` Overrides
+    # `*0` Overrides
     # --------------
     def __len__(self) -> int:
         return len(self.data)
@@ -94,7 +94,7 @@ class Atom(pyd.BaseModel):
         return cls(self.data[key])
 
     # ---------------
-    # `x1` Properties
+    # `*1` Properties
     # ---------------
     @ft.cached_property
     def quantifier(self) -> Quantifier:
@@ -139,7 +139,7 @@ class Atom(pyd.BaseModel):
         return bool(self) and self.quantifier.is_simple
 
     # ------------
-    # `x2` Methods
+    # `*2` Methods
     # ------------
     def quantify(self, quantifier: str | Quantifier, overwrite: bool = True) -> Self | None:
         """

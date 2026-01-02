@@ -39,7 +39,7 @@ class GroupAtom(Atom):
     flags: set[str] = set()
 
     # -------------------
-    # `0` Initial Methods
+    # `.` Initial Methods
     # -------------------
     @pyd.model_validator(mode='after')
     def _construct_group(self) -> Self:
@@ -104,7 +104,7 @@ class GroupAtom(Atom):
     # -------------------
 
     # ------------------
-    # `x` Public Methods
+    # `*` Public Methods
     # ------------------
     def __hash__(self) -> int:
         return hash(str(self))

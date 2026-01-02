@@ -66,7 +66,7 @@ class Markdown(pyd.BaseModel):
     buffer_factory: Callable[..., Buffer] = pyd.Field(default=BUFFER_FACTORY, exclude=True)
 
     # -------------------
-    # `0` Initial Methods
+    # `.` Initial Methods
     # -------------------
     @classmethod
     def new(cls, **kwargs: Any) -> Self:
@@ -508,7 +508,7 @@ class Markdown(pyd.BaseModel):
                 child.set_idx(new_idx, i)
 
     # ------------------
-    # `x` Public Methods
+    # `*` Public Methods
     # ------------------
     @property
     def tree(self) -> Iterator['Markdown']:

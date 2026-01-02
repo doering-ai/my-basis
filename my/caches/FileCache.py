@@ -33,6 +33,7 @@ class FileCache(Generic[T]):
     - items: In-memory cache of deserialized data
     - files: Index of on-disk files with their contained item names
     """
+
     MAX_CACHE: ClassVar[int] = 2**16  # 64K
     NAME_RGX: ClassVar[re.Pattern] = re.compile(
         r'[\'"]?'.join([r'(?m)^', r'[[:lower:]][-_[:lower:]]++', r':(?:$| \{)'])
@@ -54,7 +55,7 @@ class FileCache(Generic[T]):
     splitter: Callable[[str], list[str]]
 
     # -------------------
-    # `0` Initial Methods
+    # `.` Initial Methods
     # -------------------
     def __init__(
         self,
@@ -253,7 +254,7 @@ class FileCache(Generic[T]):
         self.fsize += len(data)
 
     # ------------------
-    # `x` Public Methods
+    # `*` Public Methods
     # ------------------
     def read(self, group: str, name: str) -> T | None:
         """

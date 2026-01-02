@@ -38,7 +38,7 @@ class Regex:
     data: list[Atom] = []
 
     # -------------------
-    # `0` Initial Methods
+    # `.` Initial Methods
     # -------------------
     def __init__(self, *args: str | Atom | Sequence[Atom] | Iterator[Atom] | Self) -> None:
         self.data = list(filter(bool, mi.flatten(map(self._parse_arg, args))))
@@ -205,10 +205,10 @@ class Regex:
             yield SetAtom(data=text[span[0] : span[1]], span=span, body=body)
 
     # ------------------
-    # `x` Public Methods
+    # `*` Public Methods
     # ------------------
     # --------------
-    # `x0` Overrides
+    # `*0` Overrides
     # --------------
     def __len__(self) -> int:
         return len(self.data)
@@ -295,7 +295,7 @@ class Regex:
             return False
 
     # ---------------
-    # `x1` Properties
+    # `*1` Properties
     # ---------------
     @property
     def first(self) -> Atom:
@@ -317,7 +317,7 @@ class Regex:
         return list(zip(starts, ends, strict=True))
 
     # ------------
-    # `x2` Methods
+    # `*2` Methods
     # ------------
     def quantify(self, quantifier: str | Quantifier, overwrite: bool = False) -> Self:
         """

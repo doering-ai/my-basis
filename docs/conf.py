@@ -30,7 +30,16 @@ release = version
 # -------
 # General
 # -------
-extensions = ['sphinx.ext.autodoc', 'sphinx.ext.napoleon', 'myst_parser']
+extensions = [
+    'sphinx.ext.autodoc',
+    'sphinx.ext.napoleon',
+    'sphinx.ext.viewcode',
+    'myst_parser',
+    'sphinx_last_updated_by_git',  # https://github.com/mgeier/sphinx-last-updated-by-git
+    'hoverxref.extension',  # https://sphinx-hoverxref.readthedocs.io/en/latest/index.html
+    'sphixext.opengraph',  # https://sphinxext-opengraph.readthedocs.io/en/latest/
+    'notfound.extension',  # https://sphinx-notfound-page.readthedocs.io/en/latest/
+]
 templates_path = ['docs/_templates']
 exclude_patterns = [
     '_build',
@@ -42,6 +51,17 @@ exclude_patterns = [
     'build',
     'dist',
 ]
+
+# ------
+# Python
+# ------
+# add_module_names = True
+# modindex_common_prefix = []
+python_display_short_literal_types = True
+# python_maximum_signature_line_length = None
+# python_trailing_comma_in_multi_line_signatures = True
+python_use_unqualified_type_names = True
+# trim_doctest_flags = True
 
 
 # ------
@@ -75,6 +95,9 @@ napoleon_numpy_docstring = False
 # napoleon_type_aliases = None
 # napoleon_attr_annotations = True
 
+################
+### BUILDERS ###
+################
 # --------
 # Markdown
 # --------
@@ -88,5 +111,5 @@ source_suffix = {
 # ----
 # HTML
 # ----
-html_theme = 'alabaster'
+html_theme = 'sphinx_rtd_theme'
 html_static_path = ['_static']

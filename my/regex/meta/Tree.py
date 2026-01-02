@@ -43,7 +43,7 @@ class Tree(pyd.BaseModel):
     max_expand: int = 4
 
     # -------------------
-    # `0` Initial Methods
+    # `.` Initial Methods
     # -------------------
     def __init__(
         self,
@@ -383,10 +383,10 @@ class Tree(pyd.BaseModel):
         return ret
 
     # ------------------
-    # `x` Public Methods
+    # `*` Public Methods
     # ------------------
     # --------------
-    # `x0` Overrides
+    # `*0` Overrides
     # --------------
     def __len__(self) -> int:
         return len(self.branches)
@@ -427,7 +427,7 @@ class Tree(pyd.BaseModel):
         return self.new(*self.branches[key])
 
     # ---------------
-    # `x1` Properties
+    # `*1` Properties
     # ---------------
     @property
     def lengths(self) -> list[int]:
@@ -443,7 +443,7 @@ class Tree(pyd.BaseModel):
         return [self.suffix] if self.suffix else self.branches
 
     # --------------
-    # `x2` Modifiers
+    # `*2` Modifiers
     # --------------
     def clean(self) -> Self:
         """
@@ -579,7 +579,7 @@ class Tree(pyd.BaseModel):
         return self
 
     # ------------------
-    # `x3` Serialization
+    # `*3` Serialization
     # ------------------
     def render(self) -> Regex:
         """

@@ -18,7 +18,7 @@ cls = SetAtom
 ############
 class TestSetAtom:
     # -------------------
-    # `0` Initial Methods
+    # `.` Initial Methods
     # -------------------
     @pyt.mark.parametrize(
         'expr, body, quant',
@@ -40,7 +40,7 @@ class TestSetAtom:
         assert atom.quantifier == quant
 
     # ------------------
-    # `x` Public Methods
+    # `*` Public Methods
     # ------------------
     @pyt.mark.parametrize(
         'expr, expected',

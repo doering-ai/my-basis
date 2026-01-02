@@ -26,7 +26,7 @@ class TestPredicate:
     )
 
     # -------------------
-    # `0` Initial Methods
+    # `.` Initial Methods
     # -------------------
     @pyt.mark.parametrize(
         'data, expected',
@@ -205,10 +205,10 @@ class TestPredicate:
         assert result == expected
 
     # ------------------
-    # `x` Public Methods
+    # `*` Public Methods
     # ------------------
     # --------------
-    # `x0` Overrides
+    # `*0` Overrides
     # --------------
     def test_getitem(self):
         pred = cls.new(self.SAMPLES['basic'])
@@ -381,7 +381,7 @@ class TestPredicate:
         assert result == expected
 
     # --------------
-    # `x2` Accessors
+    # `*2` Accessors
     # --------------
     @pyt.mark.parametrize(
         'data, expected',
@@ -397,5 +397,5 @@ class TestPredicate:
         assert pred.values() == values
 
     # -------------
-    # `x3` Mutators
+    # `*3` Mutators
     # -------------

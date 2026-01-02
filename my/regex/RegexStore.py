@@ -126,7 +126,7 @@ class RegexStore(pyd.BaseModel):
     options: Options = pyd.Field(default_factory=Options)
 
     # -------------------
-    # `0` Initial Methods
+    # `.` Initial Methods
     # -------------------
     @classmethod
     def new(
@@ -718,10 +718,10 @@ class RegexStore(pyd.BaseModel):
         return values
 
     # ------------------
-    # `x` Public Methods
+    # `*` Public Methods
     # ------------------
     # --------------
-    # `x0` Overrides
+    # `*0` Overrides
     # --------------
     def __len__(self) -> int:
         return len(self.patterns)
@@ -781,7 +781,7 @@ class RegexStore(pyd.BaseModel):
         return list(self.patterns.items())
 
     # -------------------------------
-    # `x1` Top-Level Matching Methods
+    # `*1` Top-Level Matching Methods
     # -------------------------------
     def match(self, names: str | Iterable[str], text: str | Buffer) -> MatchData:
         """
@@ -921,7 +921,7 @@ class RegexStore(pyd.BaseModel):
         return MatchData(data=pd.captures)
 
     # -------------------------
-    # `x2` Functional Utilities
+    # `*2` Functional Utilities
     # -------------------------
     def parse_invocations(self, text: str) -> set[str]:
         """
@@ -989,7 +989,7 @@ class RegexStore(pyd.BaseModel):
         yield from filter(lambda text: bool(fn(text)), texts)
 
     # ---------------------------
-    # `x3` Optimization Functions
+    # `*3` Optimization Functions
     # ---------------------------
     def define_router_tree(self, router: str, items: Mapping[str, RegexVal], **kwargs: str) -> None:
         """
@@ -1077,7 +1077,7 @@ class RegexStore(pyd.BaseModel):
         return ''
 
     # ---------
-    # `x4` Misc
+    # `*4` Misc
     # ---------
     def sanitize(self, pattern: str | Pattern | Buffer | Regex | Atom) -> str:
         """

@@ -17,7 +17,7 @@ from ..conftest import boolmap
 ############
 class TestSpan:
     # -------------------
-    # `0` Initial Methods
+    # `.` Initial Methods
     # -------------------
     @pyt.mark.parametrize(
         'arg0, arg1, expected',
@@ -85,10 +85,10 @@ class TestSpan:
     # -------------------
 
     # ------------------
-    # `x` Public Methods
+    # `*` Public Methods
     # ------------------
     # --------------
-    # `x0` Overrides
+    # `*0` Overrides
     # --------------
     @pyt.mark.parametrize(
         'span, expected',
@@ -200,7 +200,7 @@ class TestSpan:
         assert result == expected
 
     # ---------------
-    # `x1` Properties
+    # `*1` Properties
     # ---------------
     @pyt.mark.parametrize(
         'span, expected',
@@ -215,7 +215,7 @@ class TestSpan:
         assert span.delta == expected
 
     # ------------
-    # `x2` Methods
+    # `*2` Methods
     # ------------
     @pyt.mark.parametrize(
         'p0, p1, expected',

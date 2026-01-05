@@ -75,7 +75,7 @@ class Buffer(pyd.BaseModel):
     pair delimiters that are assumed to represent syntax errors in the original content.
     """
 
-    BUFF_LEN: int = 1
+    BUFF_LEN: ClassVar[int] = 1
     NO_ESC: ClassVar[str] = NO_ESC
     RGXS: ClassVar[dict[str, Pattern]] = ut.regex_dict(
         dict(
@@ -95,7 +95,10 @@ class Buffer(pyd.BaseModel):
     )
 
     text: list[str] = ['']
-    uid: str = ''  # optional
+    """The primary content of each instance -- can be modified directly if needed."""
+
+    uid: str = ''
+    """Optional identifier for use by the caller."""
 
     fences: Annotated[SpanArray, ut.pyd_schemify(np.ndarray)] = pyd.Field(default_factory=no_spans)
     fence_rgxs: list[str] = []
@@ -540,16 +543,32 @@ class Buffer(pyd.BaseModel):
         return self
 
     def insert(self, pos: int, new: str) -> None:
-        """Convenience setter for replacing an empty span with new text."""
+        """
+        Convenience setter for replacing an empty span with new text.
+
+        Args:
+            pos: The position to insert the new text at.
+            new: The new text to insert.
+        """
         self._replace_span(Span(pos, pos), new)
 
     def drop(self, old: str | Span | tuple[int, int]) -> Self:
-        """Convenience setter for removing the specified text from the buffer."""
+        """
+        Convenience setter for removing the specified text from the buffer.
+
+        Args:
+            old: The substring or span to remove.
+        """
         self.replace(old, '')
         return self
 
     def set(self, text: str) -> Self:
-        """Convenience setter for replacing the entire content of the buffer at once."""
+        """
+        Convenience setter for replacing the entire content of the buffer at once.
+
+        Args:
+            text: The new text to set the buffer to.
+        """
         self.text[0] = text
         self.fences = self._build_fences()
         return self
@@ -585,19 +604,47 @@ class Buffer(pyd.BaseModel):
         return self
 
     def match(self, rgx: Pattern, *args, **kwargs) -> Match | None:
-        """Wrapper for regex.match()."""
+        """
+        Wrapper for regex.match().
+
+        Args:
+            rgx: The regex pattern to match.
+        Returns:
+            The Match object if a match is found, else None.
+        """
         return rgx.match(self.text[0], *args, **kwargs)
 
     def search(self, rgx: Pattern, *args, **kwargs) -> Match | None:
-        """Wrapper for regex.search()."""
+        """
+        Wrapper for regex.search().
+
+        Args:
+            rgx: The regex pattern to search for.
+        Returns:
+            The Match object if a match is found, else None.
+        """
         return rgx.search(self.text[0], *args, **kwargs)
 
     def findall(self, rgx: Pattern, *args, **kwargs) -> list[tuple[str, ...]]:
-        """Wrapper for regex.findall()."""
+        """
+        Wrapper for regex.findall().
+
+        Args:
+            rgx: The regex pattern to find all matches for.
+        Returns:
+            A list of all matches found.
+        """
         return rgx.findall(self.text[0], *args, **kwargs)
 
     def sub(self, rgx: Pattern, new: str, count: int = 0) -> None:
-        """Direct wrapper for _replace_regex(), defined to match the base regex interface."""
+        """
+        Direct wrapper for _replace_regex(), defined to match the base regex interface.
+
+        Args:
+            rgx: The regex pattern to replace.
+            new: The new text to insert.
+            count: The maximum number of replacements to make (0 for all).
+        """
         self.replace(rgx, new, count)
 
     def apply(self, *functions: Callable[[str], str], b0: int = 0, b1: int = -1) -> Self:
@@ -646,11 +693,17 @@ class Buffer(pyd.BaseModel):
     def write(self, span: Span, text: str | Iterable[str], spacing: int = 0, **kwargs) -> None:
         """
         Wraps a given string output in preparation for it to be inserted into the article.
+
         Offers four distinct spacing modes:
-            spacing=0: No spacing
-            spacing=1: Ensures space or newline exists before and after
-            spacing=2: Ensures newline exists before and after
-            spacing=3: Ensures two newlines (i.e. an empty line) exists before and after
+        - 0: No spacing
+        - 1: Ensures space or newline exists before and after
+        - 2: Ensures newline exists before and after
+        - 3: Ensures two newlines (i.e. an empty line) exists before and after
+
+        Args:
+            span: The span of text to replace.
+            text: The text to insert, either as a single string or an iterable of strings to join.
+            spacing: The spacing mode to use (0-3).
         """
         if not text:
             self.drop(span)

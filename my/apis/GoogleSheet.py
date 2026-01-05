@@ -332,7 +332,7 @@ class GoogleSheet:
         Args:
             worksheet: The worksheet name(s) to clear.
             cells: The cell range(s) to clear. If a single string is provided, it applies to all
-                worksheets. If a list is provided, it must match the length of `worksheet`.
+                   worksheets. If a list is provided, it must match the length of `worksheet`.
         """
         if isinstance(worksheet, str):
             assert isinstance(cells, str)
@@ -370,8 +370,7 @@ class GoogleSheet:
         """
         Write multiple DataFrames to the Google Sheet in a single batch operation.
         Args:
-            **kwargs: Each key is a target range (e.g. worksheet!cells) and each value is the
-                DataFrame to write to that range.
+            **kwargs: { 'worksheet!cells': DataFrame }
         """
         requests = []
         with fire.span(f'Writing {len(kwargs)} ranges to {self.name}...'):
@@ -405,8 +404,7 @@ class GoogleSheet:
         Add new worksheets to the Google Sheet.
         Args:
             *args: The names of the worksheets to add with default properties.
-            **kwargs: Each key is a worksheet name and each value is a dictionary of properties to
-                set for that worksheet.
+            **kwargs: A map of properties to set for each worksheet.
         """
         worksheets = [
             *(dict(title=worksheet) for worksheet in args),

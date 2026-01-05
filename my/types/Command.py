@@ -26,7 +26,7 @@ class Command(pyd.BaseModel):
     verbose: bool = False
 
     out: str | None = None
-    pipe: 'Command' | None = None
+    pipe: Self | None = None
 
     # -------------------
     # `.` Initial Methods

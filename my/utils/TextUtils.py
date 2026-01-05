@@ -136,13 +136,13 @@ class TextUtils:
         the passed expressions.
 
         Args:
-            *expressions: Regex patterns (strings or lists of strings).
-            sep: Separator for joining list patterns (default: r' ?').
-            pre: Prefix to add before combined pattern (default: '').
-            suf: Suffix to add after combined pattern (default: '').
+            expressions: Regex patterns (strings or lists of strings).
+            sep: Separator for joining list patterns (default: ` ?`).
+            pre: Prefix to add before combined pattern (default: empty).
+            suf: Suffix to add after combined pattern (default: empty).
             branching: If True, use branching group (resets group names b/w branches)
         Returns:
-            Combined regex pattern in group format (?:|...) or (?:...).
+            Combined regex pattern in group format `(?|...)` or `(?:...)`.
         """
         parts = [(expr if isinstance(expr, str) else sep.join(expr)) for expr in expressions]
         contents = r'|'.join(parts)
@@ -158,7 +158,7 @@ class TextUtils:
 
         Args:
             line: Text to wrap.
-            prefix: Prefix for each line (default: '').
+            prefix: Prefix for each line (default: empty).
             char: Character for border (default: '-').
             width: Padding width on each side (default: 2).
         Returns:
@@ -207,12 +207,11 @@ class TextUtils:
     @staticmethod
     def strip_quotes(string: str) -> str:
         """
-        Remove surrounding quotes and emphasis markers from string.
-
-        Strips matching pairs of ', ", *, and _ characters.
+        Remove surrounding quotes and emphasis markers from string, namely characters in the set
+        `'"*_`.
 
         Args:
-            string: String to strip.
+            string: The text content to strip.
         Returns:
             String with surrounding quotes/emphasis removed.
         """

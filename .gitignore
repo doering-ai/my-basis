@@ -60,6 +60,7 @@ profile_default/
 
 # Documentation
 _build/
+_source/
 
 # Publishing
 *.egg
@@ -142,6 +143,7 @@ coverage.xml
 coverage/
 lib-cov
 
+.task
 .hypothesis/
 .nox/
 .ropeproject

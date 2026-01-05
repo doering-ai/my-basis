@@ -6,7 +6,7 @@ from .SystemUtils import SystemUtils, system_utils  # USES: text
 
 
 class Utils(IterUtils, TextUtils, SystemUtils, SemanticUtils, SyntaxUtils):
-    pass
+    """A class combining all of the the utility classes into one convenient static interface."""
 
 
 ut = Utils

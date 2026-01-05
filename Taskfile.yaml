@@ -4,33 +4,44 @@ version: '3'
 
 env:
     FORCE_COLOR: 1
-    GREETING: Hello, world!
-    SPHINX_PARSE: uv run sphinx-apidoc
-    SPHINX_BUILD: uv run sphinx-build
-    SRC_DIR: ./my/
-    RST_DIR: ./docs/
-    OUT_DIR: ./docs/_build/
 
-dotenv: ['.env']
+vars:
+    SRC_DIR: ./my
+    DOC_DIR: ./docs
+    RST_DIR: '{{.DOC_DIR}}/_source'
+    OUT_DIR: '{{.DOC_DIR}}/_build'
+
+dotenv: [.env, ~/tmp/.env]
 
 tasks:
     # ------
     # PyTest
     # ------
-    test: uvr pytest {{.CLI_ARGS}}
+    test: uv run pytest {{.CLI_ARGS}}
 
-    test_dev: uvr pytest --sw -s --pdb -vv --durations=5 --durations-min=0.005 -k
-        "${PYTEST_TARGET}" {{.CLI_ARGS}}
+    test-dev: uv run pytest --sw -s --pdb -vv --durations=5 --durations-min=0.005
+        {{.CLI_ARGS}}
 
-    test_cov: uvr pytest --cov=my --cov-report=term-missing {{.CLI_ARGS}} -p
+    test-cov: uv run pytest --cov=my --cov-report=term-missing {{.CLI_ARGS}}
 
     # ------
     # Sphinx
     # ------
-    parse_docs: uvr sphinx-apidoc
-    build_docs: uvr sphinx-build
+    docs-parse:
+        desc: Parse Python source code and generate Sphinx .rst files; configured
+            in conf.py.
+        # cmd: uv run sphinx-apidoc -o {{.RST_DIR}} {{.SRC_DIR}} --remove-old {{.CLI_ARGS}}
+        cmd: uv run sphinx-build {{.DOC_DIR}} {{.OUT_DIR}} --fail-on-warning {{.CLI_ARGS}}
+        sources: ['{{.SRC_DIR}}/**/*.py', '{{.DOC_DIR}}/conf.py']
+        generates: ['{{.RST_DIR}}/*.rst']
+
+    docs-build:
+        desc: Build Sphinx .rst files into publishable .html files.
+        cmd: uv run sphinx-build {{.DOC_DIR}} {{.OUT_DIR}} --fail-on-warning {{.CLI_ARGS}}
+        sources: ['{{.RST_DIR}}/*.rst', '{{.DOC_DIR}}/**/*.md', '{{.DOC_DIR}}/conf.py']
+        generates: ['{{.OUT_DIR}}/*.html']
     docs:
         cmds:
-            - task: parse_docs
-            - task: build_docs
+            - task: docs-parse
+            - task: docs-build
 

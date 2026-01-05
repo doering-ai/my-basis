@@ -22,9 +22,15 @@ class Cache(pyd.BaseModel, Generic[Key, Value]):
     Maintains insertion order with most recently accessed items at the end.
     When maxsize is reached, removes items in buckets from the front (oldest first).
     """
+
     data: dict[Key, Value] = {}
+    """The primary data of the cache, typed generically per instance."""
+
     maxsize: int = pyd.Field(default=2**12, gt=0)  # 4096
+    """The maximum size of this cache, beyond which the oldest entries will be pruned."""
+
     bucket_size: int = pyd.Field(default=2**8, gt=0)  # 256
+    """The amount of entries to prune at once (by default)"""
 
     def __getitem__(self, key: Key) -> Value | None:
         if (ret := self.data.pop(key, None)) is not None:

@@ -525,3 +525,4 @@ class IterUtils:
 
 
 iter_utils = IterUtils
+"""An alias of `IterUtils`, cased so as to imply static usage."""

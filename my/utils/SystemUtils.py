@@ -558,3 +558,4 @@ class SystemUtils:
 
 
 system_utils = SystemUtils
+"""An alias of `SystemUtils`, cased so as to imply static usage."""

@@ -7,10 +7,10 @@ from pathlib import Path
 from importlib import metadata
 
 ### EXTERNAL
-import regex as re
 
 ### INTERNAL
-from my import ut  # noqa: F401
+from my import RegexStore
+import my  # noqa: F401
 
 ############
 ### BODY ###
@@ -43,7 +43,7 @@ extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.apidoc',
     'sphinx.ext.napoleon',
-    'sphinx.ext.viewcode',
+    # 'sphinx.ext.viewcode',
     'myst_parser',
     # 'sphinx_last_updated_by_git',  # https://github.com/mgeier/sphinx-last-updated-by-git
     # 'hoverxref.extension',  # https://sphinx-hoverxref.readthedocs.io/en/latest/index.html
@@ -52,7 +52,7 @@ extensions = [
 ]
 templates_path = [str(JNJ_DIR)]
 exclude_patterns = [
-    '**/.git',
+    '*/.git',
     '.DS_Store',
     '.venv',
     '__init__.py',
@@ -95,22 +95,22 @@ autodoc_member_order = 'bysource'
 # autodoc_warningiserror =
 # autodoc_inherit_docstrings =
 
-# autodoc_default_options = dict(
-# members = None,
-# undoc-members = None,
-# private-members = None,
-# special-members = None,
-# inherited-members = None,
-# imported-members = None,
-# exclude-members = None,
-# ignore-module-all = None,
-# member-order = None,
-# show-inheritance = None,
-# class-doc-from = None,
-# no-value = None,
-# no-index = None,
-# no-index-entry = None,
-# )
+autodoc_default_options = {
+    # 'members': None,
+    # 'undoc-members': None,
+    # 'private-members': None,
+    # 'special-members': None,
+    # 'inherited-members': None,
+    # 'imported-members': None,
+    # 'exclude-members': None,
+    # 'ignore-module-all': None,
+    'member-order': 'bysource',
+    # 'show-inheritance': None,
+    # 'class-doc-from': None,
+    # 'no-value': None,
+    # 'no-index': None,
+    # 'no-index-entry': None,
+}
 
 
 # ------
@@ -119,12 +119,12 @@ autodoc_member_order = 'bysource'
 # https://www.sphinx-doc.org/en/master/usage/extensions/apidoc.html
 default = dict(
     destination=RST_DIR,
-    separate_modules=False,
+    separate_modules=True,
     module_first=True,
     exclude_patterns=[],
     # implicit_namespaces=True,
     # https://www.sphinx-doc.org/en/master/usage/extensions/autodoc.html#directive-automodule
-    # automomdule_options=set(),
+    automomdule_options=set(),
 )
 apidoc_modules = [
     default
@@ -201,25 +201,28 @@ source_suffix = {
 # myst_html_meta = {}
 # myst_footnote_transition = True
 # myst_words_per_minute = 200
-# myst_enable_extensions = [
-# 'amsmath', # Enable direct parsing of amsmath LaTeX equations
-# 'colon_fence', # Enable code fences using ::: delimiters
-# 'deflist', # Enable definition lists
-# 'dollarmath', # Enable parsing of dollar $ and $$ encapsulated math
-# 'fieldlist', # Enable field lists
-# 'html_admonition', # Convert <div class="admonition"> elements to sphinx admonition nodes
-# 'html_image', # Convert HTML <img> elements to sphinx image nodes
-# 'linkify', # Automatically identify “bare” web URLs and add hyperlinks
-# 'replacements', # Automatically convert some common typographic texts
-# 'smartquotes', # Automatically convert standard quotations to their opening/closing variants
-# 'substitution', # Substitute keys
-# 'tasklist', # Add check-boxes to the start of list items
-# ]
+myst_enable_extensions = [
+    'dollarmath',  # Enable parsing of dollar $ and $$ encapsulated math
+    'replacements',  # Automatically convert some common typographic texts
+    'html_admonition',  # Convert <div class="admonition"> elements to sphinx admonition nodes
+    'html_image',  # Convert HTML <img> elements to sphinx image nodes
+    'linkify',  # Automatically identify “bare” web URLs and add hyperlinks
+    'deflist',  # Enable definition lists
+    'fieldlist',  # Enable field lists
+    # 'amsmath', # Enable direct parsing of amsmath LaTeX equations
+    # 'colon_fence', # Enable code fences using ::: delimiters
+    # 'smartquotes', # Automatically convert standard quotations to their opening/closing variants
+    # 'substitution', # Substitute keys
+    # 'tasklist', # Add check-boxes to the start of list items
+]
 
 # ----
 # HTML
 # ----
-html_theme = 'sphinx_rtd_theme'
+# html_theme = 'sphinx_rtd_theme' # The standard ReadTheDocs theme.
+html_theme = 'furo'  # copied from https://more-itertools.readthedocs.io/en/stable/
+pygments_style = 'sphinx'
+pygments_dark_style = 'monokai'  # specific to `furo` theme
 # html_theme_options=
 # html_theme_path=
 # html_style=
@@ -278,6 +281,38 @@ ObjType = Literal[
 ]
 
 
+_AUTODOC_SKIPS = RegexStore.new(
+    skip_any=(
+        '|',
+        [
+            r'^_.*',
+            r'[[:upper:]\d_]+',
+        ],
+    ),
+    skip_module='',
+    skip_class='',
+    skip_method='',
+    skip_function='',
+    skip_decorator='',
+    skip_attribute='',
+    skip_exception='',
+    skip_property='',
+    skip_data='',
+    skip_type='',
+)
+
+
+def autodoc_skip_member(
+    app: Any,
+    obj_type: ObjType,
+    name: str,
+    obj: Any,
+    skip: bool,
+    options: Any,
+) -> bool | None:
+    return skip or bool(_AUTODOC_SKIPS.fullmatch(['skip_any', f'skip_{obj_type}'], name))
+
+
 def autodoc_process_docstring(
     app: Any,
     obj_type: ObjType,
@@ -307,18 +342,6 @@ def autodoc_process_signature(
 
 def autodoc_process_bases(app: Any, name: str, obj: Any, _unused: Any, bases: list) -> None:
     pass
-
-
-def autodoc_skip_member(
-    app: Any,
-    obj_type: ObjType,
-    name: str,
-    obj: Any,
-    skip: bool,
-    options: Any,
-) -> bool | None:
-    print(f'\t{obj_type}: {name}')
-    return bool(re.fullmatch(r'[_[:upper:]\d]+', name)) or None
 
 
 def setup(app: Any):

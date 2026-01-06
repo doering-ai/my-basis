@@ -3,6 +3,7 @@ from .UniqueId import UniqueId, Uid
 from .Span import Span
 from .Buffer import Buffer
 from .Predicate import Predicate
+from .MyEnumRow import MyEnumRow, MyEnumSetRow
 
 __all__ = [
     'MyEnum',
@@ -11,4 +12,6 @@ __all__ = [
     'Span',
     'Buffer',
     'Predicate',
+    'MyEnumRow',
+    'MyEnumSetRow',
 ]

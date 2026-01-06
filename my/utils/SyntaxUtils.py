@@ -233,3 +233,4 @@ class SyntaxUtils:
 
 
 syntax_utils = SyntaxUtils
+"""An alias of `SyntaxUtils`, cased so as to imply static usage."""

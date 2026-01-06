@@ -20,13 +20,14 @@ E = TypeVar('E', bound=MyEnum)
 ############
 ### BODY ###
 ############
-class EnumType(sa.TypeDecorator, Generic[E]):
+class MyEnumRow(sa.TypeDecorator, Generic[E]):
     """
     SQLAlchemy type for storing MyEnum values as strings.
 
     Automatically converts between MyEnum instances and their string representations
     for database storage and retrieval.
     """
+
     impl = sa.String(64)
 
     def __init__(self, tvar: Type[E], *args, **kwargs):
@@ -62,13 +63,14 @@ class EnumType(sa.TypeDecorator, Generic[E]):
         return self.tvar.read(value)
 
 
-class EnumSetType(sa.TypeDecorator, Generic[E]):
+class MyEnumSetRow(sa.TypeDecorator, Generic[E]):
     """
     SQLAlchemy type for storing sets of MyEnum values as PostgreSQL arrays.
 
     Automatically converts between sets of MyEnum instances and arrays of strings
     for PostgreSQL storage and retrieval.
     """
+
     impl = psql.ARRAY
     cache_ok = True
 

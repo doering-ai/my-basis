@@ -1,13 +1,4 @@
-# ./utils/ <- NONE
-#   ./caches/ <- utils
-#       ./typing/ <- utils, caches
-#           ./types/ <- utils, typing
-#               ./data/ <- types
-#               ./apis/ <- utils, types
-#               ./regex/ <- utils, types, text
-#                   ./files/ <- utils, typing, types, regex
-
-
+# See docs/contributing.md for inter-package dependency tree
 from .infra import T, C, Key, Keys, Value, Atomic, Series, MapItems, AtomicType, TimeType
 from .utils import (
     Utils,
@@ -26,8 +17,7 @@ from .utils import (
 )
 from .caches import Cache, NestedCache, PickleCache, FileCache
 from .typing import Typist, typist, TypeArg, AutocastModel
-from .types import MyEnum, UniqueId, Uid, Span, Buffer, Predicate
-from .data import EnumType, EnumSetType
+from .types import MyEnum, UniqueId, Uid, Span, Buffer, Predicate, MyEnumRow, MyEnumSetRow
 from .apis import GoogleSheet, Environment, env
 from .regex import (
     MatchData,
@@ -58,56 +48,55 @@ __all__ = [
     'AtomicType',
     'TimeType',
     # /utils/
-    'Utils',
-    'ut',
-    'utils',
-    'IterUtils',
     'iter_utils',
-    'TextUtils',
-    'text_utils',
-    'SystemUtils',
-    'system_utils',
-    'SemanticUtils',
+    'IterUtils',
     'semantic_utils',
-    'SyntaxUtils',
+    'SemanticUtils',
     'syntax_utils',
+    'SyntaxUtils',
+    'system_utils',
+    'SystemUtils',
+    'text_utils',
+    'TextUtils',
+    'ut',
+    'Utils',
+    'utils',
     # /caches/
     'Cache',
+    'FileCache',
     'NestedCache',
     'PickleCache',
-    'FileCache',
     # /apis/
-    'GoogleSheet',
-    'Environment',
     'env',
+    'Environment',
+    'GoogleSheet',
     # /typing/
+    'AutocastModel',
+    'TypeArg',
     'Typist',
     'typist',
-    'TypeArg',
-    'AutocastModel',
     # /types/
-    'MyEnum',
-    'UniqueId',
-    'Uid',
-    'Span',
     'Buffer',
+    'MyEnum',
+    'MyEnumRow',
+    'MyEnumSetRow',
     'Predicate',
-    # /data/
-    'EnumType',
-    'EnumSetType',
+    'Span',
+    'Uid',
+    'UniqueId',
     # /regex/
-    'MatchData',
-    'GroupKind',
-    'RegexParser',
-    'RegexTup',
-    'RegexList',
-    'RegexVal',
-    'RegexDef',
-    'RegexStore',
-    'format_url',
     'atom',
     'COMMON_RGXS',
+    'format_url',
+    'GroupKind',
+    'MatchData',
     'RegexDebugger',
+    'RegexDef',
+    'RegexList',
+    'RegexParser',
+    'RegexStore',
+    'RegexTup',
+    'RegexVal',
     # /files/
     'Markdown',
 ]

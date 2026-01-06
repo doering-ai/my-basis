@@ -1,8 +1,31 @@
 # MyBasis: A Python Toolkit
 
-The MyBasis Python package contains a variety of utilities generally centered around the topics of text processing, functional programming, and runtime type coercion.
-This broad scope is somewhat unusual, as any given application will likely only need a small subset of the contents; for this reason, it is intended for use in applications where dependency purity isn't very important, such as personal projects, local development scripts, offline data-processing projects, and prototypes.
+MyBasis is a library built to provide a variety of useful doodads for high-level Python development of all kinds, with a special eye towards ergonomics, Unix-style composability, and thorough documentation & testing.
 
-```{eval-rst}
-.. include:: _source/modules.rst
+It's aimed at Python developers of all kinds, but it's especially worth a perusal if you're...
+
+- ...iteratively **modifying text files**, e.g. while setting up a RAG corpus, converting files between formats, or cleaning up a dataset.
+
+- ...looking for a clean, easily-extensible way to interact with **Google Sheets**.
+
+- ...convinced Python has accidentally become the best functional language ever released, and thus always on the lookout for ways to write more **readable, concise functional code**.
+
+- ...building AI agents where **"vibe" typing** can save you a few thousand tokens per slightly-mistaken tool call.
+
+- ...interested in generic **caching mechanisms** in order to satisfy the guilty pleasure of premature optimzation.
+
+- ...looking for some **code snippets** to lift out of this repo directly, saving you an import!
+
+The package is organized into seven subpackages, which are (in roughly descending order of generality):
+
+```{toctree}
+:maxdepth: 2
+
+1. My Utilities </my.utils>
+2. Type Casting </my.typing>
+3. Useful Types </my.types>
+4. Regex Stores </my.regex>
+5. Local Caches </my.caches>
+6. API Wrappers </my.apis>
+7. File Formats </my.files>
 ```

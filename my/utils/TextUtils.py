@@ -136,7 +136,7 @@ class TextUtils:
         the passed expressions.
 
         Args:
-            expressions: Regex patterns (strings or lists of strings).
+            *expressions: Regex patterns (strings or lists of strings).
             sep: Separator for joining list patterns (default: ` ?`).
             pre: Prefix to add before combined pattern (default: empty).
             suf: Suffix to add after combined pattern (default: empty).
@@ -381,3 +381,4 @@ TextUtils.RGXS = TextUtils.regex_dict(
 )
 
 text_utils = TextUtils
+"""An alias of `TextUtils`, cased so as to imply static usage."""

@@ -21,8 +21,7 @@ from .RegexStore import RegexStore, RegexBuffer
 ### BODY ###
 ############
 class RegexDebugger(RegexStore):
-    """
-    Debugging tools for analyzing regex pattern failures.
+    """Debugging tools for analyzing regex pattern failures.
 
     Extends RegexStore with methods to diagnose why patterns fail to match text.
     Provides detailed failure analysis by isolating the failing clause and showing
@@ -34,8 +33,7 @@ class RegexDebugger(RegexStore):
     # -------------------
     @classmethod
     def new_debugger(cls, store: RegexStore) -> Self:
-        """
-        Create a debugger from an existing RegexStore.
+        """Create a debugger from an existing RegexStore.
 
         Args:
             store: RegexStore instance to create debugger from.
@@ -48,6 +46,16 @@ class RegexDebugger(RegexStore):
     # `-` Private Methods
     # -------------------
     def pinpoint_failure(self, text: Buffer, expr: Regex, prefix: str) -> tuple[int, MatchData]:
+        """Identifies the first clause to cause an accumulated sub-expression to fail to match.
+
+        Args:
+            text: Buffer containing text to match against.
+            expr: Tuple of regex atoms from the pattern body.
+            prefix: Precompiled prefix string to prepend to each snippet.
+        Returns:
+            1. Index of failing atom.
+            2. MatchData of last successful match.
+        """
         n = len(expr)
         last_match: MatchData = MatchData()
 
@@ -63,15 +71,15 @@ class RegexDebugger(RegexStore):
         return n, last_match
 
     def curate(self, atoms: Regex, failed_idx: int, flags: Atom) -> str:
-        """
-        Curate the given regex snippet to include only the failing clause and its dependencies.
+        """Curate the given regex snippet to include only the failing clause and its dependencies.
+
+        The purpose of this function is to help callers construct a "minimally-failing version" of
+        a problem regex.
 
         Args:
             atoms: Tuple of regex atoms from the pattern body.
-            atom_ends: List of end indices for each atom in the body.
             failed_idx: Index of the atom where matching failed.
-            body: Buffer containing the full pattern body.
-            defs: Dictionary of group definitions from the pattern head.
+            flags: Atom containing any regex flags(/"modifiers") to apply to the curated expression.
         Returns:
             A truncated version of the given expression.
         """
@@ -98,37 +106,37 @@ class RegexDebugger(RegexStore):
             and not Regex.is_split(group.body)
         )
 
-    def format_expr(self, expr: str | Regex) -> str:
+    def _format_expr(self, expr: str | Regex) -> str:
         return ut.wrap('EXPRESSION', char='-', width=3) + f'\n{expr}'
 
-    def format_data(self, match: str | MatchData) -> str:
+    def _format_data(self, match: str | MatchData) -> str:
         return ut.wrap('LAST MATCH', char='-', width=1) + f'\n{match}'
 
-    def format_curated(self, curated_expr: str | Regex) -> str:
+    def _format_curated(self, curated_expr: str | Regex) -> str:
         return ut.wrap('CURATED EXPRESSION', char='-', width=2) + f'\n{curated_expr}'
 
-    def format_text(self, text: str | Buffer) -> str:
+    def _format_text(self, text: str | Buffer) -> str:
         return ut.wrap('UNMATCHED TEXT', char='-', width=1) + f'\n{text}'
 
-    def format_fulltext(self, text: str | Buffer) -> str:
+    def _format_fulltext(self, text: str | Buffer) -> str:
         return ut.wrap('FULL TEXT', char='-', width=3) + f'\n{text}'
 
-    def format_fullexpr(self, expr: str | Regex) -> str:
+    def _format_fullexpr(self, expr: str | Regex) -> str:
         return ut.wrap('FULL EXPRESSION', char='-', width=3) + f'\n{expr}'
 
-    def format_early_return(self, name: str, explanation: str, text: str, expr: str) -> list[str]:
+    def _format_early_return(self, name: str, explanation: str, text: str, expr: str) -> list[str]:
         return [
             f'Regular expression "{name}" {explanation}',
-            self.format_fulltext(text),
-            self.format_fullexpr(expr),
+            self._format_fulltext(text),
+            self._format_fullexpr(expr),
         ]
 
     # -------------------
     # `+` Primary Methods
     # -------------------
     def debug_failed_match(self, name: str, text: Buffer) -> list[str]:
-        """
-        Analyze a pattern that failed to match and identify the failing clause.
+        """Identify which clause in the identified pattern caused matching to fail.
+
         Iteratively tests progressively longer subpatterns to find exactly where
         matching stops, then extracts that clause with its dependencies for testing.
 
@@ -144,10 +152,9 @@ class RegexDebugger(RegexStore):
 
         # I.i. Drill down through unnecessary wrapper groups, collecting any flags set along the way
         flags = {'m'}
-        while len(atoms) == 1 and isinstance(atoms.one, GroupAtom) and self._do_drill(atoms.one):
-            assert Regex.is_group(group := atoms.one), 'Expected group, got plain atom.'
-            atoms = Regex(group.body)
-            flags |= group.flags
+        while len(atoms) == 1 and isinstance(grp := atoms.one, GroupAtom) and self._do_drill(grp):
+            atoms = Regex(grp.body)
+            flags |= grp.flags
 
         # I.ii. Generate a convenient (if oversized) prefix for future repeated use
         definitions = mi.first(Regex.atomize(self.patterns[name].pattern))
@@ -163,19 +170,19 @@ class RegexDebugger(RegexStore):
             output.extend(
                 [
                     'Failed to identify failure during debugging (all atoms matched successfully).',
-                    self.format_expr(self.sanitize(name)),
-                    self.format_data(last_match),
+                    self._format_expr(self.sanitize(name)),
+                    self._format_data(last_match),
                 ]
             )
             if last_match.end < len(text):
-                output.append(self.format_text(text[last_match.end :]))
+                output.append(self._format_text(text[last_match.end :]))
             return output
         elif failed_idx == 0:
             # III.ii. All atoms failed
             output.extend(
                 [
                     'All atoms of the regex failed, implicating the first atom OR a context issue.',
-                    self.format_expr(self.sanitize(name)),
+                    self._format_expr(self.sanitize(name)),
                 ]
             )
             remaining_text = str(text)
@@ -191,15 +198,15 @@ class RegexDebugger(RegexStore):
             output.extend(
                 [
                     'DEBUGGING ERROR -- failed to curate!',
-                    self.format_expr(self.sanitize(name)),
+                    self._format_expr(self.sanitize(name)),
                 ]
             )
         else:
             output.extend(
                 [
-                    self.format_data(last_match),
-                    self.format_curated(curated_rgx),
-                    self.format_text(remaining_text),
+                    self._format_data(last_match),
+                    self._format_curated(curated_rgx),
+                    self._format_text(remaining_text),
                 ]
             )
 
@@ -216,8 +223,7 @@ class RegexDebugger(RegexStore):
         expected: bool = True,
         func: str = '',
     ) -> str:
-        """
-        Generate debug output for a regex test that produced unexpected results.
+        """Generate stdout-ready debug output for a regex test that produced unexpected results.
 
         Args:
             names: List of pattern names that were tested.
@@ -236,7 +242,7 @@ class RegexDebugger(RegexStore):
         term_width = ut.get_terminal_width()
         output: list[str] = [f'{" REGEX DEBUGGER ":#^{term_width}}']
         preamble = ft.partial(
-            self.format_early_return,
+            self._format_early_return,
             name=name,
             text=text,
             expressions='\n\n'.join(map(self.sanitize, names)),

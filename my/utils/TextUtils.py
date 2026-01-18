@@ -2,7 +2,8 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import Callable, Iterable, Literal, ClassVar
+from typing import Literal, ClassVar
+from collections.abc import Callable, Iterable
 import textwrap
 import itertools as it
 
@@ -21,9 +22,12 @@ from .IterUtils import iter_utils
 ### BODY ###
 ############
 class TextUtils:
-    """
-    Utilities for text manipulation tasks, including a basic, dependency-free version of the Regex
-    functionality found at [`/my/regex`](/my/regex).
+    """Methods that clean, search, split, and otherwise interact with strings.
+
+    Parts of this class overlap in scope with `RegexStore` (namely `regex_dict()`), but ultimately
+    present a much more lightweight interface for simple (or dependency-sensitive...) regex tasks.
+    As with the store, all regex compiled through these methods supports the regex module's
+    [extended regex syntax](/mrab-regex-syntax.my).
     """
 
     RGXS: ClassVar[dict[str, Pattern]] = {}  # written at bottom of file
@@ -33,8 +37,7 @@ class TextUtils:
     # ------------------------
     @staticmethod
     def replace(string: str, *args: tuple[str | Pattern, str | Callable[[Match[str]], str]]) -> str:
-        """
-        Apply multiple regex replacements sequentially to a string.
+        """Apply multiple regex replacements sequentially to a string.
 
         Args:
             string: Input string to transform.
@@ -48,8 +51,7 @@ class TextUtils:
 
     @staticmethod
     def split_into(text: str, pattern: str | Pattern, n: int = 2, rhs: bool = True) -> list[str]:
-        """
-        Split string using regex into exactly n parts, padding as needed.
+        """Split string using regex into exactly n parts, padding as needed.
 
         Args:
             text: String to split.
@@ -81,8 +83,7 @@ class TextUtils:
         expressions: dict[T, str | tuple[str, ...] | Pattern] | dict[T, str] | None = None,
         compile_function: Callable[..., Pattern] = re.compile,
     ) -> dict[T, Pattern]:
-        """
-        Compile string patterns in a expressions to compiled regex Pattern objects.
+        """Compile the expression strings in the given dictionary, mapping names to Patterns.
 
         Args:
             expressions: A mapping of string names to regular expressions (compiled or otherwise).
@@ -105,9 +106,7 @@ class TextUtils:
         array: Iterable[tuple[str | Pattern, str]],
         compile_function: Callable[..., Pattern] = re.compile,
     ) -> list[tuple[Pattern, str]]:
-        """
-        Compile raw expressions associated with keys into a list of two-tuples, effectively mapping
-        `pattern: name`.
+        """Compile the expressions in a list of two-tuples, effectively mapping Patterns to strings.
 
         Args:
             array: Iterable of (pattern, replacement) tuples.
@@ -131,12 +130,10 @@ class TextUtils:
         pre: str = '',
         suf: str = '',
     ) -> str:
-        """
-        Combine two or more regular expressions into a single "branching" group that matches any of
-        the passed expressions.
+        """Combine expression clauses into a single alternating group that matches any of them.
 
         Args:
-            *expressions: Regex patterns (strings or lists of strings).
+            *expressions: Regex patterns to be combined.
             sep: Separator for joining list patterns (default: ` ?`).
             pre: Prefix to add before combined pattern (default: empty).
             suf: Suffix to add after combined pattern (default: empty).
@@ -153,8 +150,7 @@ class TextUtils:
     # --------------
     @staticmethod
     def wrap(line: str, prefix: str = '', char: str = '-', width: int = 2) -> str:
-        """
-        Wrap a line of text with decorative borders.
+        """Wrap a line of text with decorative borders.
 
         Args:
             line: Text to wrap.
@@ -177,8 +173,7 @@ class TextUtils:
 
     @staticmethod
     def indent(text: str, n: int = 4) -> str:
-        """
-        Indent all lines in text by n spaces.
+        """Indent all lines in text by n spaces.
 
         Args:
             text: Text to indent.
@@ -192,8 +187,7 @@ class TextUtils:
 
     @staticmethod
     def unindent(text: str, n: int = 4) -> str:
-        """
-        Remove up to n*4 leading spaces from each line.
+        """Remove up to n*4 leading spaces from each line.
 
         Args:
             text: Text to unindent.
@@ -206,9 +200,7 @@ class TextUtils:
 
     @staticmethod
     def strip_quotes(string: str) -> str:
-        """
-        Remove surrounding quotes and emphasis markers from string, namely characters in the set
-        `'"*_`.
+        """Remove surrounding *matched* quotes and emphasis markers (`'"*_`) from the string.
 
         Args:
             string: The text content to strip.
@@ -229,8 +221,7 @@ class TextUtils:
 
     @classmethod
     def _clean_nonwords(cls, string: str) -> str:
-        """
-        Clean non-word characters from string using standard replacements.
+        """Clean non-word characters from string using standard replacements.
 
         Internal method that normalizes newlines, punctuation, spaces, and hyphens.
 
@@ -250,8 +241,7 @@ class TextUtils:
 
     @classmethod
     def clean_string(cls, string: str, case: Literal['lower', 'none', 'upper'] = 'lower') -> str:
-        """
-        Fully clean and normalize a string for use as identifier or slug.
+        """Fully clean and normalize a string for use as identifier or slug.
 
         Applies unidecode, strips whitespace, cleans non-words, and applies case conversion.
 
@@ -271,8 +261,7 @@ class TextUtils:
 
     @classmethod
     def to_words(cls, text: str) -> list[str]:
-        """
-        Extract all words from text using regex word boundary matching.
+        """Extract all words from text using regex word boundary matching.
 
         Args:
             text: Text to extract words from.
@@ -283,8 +272,7 @@ class TextUtils:
 
     @staticmethod
     def line_num(article: str, pos: int | str) -> int:
-        """
-        Calculate line number from character position or substring.
+        """Calculate line number from character position or substring.
 
         Args:
             article: Text to search within.
@@ -299,8 +287,7 @@ class TextUtils:
 
     @staticmethod
     def parse_domain(url: str, default: str = '') -> str:
-        """
-        Extract domain name from URL, removing 'www.' prefix.
+        """Extract domain name from URL, removing 'www.' prefix.
 
         Args:
             url: URL string to parse.
@@ -318,8 +305,7 @@ class TextUtils:
 
     @staticmethod
     def wrap_paragraphs(text: str, width: int = 100) -> str:
-        """
-        Wrap text to specified width, breaking on whitespace.
+        """Wrap text to specified width, breaking on whitespace.
 
         Args:
             text: Text to wrap.
@@ -331,8 +317,7 @@ class TextUtils:
 
     @classmethod
     def unwrap_paragraphs(cls, text: str) -> str:
-        """
-        Unwrap and normalize paragraph text, joining wrapped lines intelligently.
+        """Unwrap and normalize paragraph text, joining wrapped lines intelligently.
 
         Handles hyphenated line breaks, prose detection, and comment prefixes.
 

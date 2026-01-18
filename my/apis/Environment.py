@@ -5,7 +5,6 @@
 from typing import ClassVar
 from pathlib import Path
 import functools as ft
-import regex as re
 import os
 
 ### EXTERNAL
@@ -13,6 +12,8 @@ import pydantic as pyd
 import dotenv
 
 ### INTERNAL
+from ..types import Buffer
+from ..regex import RegexStore
 
 
 ############
@@ -27,17 +28,59 @@ initial_env = dict(os.environ)
 ############
 class Environment(pyd.BaseModel):
     """
-    Convient interface to environment variables with special cases for accessing fileystem paths
-    and flags (integers) with typing.
+    An ergonomic interface for reading environment variables with intelligent type coercion,
+    automatic dotenv loading, and performant caching for worry-free use. For example:
 
-    Provides attribute and item access to environment variables with caching.
-    Includes special accessors for paths (with variable expansion) and boolean flags.
-    Environment variables must be uppercase with underscores to be recognized by this interface.
+    ```python
+    from my.apis import env
+
+    # export SOME_TEXT="production"
+    print(f'{env.SOME_TEXT=!r}')  # -> 'production'
+    print(f'{env.MISSING_VAR=!r}')  # -> ''
+
+    # export SOME_PATH="~/Downloads"
+    # export NESTED_PATH="$SOME_PATH/child"
+    print(f'{env.paths.SOME_PATH=!r}')  # -> PosixPath('/home/username/Downloads')
+    print(f'{env.paths.NESTED_PATH=!r}')  # -> PosixPath('/home/username/Downloads/child')
+
+    # export SOME_FLAG="32"
+    # export OTHER_FLAG="yes"
+    # export FALSE_FLAG="yes, some non-truthy string"
+    print(env.flags.SOME_FLAG)  # -> 32
+    print(bool(env.flags.OTHER_FLAG))  # -> True
+    print(bool(env.flags.FALSE_FLAG))  # -> False
+    print(bool(env.flags.MISSING_FLAG))  # -> False
+    ```
+
+    Beyond basic string access via attribute or item notation, the class provides specialized
+    accessors for common use cases:
+
+    1. The `paths` property turns vars into filesystem paths with variable expansion, user home
+    directory expansion, and automatic path resolution.
+
+    2. The `flags` property interprets environment variables as int flags, recognizing common
+    truthy values like `true`, `yes`,and `ON` as `1` for use w/ booleans.
+
+    ```{note} All environment variable names must be uppercase to be recognized by the interface.
+    ```
     """
 
-    ENVIRON: ClassVar[dict[str, str]] = initial_env
-    NAME_RGX: ClassVar[re.Pattern] = re.compile(r'[_\d[:upper:]]')
-    EMB_RGX: ClassVar[re.Pattern] = re.compile(r'\$[_\d[:upper:]]+\b|\${[_\d[:upper:]]+}')
+    _ENVIRON: ClassVar[dict[str, str]] = initial_env
+    RGXS: ClassVar[RegexStore] = RegexStore.new(
+        options=dict(
+            force_named_groups=True,
+        ),
+        name=r'[_\d[:upper:]]+',
+        interpolation=r'\$(?P>name)\b|\${(?P>name)}',
+        truthy=r'(?i:t(rue)?|y(es)?|enable[d]?|on)',
+    )
+
+    # Override thse so that no sensitive info is automatically printed by loggers
+    def __str__(self) -> str:
+        return 'Environment(...)'
+
+    def __repr__(self) -> str:
+        return 'Environment(...)'
 
     # -------
     # GETTERS
@@ -51,7 +94,10 @@ class Environment(pyd.BaseModel):
     @ft.lru_cache(maxsize=256)
     @staticmethod
     def _get(key: str, default: str = '') -> str:
-        return Environment.ENVIRON.get(key, default)
+        ret = Environment._ENVIRON.get(key, default)
+        if '$' in ret:
+            ret = Environment.interpolate(ret)
+        return ret
 
     def get(self, key: str, default: str = '') -> str:
         return Environment._get(key, default)
@@ -66,8 +112,7 @@ class Environment(pyd.BaseModel):
         self.set(key, value)
 
     def set(self, key: str, value: str) -> None:
-        """
-        Set an environment variable, clearing caches if value changes.
+        """Set an environment variable, clearing caches if value changes.
 
         Args:
             key: Variable name (must be uppercase with underscores).
@@ -84,7 +129,7 @@ class Environment(pyd.BaseModel):
                 Environment._path.cache_clear()
                 Environment._flag.cache_clear()
 
-        Environment.ENVIRON[key] = value
+        Environment._ENVIRON[key] = value
 
     # -----
     # PATHS
@@ -95,26 +140,20 @@ class Environment(pyd.BaseModel):
 
     @ft.cached_property
     def paths(self) -> 'Environment.PathEnv':
+        """A cached property allowing for ergonomic dot-notation access to coerced path vars."""
         return self.PathEnv()
 
     @ft.lru_cache(maxsize=256)
     @staticmethod
     def _path(key: str, default: str = '', mkdir: bool = False) -> Path:
-        val = Environment._get(key) or default
-
-        for match in Environment.EMB_RGX.findall(val):
-            if subval := Environment._get(match.strip('{}$')):
-                val = val.replace(match, subval)
-
+        val = Environment._get(key, default)
         ret = Path(val).expanduser().resolve()
-
         if mkdir and val:
             ret.mkdir(parents=True, exist_ok=True)
         return ret
 
     def path(self, key: str, default: str = '', mkdir: bool = False) -> Path:
-        """
-        Get environment variable as an expanded, resolved path.
+        """Get environment variable as an expanded, resolved path.
 
         Performs variable substitution for ${VAR} or $VAR patterns, then expands
         user home directory and resolves to absolute path.
@@ -137,6 +176,7 @@ class Environment(pyd.BaseModel):
 
     @ft.cached_property
     def flags(self) -> 'Environment.FlagEnv':
+        """A cached property allowing for ergonomic dot-notation access to coerced flag vars."""
         return self.FlagEnv()
 
     @ft.lru_cache(maxsize=256)
@@ -144,27 +184,28 @@ class Environment(pyd.BaseModel):
     def _flag(key: str, default: int = 0) -> int:
         assert key, 'FlagEnv keys must be non-empty'
         assert key.isupper(), 'FlagEnv keys must be uppercase'
-        val = Environment._get(key).lower()
+        val = Environment._get(key).strip(' ')
 
-        if val.isdigit():
+        if not val:
+            return default
+        elif val.isdigit():
             return int(val)
-        elif val in ('true', 'yes', 'y', 't', 'on', 'enable'):
+        elif val.startswith('-') and val[1:].isdigit():
+            return -1 * int(val[1:])
+        elif Environment.RGXS.fullmatch('truthy', val):
             return 1
         else:
             return default
 
     def flag(self, key: str, default: int = 0) -> int:
-        """
-        Get environment variable as a boolean flag (0 or 1).
-
-        Recognizes: '1', 'true', 'yes', 'y', 't', 'on', 'enable' as 1.
-        Numeric values are parsed directly. All other values return default.
+        """Get environment variable as an integer flag, or 0 if no set or coercable.
+        Recognizes: `t|true|y|yes|enable|enabled|on` as 1.
 
         Args:
             key: Environment variable name (must be uppercase).
             default: Default value if not set or unrecognized.
         Returns:
-            Integer 0 or 1 (or numeric value).
+            Any integer.
         Raises:
             AssertionError: If key is empty or not uppercase.
         """
@@ -178,24 +219,22 @@ class Environment(pyd.BaseModel):
         return self.get('MY_MODE', 'dev').lower().startswith('dev')
 
     def __contains__(self, key: object) -> bool:
-        return isinstance(key, str) and key in Environment.ENVIRON
+        return isinstance(key, str) and key in Environment._ENVIRON
 
     @staticmethod
     def is_valid_name(key: str) -> bool:
-        """
-        Check if string is a valid environment variable name.
+        """Check if string is a valid environment variable name.
 
         Args:
             key: String to validate.
         Returns:
             True if key contains only uppercase, digits, and underscores.
         """
-        return bool(Environment.NAME_RGX.fullmatch(key))
+        return bool(Environment.RGXS.fullmatch('name', key))
 
     @staticmethod
     def validate_name(key: str) -> None:
-        """
-        Validate environment variable name format.
+        """Validate environment variable name format.
 
         Args:
             key: Variable name to validate.
@@ -204,5 +243,21 @@ class Environment(pyd.BaseModel):
         """
         assert Environment.is_valid_name(key), f'Invalid environment variable name: {key}'
 
+    @staticmethod
+    def interpolate(val: str) -> str:
+        """Replace envvar references in the value with their corresponding values.
 
+        Args:
+            val: A string, e.g. `${HOME}/data/${DATASET}`.
+        Returns:
+            Interpolated string, e.g. `/home/user/data/mnist`.
+        """
+        buf = Buffer.new(val)
+        for match in Environment.RGXS.finditer('interpolation', buf):
+            if subval := Environment._get(match.at('name')):
+                buf.replace(match.span, subval)
+        return str(buf)
+
+
+#: Global instance of this class for convenient access.
 env = Environment()

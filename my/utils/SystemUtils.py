@@ -2,11 +2,12 @@
 ### HEAD ###
 ############
 ### STANDARD
-from datetime import datetime, timezone, timedelta
+from collections.abc import Callable
+from datetime import datetime, timedelta, UTC
 from pathlib import Path
 from shutil import get_terminal_size
 from time import perf_counter_ns
-from typing import Any, Callable, ClassVar
+from typing import Any, ClassVar
 import asyncio as aio
 import contextlib as ctx
 import functools as ft
@@ -33,13 +34,14 @@ from .TextUtils import text_utils
 ### BODY ###
 ############
 class SystemUtils:
+    """Methods that deal with low-level system resources & APIs."""
+
     # ---------------
     # `0` DATE & TIME
     # ---------------
     @classmethod
     def posix(cls, val: int | float | datetime | None = None) -> datetime:
-        """
-        Convert a timestamp or datetime to UTC datetime.
+        """Convert a timestamp or datetime to UTC datetime.
 
         Args:
             val: Unix timestamp (int/float), datetime object, or None for current time.
@@ -47,16 +49,15 @@ class SystemUtils:
             Timezone-aware datetime in UTC.
         """
         if val is None:
-            return datetime.now(timezone.utc)
+            return datetime.now(UTC)
         elif isinstance(val, datetime):
-            return val.astimezone(timezone.utc)
+            return val.astimezone(UTC)
         else:
-            return datetime.fromtimestamp(val, timezone.utc)
+            return datetime.fromtimestamp(val, UTC)
 
     @classmethod
     def posix_since(cls, val: int | float | datetime | None = None) -> timedelta:
-        """
-        Calculate time elapsed since a given timestamp.
+        """Calculate time elapsed since a given timestamp.
 
         Args:
             val: Unix timestamp (int/float), datetime object, or None.
@@ -73,8 +74,7 @@ class SystemUtils:
     # --------------
     @classmethod
     def validate_dir(cls, *paths: pyd.DirectoryPath) -> bool:
-        """
-        Validate that all provided paths are existing directories.
+        """Validate that all provided paths are existing directories.
 
         Args:
             *paths: One or more directory paths to validate.
@@ -89,8 +89,7 @@ class SystemUtils:
 
     @classmethod
     def validate_file(cls, *paths: pyd.FilePath) -> bool:
-        """
-        Validate that all provided paths are existing files.
+        """Validate that all provided paths are existing files.
 
         Args:
             *paths: One or more file paths to validate.
@@ -105,8 +104,7 @@ class SystemUtils:
 
     @classmethod
     def path_sub(cls, path: Path, old: str, new: str) -> Path:
-        """
-        Substitute a path component with a new value.
+        """Substitute a path component with a new value.
 
         Args:
             path: Path object to modify.
@@ -132,8 +130,8 @@ class SystemUtils:
 
     @classmethod
     def get_terminal_width(cls) -> int:
-        """
-        Get the current terminal width in characters.
+        """Get the current terminal width in characters.
+
         Returns:
             Terminal width (defaults to 100 if unavailable).
         """
@@ -141,8 +139,7 @@ class SystemUtils:
 
     @classmethod
     def terminal_linewrap(cls, text: str, indent: int = 0) -> str:
-        """
-        Wrap text to fit within terminal width.
+        """Wrap text to fit within terminal width.
 
         Args:
             text: Text to wrap.
@@ -167,8 +164,7 @@ class SystemUtils:
         italic: bool = False,
         underline: bool = False,
     ) -> str:
-        """
-        Wrap text in zsh color codes with optional styles.
+        """Wrap text in zsh color codes with optional styles.
 
         Args:
             text: Text to colorize.
@@ -198,8 +194,7 @@ class SystemUtils:
 
     @staticmethod
     def confirm(prompt: str, default_no: bool = False) -> bool:
-        """
-        Prompt user for confirmation with y/n input.
+        """Prompt user for confirmation with y/n input.
 
         Args:
             prompt: Question to display to user.
@@ -228,8 +223,7 @@ class SystemUtils:
         maxsize: int = 2**26,  # 64 MB
         maxcount: int = 2**10,  # 1024 backups
     ) -> lg.Logger:
-        """
-        Configure Python file-based logging with rotation.
+        """Configure Python file-based logging with rotation.
 
         Args:
             logdir: Directory for log files.
@@ -257,7 +251,7 @@ class SystemUtils:
 
         file_handler = lgh.RotatingFileHandler(file, maxBytes=maxsize, backupCount=maxcount)
         file_handler.setLevel(lg.DEBUG if is_dev else lg.INFO)
-        file_handler.setFormatter(lg.Formatter('[%(asctime)s %(levelname)s] %(message)s'))
+        file_handler.setFormatter(lg.Formatter('[%(asynctime)s %(levelname)s] %(message)s'))
 
         # III. Register handler(s) with logger, defaulting to the universal one
         logger.addHandler(file_handler)
@@ -281,8 +275,7 @@ class SystemUtils:
         app: Any | None = None,
         **kwargs: Any,
     ) -> None:
-        """
-        Configure Logfire observability and logging.
+        """Configure Logfire observability and logging.
 
         Args:
             fire_token: Logfire API token.
@@ -338,15 +331,11 @@ class SystemUtils:
         if app is not None:
             # see opentelemetry-python-contrib.readthedocs.io/en/latest/instrumentation
             fire.instrument_aiohttp_client()
-            app.asgi_app = fire.instrument_asgi(app.asgi_app)  # type:ignore
+            app.asgi_app = fire.instrument_asgi(app.asgi_app)
 
     @classmethod
     def get_package_name(cls) -> str:
-        """
-        Retrieve the current package name from metadata.
-        Returns:
-            Package name as string, derived from module metadata.
-        """
+        """Retrieve the current package name from metadata."""
         current_module = sys.modules[__name__]
         package_name = current_module.__package__ or __name__
         root_package = package_name.split('.', 1)[0]
@@ -368,8 +357,7 @@ class SystemUtils:
         maxcount: int = 2**10,  # 1024 backups
         **fire_kwargs: Any,
     ) -> lg.Logger:
-        """
-        Configure comprehensive logging (Python file logging + Logfire).
+        """Configure comprehensive logging (Python file logging + Logfire).
 
         Args:
             logdir: Directory for log files.
@@ -417,8 +405,7 @@ class SystemUtils:
 
     @staticmethod
     def setup_warnings():
-        """
-        Configure warning filters to suppress common deprecation warnings.
+        """Configure warning filters to suppress common deprecation warnings.
 
         Filters out warnings for class-based config, config key changes, and
         pkg_resources deprecation. Only runs once per session.
@@ -436,8 +423,7 @@ class SystemUtils:
     # -----------
     @classmethod
     def setup_metrics(cls, metrics: pyd.DirectoryPath, logger: lg.Logger):
-        """
-        Perform setup for Prometheus metrics, ensuring directory exists and is empty.
+        """Perform setup for Prometheus metrics, ensuring directory exists and is empty.
 
         Args:
             metrics: Directory for Prometheus multiprocess metrics.
@@ -467,8 +453,7 @@ class SystemUtils:
     def _measure(
         cls, name: str, counter: OpenTelemetryCounter | dict[str, int] | pd.Series, start: int
     ):
-        """
-        Record elapsed time in milliseconds to a counter.
+        """Record elapsed time in milliseconds to a counter.
 
         Args:
             name: Metric name (used for dict/Series counters).
@@ -485,8 +470,7 @@ class SystemUtils:
     def _instrument(
         cls, func: Callable, counter: OpenTelemetryCounter | dict[str, int] | pd.Series
     ) -> Callable:
-        """
-        Wrap a function to automatically measure and record execution time.
+        """Wrap a function to automatically measure and record execution time.
 
         Args:
             func: Function to instrument (sync or async).
@@ -516,8 +500,7 @@ class SystemUtils:
     @ctx.contextmanager
     @classmethod
     def measure_context(cls, name: str, counter: dict[str, int]):
-        """
-        Context manager to measure execution time of a code block.
+        """Context manager to measure execution time of a code block.
 
         Args:
             name: Metric name for recording.
@@ -531,8 +514,7 @@ class SystemUtils:
 
     @classmethod
     def monitor(cls, *args: Any, **kwargs: Any) -> Callable:
-        """
-        Create a Logfire instrumentation decorator for a function.
+        """Create a Logfire instrumentation decorator for a function.
 
         Args:
             *args: Positional arguments for fire.instrument().
@@ -544,8 +526,7 @@ class SystemUtils:
 
     @classmethod
     def print_in_color(cls, text: str) -> None:
-        """
-        Print colored text using zsh prompt expansion.
+        """Print colored text using zsh prompt expansion.
 
         Args:
             text: Text with zsh color codes to print.

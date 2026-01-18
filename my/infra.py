@@ -2,11 +2,13 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import TypeVar, Hashable
+from typing import TypeVar
+from collections.abc import Hashable
 from collections import deque
+from datetime import date, datetime, time, timedelta
+from enum import Enum
 from pathlib import Path
 import functools as ft
-from datetime import date, datetime, time, timedelta
 
 ### EXTERNAL
 import jinja2 as jn
@@ -20,7 +22,7 @@ import jinja2 as jn
 BASIS_ROOT_DIR = Path(__file__).parent
 assert BASIS_ROOT_DIR.exists() and BASIS_ROOT_DIR.is_dir()
 
-TEMPLATE_DIR = BASIS_ROOT_DIR / 'templates'
+TEMPLATE_DIR = BASIS_ROOT_DIR / "templates"
 assert TEMPLATE_DIR.exists() and TEMPLATE_DIR.is_dir()
 
 ############
@@ -29,23 +31,22 @@ assert TEMPLATE_DIR.exists() and TEMPLATE_DIR.is_dir()
 # ---------
 # CONSTANTS
 # ---------
-DELIM = ' // '
+DELIM = " // "
 
 # -----
 # TYPES
 # -----
-T = TypeVar('T')
-C = TypeVar('C')
-Key = TypeVar('Key', bound=Hashable)
-Keys = TypeVar('Keys', bound=tuple)
-Value = TypeVar('Value')
+T = TypeVar("T")
+C = TypeVar("C")
+Key = TypeVar("Key", bound=Hashable)
+Keys = TypeVar("Keys", bound=tuple)
+Value = TypeVar("Value")
 
-Atomic = str | int | float | bool
 Series = list | tuple | set | deque
 MapItems = list[tuple] | tuple[tuple] | deque[tuple] | set[tuple]
 
-AtomicType = type[str] | type[int] | type[float] | type[bool]
-TimeType = date | datetime | time | timedelta
+Time = date | datetime | time | timedelta
+Atomic = str | int | float | bool | bytes | Enum | Time
 
 # -----
 # JINJA
@@ -59,8 +60,7 @@ JINJA = jn.Environment(
 
 @ft.lru_cache(maxsize=128)
 def get_template(template_name: str) -> jn.Template:
-    """
-    Load and cache a Jinja2 template from the data/templates directory.
+    """Load and cache a Jinja2 template from the data/templates directory.
 
     Args:
         template_name: Name of template file.

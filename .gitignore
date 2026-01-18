@@ -11,6 +11,7 @@
 
 # Dev Artifacts
 /scratch.*
+/.scratch.*
 /tmp/
 .cache/
 local_cache/

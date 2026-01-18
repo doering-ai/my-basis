@@ -35,7 +35,8 @@ class TestGroupAtom:
             (r'(?<=test)', GroupKind.BEHIND, '(?<=', 'test', ''),
             (r'(?<!test)', GroupKind.NOT_BEHIND, '(?<!', 'test', ''),
             (r'(?P<name>value)', GroupKind.PARAM, '(?P<name>', 'value', ''),
-            (r'(?P=name)', GroupKind.INVOC, '(?P=name', '', ''),
+            (r'(?P=name)', GroupKind.SUBST, '(?P=name', '', ''),
+            (r'(?P>name)', GroupKind.INVOC, '(?P>name', '', ''),
             # Quantifiers
             (r'(?:abc)+', GroupKind.PLAIN, '(?:', 'abc', '+'),
             (r'(?:abc)*?', GroupKind.PLAIN, '(?:', 'abc', r'*?'),

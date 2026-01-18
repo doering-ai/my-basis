@@ -8,10 +8,10 @@ env:
 vars:
     SRC_DIR: ./my
     DOC_DIR: ./docs
-    RST_DIR: '{{.DOC_DIR}}/_source'
+    API_DIR: '{{.DOC_DIR}}/_source'
     OUT_DIR: '{{.DOC_DIR}}/_build'
 
-dotenv: [.env, ~/tmp/.env]
+dotenv: []
 
 tasks:
     # ------
@@ -19,10 +19,9 @@ tasks:
     # ------
     test: uv run pytest {{.CLI_ARGS}}
 
-    test-dev: uv run pytest --sw -vv --durations=5 --durations-min=0.005 {{.CLI_ARGS}}
+    test-dev: uv run pytest --sw -vv {{.CLI_ARGS}}
 
-    test-pdb: uv run pytest -s --pdb --sw -vv --durations=5 --durations-min=0.005
-        {{.CLI_ARGS}}
+    test-pdb: uv run pytest -s --pdb --sw -vv {{.CLI_ARGS}}
 
     test-cov: uv run pytest --cov=my --cov-report=term-missing {{.CLI_ARGS}}
 
@@ -32,7 +31,12 @@ tasks:
     docs:
         desc: Extract python docstrings into MyST files, then (re)build the finalized
             HTML files.
-        cmd: uv run sphinx-build {{.DOC_DIR}} {{.OUT_DIR}} --fail-on-warning {{.CLI_ARGS}}
-        sources: ['{{.RST_DIR}}/*.rst', '{{.DOC_DIR}}/**/*.md', '{{.DOC_DIR}}/conf.py']
+        cmd: uv run sphinx-build -c {{DOC_DIR}} --fail-on-warning {{.CLI_ARGS}} {{.API_DIR}}
+            {{.OUT_DIR}}
+        sources:
+            - '{{.SRC_DIR}}/**/*.py'
+            - '{{.API_DIR}}/*'
+            - '{{.DOC_DIR}}/**/*.md'
+            - '{{.DOC_DIR}}/conf.py'
         generates: ['{{.OUT_DIR}}/*.html']
 

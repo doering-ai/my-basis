@@ -1,0 +1,432 @@
+(?x)
+# Exhaustive Examples of Extended Python Regex Syntax (mrab regex package)
+# ============================================================================
+
+# ============================================================================
+# FLAGS - SCOPED (can apply to part of pattern, can be turned on/off)
+# ============================================================================
+
+# ENCODING FLAGS
+# --------------
+(?u)abc                          # UNICODE: default, matches by Unicode standards
+(?a)\w+                          # ASCII: \w, \W, \b, \B, \d, \D, \s, \S match only ASCII
+(?L)\w+                          # LOCALE: match according to current locale (legacy)
+
+# CASE FLAGS
+# ----------
+(?i)hello                        # IGNORECASE: case-insensitive matching
+(?i)HeLLo                        # matches "hello", "HELLO", "HeLLo", etc.
+(?iV1)straße                     # FULLCASE with V1: full Unicode case-folding
+(?if)straße                      # FULLCASE: enables full case-folding (V1 default on)
+
+# WHITESPACE FLAGS
+# ----------------
+(?m)^line$                       # MULTILINE: ^ and $ match line boundaries
+(?s).+                           # DOTALL: . matches newlines too
+(?w)\b\w+\b                      # WORD: Unicode word boundaries, extended line separators
+
+
+# ============================================================================
+# FLAGS - GLOBAL (apply to entire pattern, can only be turned on)
+# ============================================================================
+
+(?b)pattern                      # BESTMATCH: fuzzy matching searches for best match
+(?e)pattern                      # ENHANCEMATCH: fuzzy matching improves fit of match
+(?p)Mr|Mrs                       # POSIX: leftmost longest matching
+(?r).                            # REVERSE: match from end to beginning
+(?V0)[a-z]                       # VERSION0: old behaviour, compatible with re module
+(?V1)[[a-z]--[aeiou]]           # VERSION1: new behaviour, supports set operators
+
+
+# ============================================================================
+# SETS - SIMPLE (Version 0 compatible)
+# ============================================================================
+
+[abc]                            # Set containing 'a', 'b', 'c'
+[a-z]                            # Set containing 'a' through 'z'
+[^abc]                           # Set containing everything except 'a', 'b', 'c'
+[a-zA-Z0-9]                      # Alphanumeric characters
+[\w\s]                           # Word characters or whitespace
+[^\d]                            # Non-digits
+
+
+# ============================================================================
+# SETS - EXPANDED (Version 1 only)
+# ============================================================================
+
+# SET OPERATORS (in order of precedence: || < ~~ < && < --)
+# ----------------------------------------------------------
+[a||b]                           # Union: 'a' or 'b' (same as [ab])
+[a~~b]                           # Symmetric difference: 'a' or 'b', but not both
+[ab&&cd]                         # Intersection: nothing (no char is both a/b AND c/d)
+[a-z--aeiou]                     # Difference: 'a'..'z' except vowels
+[[a-z]--[aeiou]]                 # Same as above, with explicit nesting
+
+# COMPLEX SET EXAMPLES
+# --------------------
+[\p{L}--QW]                      # All letters except 'Q' and 'W'
+[\p{N}--[0-9]]                   # All numbers except '0' through '9'
+[\p{ASCII}&&\p{Letter}]          # All characters that are both ASCII and letters
+[a-z||A-Z]                       # All letters (same as [a-zA-Z])
+[[a-z]&&[aeiou]]                 # Only vowels
+[a-z~~[aeiou]]                   # Consonants or nothing (symmetric diff)
+
+
+# ============================================================================
+# GROUPS - BASIC
+# ============================================================================
+
+# NUMBERED GROUPS
+# ---------------
+(abc)                            # Capture group 1
+(abc)(def)                       # Capture groups 1 and 2
+
+(?:abc)                          # Non-capturing group
+(abc)(?:def)(ghi)                # Groups 1 and 2 ((?:def) doesn't count)
+
+# NAMED GROUPS
+# ------------
+(?P<name>abc)                    # Named group using Python syntax
+(?P'name'abc)                     # Named group using angle brackets
+
+# MULTIPLE GROUPS WITH SAME NAME
+# -------------------------------
+(?P<item>\w+)?|(?P<item>\w+)?    # Later captures overwrite earlier ones
+
+
+# ============================================================================
+# GROUPS - REFERENCES & INVOCATIONS
+# ============================================================================
+
+# BACKREFERENCES (match same text as captured group)
+# ---------------------------------------------------
+(abc)\1                          # Match 'abc' then same text again: 'abcabc'
+(["'])\w+\1                      # Match quoted string with same quote type
+(abc)\g<1>                       # Reference group 1 using \g<1>
+(?P<q>["'])\w+(?P=q)             # Reference named group using (?P=name)
+(?P<q>["'])\w+\g<q>              # Reference named group using \g<name>
+
+# GROUP INVOCATIONS (match pattern again, not same text)
+# -------------------------------------------------------
+(\w+)\s+(?1)                     # Match word, space, then another word
+(?P<word>\w+)\s+(?&word)         # Named group invocation using (?&name)
+(?P<word>\w+)\s+(?P>word)        # Named group invocation using (?P>name)
+(?P<word>\w+)\s+(?P&word)        # Named group invocation using (?P&name)
+
+# RECURSION
+# ---------
+(?R)                             # Recursively match entire pattern
+(\w)(?:(?R)|(\w?))\1             # Match palindromes like 'kayak'
+(\[(?:[^\[\]]|(?R))*\])          # Match nested brackets
+
+
+# ============================================================================
+# GROUPS - CONDITIONAL
+# ============================================================================
+
+# CONDITIONAL WITH GROUP REFERENCE
+# ---------------------------------
+(a)?(?(1)b|c)                    # If group 1 matched, match 'b', else 'c'
+(?P<prefix>pre)?(?(prefix)fix|post) # Named group conditional
+
+# CONDITIONAL WITH LOOKAROUND
+# ---------------------------
+(?(?=\d)\d+|\w+)                 # If lookahead sees digit, match digits, else words
+(?(?<=\s)\w+|^\w+)               # If lookbehind sees space, match word, else start
+
+
+# ============================================================================
+# GROUPS - SPECIAL TYPES
+# ============================================================================
+
+# BRANCH RESET GROUPS (reuse group numbers across branches)
+# ----------------------------------------------------------
+(?|(first)|(second))             # Both alternatives are group 1
+(?|(\d{2})-(\d{2})-(\d{4})|(\d{4})/(\d{2})/(\d{2})) # Date formats, 3 groups each
+
+# PREDEFINED SUBROUTINES (DEFINE)
+# --------------------------------
+(?(DEFINE)(?P<int>\d+)(?P<word>\w+))(?&int)\s+(?&word) # Define then use
+(?(DEFINE)(?P<digit>\d))(?&digit){3}-(?&digit){4}      # Pattern library
+
+
+# ============================================================================
+# UNICODE PROPERTIES
+# ============================================================================
+
+# GENERAL CATEGORY PROPERTIES
+# ----------------------------
+\p{L}                            # Any letter
+\p{Lu}                           # Uppercase letter
+\p{Ll}                           # Lowercase letter
+\p{N}                            # Any number
+\p{P}                            # Any punctuation
+\p{S}                            # Any symbol
+\p{Z}                            # Any separator
+
+# NEGATED PROPERTIES
+# ------------------
+\P{L}                            # Not a letter
+\P{N}                            # Not a number
+
+# PROPERTY WITH VALUE
+# -------------------
+\p{Script=Latin}                 # Latin script characters
+\p{Script=Cyrillic}              # Cyrillic script characters
+\p{Block=BasicLatin}             # Basic Latin block (U+0000 to U+007F)
+\P{Script=Latin}                 # Not Latin script
+
+# SHORT FORMS
+# -----------
+\p{IsLatin}                      # Script or binary property (Latin script)
+\p{IsAlphabetic}                 # Binary property (alphabetic)
+\p{InBasicLatin}                 # Block property (Basic Latin block)
+
+# SPECIAL WHITESPACE PROPERTIES
+# ------------------------------
+\p{H}                            # Horizontal whitespace
+\p{V}                            # Vertical whitespace
+\p{Horiz_Space}                  # Horizontal whitespace (long form)
+\p{Vert_Space}                   # Vertical whitespace (long form)
+
+
+# ============================================================================
+# POSIX CHARACTER CLASSES
+# ============================================================================
+
+[[:alpha:]]                      # Alphabetic characters
+[[:alnum:]]                      # Alphanumeric characters
+[[:digit:]]                      # Digits
+[[:xdigit:]]                     # Hexadecimal digits
+[[:punct:]]                      # Punctuation
+[[:blank:]]                      # Space and tab
+[[:space:]]                      # All whitespace
+[[:upper:]]                      # Uppercase letters
+[[:lower:]]                      # Lowercase letters
+[[:print:]]                      # Printable characters
+[[:graph:]]                      # Visible characters
+[[:cntrl:]]                      # Control characters
+
+# NEGATED POSIX CLASSES
+# ----------------------
+[[:^alpha:]]                     # Not alphabetic
+[[:^digit:]]                     # Not digits
+
+
+# ============================================================================
+# ANCHORS & BOUNDARIES
+# ============================================================================
+
+# STANDARD ANCHORS
+# ----------------
+^start                           # Start of string (or line with (?m))
+end$                             # End of string (or line with (?m))
+\Astart                          # Start of string (always)
+end\Z                            # End of string before final newline (always)
+end\z                            # End of string (always)
+
+# WORD BOUNDARIES
+# ---------------
+\bword\b                         # Word boundaries (standard)
+\Bno\B                           # Not at word boundary
+\mstart                          # Start of word
+end\M                            # End of word
+
+# SEARCH ANCHOR
+# -------------
+\G\w{2}                          # Continue from where last match ended
+\G.                              # Match contiguous characters only
+
+
+# ============================================================================
+# SPECIAL LITERALS
+# ============================================================================
+
+# NAMED CHARACTERS
+# ----------------
+\N{LATIN SMALL LETTER SHARP S}   # Named Unicode character (ß)
+\N{COPYRIGHT SIGN}               # Named Unicode character (©)
+\N{SNOWMAN}                      # Named Unicode character (☃)
+
+# GRAPHEME MATCHER
+# ----------------
+\X                               # Match single grapheme cluster
+\X+                              # Match one or more graphemes
+
+
+# ============================================================================
+# LOOKBEHIND - VARIABLE LENGTH
+# ============================================================================
+
+(?<=^.*)pattern                  # Variable-length lookbehind (look behind any chars)
+(?<=\w+)ing                      # Match 'ing' after any word characters
+(?<!^.*prefix)word               # Negative variable-length lookbehind
+
+
+# ============================================================================
+# OPTIMIZATION - ATOMIC GROUPING
+# ============================================================================
+
+(?>abc)                          # Atomic group: no backtracking into this
+(?>a+)b                          # Match 'a's atomically; if 'b' fails, whole fails
+(?>"\w+")                        # Atomic quoted string
+
+
+# ============================================================================
+# OPTIMIZATION - POSSESSIVE QUANTIFIERS
+# ============================================================================
+
+a*+                              # 0 or more 'a's, possessive (no backtracking)
+a++                              # 1 or more 'a's, possessive
+a?+                              # 0 or 1 'a', possessive
+a{2,5}+                          # 2 to 5 'a's, possessive
+\d++\.                           # Digits then period, no backtracking on digits
+
+
+# ============================================================================
+# OPTIMIZATION - BACKTRACKING CONTROL VERBS
+# ============================================================================
+
+pattern(*PRUNE)                  # Discard backtracking info up to this point
+pattern(*SKIP)                   # Skip to next position if this fails
+pattern(*FAIL)                   # Immediate backtracking
+pattern(*F)                      # Immediate backtracking (short form)
+
+
+# ============================================================================
+# OPTIMIZATION - KEEP
+# ============================================================================
+
+prefix\Ksuffix                   # Match both but only keep 'suffix' in match
+\w\w\K\w\w\w                     # Match 5 chars but only keep last 3
+(?r)\w\w\K\w\w\w                 # Reverse matching with keep
+
+
+# ============================================================================
+# OPTIMIZATION - NAMED LISTS
+# ============================================================================
+
+\L<options>                      # Match any string from named list 'options'
+\L<keywords>                     # Match any keyword from named list
+
+
+# ============================================================================
+# FUZZY MATCHING - BASICS
+# ============================================================================
+
+# SIMPLE FUZZY (UNLIMITED ERRORS)
+# --------------------------------
+(foo){i}                         # Allow insertions
+(foo){d}                         # Allow deletions
+(foo){s}                         # Allow substitutions
+(foo){e}                         # Allow any errors
+(foo){i,s}                       # Allow insertions and substitutions
+(foo){i,d,s}                     # Allow insertions, deletions, and substitutions
+
+
+# ============================================================================
+# FUZZY MATCHING - WITH LIMITS
+# ============================================================================
+
+# MAXIMUM LIMITS
+# --------------
+(foo){e<=2}                      # At most 2 errors total
+(foo){i<=1}                      # At most 1 insertion
+(foo){d<=2}                      # At most 2 deletions
+(foo){s<=1}                      # At most 1 substitution
+(foo){i<=1,d<=1,s<=2}            # At most 1 insertion, 1 deletion, 2 substitutions
+
+# EXCLUSIVE MAXIMUM
+# -----------------
+(foo){e<3}                       # Fewer than 3 errors (i.e., at most 2)
+(foo){i<2,d<3}                   # Fewer than 2 insertions, fewer than 3 deletions
+
+# RANGE LIMITS
+# ------------
+(foo){1<=e<=3}                   # At least 1 and at most 3 errors
+(foo){2<=e<5}                    # At least 2 and fewer than 5 errors
+
+
+# ============================================================================
+# FUZZY MATCHING - COSTS & BUDGETS
+# ============================================================================
+
+(foo){2i+2d+1s<=4}               # Insertions cost 2, deletions cost 2, subs cost 1
+(foo){i<=1,d<=1,s<=1,2i+2d+1s<=4} # Limits + costs combined
+(pattern){3i+1d+2s<=10}          # Complex cost structure
+
+
+# ============================================================================
+# FUZZY MATCHING - WITH TESTS
+# ============================================================================
+
+(foo){s<=2:[a-z]}                # At most 2 substitutions, must be lowercase
+(bar){i<=3:\d}                   # At most 3 insertions, must be digits
+(baz){s<=1:\w,i<=2:\s}           # Subs must be word chars, insertions must be space
+
+
+# ============================================================================
+# FUZZY MATCHING - WITH FLAGS
+# ============================================================================
+
+(?e)(dog){e<=1}                  # ENHANCEMATCH: improve fit after finding match
+(?b)(dog){e<=2}                  # BESTMATCH: search for best match instead of first
+
+
+# ============================================================================
+# COMPLEX COMBINED EXAMPLES
+# ============================================================================
+
+# Email-like pattern with Unicode
+(?x)(?i)                         # Verbose and case-insensitive
+\p{L}[\p{L}\p{N}_.+-]*           # Username part
+@                                # At symbol
+[\p{L}\p{N}.-]+                  # Domain part
+\.                               # Dot
+\p{L}{2,}                        # TLD
+
+# Nested structures
+\((?:[^()]|(?R))*\)              # Balanced parentheses
+\{(?:[^\{\}]|(?R))*\}            # Balanced braces
+\[(?:[^\[\]]|(?R))*\]            # Balanced brackets
+
+# Date matching with alternatives
+(?|((?P<y>\d{4})-(?P<m>\d{2})-(?P<d>\d{2}))|  # ISO format
+   ((?P<m>\d{2})/(?P<d>\d{2})/(?P<y>\d{4})))  # US format
+
+# Fuzzy word boundary search
+(?e)\b(color){e<=1}\b            # Match 'color' or similar within 1 error
+
+# Unicode word with properties
+\m\p{L}+\M                       # Start-of-word, letters, end-of-word
+
+# Complex lookaround with conditionals
+(?(?<=\d)(?=\w{3})\w{3}|(?=[A-Z])[A-Z]+) # If after digit, match 3 word chars
+
+# Recursive quoted strings
+"(?:[^"\\]|\\.)*"                # Simple quoted string
+'(?:[^'\\]|\\.)*'                # Single quoted string
+
+# Possessive matching with fallback
+\w++\.|\w+                       # Try possessive first, fallback to normal
+
+# Named list with keep
+prefix\L<items>\K\w+             # Match prefix+item but only keep word after
+
+# Full-featured pattern
+(?xiV1)(?P<tag>                  # Verbose, case-insensitive, V1
+  <\p{L}+                        # Tag start
+  (?:\s+\p{L}+=                  # Attributes
+    (?:"[^"]*"|'[^']*')          # Quoted values
+  )*+                            # Possessive repeat
+  >                              # Tag end
+)
+
+# Advanced fuzzy with multiple groups
+(?e)((?P<word>\w+){e<=1})\s+((?P=word){e<=1}) # Same word twice, fuzzy
+
+# Grapheme-aware pattern
+\X{3,10}                         # 3 to 10 grapheme clusters
+
+# Property set operations
+[\p{L}&&[\p{Latin}--[aeiouAEIOU]]] # Latin consonants only

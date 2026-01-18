@@ -2,7 +2,7 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import Generic, Hashable, Iterator
+from collections.abc import Hashable, Iterator
 import functools as ft
 import more_itertools as mi
 
@@ -10,20 +10,19 @@ import more_itertools as mi
 import pydantic as pyd
 
 ### INTERNAL
-from ..infra import Keys, Value
 
 
 ############
 ### BODY ###
 ############
-class NestedCache(pyd.BaseModel, Generic[Keys, Value]):
-    """
-    Multi-level hierarchical cache with automatic pruning.
+class NestedCache[Keys: tuple, Value](pyd.BaseModel):
+    """Multi-level hierarchical cache with automatic pruning.
 
     Supports arbitrary nesting depth determined by the signature tuple length.
     Each level maintains LRU ordering. Pruning is distributed proportionally
     across child caches based on their sizes.
     """
+
     signature: tuple
 
     children: dict[Hashable, 'NestedCache'] = {}
@@ -35,6 +34,7 @@ class NestedCache(pyd.BaseModel, Generic[Keys, Value]):
 
     @ft.cached_property
     def depth(self) -> int:
+        """The length of all items in this cache."""
         return len(self.signature)
 
     def __getitem__(self, keys: list | tuple) -> Value | None:
@@ -58,8 +58,7 @@ class NestedCache(pyd.BaseModel, Generic[Keys, Value]):
             return val[keys]
 
     def set(self, keys: list | tuple, value: Value) -> int:
-        """
-        Set a value at the specified key path.
+        """Set a value at the specified key path.
 
         Args:
             keys: Path through nested levels (length must match depth).
@@ -91,8 +90,7 @@ class NestedCache(pyd.BaseModel, Generic[Keys, Value]):
             self.prune(self.bucket_size)
 
     def delete(self, keys: list | tuple) -> int:
-        """
-        Delete a value at the specified key path.
+        """Delete a value at the specified key path.
 
         Args:
             keys: Path through nested levels (length must match depth).
@@ -128,23 +126,25 @@ class NestedCache(pyd.BaseModel, Generic[Keys, Value]):
         return self.size > 0
 
     def items(self) -> Iterator[tuple[Keys, Value]]:
+        """Iterator over all key-value pairs in the cache."""
         if self.depth == 1:
             for key, val in self.data.items():
-                yield (key,), val  # type: ignore
+                yield (key,), val
         else:
             for key, child in self.children.items():
                 for keys, val in child.items():
-                    yield (key, *keys), val  # type: ignore
+                    yield (key, *keys), val
 
     def keys(self) -> Iterator[Keys]:
+        """Iterator over all keys in the cache."""
         yield from (key for key, _ in self.items())
 
     def values(self) -> Iterator[Value]:
+        """Iterator over all values in the cache."""
         yield from (val for _, val in self.items())
 
     def prune(self, n: int) -> int:
-        """
-        Remove approximately n items from the cache.
+        """Remove approximately n items from the cache.
 
         For nested caches, distributes pruning proportionally across children
         based on their relative sizes.

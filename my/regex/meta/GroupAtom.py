@@ -83,8 +83,8 @@ class GroupAtom(Atom):
             assert '>' in self.body, f'Invalid named capture self: {self.body}'
             self.name, self.body = self.body.split('>', 1)
             self.start += f'{self.name}>'
-        elif self.kind == GroupKind.INVOC:
-            # II. Invocations have no body
+        elif self.kind & GroupKind.INVOC | GroupKind.SUBST:
+            # II. Invocations and substitutions have no body
             self.name, self.body = self.body, ''
             self.start += self.name
 

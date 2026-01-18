@@ -3,14 +3,13 @@
 ############
 ### STANDARD
 from typing import Any
-import itertools as it
 
 ### EXTERNAL
 import pytest as pyt
 
 ### INTERNAL
 from ..conftest import boolmap
-from my.regex import Quantifier, Atom, Regex, Tree
+from my.regex import Atom, Regex, Tree
 
 cls = Tree
 
@@ -309,17 +308,6 @@ class TestTree:
     )
     def test_bool(self, tree: Tree, expected: bool):
         assert bool(tree) == expected
-
-    @pyt.mark.parametrize(
-        'tree, expected',
-        [
-            (cls(r'ab|cd'), [r'ab', r'cd']),
-            (cls(r'ab|cd', suffix=r'ef'), [r'ef']),
-            (cls(), []),
-        ],
-    )
-    def test_last(self, tree: Tree, expected: list[str]):
-        assert list(map(str, tree.last)) == expected
 
     # --------------
     # `*1` Modifiers

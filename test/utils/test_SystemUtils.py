@@ -2,7 +2,7 @@
 ### HEAD ###
 ############
 ### STANDARD
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, UTC
 from pathlib import Path
 
 ### EXTERNAL
@@ -39,22 +39,22 @@ class TestSystemUtils:
     def test_posix_none(self):
         result = cls.posix(None)
         assert isinstance(result, datetime)
-        assert result.tzinfo == timezone.utc
+        assert result.tzinfo == UTC
 
     def test_posix_datetime(self):
-        dt = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        dt = datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC)
         result = cls.posix(dt)
         assert result == dt
-        assert result.tzinfo == timezone.utc
+        assert result.tzinfo == UTC
 
     def test_posix_timestamp(self):
         timestamp = 1704110400  # 2024-01-01 12:00:00 UTC
         result = cls.posix(timestamp)
         assert isinstance(result, datetime)
-        assert result.tzinfo == timezone.utc
+        assert result.tzinfo == UTC
 
     def test_posix_since(self):
-        past = datetime.now(timezone.utc) - timedelta(seconds=5)
+        past = datetime.now(UTC) - timedelta(seconds=5)
         result = cls.posix_since(past)
         assert isinstance(result, timedelta)
         assert result.total_seconds() >= 4  # At least 4 seconds (allowing for execution time)

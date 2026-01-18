@@ -222,7 +222,7 @@ class TestSyntaxUtils:
         'file_path, root_path, expected_module',
         [
             # Test importing a module from my/utils
-            ('my/utils/CodeUtils.py', '.', 'my.utils.CodeUtils'),
+            ('my/utils/SyntaxUtils.py', '.', 'my.utils.SyntaxUtils'),
             ('my/utils/IterUtils.py', '.', 'my.utils.IterUtils'),
         ],
     )

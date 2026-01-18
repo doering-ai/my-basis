@@ -4,6 +4,7 @@ from .Span import Span
 from .Buffer import Buffer
 from .Predicate import Predicate
 from .MyEnumRow import MyEnumRow, MyEnumSetRow
+from .Command import Command
 
 __all__ = [
     'MyEnum',
@@ -14,4 +15,5 @@ __all__ = [
     'Predicate',
     'MyEnumRow',
     'MyEnumSetRow',
+    'Command',
 ]

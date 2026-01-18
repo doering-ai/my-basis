@@ -2,7 +2,8 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import Callable, Literal, ClassVar
+from typing import Literal, ClassVar
+from collections.abc import Callable
 import keyword
 
 ### EXTERNAL
@@ -16,6 +17,8 @@ from .IterUtils import iter_utils
 ### BODY ###
 ############
 class SemanticUtils:
+    """Methods for semantic-y tasks (i.e. related to data's contant rather than its form)."""
+
     # ------------------
     # `0` ROMAN NUMERALS
     # ------------------
@@ -35,8 +38,7 @@ class SemanticUtils:
 
     @classmethod
     def decimal_to_roman(cls, decimal: int) -> str:
-        """
-        Convert decimal integer to Roman numeral notation.
+        """Convert decimal integer to Roman numeral notation.
 
         Handles subtractive notation (e.g., IV, IX, XL, XC, CD, CM).
 
@@ -69,8 +71,7 @@ class SemanticUtils:
 
     @classmethod
     def roman_to_decimal(cls, roman: str) -> int:
-        """
-        Convert Roman numeral notation to decimal integer.
+        """Convert Roman numeral notation to decimal integer.
 
         Validates format and handles subtractive notation.
 
@@ -109,8 +110,7 @@ class SemanticUtils:
 
     @classmethod
     def format_amount(cls, amount: int, unit: Literal['num', 'mem'] = 'num', width: int = 0) -> str:
-        """
-        Format large numbers with SI suffixes (K, M, B) or memory units (KB, MB, GB).
+        """Format large numbers with SI suffixes (K, M, B) or memory units (KB, MB, GB).
 
         Args:
             amount: Number to format.
@@ -158,8 +158,7 @@ class SemanticUtils:
 
     @classmethod
     def to_singular(cls, plural: str) -> str:
-        """
-        Convert plural English word to singular form.
+        """Convert plural English word to singular form.
 
         Handles regular plurals, irregulars, and archaic forms.
 
@@ -182,8 +181,7 @@ class SemanticUtils:
 
     @staticmethod
     def to_ordinal(num: int | str) -> str:
-        """
-        Convert number to ordinal string (e.g., 1 -> '1st', 2 -> '2nd').
+        """Convert number to ordinal string (e.g., 1 -> '1st', 2 -> '2nd').
 
         Args:
             num: Integer or string representation of integer.
@@ -264,8 +262,7 @@ class SemanticUtils:
 
     @classmethod
     def validate_identifier(cls, *symbols: str) -> None:
-        """
-        Validate that symbols are valid identifiers in Python and TypeScript.
+        """Validate that symbols are valid identifiers in Python and TypeScript.
 
         Args:
             *symbols: Symbol names to validate.

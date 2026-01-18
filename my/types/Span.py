@@ -16,13 +16,15 @@ from ..infra import Series, DELIM
 ### BODY ###
 ############
 class Span(tuple[int, int]):
-    """
-    An immutable half-open interval [start, end) representing a text range.
+    """An immutable half-open interval [start, end), typically representing a text range.
 
-    Spans are tuples of two integers where the first is inclusive and the second is
-    exclusive. They support arithmetic, containment checks, intersection testing,
-    and merging operations. Can be constructed from various formats including strings
-    like "10-20" or "432-3" (abbreviated form).
+    Spans are a simple wrapper around `tuple[int, int]` built to support arithmetic (shifting by
+    integers), containment testing (checking if positions or other spans intersect), and merging
+    operations (combining overlapping spans into minimal non-overlapping sets).
+
+    The class provides flexible construction from strings like `"10-20"` or abbreviated forms like
+    `"432-3"` (interpreted as 432-433). The `parse()` classmethod handles smart abbreviation
+    expansion, where trailing digits inherit leading digits from the start position.
     """
 
     DELIM_RGX: ClassVar[re.Pattern] = re.compile(r' ?[-,\/]+ ?')
@@ -31,6 +33,7 @@ class Span(tuple[int, int]):
     # `.` Initial Methods
     # -------------------
     def __new__(cls, arg0: Series | int | float | str | Self = -1, arg1: int | str = -1):
+        """Create a new Span instance, overriding default tuple behavior w/ flexible coercion."""
         if isinstance(arg0, Span):
             return arg0
 
@@ -143,8 +146,7 @@ class Span(tuple[int, int]):
     # `*2` Methods
     # ------------
     def intersects(self, other: tuple[int, int] | Self | list[Self]) -> bool:
-        """
-        Check if this span overlaps with another span.
+        """Check if this span overlaps with another span.
 
         Args:
             other: Span to test for intersection.
@@ -153,21 +155,19 @@ class Span(tuple[int, int]):
         """
         return other in self
 
-    def join(self, other: 'Span|tuple[int, int]') -> 'Span':
-        """
-        Create a span that encompasses both this span and another.
+    def join(self, other: Self | tuple[int, int]) -> Self:
+        """Create a span that encompasses both this span and another.
 
         Args:
             other: Span to join with.
         Returns:
             New span from the minimum start to maximum end.
         """
-        return Span(min(self[0], other[0]), max(self[1], other[1]))
+        return self.__class__(min(self[0], other[0]), max(self[1], other[1]))
 
-    @staticmethod
-    def serialize(*args: 'Span|tuple[int, int]') -> str:
-        """
-        Serialize multiple spans to a delimited string.
+    @classmethod
+    def serialize(cls, *args: Self | tuple[int, int]) -> str:
+        """Serialize multiple spans to a delimited string.
 
         Args:
             *args: Spans to serialize.
@@ -177,9 +177,8 @@ class Span(tuple[int, int]):
         return DELIM.join(map(str, args))
 
     @classmethod
-    def parse(cls, text: str) -> 'Span':
-        """
-        Parse a span from text with smart abbreviation handling.
+    def parse(cls, text: str) -> Self:
+        """Parse a span from text with smart abbreviation handling.
 
         Handles formats like:
         - "10-20": Full range
@@ -205,23 +204,22 @@ class Span(tuple[int, int]):
 
                 x1 = f'{prefix}{x1}'
 
-            return Span((int(x0), int(x1) + 1))
+            return cls((int(x0), int(x1) + 1))
         elif text.isdigit():
-            return Span((int(text), int(text) + 1))
+            return cls((int(text), int(text) + 1))
         else:
-            return Span((0, 0))
+            return cls((0, 0))
 
     @classmethod
-    def merge(cls, *args: 'tuple[int, int]|Span') -> list['Span']:
-        """
-        Merge overlapping spans into a minimal set of non-overlapping spans.
+    def merge(cls, *args: tuple[int, int] | Self) -> list[Self]:
+        """Merge overlapping spans into a minimal set of non-overlapping spans.
 
         Args:
             *args: Spans to merge.
         Returns:
             Sorted list of non-overlapping spans covering the same positions.
         """
-        spans = list(sorted(set(map(Span, args))))
+        spans = list(sorted(set(map(cls, args))))
         i = 0
         while i < len(spans) - 1:
             while i < len(spans) - 1 and spans[i + 1][0] <= spans[i][1]:

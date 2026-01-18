@@ -2,7 +2,7 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import Self, Type
+from typing import Self
 from enum import Enum, Flag
 import more_itertools as mi
 import functools as ft
@@ -19,18 +19,25 @@ from ..utils import ut
 ############
 @ft.total_ordering
 class MyEnum(Enum):
-    """
-    Enhanced Enum base class with flexible parsing, arithmetic, and comparison.
+    """Enhanced Enum base class with flexible & ergonomic parsing, arithmetic, and comparison.
 
-    Supports reading values from strings (including aliases), integers, and lists.
-    Provides arithmetic operations for numeric enums and bitwise operations for Flags.
-    Implements total ordering and string conversion with configurable aliases.
+    This class is built to be a useful *base* more than anything, but as-is, its main strength is in
+    its (de)serialization methods. A single `read()` call can parse strings (matching by name or
+    regex alias), integers (for Flag enums), and lists thereof all at once,  while `write
+    ()` method serializes enums back to strings, with pipe-separated names for combined flags.
+
+    This class does not inherit from `enum.Flag` by default, but it is built with support for such
+    usecases out-of-the-box; to use those those features, simply subclass both `MyEnum` and `Flag`.
+
+    ```{note}
+    Total ordering is implemented based on enum value for numeric enums, and declaration order
+    otherwise -- if you want ordering based on string values, you'll have to override those methods.
+    ```
     """
 
     @classmethod
     def read(cls, value: str | int | list | Self) -> Self:
-        """
-        Parse a value into an enum member.
+        """Parse a value into an enum member.
 
         Supports multiple input formats:
         - Enum member: Returns as-is
@@ -81,8 +88,8 @@ class MyEnum(Enum):
         raise ValueError(f'Invalid {cls.__name__} value: {value}')
 
     def write(self) -> str:
-        """
-        Convert enum member to string representation.
+        """Convert enum member to string representation.
+
         Returns:
             String value, lowercase name, or pipe-separated flags for Flag enums.
         """
@@ -110,7 +117,7 @@ class MyEnum(Enum):
         return cls(self.value - other.value)  # type: ignore
 
     def __isub__(self, other: Self | str | int | list) -> Self:
-        return self - other  # type: ignore
+        return self - other
 
     def __add__(self, other: Self | str | int | list) -> Self:
         cls = self.__class__
@@ -119,10 +126,11 @@ class MyEnum(Enum):
         return cls(self.value + other.value)  # type: ignore
 
     def __iadd__(self, other: Self | str | int | list) -> Self:
-        return self + other  # type: ignore
+        return self + other
 
     @property
     def parts(self) -> list[Self]:
+        """The component members of Flag unions, else just `[self]`."""
         if not isinstance(self, Flag):
             return [self]
         else:
@@ -130,8 +138,8 @@ class MyEnum(Enum):
 
     @property
     def base(self) -> Self:
-        """
-        Return the first/primary part of a Flag enum, or self for regular enums.
+        """Return the first/primary part of a Flag enum, or self for regular enums.
+
         Returns:
             First flag component or self.
         """
@@ -154,19 +162,19 @@ class MyEnum(Enum):
     @ft.lru_cache(maxsize=1)
     @staticmethod
     def _aliases() -> dict[str, re.Pattern]:
-        """
-        Define regex patterns for parsing aliases.
+        """Define regex patterns for parsing aliases.
 
         Override in subclasses to provide custom alias matching.
+
         Returns:
             Dict mapping member names to alias regex patterns.
         """
         return {}
 
     @classmethod
-    def vtype(cls) -> Type:
-        """
-        Get the type of enum values.
+    def vtype(cls) -> type:
+        """Get the type of enum values.
+
         Returns:
             Type of the first enum member's value.
         """

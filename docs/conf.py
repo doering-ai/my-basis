@@ -5,25 +5,27 @@
 from typing import Any, Literal
 from pathlib import Path
 from importlib import metadata
+import inspect
 
 ### EXTERNAL
 
 ### INTERNAL
-from my import RegexStore
-import my  # noqa: F401
+from my import RegexStore, Buffer
+import my
 
 ############
 ### BODY ###
 ############
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
-ROOT = Path(__file__).parent.parent.resolve()
+ROOT = Path(__file__).parent.resolve()
 
 DOC_DIR = '.'
-SRC_DIR = './../my'
-RST_DIR = './_source'
+API_DIR = './api'
 OUT_DIR = './_build'
 JNJ_DIR = './_templates'
 STC_DIR = './_static'
+
+SRC_DIR = './../my'
 
 
 # -------
@@ -31,17 +33,16 @@ STC_DIR = './_static'
 # -------
 project = 'MyBasis'
 author = 'Robb Doering'
-# version = my.__version__
-# release = '1.0.0'
 version = metadata.version('MyBasis')
 release = version
 
 # -------
 # General
 # -------
+default_role = 'any'
 extensions = [
     'sphinx.ext.autodoc',
-    'sphinx.ext.apidoc',
+    # 'sphinx.ext.apidoc',
     'sphinx.ext.napoleon',
     # 'sphinx.ext.viewcode',
     'myst_parser',
@@ -69,7 +70,7 @@ exclude_patterns = [
 # Python
 # ------
 # add_module_names = True
-modindex_common_prefix = ['my.']
+# modindex_common_prefix = ['my.']
 python_display_short_literal_types = True
 # python_maximum_signature_line_length = None
 # python_trailing_comma_in_multi_line_signatures = True
@@ -106,7 +107,7 @@ autodoc_default_options = {
     # 'ignore-module-all': None,
     'member-order': 'bysource',
     # 'show-inheritance': None,
-    # 'class-doc-from': None,
+    'class-doc-from': 'class',
     # 'no-value': None,
     # 'no-index': None,
     # 'no-index-entry': None,
@@ -117,50 +118,31 @@ autodoc_default_options = {
 # APIDoc
 # ------
 # https://www.sphinx-doc.org/en/master/usage/extensions/apidoc.html
-default = dict(
-    destination=RST_DIR,
-    separate_modules=True,
-    module_first=True,
-    exclude_patterns=[],
-    # implicit_namespaces=True,
-    # https://www.sphinx-doc.org/en/master/usage/extensions/autodoc.html#directive-automodule
-    automomdule_options=set(),
-)
-apidoc_modules = [
-    default
-    | dict(
-        path=SRC_DIR,
-        exclude_patterns=['*/meta'],
-    )
-]
-# modules = [
-#     dict(
-#         path=f'{SRC_DIR}/utils',
-#     ),
-#     dict(
-#         path=f'{SRC_DIR}/caches',
-#     ),
-#     dict(
-#         path=f'{SRC_DIR}/typing',
-#     ),
-#     dict(
-#         path=f'{SRC_DIR}/types',
-#     ),
-#     dict(
-#         path=f'{SRC_DIR}/data',
-#     ),
-#     dict(
-#         path=f'{SRC_DIR}/apis',
-#     ),
-#     dict(
-#         path=f'{SRC_DIR}/regex',
-#         exclude_patterns=['*/meta'],
-#     ),
-#     dict(
-#         path=f'{SRC_DIR}/files',
+# default = dict(
+#     destination=API_DIR,
+#     separate_modules=True,
+#     module_first=True,
+#     exclude_patterns=[],
+#     # implicit_namespaces=True,
+#     # https://www.sphinx-doc.org/en/master/usage/extensions/autodoc.html#directive-automodule
+#     # automomdule_options=set(),
+# )
+# apidoc_modules = [
+#     default
+#     | dict(
+#         path=SRC_DIR,
+#         exclude_patterns=[
+#             '*/meta',
+#             '*/MyEnumRow.py',
+#         ],
 #     ),
 # ]
-# apidoc_modules = [default | module for module in modules]
+
+# rstdir = (ROOT / API_DIR).absolute()
+# if rstdir.exists() and rstdir.is_dir():
+#     print(f'DELETING EXISTING RST FILES in {rstdir}')
+#     Command.run('rm', f'{rstdir}/my.*.rst', f'{rstdir}/modules.rst')
+
 
 # --------
 # Napoleon
@@ -202,18 +184,20 @@ source_suffix = {
 # myst_footnote_transition = True
 # myst_words_per_minute = 200
 myst_enable_extensions = [
+    # 'amsmath', ## Enable direct parsing of amsmath LaTeX equations
+    'attrs_inline',  # Enable inline attribute lists
+    'colon_fence',  ## Enable code fences using ::: delimiters
+    'deflist',  # Enable definition lists
     'dollarmath',  # Enable parsing of dollar $ and $$ encapsulated math
-    'replacements',  # Automatically convert some common typographic texts
+    'fieldlist',  # Enable field lists
     'html_admonition',  # Convert <div class="admonition"> elements to sphinx admonition nodes
     'html_image',  # Convert HTML <img> elements to sphinx image nodes
     'linkify',  # Automatically identify “bare” web URLs and add hyperlinks
-    'deflist',  # Enable definition lists
-    'fieldlist',  # Enable field lists
-    # 'amsmath', # Enable direct parsing of amsmath LaTeX equations
-    # 'colon_fence', # Enable code fences using ::: delimiters
-    # 'smartquotes', # Automatically convert standard quotations to their opening/closing variants
-    # 'substitution', # Substitute keys
-    # 'tasklist', # Add check-boxes to the start of list items
+    'replacements',  # Automatically convert some common typographic texts
+    # 'smartquotes', ## Automatically convert standard quotations to their opening/closing variants
+    'strikethrough',  # Enable strikethrough using ~~del~~ syntax
+    # 'substitution', ## Substitute keys
+    # 'tasklist', ## Add check-boxes to the start of list items
 ]
 
 # ----
@@ -281,24 +265,20 @@ ObjType = Literal[
 ]
 
 
-_AUTODOC_SKIPS = RegexStore.new(
-    skip_any=(
-        '|',
+RGXS = RegexStore.new(
+    options=dict(
+        force_named_groups=True,
+    ),
+    symbol=r'\b[_[:alpha:]]\w*\b',
+    envvar=r'\$[_[:upper:]]+\b',
+    autodoc_skip=(
+        '|:',
         [
             r'^_.*',
             r'[[:upper:]\d_]+',
         ],
     ),
-    skip_module='',
-    skip_class='',
-    skip_method='',
-    skip_function='',
-    skip_decorator='',
-    skip_attribute='',
-    skip_exception='',
-    skip_property='',
-    skip_data='',
-    skip_type='',
+    local_reference=r'`((\.?(?P>symbol))+(?P<parens>\(\))?|(?P>envvar))`',
 )
 
 
@@ -310,7 +290,73 @@ def autodoc_skip_member(
     skip: bool,
     options: Any,
 ) -> bool | None:
-    return skip or bool(_AUTODOC_SKIPS.fullmatch(['skip_any', f'skip_{obj_type}'], name))
+    """Decide whether to skip a member."""
+    return skip or bool(RGXS.fullmatch('autodoc_skip', name))
+
+
+def _get_symbol(container: object, container_name: str, *path: str) -> object | None:
+    obj = container
+    if path[0] == getattr(obj, '__name__', ''):
+        path = path[1:]
+
+    for part in path:
+        obj = getattr(obj, part, None)
+        if obj is None:
+            return None
+    return obj
+
+
+def _child_ref(obj: Any, ref_symbols: list[str]) -> object | None:
+    return _get_symbol(obj, *ref_symbols)
+
+
+def _sibling_ref(obj: Any, ref_symbols: list[str]) -> object | None:
+    if (
+        (qname := getattr(obj, '__qualname__', None))
+        and '.' in qname
+        and (parent := _get_symbol(my, *qname.split('.')[:-1]))
+    ):
+        return _get_symbol(parent, *ref_symbols)
+    return None
+
+
+def _mod_ref(obj: Any, ref_symbols: list[str]) -> object | None:
+    if (mname := getattr(obj, '__module__', None)) and (
+        module := _get_symbol(my, *mname.split('.'))
+    ):
+        return _get_symbol(module, *ref_symbols)
+    return None
+
+
+def _global_ref(ref_symbols: list[str]) -> object | None:
+    return _get_symbol(my, *ref_symbols)
+
+
+def _expand_reference(ref_symbols: list[str], obj: Any) -> str:
+    if not all(map(str.isidentifier, ref_symbols)):
+        return ''
+
+    ref = None
+    if ref := _child_ref(obj, ref_symbols) or _sibling_ref(obj, ref_symbols):
+        is_member = True
+    elif ref := _global_ref(ref_symbols) or _mod_ref(obj, ref_symbols):
+        is_member = '.' in getattr(obj, '__qualname__', '')
+    else:
+        return ''
+
+    if inspect.isclass(ref):
+        role = 'class'
+    elif inspect.ismethod(ref):
+        role = 'meth'
+    elif inspect.isfunction(ref):
+        role = 'func'
+    elif is_member:
+        role = 'attr'
+    elif ref_symbols[-1].isupper():
+        role = 'const'
+    else:
+        role = 'data'
+    return f'{{py:{role}}}{ref}'
 
 
 def autodoc_process_docstring(
@@ -321,28 +367,50 @@ def autodoc_process_docstring(
     options: Any,
     lines: list[str],
 ) -> None:
-    pass
+    """Modifies `lines` in place."""
+    for i, line in enumerate(lines):
+        if '`' not in line:
+            continue
+
+        buf = Buffer.new(line)
+        did_change = False
+        for match in RGXS.finditer('local_reference', buf):
+            if var := match.at('envvar').strip('$'):
+                newtext = f'{{envvar}}{var}'
+                buf.replace(match.span, newtext)
+                did_change = True
+                continue
+
+            if newtext := _expand_reference(match['symbol'], obj):
+                buf.replace(match.span, newtext)
+                did_change = True
+
+        if did_change:
+            print(f'\n  DOC REF: {line} --> {buf}\n')
+            lines[i] = str(buf)
 
 
-def autodoc_before_process_signature(app: Any, obj: Any, bound_method: bool) -> None:
-    pass
+# def autodoc_before_process_signature(app: Any, obj: Any, bound_method: bool) -> None:
+#     pass
 
 
-def autodoc_process_signature(
-    app: Any,
-    obj_type: ObjType,
-    name: str,
-    obj: Any,
-    options: Any,
-    signature: str,
-    return_annotation: str,
-) -> tuple[str, str] | None:
-    pass
+# def autodoc_process_signature(
+#     app: Any,
+#     obj_type: ObjType,
+#     name: str,
+#     obj: Any,
+#     options: Any,
+#     signature: str,
+#     return_annotation: str,
+# ) -> tuple[str, str] | None:
+#     pass
 
 
-def autodoc_process_bases(app: Any, name: str, obj: Any, _unused: Any, bases: list) -> None:
-    pass
+# def autodoc_process_bases(app: Any, name: str, obj: Any, _unused: Any, bases: list) -> None:
+#     pass
 
 
 def setup(app: Any):
+    """Register custom Sphinx event handlers."""
     app.connect('autodoc-skip-member', autodoc_skip_member)
+    app.connect('autodoc-process-docstring', autodoc_process_docstring)

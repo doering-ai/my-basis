@@ -3,17 +3,20 @@
 The MyBasis Python package (imported as `my`) contains a variety of utilities generally centered around the topics of text processing, functional programming, and runtime type coercion.
 
 It is developed with usage as a library in mind, and given its broad scope, is organized into a mostly-flat structure.
-The source code is found in `my/`, broken up further into subdirectories (e.g. `my/utils/`, `my/text/`, etc.) for the purposes of organization and prevention of circular imports.
+The source code is found in `my/`, broken up further into ~7 subpackages.
 The corresponding PyTest files for each individual python file are present in matching subdirectories of `tests/`.
 
 ## Commands
 
 - **Testing:**
-    - `uv run pytest` - Run all unit tests.
-    - `uv run pytest -k <pattern>` - Run all unit tests matching `<pattern>`.
-    - `uv run pytest --cov=my --cov-report=term-missing` - Run all unit tests with coverage report for the `my` package.
+  - `uv run pytest` - Run all unit tests.
+  - `uv run pytest -k <pattern>` - Run all unit tests matching `<pattern>`.
+  - `uv run pytest --cov=my --cov-report=term-missing` - Run all unit tests with coverage report for the `my` package.
 
-## Important Dependencies
+## Dependencies
+
+The project has many dependencies, but the most important are listed here.
+Consult pyproject.toml or run `uv tree -d 1` for a full list.
 
 ### Development
 
@@ -33,9 +36,7 @@ The corresponding PyTest files for each individual python file are present in ma
 
 - `pydantic`: data validation and settings management using Python type annotations
 
-- `regex`: advanced regular expressions
-
-- `tqdm`: progress bars
+- `regex`: advanced regular expressions -- especially critical for the `my.regex` subpackage.
 
 - `more-itertools`: additional iteration utilities beyond the standard library
 
@@ -47,11 +48,11 @@ Almost all Python files in the project contain one or more of the following sect
 
 1. `HEAD`: This is where imports are defined in three subsections: `STANDARD` (the python stdlib), `EXTERNAL` (dependencies installed via `uv` and controlled by `pyproject.toml`), and `INTERNAL` (other files in this project or an imported library that we wrote).
 
-2. `DATA`: This is where dataclasses (usually Pydantic BaseModels) and module-level constants are defined.
+1. `DATA`: This is where dataclasses (usually Pydantic BaseModels) and module-level constants are defined.
 
-3. `BODY`: This is where the main functionality of the file is implemented.
+1. `BODY`: This is where the main functionality of the file is implemented.
 
-4. `MAIN`: The entrypoint code for executing this file on the commandline as a script, often with handling of arguments via `argparse`.
+1. `MAIN`: The entrypoint code for executing this file on the commandline as a script, often with handling of arguments via `argparse`.
 
 ### Classes
 

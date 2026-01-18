@@ -2,7 +2,8 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import Iterable, Iterator, Literal, ClassVar, Any, Callable, Mapping, Self
+from typing import Literal, ClassVar, Any, Self
+from collections.abc import Iterable, Iterator, Callable, Mapping
 import functools as ft
 import contextlib as ctx
 
@@ -16,9 +17,8 @@ from regex import Match, Pattern, RegexFlag
 from ..utils import ut
 from ..types import Buffer
 from ..typing import typist
-from .meta import Atom, GroupAtom, Regex, Tree, GroupKind, META_RGXS
+from .meta import ParseData, Atom, GroupAtom, Regex, Tree, GroupKind, META_RGXS
 from .MatchData import MatchData
-from .ParseData import ParseData
 
 ############
 ### DATA ###
@@ -65,8 +65,7 @@ NO_FLAG = RegexFlag(0)
 ### BODY ###
 ############
 class RegexStore(pyd.BaseModel):
-    """
-    A powerful regex pattern management system with composition and parsing capabilities.
+    """A powerful regex pattern management system with composition and parsing capabilities.
 
     RegexStore provides a comprehensive framework for defining, composing, and applying
     complex regex patterns.
@@ -117,6 +116,7 @@ class RegexStore(pyd.BaseModel):
         formatter: Callable[..., str] | None = None
         separator: str = r' *'
         force_named_groups: bool = False
+        force_reinvocations: bool = True
 
         # Autostrip behavior
         autostrip_spaces: bool = True
@@ -172,12 +172,6 @@ class RegexStore(pyd.BaseModel):
 
         return store
 
-    @pyd.field_validator('definitions')
-    @classmethod
-    def _init_definitions(cls, definitions: dict[str, str]) -> dict[str, str]:
-        """Clean the passed definitions by normalizing group reference syntax."""
-        return {key: val.replace('(?P=', '(?&') for key, val in definitions.items()}
-
     @pyd.model_validator(mode='after')
     def _process_options(self) -> Self:
         """Finalize the store by setting up the autostrip function based on member variables."""
@@ -194,6 +188,11 @@ class RegexStore(pyd.BaseModel):
             self.strip = lambda text: text.strip(strip_string) or text
         else:
             self.strip = lambda text: text
+
+        if self.options.force_reinvocations:
+            self.definitions = {
+                key: val.replace('(?P=', '(?P>') for key, val in self.definitions.items()
+            }
 
         return self
 
@@ -215,8 +214,7 @@ class RegexStore(pyd.BaseModel):
         return value
 
     def _read_match(self, match: Match) -> tuple[dict[str, str], dict[str, list[str]]]:
-        """
-        Extract and autostrip all captured groups from a match object.
+        """Extract and autostrip all captured groups from a match object.
 
         Args:
             match: Regex match object to read.
@@ -240,8 +238,7 @@ class RegexStore(pyd.BaseModel):
         maxdepth: int = 0,
         threshold: int = 48,
     ) -> str:
-        """
-        Recursive helper for tree_print, handling indentation and group structure.
+        """Recursive helper for tree_print, handling indentation and group structure.
 
         Args:
             expr: The regex expression to print.
@@ -283,9 +280,9 @@ class RegexStore(pyd.BaseModel):
         Returns:
             Tuple of (kind, start, separator, quantifier) where:
             - kind: GroupKind enum value
-            - start: Opening group syntax (e.g., '(?:', '(?>')
+            - start: Opening group syntax (e.g., `(?:`, `(?>`)
             - separator: String to join children (defaults to self.separator)
-            - quantifier: Quantifier string (e.g., '?', '+', '*')
+            - quantifier: Quantifier string (e.g., `?`, `+`, `*`)
         """
         mark = mark.strip()
         match = META_RGXS['struct_mark'].fullmatch(mark)
@@ -320,8 +317,7 @@ class RegexStore(pyd.BaseModel):
         patterns: str | Iterable[str],
         text: str | Buffer,
     ) -> tuple[Iterable[str], str]:
-        """
-        Validate, clean, and/or coerce the usual public paramaters of the constructor.
+        """Validate, clean, and/or coerce the usual public paramaters of the constructor.
 
         Args:
             patterns: Pattern name(s) to validate.
@@ -337,13 +333,13 @@ class RegexStore(pyd.BaseModel):
     def _parse_tuple(self, data: RegexTup) -> tuple[str, RegexList, str, str]:
         if (n := len(data)) == 2:
             assert typist.tuple_is(data, tuple[str, list]), f'Invalid group spec: {data}'
-            mark, children = data  # type: ignore
+            mark, children = data
             return mark, children, '', ''
         elif n == 4:
             assert typist.tuple_is(data, tuple[str, str, list, str]), (
                 f'Invalid group spec (w/ prefix & suffix): {data}'
             )
-            mark, prefix, children, suffix = data  # type: ignore
+            mark, prefix, children, suffix = data
             # The prefix and suffix weren't formatted upfront
             if self.options.formatter is not None:
                 prefix, suffix = map(self.options.formatter, (prefix, suffix))
@@ -353,8 +349,7 @@ class RegexStore(pyd.BaseModel):
 
     @staticmethod
     def _collapse_empty_sections(delims: list[str], sections: list[str]) -> None:
-        """
-        Remove any empty sections in the given delimited fullsplit(). Modifies arguments.
+        """Remove any empty sections in the given delimited fullsplit(). Modifies arguments.
 
         Args:
             delims: List of delimiters.
@@ -371,8 +366,7 @@ class RegexStore(pyd.BaseModel):
             sections.pop(i)
 
     def _render_definitions(self, *definitions: str) -> str:
-        """
-        Serialize definitions into a DEFINE block for regex compilation.
+        """Serialize definitions into a DEFINE block for regex compilation.
 
         Orders and serializes the specified definitions as a (?(DEFINE)...) block,
         ensuring references to other definitions are resolved in definition order.
@@ -395,8 +389,7 @@ class RegexStore(pyd.BaseModel):
         return '\n'.join([r'(?(DEFINE)', *[f'(?P<{name}>{rgx})' for name, rgx in data], ')'])
 
     def _autoparse(self, func: str, names: Iterable[str], text: str) -> MatchData:
-        """
-        Helper function for parsing the outputs from a typical regex call.
+        """Helper function for parsing the outputs from a typical regex call.
 
         Args:
             func: Name of the regex function to call (e.g., 'match', 'search').
@@ -411,8 +404,7 @@ class RegexStore(pyd.BaseModel):
         return MatchData()
 
     def find_all_invocations(self, groups_used: set[str]) -> set[str]:
-        """
-        Recursively find all groups invoked by the given set of groups.
+        """Recursively find all groups invoked by the given set of groups.
 
         Args:
             groups_used: Initial set of group names to analyze.
@@ -432,8 +424,7 @@ class RegexStore(pyd.BaseModel):
             return groups_used
 
     def compose_group(self, mark: str, children: RegexList, pre: str = '', suf: str = '') -> str:
-        """
-        Compose a regex group from a mark, children, and optional prefix/suffix.
+        """Compose a regex group from a mark, children, and optional prefix/suffix.
 
         Args:
             mark: Custom mark syntax defining group type and separator.
@@ -470,8 +461,7 @@ class RegexStore(pyd.BaseModel):
         return ''.join([start, pre, body, suf, end, quant])
 
     def compose_tree(self, data: RegexList) -> str:
-        """
-        Compose an optimized/"condensed" version of the give regex branches.
+        """Compose an optimized/"condensed" version of the give regex branches.
 
         Args:
             data: List of branched regex expressions.
@@ -497,8 +487,7 @@ class RegexStore(pyd.BaseModel):
     # `+` Primary Methods
     # -------------------
     def parse(self, match: Match | None, pattern_name: str = '') -> MatchData:
-        """
-        Parse a match object, applying registered parsers and cleaning results.
+        """Parse a match object, applying registered parsers and cleaning results.
 
         Reads the match, applies any parsers registered for captured groups, removes
         hidden fields (those starting with '_'), and returns a clean MatchData object.
@@ -545,8 +534,7 @@ class RegexStore(pyd.BaseModel):
 
     @ft.singledispatchmethod
     def compose(self, data: RegexVal, sep: str | None = None) -> str:
-        """
-        Recursively transform a DSL-compliant definition into a valid regular expression.
+        """Recursively transform a DSL-compliant definition into a valid regular expression.
 
         Args:
             data: The regex value to compose.
@@ -598,8 +586,7 @@ class RegexStore(pyd.BaseModel):
         return self.compose_group(*self._parse_tuple(tup))
 
     def clean(self, name: str, text: Buffer) -> set[str]:
-        """
-        Clean and validate a regex pattern, identifying all group dependencies.
+        """Clean and validate a regex pattern, identifying all group dependencies.
 
         Normalizes group invocation syntax and validates that local group names don't
         conflict with predefined subroutine names.
@@ -613,7 +600,8 @@ class RegexStore(pyd.BaseModel):
             AssertionError: If local group names conflict with predefined groups.
         """
         # I. Replace the convenience syntax with the actual, ugly syntax
-        text.replace('(?P=', '(?&')
+        if self.options.force_reinvocations:
+            text.replace('(?P=', '(?P>')
 
         # II. Go through all the subroutine calls in the pattern, replacing as we go
         groups_used: set[str] = set()
@@ -642,8 +630,7 @@ class RegexStore(pyd.BaseModel):
         parser: RegexParser | None = None,
         flags: RegexFlag = NO_FLAG,
     ) -> None:
-        """
-        Define a new named regex pattern in the store.
+        """Define a new named regex pattern in the store.
 
         Composes the pattern from the given value, cleans and validates it, compiles it
         with any necessary definitions, and stores it along with an optional parser.
@@ -671,7 +658,11 @@ class RegexStore(pyd.BaseModel):
             # III. Compile a finalized version with subroutines attached as 'definitions'
             definitions = self._render_definitions(*groups_used)
             rgx = rf'{definitions}(?P<{name}>{text})'
-            self.patterns[name] = re.compile(rgx, flags)
+            try:
+                self.patterns[name] = re.compile(rgx, flags)
+            except Exception:
+                print(f'Failed to compile rgx `{name.upper()}`:\n{rgx}\n')
+                raise
 
         except Exception as e:
             print(f'Error compiling rgx `{name.upper()}`: {e}')
@@ -692,8 +683,7 @@ class RegexStore(pyd.BaseModel):
         _str = self.definitions[name]
 
     def autostrip(self, values: list[str] | str) -> list[str]:
-        """
-        Strip configured characters from values and fix broken brackets.
+        """Strip configured characters from values and fix broken brackets.
 
         Args:
             values: Single string or list of strings to strip.
@@ -702,7 +692,7 @@ class RegexStore(pyd.BaseModel):
         """
         if not isinstance(values, list):
             values = [values]
-        values = list(filter(len, map(self.strip, values)))
+        values = list(filter(bool, map(self.strip, values)))
 
         # Check if we removed an actually useful bracket above, and add it back in if so
         if values and self.options.autostrip_brackets:
@@ -784,8 +774,7 @@ class RegexStore(pyd.BaseModel):
     # `*1` Top-Level Matching Methods
     # -------------------------------
     def match(self, names: str | Iterable[str], text: str | Buffer) -> MatchData:
-        """
-        Match one of the named patterns against text from the beginning.
+        """Match one of the named patterns against text from the beginning.
 
         Args:
             names: Pattern name or list of pattern names to try.
@@ -797,8 +786,7 @@ class RegexStore(pyd.BaseModel):
         return self._autoparse('match', names, text)
 
     def fullmatch(self, names: str | Iterable[str], text: str | Buffer) -> MatchData:
-        """
-        Match one of the named patterns against the entire text.
+        """Match one of the named patterns against the entire text.
 
         Args:
             names: Pattern name or list of pattern names to try.
@@ -810,8 +798,7 @@ class RegexStore(pyd.BaseModel):
         return self._autoparse('fullmatch', names, text)
 
     def search(self, names: str | Iterable[str], text: str | Buffer) -> MatchData:
-        """
-        Search for one of the named patterns anywhere in text.
+        """Search for one of the named patterns anywhere in text.
 
         Args:
             names: Pattern name or list of pattern names to try.
@@ -823,8 +810,7 @@ class RegexStore(pyd.BaseModel):
         return self._autoparse('search', names, text)
 
     def finditer(self, name: str, text: str | Buffer, **kwargs) -> Iterator[MatchData]:
-        """
-        Find all non-overlapping matches of the pattern in text.
+        """Find all non-overlapping matches of the pattern in text.
 
         Args:
             name: Pattern name to search for.
@@ -842,8 +828,7 @@ class RegexStore(pyd.BaseModel):
             yield from map(parse, rgx.finditer(text))
 
     def findall(self, name: str, text: str | Buffer, **kwargs) -> list[MatchData]:
-        """
-        Find all non-overlapping matches of the pattern in text.
+        """Find all non-overlapping matches of the pattern in text.
 
         Args:
             name: Pattern name to search for.
@@ -860,8 +845,7 @@ class RegexStore(pyd.BaseModel):
         text: str | Buffer,
         collapse: bool = False,
     ) -> tuple[list[str], list[str]]:
-        """
-        Split text by matches, returning both delimiters and sections.
+        """Split text by matches, returning both delimiters and sections.
 
         Args:
             name: Pattern name to split on.
@@ -893,8 +877,7 @@ class RegexStore(pyd.BaseModel):
         return delims, sections
 
     def polymatch(self, name: str, text: str | Buffer) -> MatchData:
-        """
-        Find all matches and merge their captures into a single MatchData.
+        """Find all matches and merge their captures into a single MatchData.
 
         Unlike findall which returns separate MatchData objects, this merges all
         captures from all matches into one result, preserving order by start position.
@@ -924,8 +907,7 @@ class RegexStore(pyd.BaseModel):
     # `*2` Functional Utilities
     # -------------------------
     def parse_invocations(self, text: str) -> set[str]:
-        """
-        Find all group invocations in text and transitively expand dependencies.
+        """Find all group invocations in text and transitively expand dependencies.
 
         Args:
             text: Regex pattern text to analyze.
@@ -940,8 +922,7 @@ class RegexStore(pyd.BaseModel):
         name: str,
         func: Literal['match', 'fullmatch', 'search', 'polymatch'] = 'match',
     ) -> Callable[[str | Buffer], MatchData]:
-        """
-        Create a partially applied matching function for a pattern.
+        """Create a partially applied matching function for a pattern.
 
         Args:
             name: Pattern name to use.
@@ -957,8 +938,7 @@ class RegexStore(pyd.BaseModel):
         texts: Iterable[str],
         func: Literal['match', 'fullmatch', 'search', 'polymatch'] = 'match',
     ) -> Iterable[MatchData]:
-        """
-        Apply a pattern to multiple texts.
+        """Apply a pattern to multiple texts.
 
         Args:
             name: Pattern name to use.
@@ -975,8 +955,7 @@ class RegexStore(pyd.BaseModel):
         texts: Iterable[str],
         func: Literal['match', 'fullmatch', 'search', 'polymatch'] = 'match',
     ) -> Iterable[str]:
-        """
-        Filter texts by whether they match a pattern.
+        """Filter texts by whether they match a pattern.
 
         Args:
             name: Pattern name to test against.
@@ -992,8 +971,7 @@ class RegexStore(pyd.BaseModel):
     # `*3` Optimization Functions
     # ---------------------------
     def define_router_tree(self, router: str, items: Mapping[str, RegexVal], **kwargs: str) -> None:
-        """
-        Define a router pattern that classifies text into named categories.
+        """Define a router pattern that classifies text into named categories.
 
         Creates two patterns: one optimized router (<router>) and one with route tracking
         (<router>_router) that captures which category matched.
@@ -1029,8 +1007,7 @@ class RegexStore(pyd.BaseModel):
         self[f'{router}_router'] = ('|:', p1, [(f'<|>P<rt_{i}>', rgx) for i, rgx in routes], s1)
 
     def route_match(self, router: str, text: str | MatchData) -> str:
-        """
-        Determine which category a text matches in a router tree.
+        """Determine which category a text matches in a router tree.
 
         Args:
             router: Name of router pattern to use.
@@ -1051,8 +1028,7 @@ class RegexStore(pyd.BaseModel):
         return ''
 
     def expand_match(self, router: str, text: str | MatchData) -> str:
-        """
-        Match text against a router and expand using the matched category's format.
+        """Match text against a router and expand using the matched category's format.
 
         Args:
             router: Name of router pattern to use.
@@ -1080,8 +1056,7 @@ class RegexStore(pyd.BaseModel):
     # `*4` Misc
     # ---------
     def sanitize(self, pattern: str | Pattern | Buffer | Regex | Atom) -> str:
-        """
-        Sanitize a pattern by normalizing inline flag syntax.
+        """Sanitize a pattern by normalizing inline flag syntax.
 
         Args:
             pattern: Pattern to sanitize (string, Pattern, Buffer, or pattern name).

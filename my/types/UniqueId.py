@@ -16,7 +16,11 @@ import pydantic as pyd
 ### BODY ###
 ############
 class UniqueId(pyd.RootModel[str]):
-    """Validates and operates on 32bit hex strings"""
+    """A simple wrapper for uuid4 strings (32-byte hex codes), with validation and utilities.
+
+    Attributes:
+        root: The UUID string itself.
+    """
 
     RGX: ClassVar[re.Pattern] = re.compile(
         r'[[:xdigit:]]{8}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{12}', re.I
@@ -26,8 +30,7 @@ class UniqueId(pyd.RootModel[str]):
     @pyd.field_validator('root', mode='after')
     @classmethod
     def validate_uid(cls, uid: str) -> str:
-        """
-        Validate and normalize a UUID string.
+        """Validate and normalize a UUID string.
 
         Args:
             uid: UUID string to validate.
@@ -41,8 +44,7 @@ class UniqueId(pyd.RootModel[str]):
 
     @classmethod
     def new(cls, uid: str = '') -> 'UniqueId':
-        """
-        Create a new UniqueId, generating one if not provided.
+        """Create a new UniqueId, generating one if not provided.
 
         Args:
             uid: Optional UUID string. If empty, generates a new UUID.
@@ -53,11 +55,7 @@ class UniqueId(pyd.RootModel[str]):
 
     @classmethod
     def newstr(cls) -> str:
-        """
-        Generate a new UUID as a string.
-        Returns:
-            New UUID string.
-        """
+        """Generate a new UUID as a string (just a convience wrapper around `new()`)."""
         return str(cls.new())
 
     def __hash__(self) -> int:
@@ -86,14 +84,7 @@ class UniqueId(pyd.RootModel[str]):
 
     @classmethod
     def remove_uids(cls, text: str) -> str:
-        """
-        Remove all lines containing UUIDs from text.
-
-        Args:
-            text: Text to clean.
-        Returns:
-            Text with UUID-containing lines removed.
-        """
+        """Remove all lines containing UUIDs from the given text."""
         return cls.UID_LINE_RGX.sub('', text)
 
 

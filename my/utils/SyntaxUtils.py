@@ -2,15 +2,18 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import Annotated, Any, Collection, Mapping, Sequence
-import functools as ft
 from collections import deque
+from collections.abc import Collection, Mapping, Sequence
 from types import ModuleType
+import typing
+from typing import Annotated, Any
+import functools as ft
 import importlib as imp
+import inspect
 
 ### EXTERNAL
-import pydantic as pyd
 from pydantic_core import core_schema as pyd_schema
+import pydantic as pyd
 import pandas as pd
 import regex as re
 
@@ -23,17 +26,14 @@ from .IterUtils import iter_utils
 ### BODY ###
 ############
 class SyntaxUtils:
-    """
-    Utilities for handling programming-level tasks (i.e. mostly unrelated to the program's logic).
-    """
+    """Methods for syntax-y tasks (i.e. related to data's form rather than its content)."""
 
     # -----------------
     # `0` NORMALIZATION
     # -----------------
     @classmethod
     def fill_tree(cls, tree: dict[T, C]) -> None:
-        """
-        Recursively replace None values with empty dicts in a nested tree structure.
+        """Recursively replace None values with empty dicts in a nested tree structure.
 
         Modifies tree in-place.
 
@@ -42,14 +42,13 @@ class SyntaxUtils:
         """
         for key, val in tree.items():
             if isinstance(val, dict):
-                cls.fill_tree(val)  # type: ignore
+                cls.fill_tree(val)
             elif val is None:
                 tree[key] = {}  # type:ignore
 
     @classmethod
     def tree_size(cls, tree: object) -> int:
-        """
-        Calculate total number of leaf nodes in a nested tree structure.
+        """Calculate total number of leaf nodes in a nested tree structure.
 
         Args:
             tree: Tree structure (dict of dicts, or leaf value).
@@ -63,15 +62,16 @@ class SyntaxUtils:
     # --------------
     @staticmethod
     def pyd_schemify(tvar: type) -> pyd.GetPydanticSchema:
-        """
-        Create Pydantic schema validator for instance type checking.
+        """Create Pydantic schema validator for instance type checking.
 
         Args:
             tvar: Type to create validator for.
         Returns:
             GetPydanticSchema validator for use with Annotated types.
         """
-        return pyd.GetPydanticSchema(lambda _, __: pyd_schema.is_instance_schema(cls=tvar))
+        return pyd.GetPydanticSchema(
+            lambda _, __: pyd_schema.is_instance_schema(cls=tvar)
+        )
 
     # Regex
     RegexField = Annotated[re.Pattern, pyd_schemify(re.Pattern)]
@@ -84,26 +84,38 @@ class SyntaxUtils:
     # `2` REFLECTION
     # --------------
     @staticmethod
-    def instance_fields(cls: type[pyd.BaseModel]) -> dict[str, type]:
-        """
-        Extract instance field names and types from a Pydantic model.
+    def instance_fields(cls: type) -> dict[str, Any]:
+        """Extract instance field names and annotations from a Pydantic model or typeddict.
 
         Args:
             cls: Pydantic BaseModel class to inspect.
         Returns:
             Dictionary mapping lowercase field names to their type annotations.
         """
+        if issubclass(cls, pyd.BaseModel):
+            annotations = {
+                field: info.annotation for field, info in cls.model_fields.items()
+            }
+        elif inspect.isclass(cls):
+            annotations = {
+                field: ann
+                for field, ann in inspect.get_annotations(cls, eval_str=True).items()
+                if (member := getattr(cls, field, None)) is not None
+                and not (inspect.isfunction(member) or inspect.isclass(member))
+            }
+        else:
+            return {}
+
         return {
-            field: info.annotation
-            for field, info in cls.model_fields.items()
-            if field.islower() and info.annotation is not None
+            field: ann
+            for field, ann in annotations.items()
+            if field.islower() and ann is not None
         }
 
     @ft.lru_cache(maxsize=1024)
     @staticmethod
-    def instance_aliases(cls: type[pyd.BaseModel]) -> dict[str, type]:
-        """
-        Extract field aliases and types from a Pydantic model with caching.
+    def instance_aliases(cls: type) -> dict[str, Any]:
+        """Extract field aliases and types from a Pydantic model with caching.
 
         Resolves field aliases including validation aliases and alias choices,
         converting AliasPath objects to string representations.
@@ -113,6 +125,9 @@ class SyntaxUtils:
         Returns:
             Dictionary mapping field aliases to their type annotations.
         """
+        if not isinstance(cls, pyd.BaseModel):
+            return SyntaxUtils.instance_fields(cls)
+
         ret = {}
         for field, info in cls.model_fields.items():
             if field.islower() and info.annotation is not None:
@@ -138,8 +153,7 @@ class SyntaxUtils:
         depth: int = 0,
         max_depth: int = 10,
     ) -> bool:
-        """
-        Recursively search and replace a single value in nested data structures.
+        """Recursively search and replace a single value in nested data structures.
 
         Supports sequences (list, tuple, deque, set), mappings (dict), and Pydantic
         models. Recursively traverses nested structures up to depth limit.
@@ -148,7 +162,8 @@ class SyntaxUtils:
             obj: Collection or Pydantic model to search within.
             old: Value to find and replace.
             new: Replacement value.
-            depth: Current recursion depth (default: 0, max: 10).
+            depth: Current recursion depth, up to a hard max of 100.
+            max_depth: Maximum recursion depth.
         Returns:
             True if value was found and replaced, False otherwise.
         """
@@ -162,7 +177,7 @@ class SyntaxUtils:
                         obj[index] = new
                     elif isinstance(obj, tuple):
                         # Tuples
-                        obj = tuple(obj[:index] + (new,) + obj[index + 1 :])
+                        obj = (*obj[:index], new, *obj[index + 1 :])
                 else:
                     # Sets
                     obj.remove(old)
@@ -195,8 +210,7 @@ class SyntaxUtils:
 
     @staticmethod
     def import_module(file: pyd.FilePath, root: pyd.DirectoryPath) -> ModuleType:
-        """
-        Dynamically import a Python module from a file path.
+        """Dynamically import a Python module from a file path.
 
         Converts file path to module dotted notation and imports it.
 
@@ -206,7 +220,7 @@ class SyntaxUtils:
         Returns:
             Imported ModuleType object.
         """
-        pathstr = file.with_suffix('').relative_to(root).as_posix().replace('/', '.')
+        pathstr = file.with_suffix("").relative_to(root).as_posix().replace("/", ".")
         return imp.import_module(pathstr)
 
     # -----------
@@ -214,8 +228,7 @@ class SyntaxUtils:
     # -----------
     @staticmethod
     def clear_cached_properties(inst: object, *properties: str) -> None:
-        """
-        Clear cached properties from an object instance.
+        """Clear cached properties from an object instance.
 
         If no properties specified, clears all properties listed in instance's
         CACHED_PROPERTIES attribute.
@@ -224,8 +237,8 @@ class SyntaxUtils:
             inst: Object instance to clear cached properties from.
             *properties: Property names to clear. If empty, uses inst.CACHED_PROPERTIES.
         """
-        if not properties and hasattr(inst, 'CACHED_PROPERTIES'):
-            properties = tuple(getattr(inst, 'CACHED_PROPERTIES'))
+        if not properties and hasattr(inst, "CACHED_PROPERTIES"):
+            properties = tuple(getattr(inst, "CACHED_PROPERTIES"))
 
         for prop in properties:
             if prop in inst.__dict__:

@@ -1,6 +1,7 @@
 from .meta_patterns import META_RGXS, FLAGS, NO_ESC, NON_ESC, QUANT
+from .ParseData import ParseData
 from .Quantifier import Quantifier
-from .GroupKind import GroupKind, GROUP_KIND_MAP
+from .GroupKind import GroupKind
 from .Atom import Atom
 from .GroupAtom import GroupAtom
 from .SetAtom import SetAtom
@@ -13,9 +14,9 @@ __all__ = [
     'NO_ESC',
     'NON_ESC',
     'QUANT',
+    'ParseData',
     'Quantifier',
     'GroupKind',
-    'GROUP_KIND_MAP',
     'Atom',
     'GroupAtom',
     'SetAtom',

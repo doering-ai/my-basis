@@ -8,6 +8,7 @@ import subprocess as sbp
 
 ### EXTERNAL
 import pydantic as pyd
+import more_itertools as mi
 
 ### INTERNAL
 
@@ -16,6 +17,16 @@ import pydantic as pyd
 ### BODY ###
 ############
 class Command(pyd.BaseModel):
+    """A builder for easily & durably issuing shell commands, async or otherwise.
+
+    Positional arguments are handled separately from keyword arguments, which are converted to
+    flags (e.g., `--key value` or `-k`). The class handles quoting, underscore-to-dash conversion
+    in flag names, and various shell conventions.
+
+    Commands can be manually finalized w/ `assemble()`, or executed directly via `execute()`
+     / `execute_async()`. To chain commands together, use the provided `out` and `pipe` options.
+    """
+
     command: str
     args: list[str] = []
     kwargs: dict[str, Any] = {}
@@ -32,17 +43,33 @@ class Command(pyd.BaseModel):
     # `.` Initial Methods
     # -------------------
     @pyd.model_validator(mode='after')
-    def validate(self) -> Self:
+    def _validate_command(self) -> Self:
         assert self.out is None or self.pipe is None, 'Cannot define both output and pipe at once.'
         return self
+
+    @classmethod
+    def new(cls, command: str, *args: str, **kwargs: Any) -> Self:
+        """Create a new command instance.
+
+        Args:
+            command: Base command name.
+            args: Positional arguments.
+            **kwargs: Keyword arguments -- both flags and options.
+        Returns:
+            Configured Command instance.
+        """
+        options = {}
+        if opt_keys := set(kwargs.keys()) & _command_fields:
+            options = {k: kwargs.pop(k) for k in opt_keys}
+
+        return cls(command=command, args=list(args), kwargs=kwargs, **options)
 
     # -------------------
     # `-` Private Methods
     # -------------------
     @property
     def positional_args(self) -> list[str]:
-        """
-        Convert positional arguments to shell-safe values.
+        """Convert positional arguments to shell-safe values.
 
         Returns:
             String representations with appropriate quoting.
@@ -58,11 +85,10 @@ class Command(pyd.BaseModel):
 
     @property
     def named_args(self) -> list[str]:
-        """
-        Convert keyword arguments to shell-safe flags.
+        """Convert keyword arguments to shell-safe flags.
 
         Returns:
-            Formatted command-line flags (e.g., '--key value', '-k').
+            Formatted command-line flags (e.g., `--key value`, `-k`).
         """
         ret = []
         for key, val in self.kwargs.items():
@@ -93,16 +119,7 @@ class Command(pyd.BaseModel):
     # `+` Primary Methods
     # -------------------
     def assemble(self) -> str:
-        """
-        Assemble a complete shell command from components.
-
-        Args:
-            cmd: Base command name.
-            *args: Positional arguments.
-            **kwargs: Keyword arguments converted to flags.
-        Returns:
-            Complete shell command string.
-        """
+        """Assemble a complete shell command from this instance's members."""
         parts = [self.command]
         if self.args or self.kwargs:
             # I. Assemble the main parts of the command
@@ -110,8 +127,8 @@ class Command(pyd.BaseModel):
 
             # II. Order the positional & keyword segments appropriately
             if self.named_args_last:
-                sections = list(reversed(sections))
-            parts.extend(sections)
+                sections = [sections[1], sections[0]]
+            parts.extend(mi.flatten(sections))
 
         if self.out:
             parts.append(f'>> {self.out}')
@@ -126,16 +143,11 @@ class Command(pyd.BaseModel):
     # ------------------
     # `*` Public Methods
     # ------------------
-    def sync_run(self, verbose: bool = False) -> tuple[int, str, str]:
-        """
-        Execute a shell command synchronously.
+    def execute(self) -> tuple[int, str, str]:
+        """Execute a shell command synchronously.
 
-        Args:
-            cmd: Base command to execute.
-            *args: Positional arguments.
-            **kwargs: Keyword arguments (converted to flags).
         Returns:
-            Tuple of (return_code, stdout, stderr).
+            (return_code, stdout, stderr).
         """
         cmd = self.assemble()
         ret = sbp.run(cmd, capture_output=True, text=True, shell=True)
@@ -145,16 +157,11 @@ class Command(pyd.BaseModel):
             (ret.stderr or '').strip(),
         )
 
-    async def run(self, verbose: bool = False) -> tuple[int, str, str]:
-        """
-        Execute a shell command asynchronously.
+    async def execute_async(self) -> tuple[int, str, str]:
+        """Execute a shell command asynchronously.
 
-        Args:
-            cmd: Base command to execute.
-            *args: Positional arguments.
-            **kwargs: Keyword arguments (converted to flags).
         Returns:
-            Tuple of (return_code, stdout, stderr).
+            (return_code, stdout, stderr).
         """
         cmd = self.assemble()
         subprocess = await aio.create_subprocess_shell(
@@ -171,5 +178,35 @@ class Command(pyd.BaseModel):
             (stderr or b'').decode().strip(),
         )
 
-    async def __call__(self, verbose: bool = False) -> tuple[int, str, str]:
-        return await self.run(verbose=verbose)
+    async def __call__(self) -> tuple[int, str, str]:
+        """Execute the command asynchronously when the instance is called."""
+        return await self.execute_async()
+
+    @classmethod
+    def run(cls, command: str, *args: Any, **kwargs: Any) -> tuple[int, str, str]:
+        """Convenience method to build & execute a command in one statement.
+
+        Args:
+            command: Base command to execute.
+            *args: Positional arguments.
+            **kwargs: Keyword arguments (converted to flags).
+        Returns:
+            (return_code, stdout, stderr).
+        """
+        return cls.new(command, *args, **kwargs).execute()
+
+    @classmethod
+    async def run_async(cls, command: str, *args: Any, **kwargs: Any) -> tuple[int, str, str]:
+        """Convenience method to build & execute a command in one statement.
+
+        Args:
+            command: Base command to execute.
+            *args: Positional arguments.
+            **kwargs: Keyword arguments (converted to flags).
+        Returns:
+            (return_code, stdout, stderr).
+        """
+        return await cls.new(command, *args, **kwargs).execute_async()
+
+
+_command_fields = set(Command.model_fields.keys()) - {'cmd', 'args', 'kwargs'}

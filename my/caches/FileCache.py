@@ -3,26 +3,24 @@
 ############
 ### STANDARD
 from collections import deque, defaultdict
-
-import regex as re
-import functools as ft
+from collections.abc import Iterator, Callable
 from pathlib import Path
-from typing import Iterator, ClassVar, Callable, Generic, Literal
+from typing import ClassVar, Literal
+import functools as ft
+import regex as re
 
 ### EXTERNAL
 import pydantic as pyd
 import logfire
 
 ### INTERNAL
-from ..infra import T
 
 
 ############
 ### BODY ###
 ############
-class FileCache(Generic[T]):
-    """
-    Two-level file-backed cache with in-memory LRU and on-disk persistence.
+class FileCache[T]:
+    """Two-level file-backed cache with in-memory LRU and on-disk persistence.
 
     Organizes items into a directory structure: group/prefix/filename where prefix
     is derived from filename. Maintains separate indices for in-memory (hot) items
@@ -40,10 +38,10 @@ class FileCache(Generic[T]):
     )
 
     #      {group:   {prefix:  {file:    {name: item}}}}
-    items: dict[str, dict[str, dict[str, dict[str, T]]]] = defaultdict(lambda: defaultdict(dict))
+    items: dict[str, dict[str, dict[str, dict[str, T]]]]
 
     #      {group:   {prefix:  {file:    { name }}}}
-    files: dict[str, dict[str, dict[str, set[str]]]] = defaultdict(lambda: defaultdict(dict))
+    files: dict[str, dict[str, dict[str, set[str]]]]
 
     isize: int = 0
     fsize: int = 0
@@ -65,10 +63,13 @@ class FileCache(Generic[T]):
         splitter: Callable[[str], list[str]],
         max_size: int = 0,
     ) -> None:
+        """Initialize a new FileCache."""
         self.directory = directory
         self.writer = writer
         self.reader = reader
         self.splitter = splitter
+        self.items = defaultdict(lambda: defaultdict(dict))
+        self.files = defaultdict(lambda: defaultdict(dict))
 
         assert self.directory and self.directory.is_dir(), 'Invalid cache directory.'
         for parent in filter(Path.is_dir, self.directory.iterdir()):
@@ -122,8 +123,7 @@ class FileCache(Generic[T]):
     # `+` Primary Methods
     # -------------------
     def prune(self, n: int = 0):
-        """
-        Write oldest items to disk and remove from memory cache.
+        """Write oldest items to disk and remove from memory cache.
 
         Proportionally prunes from each group based on its size relative to total.
         Items are written to disk before removal from memory.
@@ -173,8 +173,7 @@ class FileCache(Generic[T]):
             self.isize -= count
 
     def cache(self, group: str, filename: str, data: dict[str, T]) -> None:
-        """
-        Add or update items in the cache.
+        """Add or update items in the cache.
 
         Args:
             group: Category/namespace for the items.
@@ -195,8 +194,7 @@ class FileCache(Generic[T]):
             self.prune()
 
     def read_file(self, group: str, filename: str, prefix: str = '') -> dict[str, T] | None:
-        """
-        Read all items from a file, loading from disk if needed.
+        """Read all items from a file, loading from disk if needed.
 
         Args:
             group: Category/namespace.
@@ -228,8 +226,7 @@ class FileCache(Generic[T]):
         return None
 
     def write_file(self, group: str, filename: str, data: dict[str, T]) -> None:
-        """
-        Write data directly to disk, merging with any cached data.
+        """Write data directly to disk, merging with any cached data.
 
         Combines data with any existing cached items for this file before writing.
         Removes the file from memory cache and adds to disk index.
@@ -257,8 +254,7 @@ class FileCache(Generic[T]):
     # `*` Public Methods
     # ------------------
     def read(self, group: str, name: str) -> T | None:
-        """
-        Read a single item by name.
+        """Read a single item by name.
 
         Args:
             group: Category/namespace.
@@ -272,8 +268,7 @@ class FileCache(Generic[T]):
         return None
 
     def write(self, group: str, name: str, item: T) -> None:
-        """
-        Write a single item, updating file on disk.
+        """Write a single item, updating file on disk.
 
         Args:
             group: Category/namespace.
@@ -309,8 +304,7 @@ class FileCache(Generic[T]):
         prefix: str = '',
         mode: Literal['items', 'files', 'both'] = 'both',
     ) -> Iterator[T]:
-        """
-        Search for items by file or name patterns.
+        """Search for items by file or name patterns.
 
         Args:
             group: Category/namespace to search.
@@ -334,7 +328,7 @@ class FileCache(Generic[T]):
                 return
 
             for file, items in item_iter:
-                if file_rgx.search(file) or any(map(name_rgx.search, items.keys())):
+                if file_rgx.search(file) or any(name_rgx.search(key) for key in items.keys()):
                     yield from items.values()
 
         elif mode == 'files' and group in self.files:
@@ -346,7 +340,7 @@ class FileCache(Generic[T]):
                 return
 
             for file, names in file_iter:
-                if file_rgx.search(file) or any(map(name_rgx.search, names)):
+                if file_rgx.search(file) or any(name_rgx.search(name) for name in names):
                     if file_items := self.read_file(group, file, prefix):
                         yield from file_items.values()
                     break

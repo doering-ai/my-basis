@@ -2,7 +2,7 @@
 ### HEAD ###
 ############
 # Standard imports
-from typing import TypeVar, Generic, Hashable, Coroutine, Callable, Iterable
+from collections.abc import Hashable, Coroutine, Callable, Iterable
 from datetime import datetime, timedelta
 from pathlib import Path
 import pickle as pkl
@@ -13,17 +13,12 @@ import pydantic as pyd
 # Internal imports
 from ..utils import ut
 
+
 ############
 ### BODY ###
 ############
-# Specific type helpers
-Key = TypeVar('Key', bound=Hashable)
-Value = TypeVar('Value')
-
-
-class PickleCache(pyd.BaseModel, Generic[Key, Value]):
-    """
-    Persistent cache backed by pickle files with TTL-based invalidation.
+class PickleCache[Key: Hashable, Value](pyd.BaseModel):
+    """Persistent cache backed by pickle files with TTL-based invalidation.
 
     Supports three data sources with fallback hierarchy:
     1. In-memory data (fastest, if fresh)
@@ -32,6 +27,7 @@ class PickleCache(pyd.BaseModel, Generic[Key, Value]):
 
     Data is automatically written to disk when refreshed from callback.
     """
+
     file: Path
     func: Callable[[], Coroutine[None, None, dict[Key, Value]]] | None = None
     data: dict[Key, Value] = {}
@@ -53,18 +49,18 @@ class PickleCache(pyd.BaseModel, Generic[Key, Value]):
         return self
 
     async def read(self) -> dict[Key, Value]:
-        """
-        Refresh cache data, checking memory, disk, and callback in order.
+        """Refresh cache data, checking memory, disk, and callback in order.
 
         Falls back through data sources:
         1. Returns in-memory data if recent (within TTL)
         2. Loads from pickle file if it exists and is fresh
         3. Calls async func if provided and caches result
+
         Returns:
             Dictionary of cached data.
         """
-
-        cutoff = datetime.now() - self.ttl
+        now = ut.posix()
+        cutoff = now - self.ttl
         if self.last_read >= self.last_write > cutoff:
             # I. Read from memory
             pass
@@ -74,7 +70,7 @@ class PickleCache(pyd.BaseModel, Generic[Key, Value]):
             self.last_write = datetime.fromtimestamp(mtime)
             if self.last_write:
                 self.data = pkl.loads(self.file.read_bytes())
-                self.last_read = ut.posix()
+                self.last_read = now
         elif self.func is not None:
             # III. Fetch anew and cache
             self.data = await self.func()
@@ -105,20 +101,22 @@ class PickleCache(pyd.BaseModel, Generic[Key, Value]):
         return key in self.data
 
     def __ior__(self, other: dict[Key, Value]) -> 'PickleCache':
-        """
-        Merge another dictionary into this cache.
-        """
+        """Merge another dictionary into this cache."""
         self.data.update(other)
         return self
 
     def get(self, key: Key, default: None) -> Value | None:
+        """Get value for key, returning default if not found."""
         return self.data.get(key, default)
 
     def items(self) -> Iterable[tuple[Key, Value]]:
+        """Iteratre through all key-value pairs in the cache."""
         return self.data.items()
 
     def keys(self) -> Iterable[Key]:
+        """Iterate through all keys in the cache."""
         return self.data.keys()
 
     def values(self) -> Iterable[Value]:
+        """Iterate through all values in the cache."""
         return self.data.values()

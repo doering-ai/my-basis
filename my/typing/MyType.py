@@ -13,6 +13,8 @@ from typing import (
     Iterator,
     Unpack,
     Optional,
+    Collection,
+    Mapping,
 )
 import typing as ty
 import collections.abc as tyabc
@@ -25,6 +27,7 @@ import pydantic as pyd
 import more_itertools as mi
 
 # Local imports
+from ..infra import Series
 from ..utils import ut
 from ..caches import Cache
 
@@ -65,6 +68,9 @@ class MyType(pyd.BaseModel):
         "TypedDict",  # treat like BaseModel
         "NamedTuple",  # treat like tuple but w/ names
         "Protocol",  # try isinstance
+        ### IMPORTANT: TypeVars are completely unhandled as of now. Could do it tho with .__bound__
+        "TypeVar",
+        "TypeVarTuple",
     }
     SIMPLE_FORMS: ClassVar[set[str]] = {
         "ClassVar",
@@ -78,7 +84,7 @@ class MyType(pyd.BaseModel):
     PARSE_CACHE: ClassVar[Cache[str, "MyType"]] = Cache()
     RAISE: ClassVar[bool] = False
 
-    src_type: Any | None = None
+    src_type: type | ty._SpecialForm | None = None
 
     main_type: type | None = None
     val_type: Optional["MyType"] = None
@@ -95,7 +101,7 @@ class MyType(pyd.BaseModel):
     # `.` Initial Methods
     # -------------------
     @classmethod
-    def parse(cls, tvar: Any) -> "MyType":
+    def parse(cls, src_type: Any, throw: bool = False) -> "MyType":
         """Decompose a given type so that other methods can intelligently handly each part in turn.
 
         By far the most likely usecase is for containers such as `dict[str, int]` (which becomes the
@@ -105,31 +111,71 @@ class MyType(pyd.BaseModel):
         of unhandled annotations.
 
         Args:
-            tvar: The type annotation to decompose -- either a type, a union of types, or None.
+            src_type: The type annotation to decompose -- either a type, a union of types, or None.
         Returns:
             1. The **main type** (e.g. `dict`, `list`, `int`, etc.) or `None` if unparseable.
             2. The **key type** (for mappings) or `None`.
             3. The **value type** (for any generics with just one type arg) or `None`.
         """
-        try:
-            return cls._parse(tvar)
-        except Exception:
-            if cls.RAISE:
-                raise
-            else:
-                return cls(src_type=tvar)
-
-    @classmethod
-    def _parse(cls, src_type: Any) -> "MyType":
         if isinstance(src_type, MyType):
             return src_type
+        elif src_type is Ellipsis:
+            src_type = types.EllipsisType
 
-        uid = str(src_type)
-        if cached := cls.PARSE_CACHE[uid]:
-            return cached
+        try:
+            uid = str(src_type)
+            if cached := cls.PARSE_CACHE[uid]:
+                return cached
 
-        cls.PARSE_CACHE[uid] = ret = cls(src_type=src_type, uid=uid)
-        return ret
+            cls.PARSE_CACHE[uid] = ret = cls(src_type=src_type, uid=uid)
+            return ret
+        except Exception:
+            if cls.RAISE or throw:
+                raise
+            else:
+                # Return without attempting to make it valid
+                return cls(src_type=src_type)
+
+    @classmethod
+    def metaparse(cls, src_data: object) -> "MyType":
+        """Infer the type annotation of a given data value, recursing into containers.
+
+        Args:
+            src_data: Data value to infer type from.
+        Returns:
+            Parsed MyType instance representing the inferred type.
+        """
+        origin = type(src_data)
+        args = []
+        if not src_data or not hasattr(origin, "__class_getitem__"):
+            return cls.parse(origin)
+
+        elif isinstance(src_data, Series):
+            val_types = list(filter(bool, map(cls.metaparse, src_data)))
+            if isinstance(src_data, tuple):
+                if len(set(val_types)) == 1:
+                    t = val_types[0].src_type
+                    assert t is not None
+                    args = [t, Ellipsis]
+                else:
+                    args = [vt.src_type for vt in val_types if vt.src_type is not None]
+            else:
+                args = [cls._condense_args(val_types)]
+        elif isinstance(src_data, Mapping):
+            key_types = list(filter(bool, map(cls.metaparse, src_data.keys())))
+            val_types = list(filter(bool, map(cls.metaparse, src_data.values())))
+            args = [cls._condense_args(key_types), cls._condense_args(val_types)]
+
+        return cls.parse(origin[*args] if args else origin)
+
+    @classmethod
+    def _condense_args(cls, args: list["MyType"]) -> type | ty._SpecialForm:
+        uniques = list(filter(bool, (arg.src_type for arg in set(args))))
+        if len(uniques) == 1:
+            return uniques[0]
+        else:
+            base_union = types.UnionType(*(vt.src_type for vt in uniques))
+            return base_union  # type: ignore
 
     @pyd.model_validator(mode="after")
     def _process_src(self) -> Self:
@@ -138,13 +184,8 @@ class MyType(pyd.BaseModel):
             return self
         self.name, self.origin, _args = self._read(self.src_type)
 
-        # I. Catch edge cases: Unions, Unhandled types, simple wrappers, and Literals
-        if options := self._split(self.src_type):
-            self.args = tuple(map(self._parse, options))
-            self.is_split = True
-            self.main_type = self.origin if self.origin is not None else types.UnionType
-            return self
-        elif self.name in self.UNHANDLED_TYPES:
+        # I. Catch edge cases: Unhandled types, simple wrappers, unions, and literals
+        if self.name in self.UNHANDLED_TYPES:
             return self
         elif self.name in self.SIMPLE_FORMS:
             if contents := mi.first(filter(bool, self._process_args(_args)), None):
@@ -158,17 +199,22 @@ class MyType(pyd.BaseModel):
                 self.origin = contents.origin
                 self.args = (*contents.args,)
                 self.literal_members = contents.literal_members
-
+            return self
+        elif options := self._split(self.src_type):
+            self.args = tuple(self._process_args(options))
+            self.is_split = True
+            self.main_type = self.origin if self.origin is not None else types.UnionType
             return self
         elif self.origin is Literal:
             self.literal_members = list(sorted(_args))
             self.args = tuple(map(self.parse, set(map(type, _args))))
             return self
 
+        # II. Process args for all remaining types, though only generics should have them
+        self.args = tuple(self._process_args(_args))
         if self.origin:
             # III. Catch generics
             self.main_type = self.origin
-            self.args = tuple(self._process_args(_args))
             if not self.args:
                 pass
             elif issubclass(self.origin, tuple):
@@ -406,3 +452,7 @@ class MyType(pyd.BaseModel):
             self.key_type.main_type if self.key_type else None,
             self.val_type.main_type if self.val_type else None,
         )
+
+    def is_map_item(self) -> bool:
+        """Check if this type variable represents a mapping item (key-value pair)."""
+        return self.main_type is tuple and len(self.args) == 2 and None not in self.args

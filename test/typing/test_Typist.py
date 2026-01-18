@@ -102,8 +102,7 @@ class TestTypist:
         "t0, t1, expected",
         boolmap(
             false=[
-                (Span, tuple[int, str]),
-                (Span, tuple[str, ...]),
+                (Span, tuple[int, ...]),
             ],
             true=[
                 (str | int, dict | int),

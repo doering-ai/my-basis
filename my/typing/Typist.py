@@ -176,17 +176,20 @@ class Typist(pyd.BaseModel):
         float=float,
         bool=bool,
         datetime=datetime,
+        enum=Enum,
     )
 
     ### Regular Expressions (can't use RegexStore because it depends on this class)
     RGXS: ClassVar[dict[str, re.Pattern]] = ut.regex_dict(
         dict(
             # Types
+            ### Atomic Types
             int=r"-?\d+",
             float=r"-?\d+(?:\.\d+)?",
             bool=r"(?i:t(?:rue)?|y(?:es)?|no?|f(?:alse)?|enabled?|disabled?|on|off|[01])",
             bool_true=r"(?i:t(?:rue)?|y(?:es)?|enabled?|on|1)",
             datetime=r"\d\d(?:\d\d)?[-./]\d\d[-./]\d\d(?:\D\d\d:\d\d:\d\d(?:\.\d+)?)?",
+            enum=r"<(?P<class>[_[:upper:]]\w*+)\.(?:\|?(?P<member>[_[:upper:]\d]++))+: (?P<value>.+)>",
             # Others
             splitter=r" *(?:[,]|\/\/) *",
             no_space_splitter=r"(?<=\w)[.:](?=\w)",
@@ -221,6 +224,7 @@ class Typist(pyd.BaseModel):
     atomics: bool = False
     firsts: bool = False
     splits: bool = False
+    wraps: bool = False
 
     # -------------------
     # `.` Initial Methods
@@ -352,7 +356,18 @@ class Typist(pyd.BaseModel):
 
         return MyType.parse(new_src)
 
+    @staticmethod
+    def _clean_data(data: object) -> object | None:
+        if isinstance(data, Iterator):
+            return list(data)
+        elif isinstance(data, str):
+            return data.strip()
+        elif isinstance(data, bytes):
+            return data.decode().strip()
+        return data
+
     def _cast(self, data: object, target: MyType) -> Any | None:
+        data = self._clean_data(data)
         # I. Handle literals as a very special case
         if target.literal_check is not None:
             return self._to_literal(data, target)
@@ -384,7 +399,7 @@ class Typist(pyd.BaseModel):
                 ret = data
             else:
                 for val_type in target.args:
-                    ret = self._cast(data, val_type)
+                    ret = self.cast(data, val_type)
                     if ret is not None and target.literal_check(ret):
                         return ret
         elif isinstance(target.origin, type) and issubclass(target.origin, tuple):
@@ -403,16 +418,15 @@ class Typist(pyd.BaseModel):
         if (
             isinstance(data, Series)
             and not issubclass(target, Flag)
-            and (self.firsts or (self.atomics and len(data) == 1))
+            and ((self.firsts and len(data) > 0) or (self.atomics and len(data) == 1))
         ):
             data = mi.first(data)
 
         if issubclass(target, Enum):
-            data = self._to_enum(data, target)
+            return self._to_enum(data, target)
         elif issubclass(target, Time):
-            data = self._to_time(data, target)
-
-        if isinstance(data, Enum):
+            return self._to_time(data, target)
+        elif isinstance(data, Enum):
             return self._enum_to_atomic(data, target)
         elif isinstance(data, Time):
             return self._time_to_atomic(data, target)
@@ -427,34 +441,19 @@ class Typist(pyd.BaseModel):
     def _enum_to_atomic(
         self, data: Enum, target: type[AtomicType]
     ) -> AtomicType | None:
-        if issubclass(target, str):
+        if issubclass(target, str | bytes):
             if fn := self.get_str_method(data):
-                return fn()
+                ret = fn()
             elif isinstance(data.value, str):
-                return data.value
+                ret = data.value
             else:
-                return data.name.lower()
-        elif issubclass(target, bytes):
-            return target(str(self._enum_to_atomic(data, str)).encode())
+                ret = data.name.lower()
+            return ret if issubclass(target, str) else target(ret.encode())
         elif issubclass(target, int | float):
             if isinstance(data.value, int | float):
                 return target(data.value)
         elif issubclass(target, bool):
             return target(data.value)
-        elif issubclass(target, Time):
-            return self._to_time(data.value, target) or self._to_time(data.name, target)
-        elif issubclass(target, Enum):
-            if fn := self.get_method(target, "read"):
-                success, ret = self.invoke(fn, data.value)
-                if success:
-                    return ret
-                success, ret = self.invoke(fn, data.name)
-                if success:
-                    return ret
-            if data.name in target.__members__:
-                return target[data.name]
-            elif key := ut.find_key(target.__members__, data.value):
-                return target[key]
 
         return None
 
@@ -570,6 +569,18 @@ class Typist(pyd.BaseModel):
                 return target(int(data))
             elif ret := target.__members__.get(data.upper(), None):
                 return ret
+        elif isinstance(data, Enum):
+            if fn := self.get_method(target, "read"):
+                success, ret = self.invoke(fn, data.value)
+                if success:
+                    return ret
+                success, ret = self.invoke(fn, data.name)
+                if success:
+                    return ret
+            if data.name in target.__members__:
+                return target[data.name]
+            elif key := ut.find_key(target.__members__, data.value):
+                return target[key]
 
         return None
 
@@ -583,8 +594,13 @@ class Typist(pyd.BaseModel):
                 return self._str_to_time(data, target)
             elif isinstance(data, int | float):
                 return self._num_to_time(data, target)
+            elif isinstance(data, bool):
+                return None
             elif isinstance(data, Enum):
-                return self._num_to_time(data.value, target)
+                if (ret := self._to_time(data.value, target)) is not None:
+                    return ret
+                elif (ret := self._to_time(data.name, target)) is not None:
+                    return ret
             elif isinstance(data, Time):
                 if isinstance(data, datetime) and issubclass(target, time):
                     _raw = data.time().replace(tzinfo=UTC)
@@ -665,31 +681,33 @@ class Typist(pyd.BaseModel):
     def _to_map(
         self, data: object, tvar: type[MapType], details: MyType | None = None
     ) -> MapType | None:
+        # I.i. Parse details if none were given
         if details is None:
             details = MyType.parse(tvar)
             tvar = details.main_type  # type: ignore
             assert tvar is not None, f"Cannot parse series type from {tvar}"
 
+        # I.ii. Pre-cast strings by parsing JSON or YAML content
+        if data and isinstance(data, str) and data[0] == "{" and data[-1] == "}":
+            with ctx.suppress(Exception):
+                data = self.from_yaml(data, tvar)
+
+        # II. Main Case: cast maps and map-ready lists of 2-tuples ("items")
         if items := ut.map_items(data):
             keys, values = mi.unzip(items)
+            key_data = self.cast_all(keys, details.key_type, skip=False)
+            val_data = self.cast_all(values, details.val_type, skip=False)
             result = zip(
-                self.flexcast_iter(keys, details.key_type),
-                self.flexcast_iter(values, details.val_type),
+                ,
+                ,
                 strict=True,
             )
             return tvar(result)
 
-        elif (
-            issubclass(tvar, Counter) and isinstance(data, Series) and details.key_type
-        ):
-            return tvar(self.flexcast_iter(data, details.key_type))
-
-        elif isinstance(data, str):
-            if data.startswith("{") and data.endswith("}"):
-                try:
-                    return self.from_json(data, tvar)
-                except Exception:
-                    pass
+        # II. Cast counters, the only map type that takes an iter of single items
+        if issubclass(tvar, Counter) and isinstance(data, Series) and details.key_type:
+            key_data = [data, details.key_type]
+            return tvar()
 
         return None
 
@@ -697,34 +715,62 @@ class Typist(pyd.BaseModel):
         self, data: object, tvar: type[SeriesType], details: MyType | None = None
     ) -> SeriesType | None:
         """Coerce data into series (lists, tuples, deques, and sets), splitting strings."""
+        # I. Parse details if none were given
         if details is None:
             details = MyType.parse(tvar)
             tvar = details.main_type  # type: ignore
             assert tvar is not None, f"Cannot parse series type from {tvar}"
 
-        # I. Prepare the data
-        if isinstance(data, str):
-            if self.splits:
-                if "." in data and not ut.has_any(data, " ", ","):
-                    data = list(
-                        filter(bool, self.RGXS["no_space_splitter"].split(data))
-                    )
-                else:
-                    data = list(filter(bool, self.RGXS["splitter"].split(data)))
+        # II. Preprocess data into an iterable form
+        if isinstance(data, str) and self.splits:
+            # II.i. Split strings if configured to do so
+            data = self._split_str(data)
+        elif isinstance(data, Mapping):
+            # II.ii. Split maps into two-tuples if possible, otherwise fail early
+            #        This is to avoid unintentional parsing of just a map's keys
+            if (items := ut.map_items(data)) and (
+                not details.val_type or details.val_type.is_map_item()
+            ):
+                data = items
             else:
-                data = [data]
-        elif isinstance(data, Mapping) and (items := ut.map_items(data)):
-            data = items
-        elif not isinstance(data, Collection):
-            data = list(data) if isinstance(data, Iterable) else [data]
-        assert isinstance(data, Collection)
+                return None
+        elif isinstance(data, Flag):
+            # II.iii. Split Flags into their member names
+            dt = type(data)
+            data = [dt(member.value) for member in dt if member in data]
+        elif not isinstance(data, Iterable) and self.wraps:
+            # II.iv. Wrap all other non-iterables to at least give them a shot
+            data = [data]
 
-        # II. Perform the actual casting
-        if details.val_type:
-            return tvar(self.flexcast_iter(data, details.val_type))
+        # III. Perform the actual casting of the values, then the itself container
+        if data and isinstance(data, Series) and details.val_type:
+            cast_data = []
+            try:
+                data = self.multicast(data, details.val_type)
+            for item in data:  # ty:ignore[not-iterable]
+                if (_cast := self.cast(item, details.val_type)) is not None:
+                    cast_data.append(_cast)
+                else:
+                    return None
+            data = cast_data
 
         with ctx.suppress(TypeError):
             return tvar(data)
+        return None
+
+    def _split_str(self, data: str) -> list[str] | None:
+        # I. Null/invalid cases
+        if not data:
+            return None
+        elif (data[0] == "[" and data[-1] == "]") or ", " in data:
+            # II. Split yaml-like flow sequences
+            with ctx.suppress(Exception):
+                return self.from_yaml(data, list[str], cast=False)
+        elif char := next(filter(data.__contains__, [",", "//", ":", "."]), ""):
+            # III. Split on common delimiters in order of preference
+            #       e.g. one.oneA:two splits on colons, but one.oneA splits on periods
+            return list(filter(bool, map(str.strip, data.split(char))))
+
         return None
 
     @staticmethod
@@ -734,11 +780,38 @@ class Typist(pyd.BaseModel):
         """Partition a container into two lists based on type."""
         return tuple(map(list, mi.partition(lambda x: isinstance(x, type), container)))
 
+    @classmethod
+    def _concretize(cls, target: MyType, main: type, data: object) -> tuple[MyType, type]:
+        orig = target, main
+        new_main = None
+        if main in ABSTRACT_MAPS:
+            if isinstance(data, Mapping) and (_dt := MyType.parse((type(data)))):
+                new_main = _dt.main_type
+            else:
+                new_main = dict
+        elif main in ABSTRACT_SEQS:
+            if isinstance(data, Series) and (_dt := MyType.parse((type(data)))):
+                new_main = _dt.main_type
+            else:
+                new_main = list
+
+        if new_main is not None:
+            assert isinstance(new_main, types.GenericAlias)
+            return cls._derive_container(target, new_main), new_main
+        return orig
+
     # -------------------
     # `+` Primary Methods
     # -------------------
     @staticmethod
     def parse(tvar: Any) -> MyType:
+        """
+
+        Args:
+            tvar:
+
+        Returns:
+        """
         return MyType.parse(tvar)
 
     def __repr__(self) -> str:
@@ -749,24 +822,31 @@ class Typist(pyd.BaseModel):
     # ------------------
     @classmethod
     def match(cls, lhs: TypeArg, rhs: TypeArg, intersect: bool = False) -> bool:
-        """Check if the first type is valid subset of the second."""
-        if lhs is Any or lhs is None or rhs is Any or rhs is None:
+        """Check if the first type is valid subset of the second.
+
+        Args:
+            lhs: The source type.
+            rhs: The target type.
+            intersect: If `True`, check for any overlap between the two types
+                       rather than full subset coverage.
+        """
+        # I.i. Any & None (i.e. unspecified) are always true, but unhandled MyTypes are always false
+        if {lhs, rhs} & {Any, None}:
             return True
         elif not (lhs and rhs):
             return False
 
-        # 0. Create a unique ID for these arguments
+        # II. Check cache based on simple stringification
         n0 = str(lhs.src_type if isinstance(lhs, MyType) else lhs)
         n1 = str(rhs.src_type if isinstance(rhs, MyType) else rhs)
         if intersect:
             n1 += ".I"
-
-        # I. Check cache
         if (cached := cls.MATCH_CACHE[n0, n1]) is not None:
             return cached
 
-        t0 = MyType.parse(lhs) if not isinstance(lhs, MyType) else lhs
-        t1 = MyType.parse(rhs) if not isinstance(rhs, MyType) else rhs
+        # III. Parse the types (if they're already parsed, no work is done)
+        t0 = MyType.parse(lhs)
+        t1 = MyType.parse(rhs)
 
         ret = False
         _recur = ft.partial(cls.match, intersect=intersect)
@@ -774,7 +854,7 @@ class Typist(pyd.BaseModel):
             # II. Literal case
             ret = cls._match_literals(t0, t1, intersect)
         elif not (mt0 := t0.main_type) or not (mt1 := t1.main_type):
-            # II.iv. Unhandled case
+            # II. Unhandled case
             ret = False
         elif t0.is_split or t1.is_split:
             # III. Unions case
@@ -790,6 +870,7 @@ class Typist(pyd.BaseModel):
             if ret and t0.val_type and t1.val_type:
                 ret &= _recur(t0.val_type, t1.val_type)
 
+        # Cache & return
         cls.MATCH_CACHE[n0, n1] = ret
         return ret
 
@@ -797,30 +878,42 @@ class Typist(pyd.BaseModel):
     def _match_literals(cls, t0: MyType, t1: MyType, intersect: bool) -> bool:
         # 0. Setup
         lit0, lit1 = t0.literal_members, t1.literal_members
-        o0, o1 = t0.origin or object, t1.origin or object
+        o0, o1 = t0.origin, t1.origin
+
         _recur = ft.partial(cls.match, intersect=intersect)
 
         if lit0 and lit1:
+            assert o0 and o1, (
+                "Found literal without an origin, which doesn't make sense."
+            )
             if o0 is Literal and o1 is Literal:
+                # I.i. Two literals are basically the same as container types, just with objects
                 fn = ut.has_any if intersect else ut.has_all
                 return fn(t1.literal_members, *t0.literal_members)
 
             elif issubclass(o0, o1) and issubclass(o1, tuple):
+                # I.ii. Two positional tuples must always match exactly
                 return len(t0.args) == len(t1.args) and all(
                     it.starmap(_recur, zip(t0.args, t1.args, strict=True))
                 )
-        elif lit0:
+        elif lit0 and (m1 := t1.main_type):
+            assert o0, "Found literal without an origin, which doesn't make sense."
             if o0 is Literal:
+                # II.i. A literal can be a subset of an atomic type(s)
                 fn = any if intersect else all
                 return fn(_recur(arg, t1) for arg in t0.args)
-            elif issubclass(o0, tuple):
-                return issubclass(t1.main_type or object, tuple)
+            elif issubclass(o0, m1) and issubclass(m1, tuple):
+                if len(t1.args) == 0:
+                    # II.ii. Any positional tuple is a subset of its plain base
+                    return True
+                elif t1.val_type:
+                    # II.iii. Theoretically, a positional tuple could a subset of a typed tuple
+                    #         e.g. tuple[int, str] x tuple[object, ...]
+                    return all(_recur(arg, t1.val_type) for arg in t0.args)
 
-        elif lit1 and intersect:
-            if o1 is Literal:
-                return any(_recur(t0, t1) for arg in t1.args)
-            elif issubclass(o1, tuple):
-                return issubclass(t0.main_type or object, tuple)
+        elif lit1 and intersect and t0.main_type:
+            # III. Just recurse w/ flipped arguments for DRY reasons
+            return cls._match_literals(t1, t0, intersect=False)
 
         return False
 
@@ -854,7 +947,7 @@ class Typist(pyd.BaseModel):
                 (
                     type
                     for name, type in self.ATOMIC_TYPES.items()
-                    if name != "str" and self.RGXS[name].fullmatch(val)
+                    if name in self.RGXS and self.RGXS[name].fullmatch(val)
                 ),
                 str,
             )
@@ -942,35 +1035,27 @@ class Typist(pyd.BaseModel):
     # -------------
     # `*2` COERCION
     # -------------
-    def cast(self, data: object, tvar: type[Value] | Any) -> Value | None:
+    @overload
+    def cast(self, data: object, tvar: type[Value]) -> Value | None: ...
+
+    @overload
+    def cast(self, data: object, tvar: Any) -> Any | None: ...
+
+    def cast(self, data: object, tvar: type[Value] | Any) -> Value | Any | None:
         # I. Return null if the target is invalid
-        if data is None or tvar is None:
+        if data is None or tvar in {None, Any}:
             return None
         target = MyType.parse(tvar)
         if (main := target.main_type) is None:
             return None
 
         # II. Return the data as-is if it already matches the target type
+        data = self._clean_data(data)
         if target.check(data):
-            return data  # type:ignore
+            return data
 
         # III. When given abstract classes, arbitrarily choose a concrete type
-        new_main = None
-        if main in ABSTRACT_MAPS:
-            if isinstance(data, Mapping) and (_dt := MyType.parse((type(data)))):
-                new_main = _dt.main_type
-            else:
-                new_main = dict
-        elif main in ABSTRACT_SEQS:
-            if isinstance(data, Collection) and (_dt := MyType.parse((type(data)))):
-                new_main = _dt.main_type
-            else:
-                new_main = list
-        if new_main is not None:
-            assert isinstance(new_main, types.GenericAlias)
-            target = self._derive_container(target, new_main)
-            main = target.main_type
-            assert main is not None
+        target, main = self._concretize(target, main, data)
 
         # IV. Perform the actual casting
         options = self.sort_options(data, *target.args) if target.is_split else [target]
@@ -983,16 +1068,24 @@ class Typist(pyd.BaseModel):
         res = self.cast(data, tvar)
         return res if res is not None else data
 
-    def cast_all(self, values: Iterable[Any], tvar: type[Value]) -> Iterator[Value]:
-        for value in values:
-            if (result := self.cast(value, tvar)) is not None:
-                yield result
+    def multicast(
+        self, values: Iterable[Any], tvar: type[Value] | Any, skip: bool = False
+    ) -> list[Value] | list:
+        # I. Parse the type once
+        target = MyType.parse(tvar)
 
-    def flexcast_iter(self, values: Iterable[Any], tvar: TypeArg) -> Iterator[Any]:
-        yield from filter(
-            lambda res: res is not None,
-            (self.flexcast(value, tvar) for value in values),
-        )
+        # II. Cast the contents iteratively, either skipping failures or throwing TypeError
+        ret = []
+        for value in values:
+            if value is None:
+                ret.append(None)
+            elif (result := self.cast(value, target)) is not None:
+                ret.append(result)
+            elif skip:
+                continue
+            else:
+                raise TypeError(f"Cannot cast value `{value}` to type `{tvar}`.")
+        return ret
 
     def setattr(self, obj: object, key: str, value: Any, tvar: TypeArg = None) -> bool:
         """Set an attribute on an object, casting it to the appropriate type if necessary."""
@@ -1045,7 +1138,7 @@ class Typist(pyd.BaseModel):
                 return tvar({"content": data})
 
         # IV. Main case: give it to _cast and pray
-        if (ret := self._cast(data, MyType.parse(tvar))) is not None:
+        if (ret := self.cast(data, MyType.parse(tvar))) is not None:
             return ret
         raise TypeError(f"Cannot cast file data of type `{type(data)}` to `{tvar}`.")
 
@@ -1133,8 +1226,10 @@ class Typist(pyd.BaseModel):
             old = base[key]
             if self.all_are([old, new], Collection):
                 tvar = type(old)
-                if issubclass(tvar, dict):
-                    _cast = self.flexcast(new, type(old))
+                _cast = self.cast(new, tvar)
+                if _cast is None:
+                    pass # Fall through to overwrite
+                elif issubclass(tvar, dict):
                     assert isinstance(_cast, dict)
                     base[key] = tvar(self.assemble(old, _cast, copy=False))
                     continue

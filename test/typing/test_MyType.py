@@ -3,7 +3,7 @@
 ############
 ### STANDARD
 import typing
-from typing import Any, Literal, Optional, TypeGuard, Annotated, Union
+from typing import Any, Literal, Optional, TypeGuard, Annotated, Union, Unpack
 from collections.abc import (
     Mapping,
     Callable,
@@ -37,6 +37,10 @@ Expected = tuple[type, ...] | type | None
 class BaseEnum(Enum):
     A = 1
     B = 2
+
+
+T = typing.TypeVar("T")
+Ts = typing.TypeVarTuple("Ts")
 
 
 ############
@@ -189,6 +193,8 @@ class TestMyType:
             (Coroutine | Generator, [None, None]),
             # Super new TypeTuples (idiomatically speaking)
             ((dict[str, int], int), [(dict, str, int), int]),
+            # Unpack isn't technically split, but is handled whenever nested by _process_args
+            (Unpack[tuple[dict[str, int], int]], [(dict, str, int), int]),
         ],
     )
     def test_parse_split(self, data, expected: list[Expected]):

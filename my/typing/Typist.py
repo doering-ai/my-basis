@@ -342,7 +342,7 @@ class Typist(pyd.BaseModel):
             return str(file)
 
     @classmethod
-    def _derive_container(cls, old: MyType, new_origin: type[types.GenericAlias]) -> MyType:
+    def _derive_container(cls, old: MyType, new_origin: type[Collection]) -> MyType:
         """Create a new container type based on an existing one with a different origin.
 
         Args:
@@ -352,10 +352,8 @@ class Typist(pyd.BaseModel):
             New MyType with the new origin but preserving args from old.
         """
         if old.origin and old.args:
-            assert hasattr(new_origin, '__class_getitem__'), (
-                f'Type {new_origin} is not subscriptable'
-            )
-            new_src = new_origin[typing.Unpack[*tuple(arg.src_type for arg in old.args)]]
+            new_args = (arg.src_type for arg in old.args)
+            new_src = new_origin[*new_args]
         else:
             new_src = new_origin
 
@@ -389,7 +387,7 @@ class Typist(pyd.BaseModel):
         """
         data = self._clean_data(data)
         # I. Handle literals as a very special case
-        if target.literal_check is not None:
+        if target.literal_members:
             return self._to_literal(data, target)
 
         # II. Reject casts to unhandled or split types
@@ -418,7 +416,7 @@ class Typist(pyd.BaseModel):
         Returns:
             Cast data if it matches the literal, None otherwise.
         """
-        if target.literal_check is None or target.origin is None or data is None:
+        if not target.literal_members or target.origin is None or data is None:
             return None
 
         if target.origin is Literal:
@@ -430,12 +428,16 @@ class Typist(pyd.BaseModel):
                     ret = self.cast(data, val_type)
                     if ret is not None and target.literal_check(ret):
                         return ret
+                return None
         elif isinstance(target.origin, type) and issubclass(target.origin, tuple):
             # II. Cast literally-positioned tuples
             if not isinstance(data, Sequence):
                 data = self._to_series(data, tuple)
+
             if data is not None and len(data) == len(target.args):
                 ret = target.origin(it.starmap(self.cast, zip(data, target.args, strict=True)))
+            else:
+                return None
 
         return ret if target.literal_check(ret) else None
 
@@ -470,6 +472,8 @@ class Typist(pyd.BaseModel):
             success, result = self.invoke(fn)
             if success:
                 return result
+        with ctx.suppress(ValueError, TypeError):
+            return target(data)
         return None
 
     def _enum_to_atomic(self, data: Enum, target: type[AtomicType]) -> AtomicType | None:
@@ -482,8 +486,9 @@ class Typist(pyd.BaseModel):
             Converted atomic value if successful, None otherwise.
         """
         if issubclass(target, str | bytes):
-            if fn := self.get_str_method(data):
-                ret = fn()
+            success, ret, _ = self.try_method(target, 'write')
+            if success:
+                pass
             elif isinstance(data.value, str):
                 ret = data.value
             else:
@@ -619,40 +624,45 @@ class Typist(pyd.BaseModel):
             Enum instance if successful, None otherwise.
         """
         # I. If the enum has it's own read method, try that first on any datatype
-        success, res, _ = self.try_method(target, 'read', data)
-        if success:
-            return res
+        if read_method := self.get_method(target, 'read'):
+            success, ret = self.invoke(read_method, data)
+            if success and ret:
+                return ret
 
+        # II. Next, try some Flag-specific transformations
         if issubclass(target, Flag):
-            # series_to_enum
+            members = []
             if isinstance(data, Series):
                 members = data
             elif isinstance(data, str) and '|' in data:
                 members = re.split(r' *\| *', data.strip())
 
-            ret = target(0)
-            for member in members:
-                if res := self._to_enum(member, target):
-                    ret |= res
-            return ret
-        elif isinstance(data, int):
+            if members:
+                ret = target(0)
+                for member in members:
+                    if _new := self._to_enum(member, target):
+                        ret |= _new
+                return ret
+
+        if isinstance(data, int):
             # int_to_enum
             return target(data)
         elif isinstance(data, str):
-            data = data.strip()
             # str_to_enum
+            data = data.strip()
             if data.isdigit():
                 return target(int(data))
             elif ret := target.__members__.get(data.upper(), None):
                 return ret
         elif isinstance(data, Enum):
-            if fn := self.get_method(target, 'read'):
-                success, ret = self.invoke(fn, data.value)
-                if success:
+            if read_method:
+                success, ret = self.invoke(read_method, data.value)
+                if success and ret:
                     return ret
-                success, ret = self.invoke(fn, data.name)
-                if success:
+                success, ret = self.invoke(read_method, data.name)
+                if success and ret:
                     return ret
+
             if data.name in target.__members__:
                 return target[data.name]
             elif key := ut.find_key(target.__members__, data.value):
@@ -765,7 +775,7 @@ class Typist(pyd.BaseModel):
                 tzinfo=UTC,
             )
         elif issubclass(target, timedelta):
-            return target(total_seconds=data)
+            return target(seconds=float(data))
         return None
 
     def _to_map(
@@ -789,19 +799,20 @@ class Typist(pyd.BaseModel):
         # I.ii. Pre-cast strings by parsing JSON or YAML content
         if data and isinstance(data, str) and data[0] == '{' and data[-1] == '}':
             with ctx.suppress(Exception):
-                data = self.from_yaml(data, tvar)
+                return self.from_yaml(data, tvar)
 
         # II. Main Case: cast maps and map-ready lists of 2-tuples ("items")
         if items := ut.map_items(data):
             keys, values = mi.unzip(items)
             key_data = self.multicast(keys, details.key_type, skip=False)
             val_data = self.multicast(values, details.val_type, skip=False)
-            return tvar(zip(key_data, val_data, strict=True))
+            return tvar(dict(zip(key_data, val_data, strict=True)))
 
         # II. Cast counters, the only map type that takes an iter of single items
-        if issubclass(tvar, Counter) and isinstance(data, Series) and details.key_type:
-            key_data = self.multicast(data, details.key_type, skip=False)
-            return tvar(key_data)
+        if issubclass(tvar, Counter) and isinstance(data, Series):
+            if details.key_type:
+                data = self.multicast(data, details.key_type, skip=False)
+            return tvar(data)
 
         return None
 
@@ -862,7 +873,7 @@ class Typist(pyd.BaseModel):
         # I. Null/invalid cases
         if not data:
             return None
-        elif (data[0] == '[' and data[-1] == ']') or ', ' in data:
+        elif data[0] == '[' and data[-1] == ']' and data.count('[') == 1:
             # II. Split yaml-like flow sequences
             with ctx.suppress(Exception):
                 return self.from_yaml(data, list[str], cast=False)
@@ -887,17 +898,19 @@ class Typist(pyd.BaseModel):
         return tuple(map(list, mi.partition(lambda x: isinstance(x, type), container)))
 
     @classmethod
-    def _concretize(cls, target: MyType, main: type, data: object) -> tuple[MyType, type]:
+    def _concretize(cls, target: MyType, data: object) -> MyType:
         """Convert abstract container types to concrete ones based on data.
 
         Args:
             target: The target MyType.
-            main: The main type from target.
             data: The source data to inform concretization.
         Returns:
             Tuple of (potentially modified MyType, potentially modified main type).
         """
-        orig = target, main
+        main = target.main_type
+        if main is None:
+            return target
+
         new_main = None
         if main in ABSTRACT_MAPS:
             if isinstance(data, Mapping) and (_dt := MyType.parse(type(data))):
@@ -911,9 +924,8 @@ class Typist(pyd.BaseModel):
                 new_main = list
 
         if new_main is not None:
-            assert isinstance(new_main, types.GenericAlias)
-            return cls._derive_container(target, new_main), new_main
-        return orig
+            return cls._derive_container(target, new_main)
+        return target
 
     @classmethod
     def _param_is_positional(cls, param: inspect.Parameter) -> bool:
@@ -1130,8 +1142,6 @@ class Typist(pyd.BaseModel):
         if data is None or tvar in {None, Any}:
             return None
         target = MyType.parse(tvar)
-        if (main := target.main_type) is None:
-            return None
 
         # II. Return the data as-is if it already matches the target type
         data = self._clean_data(data)
@@ -1139,7 +1149,8 @@ class Typist(pyd.BaseModel):
             return data
 
         # III. When given abstract classes, arbitrarily choose a concrete type
-        target, main = self._concretize(target, main, data)
+        if target.main_type is not None:
+            target = self._concretize(target, data)
 
         # IV. Perform the actual casting
         options = self.sort_options(data, *target.args) if target.is_split else [target]

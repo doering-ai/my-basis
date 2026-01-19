@@ -3,6 +3,7 @@
 ############
 ### STANDARD
 from typing import ClassVar, Self
+from collections.abc import Iterable, Iterator
 
 ### EXTERNAL
 import regex as re
@@ -32,16 +33,16 @@ class Span(tuple[int, int]):
     # -------------------
     # `.` Initial Methods
     # -------------------
-    def __new__(cls, arg0: Series | int | float | str | Self = -1, arg1: int | str = -1):
+    def __new__(cls, arg0: Series | int | float | str | Iterator | Self = -1, arg1: int | str = -1):
         """Create a new Span instance, overriding default tuple behavior w/ flexible coercion."""
         if isinstance(arg0, Span):
             return arg0
 
-        if isinstance(arg0, Series):
+        elif isinstance(arg0, Iterable):
             # I. Handle tuple input
+            arg0 = tuple(arg0)
             assert len(arg0) == 2, 'Tuple must have exactly 2 elements'
-            assert not isinstance(arg0, set), 'Tuple cannot be a set'
-            x0, x1 = int(arg0[0]), int(arg0[1])
+            x0, x1 = int(arg0[0]), int(arg0[1])  # type: ignore
 
         elif isinstance(arg0, str):
             # II. Handle string input with delimiters

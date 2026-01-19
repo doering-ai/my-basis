@@ -3,6 +3,8 @@
 ############
 ### STANDARD
 from typing import Any, Literal
+import typing
+import types
 from collections.abc import Mapping, Callable, Collection, Sequence
 from collections import Counter, deque
 from datetime import date, datetime, time, timedelta, UTC
@@ -16,7 +18,7 @@ import pydantic as pyd
 from my.infra import Time
 from my.types import Buffer, Span
 from my.regex import MatchData, GroupKind
-from my.typing import Typist
+from my.typing import Typist, MyType
 from ..conftest import boolmap
 
 ############
@@ -112,9 +114,9 @@ class TestTypist:
         't0, t1, expected',
         boolmap(
             false=[
+                (str, Buffer),
                 (Sequence, str),
                 (int, list[int]),
-                (str, Buffer),
                 (Span, tuple[int, str]),
                 (Span, tuple[str, ...]),
                 (str | int, dict | int),
@@ -142,13 +144,20 @@ class TestTypist:
         't0, t1, expected',
         boolmap(
             false=[
-                (Span, tuple[int, ...]),
+                (str, Buffer),
+                (int, list[int]),
+                (Span, tuple[int, str]),
+                (Span, tuple[int]),
             ],
             true=[
+                (Sequence, str),
                 (str | int, dict | int),
                 (str | int, str | dict | int),
                 (str | dict | int, str | int),
                 (str | Mapping, Mapping),
+                (Span, tuple[int, ...]),
+                (Literal['A', 'B'], Literal['A']),
+                (Literal['A'], Literal['A', 'B']),
             ],
         ),
     )
@@ -201,8 +210,8 @@ class TestTypist:
         't0, t1, expected',
         boolmap(
             false=[
-                (str, None),
-                (None, str),
+                (MyType.parse(Ellipsis), MyType.parse(types.NoneType)),
+                (MyType.parse(types.NoneType), MyType.parse(typing.Self)),
             ],
             true=[
                 (Any, Any),
@@ -210,7 +219,9 @@ class TestTypist:
                 (Any, str),
                 (None, Any),
                 (None, None),
+                (None, str),
                 (str, Any),
+                (str, None),
             ],
         ),
     )
@@ -265,19 +276,26 @@ class TestTypist:
     @pyt.mark.parametrize(
         'data, target, expected',
         [
-            # Basic Series
-            (['1', '5', '10'], Sequence[str], ['1', '5', '10']),
-            (['1', '5', '10'], Sequence[int], [1, 5, 10]),
-            ({'1', '5', '10'}, Collection[int], {1, 5, 10}),
-            (deque(['1', '5.5', '10']), set[float], {1.0, 5.5, 10.0}),
-            (['1', '5', '10'], tuple[int], (1, 5, 10)),
-            # More series variations
-            ([1, 2, 3], list[str], ['1', '2', '3']),
-            (['a', 'b', 'c'], set[str], {'a', 'b', 'c'}),
-            ({1, 2, 3}, list[int], [1, 2, 3]),
-            ((1, 2, 3), deque[int], deque([1, 2, 3])),
-            # Nested series
-            (['1,2,3', '4,5,6'], list[list[int]], [[1, 2, 3], [4, 5, 6]]),
+            # ---- Numeric ----
+            (20.0, int, 20),
+            (20, float, 20.0),
+            # ---- Deserialization ----
+            ('-123', int, -123),
+            ('-45.67', float, -45.67),
+            ('true', bool, True),
+            ('On', bool, True),
+            ('EnAbLeD', bool, True),
+            ('t', bool, True),
+            ('y', bool, True),
+            ('yes', bool, True),
+            ('FALSE', bool, False),
+            ('F', bool, False),
+            ('no', bool, False),
+            ('n', bool, False),
+            ('Disabled', bool, False),
+            # ---- Noops ----
+            ('hello', str, 'hello'),
+            (5, int, 5),
         ],
     )
     def test_cast(self, data: Any, target: type, expected: object):
@@ -286,40 +304,54 @@ class TestTypist:
     @pyt.mark.parametrize(
         'data, target, expected',
         [
+            # ---- Basic ----
+            ([1, 2, 3], list[str], ['1', '2', '3']),
+            ({1, 2, 3}, list[int], [1, 2, 3]),
+            (['a', 'b', 'c'], set[str], {'a', 'b', 'c'}),
+            # ---- Deques ----
+            (deque(['1', '5.5', '10']), set[float], {1.0, 5.5, 10.0}),
+            ((1, 2, 3), deque[int], deque([1, 2, 3])),
+            # ---- Splits ----
+            (['1,2,3', '4,5,6'], list[list[int]], [[1, 2, 3], [4, 5, 6]]),
+            # ---- Tuples ----
             (['1', '2', '3'], tuple[int, ...], (1, 2, 3)),
+            (['1', '5', '10'], tuple[int, ...], (1, 5, 10)),
+            (['1', '5', '10'], tuple[int, int, int], (1, 5, 10)),
             (['a', '1', 'b', '2'], tuple[str, int, str, int], ('a', 1, 'b', 2)),
-            (['123', '456'], Span, Span((123, 456))),  # tuple subtype
+            (['123', '456'], Span, Span(123, 456)),
+            # ---- Generics ----
+            (['1', '5', '10'], Sequence[int], [1, 5, 10]),
+            ({'1', '5', '10'}, Collection[int], {1, 5, 10}),
+            (['1', '5', '10'], Sequence[str], ['1', '5', '10']),
         ],
     )
-    def test_cast__tuples(self, data: Any, target: type, expected: object):
+    def test_cast__series(self, data: Any, target: type, expected: object):
         assert typist.cast(data, target) == expected
 
     @pyt.mark.parametrize(
         'data, target, expected',
         [
+            # ---- dict ----
             (dict(x=20.0), dict[str, int], dict(x=20)),
-            (Counter(z=15), dict[str, int], dict(z=15)),
+            ({'1': '2', '3': '4'}, dict[int, int], {1: 2, 3: 4}),
+            ({'a': 1.5, 'b': 2.7}, dict[str, int], {'a': 1, 'b': 2}),
+            ({'a': {'b': '1'}}, dict[str, dict[str, int]], {'a': {'b': 1}}),
+            ('{"a": 1, "b": 2}', dict[str, int], {'a': 1, 'b': 2}),
             (
                 [('a', '1'), ('b', '5'), ('c', '10')],
                 dict[str, int],
                 dict(a=1, b=5, c=10),
             ),
-            ([('a', '1'), ('b', '2')], Counter[str], Counter(a=1, b=2)),
+            # ---- Counter ----
             (['a', 'b', 'b'], Counter, Counter(a=1, b=2)),
+            (['x', 'y', 'x', 'z'], Counter[str], Counter({'x': 2, 'y': 1, 'z': 1})),
+            ([('a', '1'), ('b', '2')], Counter[str], Counter(a=1, b=2)),
+            (Counter(z=15), dict[str, int], dict(z=15)),
             (
                 ['a.b.c', 'x.y.z', 'a.b.c'],
                 Counter[tuple[str, ...]],
                 Counter({('a', 'b', 'c'): 2, ('x', 'y', 'z'): 1}),
             ),
-            # More map variations
-            ({'1': '2', '3': '4'}, dict[int, int], {1: 2, 3: 4}),
-            ({'a': 1.5, 'b': 2.7}, dict[str, int], {'a': 1, 'b': 2}),
-            # Nested maps
-            ({'a': {'b': '1'}}, dict[str, dict[str, int]], {'a': {'b': 1}}),
-            # Maps from JSON strings
-            ('{"a": 1, "b": 2}', dict[str, int], {'a': 1, 'b': 2}),
-            # Counter variations
-            (['x', 'y', 'x', 'z'], Counter[str], Counter({'x': 2, 'y': 1, 'z': 1})),
         ],
     )
     def test_cast__maps(self, data: Any, target: type, expected: object):
@@ -396,9 +428,9 @@ class TestTypist:
             (['READ', 'WRITE'], Permission, Permission.READ | Permission.WRITE),
             (['READ', 'EXECUTE'], Permission, Permission.READ | Permission.EXECUTE),
             # ---- Flags from pipe-separated string ----
-            ('READ | WRITE', Permission, Permission.READ | Permission.WRITE),
+            ('READ|WRITE', Permission, Permission.READ | Permission.WRITE),
             (
-                'READ | WRITE | EXECUTE',
+                'READ | WRITE|EXECUTE',
                 Permission,
                 Permission.READ | Permission.WRITE | Permission.EXECUTE,
             ),

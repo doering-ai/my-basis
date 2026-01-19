@@ -3,24 +3,22 @@
 ############
 # Standard imports
 from typing import (
-    Self,
     Any,
     ClassVar,
-    TypeGuard,
     Literal,
-    Callable,
-    Iterable,
-    Iterator,
-    Unpack,
     Optional,
-    Collection,
-    Mapping,
+    Self,
+    TypeGuard,
+    Unpack,
 )
-import typing as ty
-import collections.abc as tyabc
 from collections import Counter
-import types
+from collections.abc import Iterable, Iterator, Mapping
+import collections.abc as tyabc
 import itertools as it
+import types
+import typing as ty
+import inspect
+import contextlib as ctx
 
 # Modular imports
 import pydantic as pyd
@@ -31,69 +29,75 @@ from ..infra import Series
 from ..utils import ut
 from ..caches import Cache
 
+# SpecialFormField = Annotated[ty._SpecialForm, ut.pyd_schemify(ty._SpecialForm)]
+
 
 ############
 ### BODY ###
 ############
 class MyType(pyd.BaseModel):
+    """A wrapper for any type annotation that normalizes the wide variety of interfaces."""
+
+    #: If any of these types are passed into `parse()`, no work will be done and an "inactive"
+    #: instance will be returned (i.e. it will only have `src_type` defined, and will be falsey).
     UNHANDLED_TYPES: ClassVar[set[str]] = {
-        "",
-        "Any",
-        "object",
+        '',
+        'Any',
+        'object',
         # Functional
-        "Generator",
-        "Iterator",
-        "Coroutine",
+        'Generator',
+        'Iterator',
+        'Coroutine',
         # Special Forms
-        "Callable",  # deprecated
-        "Type",  # deprecated
-        "NoReturn",
-        "TypeGuard",
+        'Callable',  # deprecated
+        'Type',  # deprecated
+        'NoReturn',
+        'TypeGuard',
         # >= 3.10
-        "Self",
-        "Never",
-        "LiteralString",  # Too complicated & rare
-        "Concatenate",
-        "TypeAlias",  # Should never come up
+        'Self',
+        'Never',
+        'LiteralString',  # Too complicated & rare
+        'Concatenate',
+        'TypeAlias',  # Should never come up
         # >= 3.13
-        "TypeIs",
-        "ReadOnly",
+        'TypeIs',
+        'ReadOnly',
         # from types module:
-        "NoneType",
-        "EllipsisType",
-        "NotImplementedType",
-        "CapsuleType",
-        "Ellipsis",
+        'NoneType',
+        'EllipsisType',
+        'NotImplementedType',
+        'CapsuleType',
+        'Ellipsis',
         # Possible, but not yet handled:
-        "TypedDict",  # treat like BaseModel
-        "NamedTuple",  # treat like tuple but w/ names
-        "Protocol",  # try isinstance
+        'TypedDict',  # treat like BaseModel
+        'NamedTuple',  # treat like tuple but w/ names
+        'Protocol',  # try isinstance
         ### IMPORTANT: TypeVars are completely unhandled as of now. Could do it tho with .__bound__
-        "TypeVar",
-        "TypeVarTuple",
+        'TypeVar',
+        'TypeVarTuple',
     }
     SIMPLE_FORMS: ClassVar[set[str]] = {
-        "ClassVar",
-        "Optional",
-        "Annotated",
-        "Required",
-        "NotRequired",
-        "Final",
+        'ClassVar',
+        'Optional',
+        'Annotated',
+        'Required',
+        'NotRequired',
+        'Final',
     }
 
-    PARSE_CACHE: ClassVar[Cache[str, "MyType"]] = Cache()
+    PARSE_CACHE: ClassVar[Cache[str, 'MyType']] = Cache()
     RAISE: ClassVar[bool] = False
 
-    src_type: type | ty._SpecialForm | None = None
+    src_type: type | Any | None = None
 
     main_type: type | None = None
-    val_type: Optional["MyType"] = None
-    key_type: Optional["MyType"] = None
+    val_type: Optional['MyType'] = None
+    key_type: Optional['MyType'] = None
 
-    name: str = ""
-    uid: str = ""
+    name: str = ''
+    uid: str = ''
     origin: type | None = None
-    args: tuple["MyType", ...] = tuple()
+    args: tuple['MyType', ...] = tuple()
     literal_members: list[Any] = []
     is_split: bool = False
 
@@ -101,7 +105,7 @@ class MyType(pyd.BaseModel):
     # `.` Initial Methods
     # -------------------
     @classmethod
-    def parse(cls, src_type: Any, throw: bool = False) -> "MyType":
+    def parse(cls, src_type: Any, throw: bool = True) -> 'MyType':
         """Decompose a given type so that other methods can intelligently handly each part in turn.
 
         By far the most likely usecase is for containers such as `dict[str, int]` (which becomes the
@@ -112,6 +116,7 @@ class MyType(pyd.BaseModel):
 
         Args:
             src_type: The type annotation to decompose -- either a type, a union of types, or None.
+            throw: If True, will re-raise any exceptions encountered during parsing.
         Returns:
             1. The **main type** (e.g. `dict`, `list`, `int`, etc.) or `None` if unparseable.
             2. The **key type** (for mappings) or `None`.
@@ -137,7 +142,7 @@ class MyType(pyd.BaseModel):
                 return cls(src_type=src_type)
 
     @classmethod
-    def metaparse(cls, src_data: object) -> "MyType":
+    def metaparse(cls, src_data: object) -> 'MyType':
         """Infer the type annotation of a given data value, recursing into containers.
 
         Args:
@@ -147,7 +152,7 @@ class MyType(pyd.BaseModel):
         """
         origin = type(src_data)
         args = []
-        if not src_data or not hasattr(origin, "__class_getitem__"):
+        if not src_data or not hasattr(origin, '__class_getitem__'):
             return cls.parse(origin)
 
         elif isinstance(src_data, Series):
@@ -169,15 +174,24 @@ class MyType(pyd.BaseModel):
         return cls.parse(origin[*args] if args else origin)
 
     @classmethod
-    def _condense_args(cls, args: list["MyType"]) -> type | ty._SpecialForm:
+    def _condense_args(cls, args: list['MyType']) -> type | ty._SpecialForm:
+        """Condense multiple type arguments into a single type or union.
+
+        Args:
+            args: List of MyType instances to condense.
+        Returns:
+            Single type if all args are the same, UnionType otherwise.
+        """
         uniques = list(filter(bool, (arg.src_type for arg in set(args))))
         if len(uniques) == 1:
             return uniques[0]
         else:
-            base_union = types.UnionType(*(vt.src_type for vt in uniques))
-            return base_union  # type: ignore
+            acc, *rest = uniques
+            for other in rest:
+                acc = acc | other
+            return acc
 
-    @pyd.model_validator(mode="after")
+    @pyd.model_validator(mode='after')
     def _process_src(self) -> Self:
         # 0. Validate & parse the source type
         if not self.src_type or not self.uid:
@@ -185,7 +199,14 @@ class MyType(pyd.BaseModel):
         self.name, self.origin, _args = self._read(self.src_type)
 
         # I. Catch edge cases: Unhandled types, simple wrappers, unions, and literals
-        if self.name in self.UNHANDLED_TYPES:
+        if options := self._split(self.name, self.origin, _args):
+            if len(options) == 1 and self.origin is Unpack:
+                options = ty.get_args(options[0])
+            self.args = tuple(self._process_args(options))
+            self.is_split = True
+            self.main_type = types.UnionType
+            return self
+        elif self.name in self.UNHANDLED_TYPES:
             return self
         elif self.name in self.SIMPLE_FORMS:
             if contents := mi.first(filter(bool, self._process_args(_args)), None):
@@ -200,13 +221,8 @@ class MyType(pyd.BaseModel):
                 self.args = (*contents.args,)
                 self.literal_members = contents.literal_members
             return self
-        elif options := self._split(self.src_type):
-            self.args = tuple(self._process_args(options))
-            self.is_split = True
-            self.main_type = self.origin if self.origin is not None else types.UnionType
-            return self
         elif self.origin is Literal:
-            self.literal_members = list(sorted(_args))
+            self.literal_members = list(_args)
             self.args = tuple(map(self.parse, set(map(type, _args))))
             return self
 
@@ -219,9 +235,11 @@ class MyType(pyd.BaseModel):
                 pass
             elif issubclass(self.origin, tuple):
                 # III.i. Catch tuples (either monotyped or literal)
-                if self.args[-1].src_type is Ellipsis:
+                if self.args[-1].src_type is types.EllipsisType:
                     if len(self.args) > 1:
                         self.val_type = self.args[0]
+                    else:
+                        self.args = tuple()
                 else:
                     self.literal_members = list(self.args)
             elif len(self.args) == 1:
@@ -238,21 +256,28 @@ class MyType(pyd.BaseModel):
                 # III.iv. Catch maps
                 self.key_type, self.val_type = self.args
 
-        elif issubclass(self.src_type, Counter):
-            # IV. Niche case: Counters imply int values
-            self.main_type = Counter
-            self.val_type = self.parse(int)
-
         elif isinstance(self.src_type, type):
-            # V. Catch atomic types
-            self.main_type = self.src_type
+            if issubclass(self.src_type, Counter):
+                # IV. Niche case: Counters imply int values
+                self.main_type = Counter
+                self.val_type = self.parse(int)
+            else:
+                # V. MAIN CASE: Catch atomic and un-parametrized types
+                self.main_type = self.src_type
 
         return self
 
     # -------------------
     # `-` Private Methods
     # -------------------
-    def _process_args(self, args: tuple) -> Iterator["MyType"]:
+    def _process_args(self, args: tuple) -> Iterator['MyType']:
+        """Process type arguments, unpacking Unpack types.
+
+        Args:
+            args: Tuple of type arguments to process.
+        Yields:
+            Parsed MyType instances, with Unpack types expanded.
+        """
         for arg in map(self.parse, args):
             if arg.origin is Unpack:
                 yield from arg.args
@@ -260,6 +285,13 @@ class MyType(pyd.BaseModel):
                 yield arg
 
     def literal_check(self, value: Any) -> bool:
+        """Check if a value matches this literal type.
+
+        Args:
+            value: The value to check.
+        Returns:
+            True if value matches the literal members.
+        """
         if not self.literal_members:
             return False
         elif self.origin is Literal:
@@ -275,22 +307,34 @@ class MyType(pyd.BaseModel):
                 and self.args[-1].src_type is not Ellipsis
                 and len(value) == len(self.args)
                 # Check them in turn
-                and all(
-                    arg.check(val) for val, arg in zip(value, self.args, strict=True)
-                )
+                and all(arg.check(val) for val, arg in zip(value, self.args, strict=True))
             )
         return False
 
     @classmethod
     def _is_type(cls, tvar: Any) -> TypeGuard[type | types.GenericAlias]:
+        """Check if a value is a valid, handleable type.
+
+        Args:
+            tvar: The value to check.
+        Returns:
+            True if tvar is a type that can be parsed.
+        """
         return bool(
             tvar is not None
-            and (name := getattr(tvar, "__name__", ""))
+            and (name := getattr(tvar, '__name__', ''))
             and name not in cls.UNHANDLED_TYPES
         )
 
     @classmethod
     def _parseable(cls, tvar: Any) -> TypeGuard[type | tuple[type, ...]]:
+        """Check if a value or tuple of values are parseable types.
+
+        Args:
+            tvar: The value or tuple to check.
+        Returns:
+            True if tvar contains parseable types.
+        """
         if isinstance(tvar, tuple):
             return any(map(cls._parseable, tvar))
         else:
@@ -307,34 +351,46 @@ class MyType(pyd.BaseModel):
             2. The type's origin (if any).
             3. The type's args (if any).
         """
-        if tvar is None or isinstance(tvar, tuple):
-            return "", None, tuple()
-        name = str(getattr(tvar, "__name__", ""))
+        if tvar is None:
+            return '', None, tuple()
+        elif isinstance(tvar, tuple):
+            return '', None, tvar
+
+        name = str(getattr(tvar, '__name__', ''))
         origin = ty.get_origin(tvar)
         args = ty.get_args(tvar)
 
-        if (
-            not (origin or args)
-            and len(orig_bases := types.get_original_bases(tvar)) == 1
-        ):
-            base = orig_bases[0]
-            _origin = ty.get_origin(base)
-            _args = ty.get_args(base)
-            if _args:
-                origin = tvar
-                args = _args
+        # Handle user defined generics that don't register origin/args properly
+        with ctx.suppress(Exception):
+            if (
+                not (origin or args)
+                and inspect.isclass(tvar)
+                and len(orig_bases := types.get_original_bases(tvar)) == 1
+            ):
+                base = orig_bases[0]
+                _origin = ty.get_origin(base)
+                _args = ty.get_args(base)
+                if _args:
+                    origin = tvar
+                    args = _args
 
         return name, origin, args
 
     @classmethod
-    def _split(cls, tvar: Any) -> tuple:
-        """Decompose a union or tuple type into its member types."""
-        if isinstance(tvar, tuple):
-            return tvar
-        elif getattr(tvar, "__name__", "") in {"Union", "Unpack"} or isinstance(
-            tvar, types.UnionType
-        ):
-            return ty.get_args(tvar)
+    def _split(cls, name: str, origin: Any | None, args: tuple) -> tuple:
+        """Decompose a union or tuple type into its member types.
+
+        Args:
+            name: Name of the type.
+            origin: Origin of the type.
+            args: Arguments of the type.
+        Returns:
+            Tuple of member types if it's a union/tuple, empty tuple otherwise.
+        """
+        if name == '' or len(args) == 0:
+            return args
+        elif name in {'Union', 'Unpack', 'Optional'} or isinstance(origin, types.UnionType):
+            return args
         else:
             return tuple()
 
@@ -349,19 +405,19 @@ class MyType(pyd.BaseModel):
         return self.main_type is not None or len(self.literal_members) > 0
 
     def __str__(self) -> str:
-        return f"{self.src_type}"
+        return f'{self.src_type}'
 
     def __repr__(self) -> str:
         parts = []
         if self.main_type is not None:
-            parts.append(f"main={self.main_type}")
+            parts.append(f'main={self.main_type}')
         if self.key_type is not None:
-            parts.append(f"key={self.key_type}")
+            parts.append(f'key={self.key_type}')
         if self.val_type is not None:
-            parts.append(f"val={self.val_type}")
-        if self.literal_members is not None:
-            parts.append("[LIT]")
-        return f"MyType[{self.src_type}]" + (f"({', '.join(parts)})" if parts else "")
+            parts.append(f'val={self.val_type}')
+        if self.literal_members:
+            parts.append('LITERAL')
+        return f'MyType[{self.src_type}]' + (f'({", ".join(parts)})' if parts else '')
 
     def __eq__(self, other: object) -> bool:
         if isinstance(other, MyType):
@@ -376,6 +432,13 @@ class MyType(pyd.BaseModel):
         return hash(self.uid)
 
     def check(self, data: object) -> bool:
+        """Check if a given data value matches this type, recursing into containers where needed.
+
+        Args:
+            data: The data value to check. Ideally not an exhaustable iter.
+        Returns:
+            True if *all* aspects of this type are satisfied by this data, including nested types.
+        """
         if data is None:
             return False
 
@@ -413,11 +476,21 @@ class MyType(pyd.BaseModel):
         return True
 
     def check_iter(self, iterable: Iterable) -> Iterator[bool]:
-        """Check if all values in an iterable match a type variable."""
+        """Check if values in an iterable match this type.
+
+        Args:
+            iterable: The iterable of values to check.
+        Yields:
+            Boolean for each value indicating if it matches this type.
+        """
         yield from map(self.check, iterable)
 
-    def members(self) -> Iterator["MyType"]:
-        """Yield all member types of this type variable."""
+    def members(self) -> Iterator['MyType']:
+        """Yield all field types for Pydantic models or TypedDicts.
+
+        Returns:
+            Iterator of MyType instances for each field in the type.
+        """
         if not self.main_type:
             return
         elif issubclass(self.main_type, pyd.BaseModel):
@@ -425,8 +498,14 @@ class MyType(pyd.BaseModel):
         elif ty.is_typeddict(self.src_type):
             yield from map(self.parse, self.src_type.__annotations__.values())
 
-    def issubclass(self, tvar: "type | types.UnionType | MyType | None") -> bool:
-        """Check if this type variable is a subclass of another type variable."""
+    def issubclass(self, tvar: 'type | types.UnionType | MyType | None') -> bool:
+        """Check if this type is a subclass of another type.
+
+        Args:
+            tvar: The type to check against (can be type, UnionType, MyType, or None).
+        Returns:
+            True if this type is a subclass of tvar.
+        """
         if isinstance(tvar, MyType):
             if self.origin is Literal and tvar.origin is Literal:
                 return True
@@ -440,10 +519,11 @@ class MyType(pyd.BaseModel):
         return issubclass(self.main_type, tvar)
 
     def summarize(self) -> tuple[type | None, type | None, type | None]:
-        """Get a simplified summary of this type variable.
+        """Get a simplified summary of this type with just the main types.
 
         Returns:
-            A tuple of the main type, key type, and value type (if any).
+            Tuple of (main_type, key_type, value_type) where key and value
+            are extracted from their respective MyType wrappers.
         """
         if not self:
             return (None, None, None)
@@ -454,5 +534,9 @@ class MyType(pyd.BaseModel):
         )
 
     def is_map_item(self) -> bool:
-        """Check if this type variable represents a mapping item (key-value pair)."""
+        """Check if this type represents a mapping item (2-tuple key-value pair).
+
+        Returns:
+            True if this is a tuple[K, V] with exactly 2 non-None type args.
+        """
         return self.main_type is tuple and len(self.args) == 2 and None not in self.args

@@ -80,6 +80,7 @@ def atom(*contents: RegexVal) -> RegexVal:
 COMMON_RGXS = RegexStore.new(
     options=dict(
         separator='',
+        lazy_load=True,
     ),
     # General patterns
     _nw=r'[\W_]',

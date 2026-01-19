@@ -3,7 +3,15 @@
 ############
 ### STANDARD
 from typing import Any, Literal
-from collections.abc import Callable, Collection, Container, Iterable, Iterator, Mapping, Sequence
+from collections.abc import (
+    Callable,
+    Collection,
+    Container,
+    Iterable,
+    Iterator,
+    Mapping,
+    Sequence,
+)
 from collections import Counter, defaultdict
 import functools as ft
 
@@ -46,14 +54,18 @@ class IterUtils:
         """
         if not value:
             pass
-        elif (fn := getattr(value, 'items', None)) and callable(fn):
+        elif (fn := getattr(value, "items", None)) and callable(fn):
             return list(fn())
-        elif isinstance(value, Series) and all(isinstance(v, tuple) and len(v) == 2 for v in value):
+        elif isinstance(value, Series) and all(
+            isinstance(v, tuple) and len(v) == 2 for v in value
+        ):
             return list(value)  # type: ignore
         return []
 
     @classmethod
-    def partition(cls, items: Iterable[T], pred: Callable[[T], bool]) -> tuple[list[T], list[T]]:
+    def partition(
+        cls, items: Iterable[T], pred: Callable[[T], bool]
+    ) -> tuple[list[T], list[T]]:
         """Partition items into two lists based on a predicate.
 
         Args:
@@ -79,15 +91,22 @@ class IterUtils:
         Raises:
             AssertionError: If 'rest' is used as a predicate key name.
         """
-        assert 'rest' not in preds.keys(), 'Cannot use key "rest" in multi_partition()'
+        assert "rest" not in preds.keys(), 'Cannot use key "rest" in multi_partition()'
 
         ret: dict[str, list[T]] = {key: [] for key in preds.keys()}
-        ret['rest'] = list(items)
+        ret["rest"] = list(items)
         for key, pred in preds.items():
-            ret['rest'], ret[key] = map(list, mi.partition(pred, ret['rest']))
-            if not ret['rest']:
+            ret["rest"], ret[key] = map(list, mi.partition(pred, ret["rest"]))
+            if not ret["rest"]:
                 break
         return ret
+
+    @classmethod
+    def type_partition[C, T](
+        cls, container: Iterable[C | T], t0: type[C], t1: type[T]
+    ) -> tuple[list[C], list[T]]:
+        """Partition a container into two lists based on type."""
+        return tuple(map(list, mi.partition(lambda x: isinstance(x, type), container)))
 
     @classmethod
     def bucket(cls, items: Iterable[T], pred: Callable[[T], C]) -> dict[C, list[T]]:
@@ -107,7 +126,9 @@ class IterUtils:
     # -------------
     @classmethod
     def find(
-        cls, container: Sequence[Value], predicate: Callable[[Value], bool] | Value = bool
+        cls,
+        container: Sequence[Value],
+        predicate: Callable[[Value], bool] | Value = bool,
     ) -> int:
         """Find index of first item matching predicate or value.
 
@@ -140,10 +161,14 @@ class IterUtils:
             cmp_obj = predicate
             predicate = lambda value: (cmp_obj == value) is True
 
-        return next((key for key, value in cls.map_items(items) if predicate(value)), default)
+        return next(
+            (key for key, value in cls.map_items(items) if predicate(value)), default
+        )
 
     @classmethod
-    def next_in(cls, container: Container[Value], items: Iterable[Value]) -> Value | None:
+    def next_in(
+        cls, container: Container[Value], items: Iterable[Value]
+    ) -> Value | None:
         """Find first item from iterable that exists in container.
 
         Args:
@@ -183,7 +208,9 @@ class IterUtils:
         yield from filter(lambda tup: pred(tup[1]), cls.map_items(items))
 
     @classmethod
-    def get_all(cls, dictionary: dict[str, T], *args: str, mandatory: bool = False) -> dict[str, T]:
+    def get_all(
+        cls, dictionary: dict[str, T], *args: str, mandatory: bool = False
+    ) -> dict[str, T]:
         """Extract multiple keys from dictionary.
 
         Args:
@@ -201,7 +228,11 @@ class IterUtils:
 
     @classmethod
     def get_any(
-        cls, dictionary: dict[str, T], *args: str, default: T | None = None, unique: bool = False
+        cls,
+        dictionary: dict[str, T],
+        *args: str,
+        default: T | None = None,
+        unique: bool = False,
     ) -> T | None:
         """Get value for first matching key from dictionary.
 
@@ -216,12 +247,14 @@ class IterUtils:
             ValueError: If unique=True and multiple keys match.
         """
         ret: dict[str, T] = {
-            key: dictionary[key] for key in args if dictionary.get(key, default) != default
+            key: dictionary[key]
+            for key in args
+            if dictionary.get(key, default) != default
         }
         if len(ret) == 0:
             return default
         if len(ret) > 1 and unique:
-            raise ValueError(f'Multiple keys found in dictionary: {ret.keys()}')
+            raise ValueError(f"Multiple keys found in dictionary: {ret.keys()}")
         else:
             return next(iter(ret.values()))
 
@@ -256,7 +289,9 @@ class IterUtils:
         return ret  # type:ignore
 
     @classmethod
-    def attr_map(cls, obj: object, fields: Iterable[str], drop: bool = False) -> dict[str, Any]:
+    def attr_map(
+        cls, obj: object, fields: Iterable[str], drop: bool = False
+    ) -> dict[str, Any]:
         """Extract attributes from object into dictionary.
 
         Args:
@@ -266,7 +301,7 @@ class IterUtils:
         Returns:
             Dict mapping field names to attribute values.
         """
-        fn = ft.partial(getattr, obj, **(dict(default='') if drop else dict()))
+        fn = ft.partial(getattr, obj, **(dict(default="") if drop else dict()))
         return cls.val_map(fn, {f: f for f in fields}, drop)
 
     @classmethod
@@ -311,7 +346,9 @@ class IterUtils:
     # `4` PRESENCE
     # ------------
     @classmethod
-    def _has(cls, container: Container, *args: Any, mode: Literal['any', 'all'] = 'any') -> bool:
+    def _has(
+        cls, container: Container, *args: Any, mode: Literal["any", "all"] = "any"
+    ) -> bool:
         """Internal method to check container membership with any/all mode.
 
         Args:
@@ -321,7 +358,7 @@ class IterUtils:
         Returns:
             True if mode condition met, False if container empty or condition fails.
         """
-        fn = any if mode == 'any' else all
+        fn = any if mode == "any" else all
         return fn(arg in container for arg in args) if container else False
 
     @classmethod
@@ -334,7 +371,7 @@ class IterUtils:
         Returns:
             True if all items present, False otherwise or if container empty.
         """
-        return cls._has(container, *args, mode='all')
+        return cls._has(container, *args, mode="all")
 
     @classmethod
     def has_any(cls, container: Container[Value], *args: Value) -> bool:
@@ -346,7 +383,7 @@ class IterUtils:
         Returns:
             True if any item present, False otherwise or if container empty.
         """
-        return cls._has(container, *args, mode='any')
+        return cls._has(container, *args, mode="any")
 
     @classmethod
     def has_only(cls, container: Collection[Value], *args: Value) -> bool:
@@ -359,7 +396,9 @@ class IterUtils:
             True if container contains exactly these items.
         """
         if isinstance(container, str):
-            return len(container) == sum(map(len, args)) and cls.has_all(container, *args)  # type:ignore
+            return len(container) == sum(map(len, args)) and cls.has_all(
+                container, *args
+            )  # type:ignore
         return set(container) == set(args)
 
     @classmethod
@@ -384,7 +423,11 @@ class IterUtils:
         Returns:
             True if every container has all items, False otherwise or if empty.
         """
-        return all(cls.has_all(cont, *args) for cont in containers) if containers else False
+        return (
+            all(cls.has_all(cont, *args) for cont in containers)
+            if containers
+            else False
+        )
 
     @classmethod
     def any_has_all(cls, containers: Iterable[Container[Value]], *args: Value) -> bool:
@@ -396,7 +439,11 @@ class IterUtils:
         Returns:
             True if at least one container has all items, False otherwise or if empty.
         """
-        return any(cls.has_all(cont, *args) for cont in containers) if containers else False
+        return (
+            any(cls.has_all(cont, *args) for cont in containers)
+            if containers
+            else False
+        )
 
     @classmethod
     def all_has_any(cls, containers: Iterable[Container[Value]], *args: Value) -> bool:
@@ -408,7 +455,11 @@ class IterUtils:
         Returns:
             True if every container has at least one item, False otherwise or if empty.
         """
-        return all(cls.has_any(cont, *args) for cont in containers) if containers else False
+        return (
+            all(cls.has_any(cont, *args) for cont in containers)
+            if containers
+            else False
+        )
 
     @classmethod
     def any_has_any(cls, containers: Iterable[Container[Value]], *args: Value) -> bool:
@@ -420,7 +471,11 @@ class IterUtils:
         Returns:
             True if at least one container has at least one item, False otherwise or if empty.
         """
-        return any(cls.has_any(cont, *args) for cont in containers) if containers else False
+        return (
+            any(cls.has_any(cont, *args) for cont in containers)
+            if containers
+            else False
+        )
 
     # --------------
     # `5` COMPARISON
@@ -434,7 +489,7 @@ class IterUtils:
         Returns:
             Longest common prefix string.
         """
-        return ''.join(mi.longest_common_prefix(strings))
+        return "".join(mi.longest_common_prefix(strings))
 
     @classmethod
     def shared_suffix(cls, *strings: str) -> str:
@@ -445,10 +500,12 @@ class IterUtils:
         Returns:
             Longest common suffix string.
         """
-        return ''.join(reversed(list(mi.longest_common_prefix(map(reversed, strings)))))
+        return "".join(reversed(list(mi.longest_common_prefix(map(reversed, strings)))))
 
     @classmethod
-    def common_elements(cls, lhs: Sequence[T] | set[T], rhs: Sequence[T] | set[T]) -> list[T]:
+    def common_elements(
+        cls, lhs: Sequence[T] | set[T], rhs: Sequence[T] | set[T]
+    ) -> list[T]:
         """Find elements common to both sequences, preserving multiplicities.
 
         Args:

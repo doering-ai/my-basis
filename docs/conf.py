@@ -268,6 +268,7 @@ ObjType = Literal[
 RGXS = RegexStore.new(
     options=dict(
         force_named_groups=True,
+        lazy_load=True,
     ),
     symbol=r'\b[_[:alpha:]]\w*\b',
     envvar=r'\$[_[:upper:]]+\b',
@@ -278,7 +279,7 @@ RGXS = RegexStore.new(
             r'[[:upper:]\d_]+',
         ],
     ),
-    local_reference=r'`((\.?(?P>symbol))+(?P<parens>\(\))?|(?P>envvar))`',
+    local_reference=r'(?<![\}\\])`((\.?(?P>symbol))+(?P<parens>\(\))?|(?P>envvar))`(?!`)',
 )
 
 

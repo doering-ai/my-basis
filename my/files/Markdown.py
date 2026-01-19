@@ -35,6 +35,7 @@ class Markdown(pyd.BaseModel):
     RGXS: ClassVar[RegexStore] = RegexStore.new(
         options=dict(
             separator=r' *\n+',
+            lazy_load=True,
         ),
         # Components
         marks=r'(?m)^#{1,6} +',

@@ -2,10 +2,12 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import Literal, ClassVar, Any, Self
+from typing import Literal, ClassVar, Any, Self, Annotated
 from collections.abc import Iterable, Iterator, Callable, Mapping
+from collections import deque
 import functools as ft
 import contextlib as ctx
+from threading import Lock
 
 ### EXTERNAL
 import more_itertools as mi
@@ -60,6 +62,8 @@ RegexFunction = Literal['match', 'fullmatch', 'search', 'polymatch']
 DEBUG = False
 NO_FLAG = RegexFlag(0)
 
+LockField = Annotated[Lock, ut.pyd_schemify(Lock)]
+
 
 ############
 ### BODY ###
@@ -91,9 +95,9 @@ class RegexStore(pyd.BaseModel):
     # ----------------
     META_RGXS: ClassVar[dict[str, re.Pattern]] = META_RGXS
 
-    # --------------
-    # Public Members
-    # --------------
+    # -------
+    # Members
+    # -------
     # Uncompiled expressions, ready for reuse
     definitions: dict[str, str] = {}
 
@@ -104,19 +108,25 @@ class RegexStore(pyd.BaseModel):
     parsers: dict[str, RegexParser] = {}
     routers: dict[str, list[str]] = {}
 
-    # Private Members
+    # Function used to clean matched strings
     strip: Callable[[str], str] = pyd.Field(default=lambda x: x, exclude=True)
+    lazy_queue: deque[Callable[[], None]] = pyd.Field(default_factory=deque, exclude=True)
+    is_loaded: bool = pyd.Field(default=True, exclude=True)
+    load_lock: LockField = pyd.Field(default_factory=Lock, exclude=True)
 
     # -------------
     # Store Options
     # -------------
     class Options(pyd.BaseModel):
+        """Configuration options for RegexStore behavior -- must be set at initialization time."""
+
         # Convenience options
         init_formatter: Callable[..., str] | None = None
         formatter: Callable[..., str] | None = None
         separator: str = r' *'
         force_named_groups: bool = False
         force_reinvocations: bool = True
+        lazy_load: bool = True
 
         # Autostrip behavior
         autostrip_spaces: bool = True
@@ -135,9 +145,7 @@ class RegexStore(pyd.BaseModel):
         imports: list[tuple[Self, Iterable[str]]] | None = None,
         **definitions: RegexDef | Any,
     ) -> Self:
-        """
-        This is the primary interface for creating new stores, allowing callers to specify their
-        patterns upfront as direct arguments to this function.
+        """Create a new store, likely specifying almost all your patterns upfront.
 
         Args:
             options: A dictionary of store-level options to apply as member variables.
@@ -153,24 +161,46 @@ class RegexStore(pyd.BaseModel):
             options = cls.Options(**options)
         store = cls(options=options)
 
+        _init_load = ft.partial(store.initial_load, imports=imports, definitions=definitions)
+        if store.options.lazy_load:
+            store.lazy_queue.append(_init_load)
+            store.is_loaded = False
+        else:
+            _init_load()
+
+        return store
+
+    def initial_load(
+        self,
+        imports: list[tuple[Self, Iterable[str]]] | None,
+        definitions: dict[str, RegexDef | Any],
+    ) -> None:
+        """Initial loading of patterns into the store, including imports and formatting."""
         # II. Import the requested patterns from other stores
         if imports:
             for source, names in imports:
                 for name in source.find_all_invocations(set(names)):
-                    store.definitions[name] = source.definitions[name]
-                    store.patterns[name] = source.patterns[name]
+                    self.definitions[name] = source.definitions[name]
+                    self.patterns[name] = source.patterns[name]
                     if name in source.parsers:
-                        store.parsers[name] = source.parsers[name]
+                        self.parsers[name] = source.parsers[name]
 
         # III. Preformat the given definitions with the user-defined formatter function
-        if (fn := store.options.init_formatter) is not None:
-            definitions = ut.val_map(ft.partial(cls.format_definition, fn=fn), definitions)
+        if (fn := self.options.init_formatter) is not None:
+            definitions = ut.val_map(ft.partial(self.format_definition, fn=fn), definitions)
 
         # IV. Set the values of the store
         for name, val in definitions.items():
-            store[name] = val
+            self[name] = val
 
-        return store
+    def load(self) -> None:
+        """Load all lazy definitions into the store now."""
+        if not self.is_loaded:
+            with self.load_lock:
+                while self.lazy_queue:
+                    fn = self.lazy_queue.popleft()
+                    fn()
+                self.is_loaded = True
 
     @pyd.model_validator(mode='after')
     def _process_options(self) -> Self:
@@ -201,6 +231,7 @@ class RegexStore(pyd.BaseModel):
     # -------------------
     @classmethod
     def format_definition(cls, fn: Callable[..., str], value: RegexDef) -> RegexDef:
+        """Apply a formatting function to a regex definition value, if possible."""
         if isinstance(value, Pattern):
             pass
         elif isinstance(value, tuple) and len(value) == 2 and callable(value[1]):
@@ -243,6 +274,8 @@ class RegexStore(pyd.BaseModel):
         Args:
             expr: The regex expression to print.
             depth: Current indentation depth.
+            maxdepth: Maximum depth to recurse (0 for unlimited).
+            threshold: Minimum length of group body to consider for splitting.
         Returns:
             Multi-line string representation with indentation showing nesting.
         """
@@ -271,18 +304,15 @@ class RegexStore(pyd.BaseModel):
         return r'|\n'.join(sections)
 
     def _parse_mark(self, mark: str) -> tuple[GroupKind, str, str, str]:
-        """
-        Parses a given string of "mark syntax" DSL (see class documentation) into valid regex
-        snippets.
+        """Parses a given string of "mark syntax" DSL into valid regex snippets.
 
         Args:
             mark: Custom mark string using the store's DSL syntax.
         Returns:
-            Tuple of (kind, start, separator, quantifier) where:
-            - kind: GroupKind enum value
-            - start: Opening group syntax (e.g., `(?:`, `(?>`)
-            - separator: String to join children (defaults to self.separator)
-            - quantifier: Quantifier string (e.g., `?`, `+`, `*`)
+            1. GroupKind enum value
+            2. Opening group syntax (e.g., `(?:`, `(?>`)
+            3. String to join children (defaults to self.separator)
+            4. Quantifier string (e.g., `?`, `+`, `*`)
         """
         mark = mark.strip()
         match = META_RGXS['struct_mark'].fullmatch(mark)
@@ -325,6 +355,7 @@ class RegexStore(pyd.BaseModel):
         Returns:
             (validated_patterns, cleaned_text_string)
         """
+        self.load() if not self.is_loaded else None
         if isinstance(patterns, str):
             patterns = [patterns]
         assert ut.has_all(self.patterns, *patterns), f'Unknown pattern(s): {patterns}'
@@ -332,13 +363,14 @@ class RegexStore(pyd.BaseModel):
 
     def _parse_tuple(self, data: RegexTup) -> tuple[str, RegexList, str, str]:
         if (n := len(data)) == 2:
-            assert typist.tuple_is(data, tuple[str, list]), f'Invalid group spec: {data}'
+            assert typist.check(data, tuple[str, list]), f'Invalid group spec: {data}'
             mark, children = data
             return mark, children, '', ''
         elif n == 4:
-            assert typist.tuple_is(data, tuple[str, str, list, str]), (
+            assert typist.check(data, tuple[str, str, list, str]), (
                 f'Invalid group spec (w/ prefix & suffix): {data}'
             )
+
             mark, prefix, children, suffix = data
             # The prefix and suffix weren't formatted upfront
             if self.options.formatter is not None:
@@ -582,7 +614,12 @@ class RegexStore(pyd.BaseModel):
     @compose.register
     def _compose_dict(self, data: dict, sep: str | None = None) -> str:
         # III. Special case: an explicitly-specified tuple (likely by a .yaml file)
-        tup = (data.get('mark', ''), data.get('pre', ''), data.get('body', []), data.get('suf', ''))
+        tup = (
+            data.get('mark', ''),
+            data.get('pre', ''),
+            data.get('body', []),
+            data.get('suf', ''),
+        )
         return self.compose_group(*self._parse_tuple(tup))
 
     def clean(self, name: str, text: Buffer) -> set[str]:
@@ -707,6 +744,17 @@ class RegexStore(pyd.BaseModel):
                     values[i] = f'{value}{rb}' if ln > rn else f'{lb}{value}'
         return values
 
+    def parse_invocations(self, text: str) -> set[str]:
+        """Find all group invocations in text and transitively expand dependencies.
+
+        Args:
+            text: Regex pattern text to analyze.
+        Returns:
+            Set of all group names invoked directly or indirectly.
+        """
+        invocations = {group.name for group in Regex.group_iterator(text, mask=GroupKind.INVOC)}
+        return self.find_all_invocations(invocations)
+
     # ------------------
     # `*` Public Methods
     # ------------------
@@ -714,12 +762,17 @@ class RegexStore(pyd.BaseModel):
     # `*0` Overrides
     # --------------
     def __len__(self) -> int:
+        self.load() if not self.is_loaded else None
         return len(self.patterns)
 
     def __contains__(self, key: str) -> bool:
+        self.load() if not self.is_loaded else None
         return key in self.patterns
 
     def __setitem__(self, name: str, param: RegexDef) -> None:
+        if not self.is_loaded:
+            self.lazy_queue.append(ft.partial(self.__setitem__, name, param))
+            return
         assert name not in self.patterns, f'Duplicate pattern name: {name}'
 
         # Pull out the parser, if present
@@ -730,13 +783,15 @@ class RegexStore(pyd.BaseModel):
             val = param  # type: ignore
             parser = None
 
-        self.define(name, val, parser)  # type: ignore
+        self.define(name, val, parser)
 
     def __getitem__(self, name: str) -> Pattern:
+        self.load() if not self.is_loaded else None
         assert name in self.patterns, f'Pattern not found: {name}'
         return self.patterns[name]
 
     def __ior__(self, other: dict[str, RegexDef] | Self) -> Self:
+        self.load() if not self.is_loaded else None
         if isinstance(other, RegexStore):
             for name in other.keys():
                 if name in other.parsers:
@@ -748,26 +803,29 @@ class RegexStore(pyd.BaseModel):
                 self[name] = param
         return self
 
-    def pop(self, name: str) -> Pattern:
-        assert name in self.patterns, f'Pattern not found: {name}'
-        del self.definitions[name]
-        if name in self.parsers:
-            del self.parsers[name]
-        return self.patterns.pop(name)
-
     def get(self, name: str, default: Pattern | None = None) -> Pattern | None:
+        """Get a compiled pattern by name, or return a default if not found."""
+        self.load() if not self.is_loaded else None
         return self.patterns.get(name, default)
 
     def get_def(self, name: str, default: str | None = None) -> str | None:
+        """Get a raw definition by name, or return a default if not found."""
+        self.load() if not self.is_loaded else None
         return self.definitions.get(name, default)
 
     def keys(self) -> list[str]:
+        """Get a list of all defined pattern names in the store."""
+        self.load() if not self.is_loaded else None
         return list(self.patterns.keys())
 
     def values(self) -> list[Pattern]:
+        """Get a list of all compiled patterns in the store."""
+        self.load() if not self.is_loaded else None
         return list(self.patterns.values())
 
     def items(self) -> list[tuple[str, Pattern]]:
+        """Get a list of all (name, pattern) pairs in the store."""
+        self.load() if not self.is_loaded else None
         return list(self.patterns.items())
 
     # -------------------------------
@@ -819,6 +877,7 @@ class RegexStore(pyd.BaseModel):
         Yields:
             MatchData objects for each match found.
         """
+        self.load() if not self.is_loaded else None
         rgx = self.patterns[name]
         parse = ft.partial(self.parse, pattern_name=name)
         if isinstance(text, Buffer):
@@ -888,6 +947,7 @@ class RegexStore(pyd.BaseModel):
         Returns:
             Single MatchData with all captures from all matches merged.
         """
+        self.load() if not self.is_loaded else None
         pd = ParseData()
         if isinstance(text, str):
             text = RegexBuffer(text)
@@ -906,17 +966,6 @@ class RegexStore(pyd.BaseModel):
     # -------------------------
     # `*2` Functional Utilities
     # -------------------------
-    def parse_invocations(self, text: str) -> set[str]:
-        """Find all group invocations in text and transitively expand dependencies.
-
-        Args:
-            text: Regex pattern text to analyze.
-        Returns:
-            Set of all group names invoked directly or indirectly.
-        """
-        invocations = {group.name for group in Regex.group_iterator(text, mask=GroupKind.INVOC)}
-        return self.find_all_invocations(invocations)
-
     def partial(
         self,
         name: str,
@@ -930,6 +979,7 @@ class RegexStore(pyd.BaseModel):
         Returns:
             Function that takes text and returns MatchData using the specified pattern.
         """
+        self.load() if not self.is_loaded else None
         return ft.partial(getattr(self, func), name)
 
     def apply(
@@ -947,6 +997,7 @@ class RegexStore(pyd.BaseModel):
         Yields:
             MatchData objects for each text in order.
         """
+        self.load() if not self.is_loaded else None
         yield from map(self.partial(name, func), texts)
 
     def filter(
@@ -964,6 +1015,7 @@ class RegexStore(pyd.BaseModel):
         Yields:
             Only those texts that successfully match the pattern.
         """
+        self.load() if not self.is_loaded else None
         fn = self.partial(name, func)
         yield from filter(lambda text: bool(fn(text)), texts)
 
@@ -973,8 +1025,8 @@ class RegexStore(pyd.BaseModel):
     def define_router_tree(self, router: str, items: Mapping[str, RegexVal], **kwargs: str) -> None:
         """Define a router pattern that classifies text into named categories.
 
-        Creates two patterns: one optimized router (<router>) and one with route tracking
-        (<router>_router) that captures which category matched.
+        Creates two patterns: one optimized router (`<router>`) and one with route tracking
+        (`<router>_router`) that captures which category matched.
 
         Args:
             router: Base name for the router patterns.
@@ -983,6 +1035,10 @@ class RegexStore(pyd.BaseModel):
         Raises:
             AssertionError: If router name is already defined.
         """
+        if not self.is_loaded:
+            self.lazy_queue.append(ft.partial(self.define_router_tree, router, items, **kwargs))
+            return
+
         assert router not in self.routers, f'Duplicate router name: {router}'
         items = {k: v for k, v in items.items() if v}
         self.routers[router] = list(items.keys())
@@ -1004,7 +1060,12 @@ class RegexStore(pyd.BaseModel):
         routes = [
             (i, rgx if isinstance(rgx, list) else [rgx]) for i, rgx in enumerate(items.values())
         ]
-        self[f'{router}_router'] = ('|:', p1, [(f'<|>P<rt_{i}>', rgx) for i, rgx in routes], s1)
+        self[f'{router}_router'] = (
+            '|:',
+            p1,
+            [(f'<|>P<rt_{i}>', rgx) for i, rgx in routes],
+            s1,
+        )
 
     def route_match(self, router: str, text: str | MatchData) -> str:
         """Determine which category a text matches in a router tree.
@@ -1017,6 +1078,7 @@ class RegexStore(pyd.BaseModel):
         Raises:
             AssertionError: If router name is not found.
         """
+        self.load() if not self.is_loaded else None
         assert router in self.routers, f'Unknown router: {router}'
         if isinstance(text, MatchData):
             text = text.text
@@ -1038,6 +1100,7 @@ class RegexStore(pyd.BaseModel):
         Raises:
             AssertionError: If router name is not found or match object is invalid.
         """
+        self.load() if not self.is_loaded else None
         assert router in self.routers, f'Unknown router: {router}'
         if isinstance(text, MatchData):
             text = text.text
@@ -1059,10 +1122,11 @@ class RegexStore(pyd.BaseModel):
         """Sanitize a pattern by normalizing inline flag syntax.
 
         Args:
-            pattern: Pattern to sanitize (string, Pattern, Buffer, or pattern name).
+            pattern: Either a known pattern's name, a compiled pattern, or a raw expression.
         Returns:
             Sanitized pattern string with normalized flag syntax.
         """
+        self.load() if not self.is_loaded else None
         if isinstance(pattern, Pattern):
             pattern = pattern.pattern
         elif isinstance(pattern, str) and pattern in self.patterns:
@@ -1081,16 +1145,16 @@ class RegexStore(pyd.BaseModel):
         print_head: bool = True,
         **kwargs: Any,
     ) -> str:
-        """
-        Pretty-print a regex pattern as an indented multiline tree structure, primarily for use
-        in debugging.
+        """Pretty-print a regex pattern as an indented multiline tree structure.
 
         Args:
             pattern: The name of an existing pattern, a compiled pattern, or a raw expression.
-            print_head: Whether to include the pattern header (i.e. '(?:DEFINE)...)') in output.
+            print_head: Whether to include the pattern header (i.e. `(?:DEFINE)...)`) in output.
+            **kwargs: Additional arguments passed to `_tree_print()`.
         Returns:
             Multi-line string representation with indentation showing nesting.
         """
+        self.load() if not self.is_loaded else None
         # 0. Normalize & validate arguments
         body: Regex
         if isinstance(pattern, Regex):
@@ -1119,7 +1183,7 @@ class RegexStore(pyd.BaseModel):
             head, *body = body
         elif print_head and isinstance(pattern, str) and pattern in self:
             head = mi.first(Regex.atomize(self.patterns[pattern].pattern))
-            assert head.is_group_of_kind(GroupKind.DEFINE)
+            assert isinstance(head, GroupAtom) and head.kind == GroupKind.DEFINE
 
         # II. Pretty-print the body & head separately
         kwargs = dict(maxdepth=6, threshold=48) | kwargs

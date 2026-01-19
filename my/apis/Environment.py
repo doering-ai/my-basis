@@ -27,9 +27,11 @@ initial_env = dict(os.environ)
 ### BODY ###
 ############
 class Environment(pyd.BaseModel):
-    """
-    An ergonomic interface for reading environment variables with intelligent type coercion,
-    automatic dotenv loading, and performant caching for worry-free use. For example:
+    """An ergonomic interface for reading environment variables.
+
+    As opposed to the builtin interface, this singleton class provides intelligent type coercion,
+    automatic dotenv loading, performant caching, and most importantly, a much clearer and more
+    ergonomic syntax.
 
     ```python
     from my.apis import env
@@ -69,6 +71,7 @@ class Environment(pyd.BaseModel):
     RGXS: ClassVar[RegexStore] = RegexStore.new(
         options=dict(
             force_named_groups=True,
+            lazy_load=True,
         ),
         name=r'[_\d[:upper:]]+',
         interpolation=r'\$(?P>name)\b|\${(?P>name)}',
@@ -100,6 +103,7 @@ class Environment(pyd.BaseModel):
         return ret
 
     def get(self, key: str, default: str = '') -> str:
+        """Get an environment variable as a string, with optional default."""
         return Environment._get(key, default)
 
     # -------
@@ -134,14 +138,14 @@ class Environment(pyd.BaseModel):
     # -----
     # PATHS
     # -----
-    class PathEnv:
+    class _PathEnv:
         def __getattr__(self, key: str) -> Path:
             return Environment._path(key)
 
     @ft.cached_property
-    def paths(self) -> 'Environment.PathEnv':
+    def paths(self) -> 'Environment._PathEnv':
         """A cached property allowing for ergonomic dot-notation access to coerced path vars."""
-        return self.PathEnv()
+        return self._PathEnv()
 
     @ft.lru_cache(maxsize=256)
     @staticmethod
@@ -170,20 +174,20 @@ class Environment(pyd.BaseModel):
     # -----
     # FLAGS
     # -----
-    class FlagEnv:
+    class _FlagEnv:
         def __getattr__(self, key: str) -> int:
             return Environment._flag(key)
 
     @ft.cached_property
-    def flags(self) -> 'Environment.FlagEnv':
+    def flags(self) -> 'Environment._FlagEnv':
         """A cached property allowing for ergonomic dot-notation access to coerced flag vars."""
-        return self.FlagEnv()
+        return self._FlagEnv()
 
     @ft.lru_cache(maxsize=256)
     @staticmethod
     def _flag(key: str, default: int = 0) -> int:
-        assert key, 'FlagEnv keys must be non-empty'
-        assert key.isupper(), 'FlagEnv keys must be uppercase'
+        assert key, '_FlagEnv keys must be non-empty'
+        assert key.isupper(), '_FlagEnv keys must be uppercase'
         val = Environment._get(key).strip(' ')
 
         if not val:
@@ -199,6 +203,7 @@ class Environment(pyd.BaseModel):
 
     def flag(self, key: str, default: int = 0) -> int:
         """Get environment variable as an integer flag, or 0 if no set or coercable.
+
         Recognizes: `t|true|y|yes|enable|enabled|on` as 1.
 
         Args:
@@ -216,6 +221,7 @@ class Environment(pyd.BaseModel):
     # ---------
     @ft.cached_property
     def is_dev(self) -> bool:
+        """Check if environment is in development mode, based on the `$MY_MODE` var."""
         return self.get('MY_MODE', 'dev').lower().startswith('dev')
 
     def __contains__(self, key: object) -> bool:

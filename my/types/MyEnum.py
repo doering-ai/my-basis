@@ -31,7 +31,7 @@ class MyEnum(Enum):
 
     ```{note}
     Total ordering is implemented based on enum value for numeric enums, and declaration order
-    otherwise -- if you want ordering based on string values, you'll have to override those methods.
+    otherwise -- if you want ordering based on string values, you'll have to override `__lt__()`.
     ```
     """
 
@@ -65,19 +65,23 @@ class MyEnum(Enum):
             elif uval in members:
                 # I.ii. Find by name
                 return members[uval]
-            elif key := ut.find_key(cls._aliases(), lambda rgx: bool(rgx.fullmatch(uval))):
+            elif key := ut.find_key(
+                cls._aliases(), lambda rgx: bool(rgx.fullmatch(uval))
+            ):
                 # I.iii. Find by alias
                 return members[key.upper()]
-            elif issubclass(cls, Flag) and '|' in uval:
+            elif issubclass(cls, Flag) and "|" in uval:
                 # I.iv. Break down flags into a list
-                value = uval.split('|')
+                value = uval.split("|")
 
         # II. Handle int flags
         if isinstance(value, int) and issubclass(cls, Flag):
             return cls(value)
 
         # III. Immediate check against values (instead of keys)
-        if type(value) is cls.vtype() and (key := ut.find_key(members, lambda v: v.value == value)):
+        if type(value) is cls.vtype() and (
+            key := ut.find_key(members, lambda v: v.value == value)
+        ):
             return members[key]
 
         # IV. Handle lists of values
@@ -85,7 +89,7 @@ class MyEnum(Enum):
             assert issubclass(cls, Flag)
             return cls(sum(val.value for val in map(cls.read, value)))
 
-        raise ValueError(f'Invalid {cls.__name__} value: {value}')
+        raise ValueError(f"Invalid {cls.__name__} value: {value}")
 
     def write(self) -> str:
         """Convert enum member to string representation.
@@ -98,8 +102,12 @@ class MyEnum(Enum):
         elif self.name:
             return self.name.lower()
         elif isinstance(self, Flag):
-            return '|'.join(
-                [flag.name for flag in type(self) if flag.name and self.value & flag.value]
+            return "|".join(
+                [
+                    flag.name
+                    for flag in type(self)
+                    if flag.name and self.value & flag.value
+                ]
             )
         else:
             return str(self)

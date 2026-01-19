@@ -61,14 +61,19 @@ class TestMyType:
             assert not inst
             return
         assert inst is not None
-        if isinstance(exp, type):
+        if not isinstance(exp, tuple):
             exp = (exp,)
 
-        if len(exp) == 1:
+        if inst.is_split:
+            assert len(exp) == 1
+            found_args = {arg.src_type for arg in inst.args}
+            exp_union_args = {arg.src_type for arg in cls.parse(exp[0]).args}
+            assert found_args == exp_union_args
+        elif len(exp) == 1:
             assert inst.main_type is exp[0]
             assert not inst.val_type
             assert not inst.key_type
-        if len(exp) == 2:
+        elif len(exp) == 2:
             assert inst.main_type is exp[0]
             self.check_inst(inst.val_type, exp[1])
             assert not inst.key_type
@@ -308,8 +313,8 @@ class TestMyType:
             (['a', 'b', 'c'], (list, str)),
             ([1.0, 2.0, 3.0], (list, float)),
             # ---- Heterogeneous lists ----
-            ([1, 'a', 2.0], (list, (int, str, float))),
-            ([1, 2, 'three'], (list, (int, str))),
+            ([1, 'a', 2.0], (list, int | str | float)),
+            ([1, 2, 'three'], (list, int | str)),
             # ---- Homogeneous tuples ----
             ((1, 2, 3), (tuple, int)),
             (('a', 'b', 'c'), (tuple, str)),
@@ -317,13 +322,13 @@ class TestMyType:
             ({1, 2, 3}, (set, int)),
             ({'a', 'b', 'c'}, (set, str)),
             # ---- Heterogeneous sets ----
-            ({1, 'a'}, (set, (int, str))),
+            ({1, 'a'}, (set, int | str)),
             # ---- Homogeneous dicts ----
             ({'a': 1, 'b': 2}, (dict, str, int)),
             ({1: 'a', 2: 'b'}, (dict, int, str)),
             # ---- Heterogeneous dicts ----
-            ({'a': 1, 'b': 'c'}, (dict, str, (int, str))),
-            ({1: 'a', 'b': 2}, (dict, (int, str), (str, int))),
+            ({'a': 1, 'b': 'c'}, (dict, str, int | str)),
+            ({1: 'a', 'b': 2}, (dict, int | str, str | int)),
             # ---- Nested structures ----
             ([[1, 2], [3, 4]], (list, (list, int))),
             ([{'a': 1}, {'b': 2}], (list, (dict, str, int))),
@@ -509,7 +514,7 @@ class TestMyType:
     def test_check__tuple(self, data, tvar: type, expected: bool):
         assert cls.parse(tvar).check(data) == expected
 
-    def test_check_iter(self, data, tvar):
+    def test_check_iter(self):
         # ---- Test successful iteration ----
         int_type = cls.parse(int)
         results = list(int_type.check_iter([1, 2, 3]))
@@ -527,48 +532,6 @@ class TestMyType:
         list_int_type = cls.parse(list[int])
         results = list(list_int_type.check_iter([[1, 2], [3, 4], ['a']]))
         assert results == [True, True, False]
-
-    @pyt.mark.parametrize(
-        'tvar1, tvar2, expected',
-        boolmap(
-            false=[
-                # ---- Not subclasses ----
-                (str, int),
-                (int, str),
-                (list, dict),
-                (dict, list),
-                (list[int], dict[str, int]),
-                # ---- Generic vs specific ----
-                (int, list[int]),
-                (str, dict[str, int]),
-            ],
-            true=[
-                # ---- Identity ----
-                (str, str),
-                (int, int),
-                (list, list),
-                (dict, dict),
-                # ---- Actual subclasses ----
-                (bool, int),
-                (dict, Mapping),
-                (list, Sequence),
-                (set, Container),
-                (Counter, dict),
-                (Counter, Mapping),
-                (deque, Sequence),
-                # ---- Generics of subclasses ----
-                (list[int], list),
-                (dict[str, int], dict),
-                (dict[str, int], Mapping),
-                (list[str], Sequence),
-                # ---- Literals ----
-                (Literal[1, 2], Literal),
-                (Literal['a', 'b'], Literal),
-            ],
-        ),
-    )
-    def test_issubclass(self, tvar1: type, tvar2: type, expected: bool):
-        assert cls.parse(tvar1).issubclass(tvar2) == expected
 
     @pyt.mark.parametrize(
         'tvar, expected',

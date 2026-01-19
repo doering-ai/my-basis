@@ -33,7 +33,7 @@ class Cache[Key: Hashable, Value](pyd.BaseModel):
     def __getitem__(self, key: Key) -> Value | None:
         if (ret := self.data.pop(key, None)) is not None:
             self.data[key] = ret  # move it to the bottom of the map
-        return None
+        return ret
 
     def __setitem__(self, key: Key, value: Value) -> None:
         if key not in self.data and len(self.data) >= self.maxsize:

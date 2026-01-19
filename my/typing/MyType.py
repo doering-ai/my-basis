@@ -304,7 +304,7 @@ class MyType(pyd.BaseModel):
                 and isinstance(value, self.origin)
                 # Confirm args
                 and len(self.args) > 0
-                and self.args[-1].src_type is not Ellipsis
+                and self.args[-1].src_type is not types.EllipsisType
                 and len(value) == len(self.args)
                 # Check them in turn
                 and all(arg.check(val) for val, arg in zip(value, self.args, strict=True))
@@ -498,26 +498,6 @@ class MyType(pyd.BaseModel):
         elif ty.is_typeddict(self.src_type):
             yield from map(self.parse, self.src_type.__annotations__.values())
 
-    def issubclass(self, tvar: 'type | types.UnionType | MyType | None') -> bool:
-        """Check if this type is a subclass of another type.
-
-        Args:
-            tvar: The type to check against (can be type, UnionType, MyType, or None).
-        Returns:
-            True if this type is a subclass of tvar.
-        """
-        if isinstance(tvar, MyType):
-            if self.origin is Literal and tvar.origin is Literal:
-                return True
-            tvar = tvar.main_type
-
-        if self.origin is Literal and tvar is Literal:
-            return True
-        if self.main_type is None or tvar is None:
-            return False
-
-        return issubclass(self.main_type, tvar)
-
     def summarize(self) -> tuple[type | None, type | None, type | None]:
         """Get a simplified summary of this type with just the main types.
 
@@ -539,4 +519,7 @@ class MyType(pyd.BaseModel):
         Returns:
             True if this is a tuple[K, V] with exactly 2 non-None type args.
         """
-        return self.main_type is tuple and len(self.args) == 2 and None not in self.args
+        return self.main_type is tuple and (
+            (len(self.args) == 2 and self.args[-1].src_type is not types.EllipsisType)
+            or len(self.args) == 0
+        )

@@ -61,7 +61,6 @@ profile_default/
 
 # Documentation
 _build/
-_source/
 
 # Publishing
 *.egg

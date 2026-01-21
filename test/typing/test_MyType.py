@@ -104,7 +104,7 @@ class TestMyType:
             MyType,
         ],
     )
-    def test_parse_atomic(self, data):
+    def test_parse__atomic(self, data):
         inst = cls.parse(data)
         assert inst.main_type is data
         assert len(inst.args) == 0
@@ -142,7 +142,7 @@ class TestMyType:
             (list[dict[str, int]], (list, (dict, str, int))),
         ],
     )
-    def test_parse_generic(self, data, expected: Expected):
+    def test_parse__generic(self, data, expected: Expected):
         inst = cls.parse(data)
         self.check_inst(inst, expected)
 
@@ -204,7 +204,7 @@ class TestMyType:
             ),
         ],
     )
-    def test_parse_literal(self, data, expected: list[type], test_vals: dict[str, list]):
+    def test_parse__literal(self, data, expected: list[type], test_vals: dict[str, list]):
         inst = cls.parse(data)
 
         if inst.origin is Literal:
@@ -246,7 +246,7 @@ class TestMyType:
             (list[int] | dict[str, list[int]], [(list, int), (dict, str, (list, int))]),
         ],
     )
-    def test_parse_split(self, data, expected: list[Expected]):
+    def test_parse__split(self, data, expected: list[Expected]):
         inst = cls.parse(data)
         assert inst.is_split
         for arg, exp in zip(inst.args, expected, strict=True):
@@ -263,7 +263,7 @@ class TestMyType:
             (typing.Sequence[Any], Sequence),
         ],
     )
-    def test_parse_abstract(self, data, expected: Expected):
+    def test_parse__abstract(self, data, expected: Expected):
         inst = cls.parse(data)
         self.check_inst(inst, expected)
 
@@ -282,7 +282,7 @@ class TestMyType:
             Generator[int, None, float],
         ],
     )
-    def test_parse_unhandled(self, data):
+    def test_parse__unhandled(self, data):
         inst = cls.parse(data)
         assert not inst
         assert inst.main_type is None
@@ -537,20 +537,20 @@ class TestMyType:
         'tvar, expected',
         boolmap(
             false=[
-                (int,),
-                (str,),
-                (list[int],),
-                (dict[str, int],),
-                (tuple[int],),
-                (tuple[int, int, int],),
-                (tuple[int, ...],),
+                int,
+                str,
+                list[int],
+                dict[str, int],
+                tuple[int],
+                tuple[int, int, int],
+                tuple[int, ...],
             ],
             true=[
-                (tuple,),
-                (tuple[str, int],),
-                (tuple[int, str],),
-                (tuple[str, list[int]],),
-                (tuple[dict[str, int], float],),
+                tuple,
+                tuple[str, int],
+                tuple[int, str],
+                tuple[str, list[int]],
+                tuple[dict[str, int], float],
             ],
         ),
     )

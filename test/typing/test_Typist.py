@@ -293,7 +293,7 @@ class TestTypist:
             ('no', bool, False),
             ('n', bool, False),
             ('Disabled', bool, False),
-            # ---- Noops ----
+            # ---- NOOPS ----
             ('hello', str, 'hello'),
             (5, int, 5),
         ],
@@ -491,6 +491,29 @@ class TestTypist:
     @pyt.mark.parametrize(
         'data, target, expected',
         [
+            # ---- Catching NOOPs ----
+            ('1', int | float | bool | str, '1'),
+            ('1', list[str] | str, 1),
+            (['1'], str | list[str], ['1']),  # avoid deserializing
+            ((1, 2), tuple[str, ...] | tuple[int, int], (1, 2)),
+            # ---- Avoiding problematic clauses ----
+            ('1', None | int, 1),
+            # ---- Arbitrary Preferences ----
+            (1, str | bool, True),
+            (2, bool | str, '2'),
+            ('-1', float | int, -1),
+            ('-1.5', int | float, -1.5),
+            (['1', '2'], str | list[int], [1, 2]),
+            (['1.0', '2.0'], str | list[int] | list[float], [1.0, 2.0]),
+            (['enabled', 'OFF'], str | list[bool], [1, 2]),
+        ],
+    )
+    def test_cast__unions(self, data: list, target: type, expected: object):
+        assert typist.cast(data, target) == expected
+
+    @pyt.mark.parametrize(
+        'data, target, expected',
+        [
             # Container <-.-> Atomic
             ('1', tuple[int], (1,)),
             (['1'], int, 1),
@@ -508,6 +531,42 @@ class TestTypist:
     )
     def test_cast__edge(self, data: list, target: type, expected: object):
         assert typist.cast(data, target) == expected
+
+    def test_cast__firsts_and_atomics(self):
+        assert typist.cast(['A', 'B'], str) == 'A'
+        assert typist.cast(['A'], str) == 'A'
+        assert typist.cast([], str) is None
+
+        typist.firsts = False
+        assert typist.cast(['A', 'B'], str) is None
+        assert typist.cast(['A'], str) == 'A'
+        assert typist.cast([], str) is None
+
+        typist.atomics = False
+        assert typist.cast(['A', 'B'], str) is None
+        assert typist.cast(['A'], str) is None
+        assert typist.cast([], str) is None
+
+        typist.firsts = typist.atomics = True
+
+    def test_cast__splits_and_wraps(self):
+        assert typist.cast('A.B', set[str]) == {'A', 'B'}
+        assert typist.cast('A.B:C', set[str]) == {'A.B', 'C'}
+        assert typist.cast('A.B:C, D', set[str]) == {'A.B:C', 'D'}
+        assert typist.cast('A.B:C //   D', set[str]) == {'A.B:C', 'D'}
+        assert typist.cast(['A.B'], set[str]) == {'A.B'}
+        assert typist.cast([['A.B']], list[set[str]]) == [{'A.B'}]
+        assert typist.cast(['A.B'], list[set[str]]) == [{'A', 'B'}]
+
+        typist.splits = False
+        assert typist.cast('A.B', set[str]) == {'A.B'}
+        assert typist.cast(['A.B'], set[str]) == {'A.B'}
+
+        typist.wraps = False
+        assert typist.cast('A.B', set[str]) is None
+        assert typist.cast(['A.B'], set[str]) == {'A.B'}
+
+        typist.splits = typist.wraps = True
 
     @pyt.mark.parametrize(
         'data, target, expected',
@@ -794,6 +853,30 @@ class TestTypist:
         assert method is not None
 
     @pyt.mark.parametrize(
+        'data, tvar, expected',
+        [
+            ([1, '2', 3, '2'], str, ['2', '2']),
+            (
+                deque(
+                    [
+                        'the first item',
+                        dict(a=[1, '2']),
+                        dict(b=[3], c=[]),
+                        {b'd': [4]},
+                        5,
+                    ]
+                ),
+                dict[str, list[int]],
+                [dict(b=[3], c=[])],
+            ),
+        ],
+    )
+    def test_type_partition(self, data, tvar, expected):
+        ret_true, ret_false = typist.type_partition(data, tvar)
+        assert ret_true == expected
+        assert ret_false == [v for v in data if v not in ret_true]
+
+    @pyt.mark.parametrize(
         't0, t1, expected',
         boolmap(
             false=[
@@ -953,30 +1036,35 @@ class TestTypist:
             (_func_no_params, (), {}, 'no params'),
             # ---- One positional ----
             (_func_one_pos, (5,), {}, 10),
-            (_func_one_pos, (), {'x': 5}, 10),
+            (_func_one_pos, (), dict(x=5), 10),
             # ---- One positional with default ----
-            (_func_one_pos_default, (), {}, 10),  # Uses default 5 * 2
+            (_func_one_pos_default, (), {}, 10),
             (_func_one_pos_default, (7,), {}, 14),
             # ---- Two positional ----
             (_func_two_pos, (42, 'answer'), {}, '42: answer'),
-            (_func_two_pos, (42,), {'y': 'answer'}, '42: answer'),
-            (_func_two_pos, (), {'x': 42, 'y': 'answer'}, '42: answer'),
+            (_func_two_pos, (42,), dict(y='answer'), '42: answer'),
+            (_func_two_pos, (), dict(x=42, y='answer'), '42: answer'),
+            (_func_two_pos, (1, 2, 3), dict(), None),
+            (_func_two_pos, (), dict(), None),
+            (_func_two_pos, (), dict(x=1, y=2, z=3), None),
+            (_func_two_pos, (1, 2), dict(x=1), None),
             # ---- Positional and keyword-only ----
-            (_func_pos_and_kwonly, (1,), {'y': 'test'}, '1: test'),
+            (_func_pos_and_kwonly, (1,), dict(y='test'), '1: test'),
             # ---- Varargs ----
             (_func_with_varargs, (1, 2, 3, 4), {}, 10),
             (_func_with_varargs, (), {}, 0),
             # ---- Kwargs ----
-            (_func_with_kwargs, (), {'a': 1, 'b': 2}, {'a': 1, 'b': 2}),
+            (_func_with_kwargs, (), dict(a=1, b=2), dict(a=1, b=2)),
             (_func_with_kwargs, (), {}, {}),
+            (_func_with_kwargs, (1, 2), dict(), None),
             # ---- Mixed ----
             (_func_mixed, (5,), {}, (5, 'default', (), {})),
             (_func_mixed, (5, 'custom'), {}, (5, 'custom', (), {})),
             (
                 _func_mixed,
                 (5, 'custom', 1, 2),
-                {'z': 3},
-                (5, 'custom', (1, 2), {'z': 3}),
+                dict(z=3),
+                (5, 'custom', (1, 2), dict(z=3)),
             ),
             # ---- Positional-only ----
             (_func_pos_only, (5,), {}, 10),
@@ -989,8 +1077,7 @@ class TestTypist:
         kwargs: dict,
         expected_result: Any,
     ):
-        success, result = typist.invoke(func, *args, **kwargs)
-        assert success, f'Expected {func} to succeed with args={args}, kwargs={kwargs}'
+        result = typist.invoke(func, *args, **kwargs)
         assert result == expected_result, f'Expected {expected_result}, got {result}'
 
     @pyt.mark.parametrize(

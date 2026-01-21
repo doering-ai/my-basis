@@ -29,7 +29,7 @@ class TestMatchData:
         if expected is None:
             expected = data.copy()
 
-        ret = cls(data=data, match=match)
+        ret = cls.new(data=data, match=match)
 
         if match is None:
             assert ret.match is None

@@ -2,10 +2,11 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import ClassVar, Any
+from typing import ClassVar, Self, override
 import functools as ft
 
 ### EXTERNAL
+from regex import Match
 import pydantic as pyd
 
 ### INTERNAL
@@ -31,14 +32,26 @@ class MatchData(Predicate):
     # -------------------
     # `.` Initial Methods
     # -------------------
-    @pyd.model_validator(mode='before')
+    @override
     @classmethod
-    def _validate_match_data(cls, kwargs: dict[str, Any]) -> dict[str, Any]:
-        kwargs['duplicates'] = True
-        if kwargs.get('match') is not None and not kwargs.get('data'):
-            kwargs['data'] = kwargs['match'].capturesdict()
-            kwargs['duplicates'] = True
-        return kwargs
+    def new(
+        cls,
+        *args,
+        match: Match | None = None,
+        **kwargs,
+    ) -> Self:
+        ret = cls(duplicates=True, overwrite=False, match=match)
+        for arg in (*args, kwargs):
+            ret._process_arg(arg)
+        ret.data = {k: v for k, v in ret.data.items() if k and v}
+        return ret
+
+    @pyd.model_validator(mode='after')
+    def _validate_matchdata(self) -> Self:
+        """Ensure that all captured group values are lists when duplicates are allowed."""
+        if not self.data and self.match is not None:
+            self.data = self.match.capturesdict()
+        return self
 
     # -------------------
     # `-` Private Methods

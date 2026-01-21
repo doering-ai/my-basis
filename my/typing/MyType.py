@@ -2,15 +2,7 @@
 ### HEAD ###
 ############
 # Standard imports
-from typing import (
-    Any,
-    ClassVar,
-    Literal,
-    Optional,
-    Self,
-    TypeGuard,
-    Unpack,
-)
+from typing import Any, ClassVar, Literal, Optional, Self, TypeGuard, Unpack
 from collections import Counter
 from collections.abc import Iterable, Iterator, Mapping
 import collections.abc as tyabc
@@ -47,12 +39,16 @@ class MyType(pyd.BaseModel):
         # Functional
         'Generator',
         'Iterator',
+        'AsyncIterator',
+        'AsyncIterable',
+        'AsyncGenerator',
         'Coroutine',
         # Special Forms
         'Callable',  # deprecated
         'Type',  # deprecated
         'NoReturn',
         'TypeGuard',
+        'NewType',  # shouldn't exist at runtime
         # >= 3.10
         'Self',
         'Never',
@@ -72,9 +68,13 @@ class MyType(pyd.BaseModel):
         'TypedDict',  # treat like BaseModel
         'NamedTuple',  # treat like tuple but w/ names
         'Protocol',  # try isinstance
-        ### IMPORTANT: TypeVars are completely unhandled as of now. Could do it tho with .__bound__
+        ### IMPORTANT: TypeVars are completely unhandled as of now.
+        ### Could do it with .__bound__, perhaps?
         'TypeVar',
         'TypeVarTuple',
+        'ParamSpec',
+        'ParamSpecArgs',
+        'ParamSpecKwargs',
     }
     SIMPLE_FORMS: ClassVar[set[str]] = {
         'ClassVar',
@@ -126,6 +126,10 @@ class MyType(pyd.BaseModel):
             return src_type
         elif src_type is Ellipsis:
             src_type = types.EllipsisType
+        elif src_type is None:
+            src_type = types.NoneType
+        elif isinstance(src_type, ty.TypeAliasType):
+            src_type = src_type.__value__
 
         try:
             uid = str(src_type)
@@ -174,7 +178,7 @@ class MyType(pyd.BaseModel):
         return cls.parse(origin[*args] if args else origin)
 
     @classmethod
-    def _condense_args(cls, args: list['MyType']) -> type | ty._SpecialForm:
+    def _condense_args(cls, args: list['MyType']) -> type | types.UnionType:
         """Condense multiple type arguments into a single type or union.
 
         Args:
@@ -360,19 +364,16 @@ class MyType(pyd.BaseModel):
         origin = ty.get_origin(tvar)
         args = ty.get_args(tvar)
 
-        # Handle user defined generics that don't register origin/args properly
-        with ctx.suppress(Exception):
-            if (
-                not (origin or args)
-                and inspect.isclass(tvar)
-                and len(orig_bases := types.get_original_bases(tvar)) == 1
-            ):
-                base = orig_bases[0]
-                _origin = ty.get_origin(base)
-                _args = ty.get_args(base)
-                if _args:
-                    origin = tvar
-                    args = _args
+        if not (origin or args):
+            with ctx.suppress(Exception):
+                # III.i. Handle user defined generics that don't register origin/args properly
+                if inspect.isclass(tvar) and len(orig_bases := types.get_original_bases(tvar)) == 1:
+                    base = orig_bases[0]
+                    _origin = ty.get_origin(base)
+                    _args = ty.get_args(base)
+                    if _args:
+                        origin = tvar
+                        args = _args
 
         return name, origin, args
 
@@ -439,28 +440,30 @@ class MyType(pyd.BaseModel):
         Returns:
             True if *all* aspects of this type are satisfied by this data, including nested types.
         """
-        if data is None:
+        datatype = type(data)
+
+        # Special types
+        if self.src_type is Any or datatype is Any:
+            return True
+        elif data is None:
+            return self.src_type is types.NoneType
+        elif data is Ellipsis:
+            return self.src_type is types.EllipsisType
+        elif getattr(datatype, '__name__', '') in self.UNHANDLED_TYPES:
             return False
 
-        elif self.is_split:
+        # Composite types
+        if self.is_split:
             return any(option.check(data) for option in self.args)
-
-        elif self.src_type in (Any, object):
-            return True
-
         elif self.literal_members:
             return self.literal_check(data)
 
-        elif self.main_type is None:
+        # Main cases: normal types, probably nested
+        if self.main_type is None:
             return False
-
         elif not isinstance(data, self.main_type):
             return False
-
-        elif type(data).__name__ in self.UNHANDLED_TYPES:
-            return False
-
-        elif self.key_type is not None and self.val_type is not None:
+        elif self.key_type is not None and self.val_type is not None and isinstance(data, Mapping):
             if items := ut.map_items(data):
                 keys, vals = mi.unzip(items)
                 return all(
@@ -469,7 +472,6 @@ class MyType(pyd.BaseModel):
                         self.val_type.check_iter(vals),
                     )
                 )
-
         elif self.val_type is not None and isinstance(data, Iterable):
             return all(self.val_type.check_iter(data))
 

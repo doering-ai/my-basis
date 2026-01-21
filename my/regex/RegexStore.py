@@ -193,14 +193,16 @@ class RegexStore(pyd.BaseModel):
         for name, val in definitions.items():
             self[name] = val
 
-    def load(self) -> None:
+    @ft.cached_property
+    def load(self) -> bool:
         """Load all lazy definitions into the store now."""
         if not self.is_loaded:
             with self.load_lock:
+                self.is_loaded = True
                 while self.lazy_queue:
                     fn = self.lazy_queue.popleft()
                     fn()
-                self.is_loaded = True
+        return True
 
     @pyd.model_validator(mode='after')
     def _process_options(self) -> Self:
@@ -355,7 +357,7 @@ class RegexStore(pyd.BaseModel):
         Returns:
             (validated_patterns, cleaned_text_string)
         """
-        self.load() if not self.is_loaded else None
+        _ = self.load
         if isinstance(patterns, str):
             patterns = [patterns]
         assert ut.has_all(self.patterns, *patterns), f'Unknown pattern(s): {patterns}'
@@ -762,11 +764,11 @@ class RegexStore(pyd.BaseModel):
     # `*0` Overrides
     # --------------
     def __len__(self) -> int:
-        self.load() if not self.is_loaded else None
+        _ = self.load
         return len(self.patterns)
 
     def __contains__(self, key: str) -> bool:
-        self.load() if not self.is_loaded else None
+        _ = self.load
         return key in self.patterns
 
     def __setitem__(self, name: str, param: RegexDef) -> None:
@@ -786,12 +788,12 @@ class RegexStore(pyd.BaseModel):
         self.define(name, val, parser)
 
     def __getitem__(self, name: str) -> Pattern:
-        self.load() if not self.is_loaded else None
+        _ = self.load
         assert name in self.patterns, f'Pattern not found: {name}'
         return self.patterns[name]
 
     def __ior__(self, other: dict[str, RegexDef] | Self) -> Self:
-        self.load() if not self.is_loaded else None
+        _ = self.load
         if isinstance(other, RegexStore):
             for name in other.keys():
                 if name in other.parsers:
@@ -805,27 +807,27 @@ class RegexStore(pyd.BaseModel):
 
     def get(self, name: str, default: Pattern | None = None) -> Pattern | None:
         """Get a compiled pattern by name, or return a default if not found."""
-        self.load() if not self.is_loaded else None
+        _ = self.load
         return self.patterns.get(name, default)
 
     def get_def(self, name: str, default: str | None = None) -> str | None:
         """Get a raw definition by name, or return a default if not found."""
-        self.load() if not self.is_loaded else None
+        _ = self.load
         return self.definitions.get(name, default)
 
     def keys(self) -> list[str]:
         """Get a list of all defined pattern names in the store."""
-        self.load() if not self.is_loaded else None
+        _ = self.load
         return list(self.patterns.keys())
 
     def values(self) -> list[Pattern]:
         """Get a list of all compiled patterns in the store."""
-        self.load() if not self.is_loaded else None
+        _ = self.load
         return list(self.patterns.values())
 
     def items(self) -> list[tuple[str, Pattern]]:
         """Get a list of all (name, pattern) pairs in the store."""
-        self.load() if not self.is_loaded else None
+        _ = self.load
         return list(self.patterns.items())
 
     # -------------------------------
@@ -877,7 +879,7 @@ class RegexStore(pyd.BaseModel):
         Yields:
             MatchData objects for each match found.
         """
-        self.load() if not self.is_loaded else None
+        _ = self.load
         rgx = self.patterns[name]
         parse = ft.partial(self.parse, pattern_name=name)
         if isinstance(text, Buffer):
@@ -947,7 +949,7 @@ class RegexStore(pyd.BaseModel):
         Returns:
             Single MatchData with all captures from all matches merged.
         """
-        self.load() if not self.is_loaded else None
+        _ = self.load
         pd = ParseData()
         if isinstance(text, str):
             text = RegexBuffer(text)
@@ -979,7 +981,7 @@ class RegexStore(pyd.BaseModel):
         Returns:
             Function that takes text and returns MatchData using the specified pattern.
         """
-        self.load() if not self.is_loaded else None
+        _ = self.load
         return ft.partial(getattr(self, func), name)
 
     def apply(
@@ -997,7 +999,7 @@ class RegexStore(pyd.BaseModel):
         Yields:
             MatchData objects for each text in order.
         """
-        self.load() if not self.is_loaded else None
+        _ = self.load
         yield from map(self.partial(name, func), texts)
 
     def filter(
@@ -1015,7 +1017,7 @@ class RegexStore(pyd.BaseModel):
         Yields:
             Only those texts that successfully match the pattern.
         """
-        self.load() if not self.is_loaded else None
+        _ = self.load
         fn = self.partial(name, func)
         yield from filter(lambda text: bool(fn(text)), texts)
 
@@ -1078,7 +1080,7 @@ class RegexStore(pyd.BaseModel):
         Raises:
             AssertionError: If router name is not found.
         """
-        self.load() if not self.is_loaded else None
+        _ = self.load
         assert router in self.routers, f'Unknown router: {router}'
         if isinstance(text, MatchData):
             text = text.text
@@ -1100,7 +1102,7 @@ class RegexStore(pyd.BaseModel):
         Raises:
             AssertionError: If router name is not found or match object is invalid.
         """
-        self.load() if not self.is_loaded else None
+        _ = self.load
         assert router in self.routers, f'Unknown router: {router}'
         if isinstance(text, MatchData):
             text = text.text
@@ -1126,7 +1128,7 @@ class RegexStore(pyd.BaseModel):
         Returns:
             Sanitized pattern string with normalized flag syntax.
         """
-        self.load() if not self.is_loaded else None
+        _ = self.load
         if isinstance(pattern, Pattern):
             pattern = pattern.pattern
         elif isinstance(pattern, str) and pattern in self.patterns:
@@ -1154,7 +1156,7 @@ class RegexStore(pyd.BaseModel):
         Returns:
             Multi-line string representation with indentation showing nesting.
         """
-        self.load() if not self.is_loaded else None
+        _ = self.load
         # 0. Normalize & validate arguments
         body: Regex
         if isinstance(pattern, Regex):

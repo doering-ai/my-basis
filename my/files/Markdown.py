@@ -88,7 +88,7 @@ class Markdown(pyd.BaseModel):
         if 'prose' in kwargs and isinstance(kwargs['prose'], str):
             kwargs['prose'] = kwargs['buffer_factory'](kwargs['prose'])
         if 'tags' in kwargs and not isinstance(kwargs['tags'], list):
-            kwargs['tags'] = Predicate.cast_to_list(kwargs['tags'])
+            kwargs['tags'] = typist.cast(kwargs['tags'], list[str]) or [str(kwargs['tags'])]
 
         # II. Create descendant nodes
         if 'nodes' in kwargs:

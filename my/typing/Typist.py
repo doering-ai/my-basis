@@ -1,10 +1,10 @@
 ############
 ### HEAD ###
 ############
-### STANDARD
-from typing import Any, ClassVar, Literal, TypeGuard, TypeVar, overload
-import types
+### STANDARD ###
+from typing import Any, ClassVar, Literal, TypeGuard, TypeVar, overload, TypeIs
 import typing
+import collections.abc as abc
 from collections.abc import (
     Collection,
     Callable,
@@ -29,7 +29,7 @@ import regex as re
 import textwrap
 import tomllib
 
-### EXTERNAL
+### EXTERNAL ###
 import dateutil.parser
 import logfire as fire
 import pydantic as pyd
@@ -37,8 +37,8 @@ import srsly
 from srsly._yaml_api import CustomYaml
 import tomli_w
 
-### INTERNAL
-from ..infra import T, C, Value, Series, Atomic, Time
+### INTERNAL ###
+from ..infra import Atomic, Time, Series, _Series
 from ..utils import ut
 from ..caches import NestedCache
 from .MyType import MyType
@@ -53,28 +53,21 @@ TypeArg = type | tuple[type, ...] | None | MyType
 File = pyd.FilePath
 Directory = pyd.DirectoryPath
 
-TupleType = TypeVar('TupleType', bound=tuple)
-EnumType = TypeVar('EnumType', bound=Enum)
-AtomicType = TypeVar('AtomicType', bound=Atomic)
-TimeType = TypeVar('TimeType', bound=Time)
-SeriesType = TypeVar('SeriesType', bound=Series)
-MapType = TypeVar('MapType', bound=dict)
 ClassType = TypeVar('ClassType')
 
 FileParam = str | bytes | File | None
 RawJsonData = str | int | float | bool | list | dict | None
 FileData = Atomic | Series | dict | pyd.BaseModel
 F = TypeVar('F', bound=FileData)
-Ft = TypeVar('Ft', bound=type[F], default=type[dict])
 
-ABSTRACT_MAPS = [typing.Mapping, Mapping]
+ABSTRACT_MAPS = [typing.Mapping, abc.Mapping, abc.MutableMapping]
 ABSTRACT_SEQS = [
     typing.Iterable,
     typing.Sequence,
     typing.Collection,
-    Iterable,
-    Sequence,
-    Collection,
+    abc.Sequence,
+    abc.Collection,
+    abc.Iterable,
 ]
 
 
@@ -283,38 +276,34 @@ class Typist(pyd.BaseModel):
         elif option.is_split:
             return max(*(cls._score_option(data, subopt) for subopt in option.args))
 
-        def check_both(tvar: type | types.UnionType) -> tuple[bool, bool]:
-            return isinstance(data, tvar), issubclass(option.main_type or object, tvar)
-
-        c0, c1 = check_both(Collection)
+        c0 = isinstance(data, Collection)
+        c1 = issubclass(option.main_type, Collection)
+        a0 = isinstance(data, Atomic)
+        a1 = issubclass(option.main_type, Atomic)
 
         score = 0
         if isinstance(data, option.main_type):
             score += 3
-        else:
-            a0, a1 = check_both(Atomic)
-            if a0 and a1:
-                score += 2
-            elif a0 or a1 or c0 or c1:
-                score -= 2
+        elif a0 and a1:
+            score += 2
+        elif a0 or a1 or c0 or c1:
+            score -= 2
 
         if c0 and c1:
             score += 2
-            m0, m1 = check_both(Mapping)
-            s0, s1 = check_both(Series)
-            if m1 and ((items := ut.map_items(data)) or m0):
+            if ut.is_map(data) and issubclass(option.main_type, Mapping):
                 score += 2
                 if option.key_type is None:
                     score += 1
                 if option.val_type is None:
                     score += 1
-                if items:
+                if items := ut.map_items(data):
                     keys, vals = mi.unzip(items)
                     if cls.match(tuple(set(map(type, keys))), option.key_type):
                         score += 2
                     if cls.match(tuple(set(map(type, vals))), option.val_type):
                         score += 2
-            elif s0 and s1:
+            elif isinstance(data, Series) and issubclass(option.main_type, Series):
                 score += 2
 
                 if option.val_type is None:
@@ -385,7 +374,6 @@ class Typist(pyd.BaseModel):
         Returns:
             Cast data if successful, None otherwise.
         """
-        data = self._clean_data(data)
         # I. Handle literals as a very special case
         if target.literal_members:
             return self._to_literal(data, target)
@@ -441,7 +429,7 @@ class Typist(pyd.BaseModel):
 
         return ret if target.literal_check(ret) else None
 
-    def _to_atomic(self, data: object, target: type[AtomicType]) -> AtomicType | None:
+    def _to_atomic[A: Atomic](self, data: object, target: type[A]) -> A | None:
         """Cast data to an atomic type (str, int, float, bool, Enum, or Time).
 
         Args:
@@ -451,32 +439,32 @@ class Typist(pyd.BaseModel):
             Cast atomic value if successful, None otherwise.
         """
         # 0. Take the first element of a series, if configured to
-        if (
-            isinstance(data, Series)
-            and not issubclass(target, Flag)
-            and ((self.firsts and len(data) > 0) or (self.atomics and len(data) == 1))
+        if (isinstance(data, Series) and not issubclass(target, Flag)) and (
+            (self.firsts and len(data) > 0) or (self.atomics and len(data) == 1)
         ):
             data = mi.first(data)
 
-        if issubclass(target, Enum):
-            return self._to_enum(data, target)
+        if isinstance(data, target):
+            return data
+        elif issubclass(target, Enum):
+            ret = self._to_enum(data, target)
         elif issubclass(target, Time):
-            return self._to_time(data, target)
+            ret = self._to_time(data, target)
         elif isinstance(data, Enum):
-            return self._enum_to_atomic(data, target)
+            ret = self._enum_to_atomic(data, target)
         elif isinstance(data, Time):
-            return self._time_to_atomic(data, target)
+            ret = self._time_to_atomic(data, target)
         elif isinstance(data, str):
-            return self._str_to_atomic(data, target)
+            ret = self._str_to_atomic(data, target)
         elif issubclass(target, str) and (fn := self.get_str_method(data)):
-            success, result = self.invoke(fn)
-            if success:
-                return result
-        with ctx.suppress(ValueError, TypeError):
-            return target(data)
-        return None
+            ret = self.invoke(fn)
 
-    def _enum_to_atomic(self, data: Enum, target: type[AtomicType]) -> AtomicType | None:
+        if ret is None:
+            with ctx.suppress(ValueError, TypeError):
+                ret = target(data)
+        return ret
+
+    def _enum_to_atomic[A: Atomic](self, data: Enum, target: type[A]) -> A | None:
         """Convert an Enum to an atomic type (str, int, float, bool, bytes).
 
         Args:
@@ -486,14 +474,17 @@ class Typist(pyd.BaseModel):
             Converted atomic value if successful, None otherwise.
         """
         if issubclass(target, str | bytes):
-            success, ret, _ = self.try_method(target, 'write')
-            if success:
+            if (ret := self.try_method(target, 'write', _tvar=str)) is not None:
                 pass
             elif isinstance(data.value, str):
                 ret = data.value
             else:
-                ret = data.name.lower()
-            return ret if issubclass(target, str) else target(ret.encode())
+                ret = str(data.name).lower()
+            typing.assert_type(ret, str)
+            if issubclass(target, bytes):
+                return target(ret.encode())
+            else:
+                return target(ret)
         elif issubclass(target, int | float):
             if isinstance(data.value, int | float):
                 return target(data.value)
@@ -502,7 +493,7 @@ class Typist(pyd.BaseModel):
 
         return None
 
-    def _time_to_atomic(self, data: Time, target: type[AtomicType]) -> AtomicType | None:
+    def _time_to_atomic[A: Atomic](self, data: Time, target: type[A]) -> A | None:
         """Convert a Time object to an atomic type (str, int, float, bool, bytes).
 
         Args:
@@ -554,7 +545,7 @@ class Typist(pyd.BaseModel):
 
         return None
 
-    def _str_to_atomic(self, data: str, target: type[AtomicType]) -> AtomicType | None:
+    def _str_to_atomic[A: Atomic](self, data: str, target: type[A]) -> A | None:
         """Convert a string to an atomic type using regex pattern matching.
 
         Args:
@@ -574,7 +565,7 @@ class Typist(pyd.BaseModel):
             return self._str_to_time(data, target)
         return None
 
-    def _to_class(self, data: object, target: type[ClassType]) -> ClassType | None:
+    def _to_class[C](self, data: object, target: type[C]) -> C | None:
         """Cast data to a class instance using various instantiation strategies.
 
         Args:
@@ -584,21 +575,17 @@ class Typist(pyd.BaseModel):
             Class instance if successful, None otherwise.
         """
         # I. First, try to use the semi-standard `new()` method if available
-        if fn := self.get_method(target, 'new'):
-            success, ret = self.invoke(fn, data)
-            if success:
-                return ret
-
-        if items := ut.map_items(data):
-            kwargs = self._cast_members(items, target)
-            success, ret = self.invoke(target.__init__, **kwargs)
-            if success:
-                return ret
-
-        success, ret = self.invoke(target.__init__, data)
-        if success:
+        if (ret := self.try_method(target, 'new', _tvar=target)) is not None:
             return ret
 
+        if ut.is_map(data):
+            kwargs = self._cast_members(ut.map_items(data), target)
+            ret = self.invoke(target, **kwargs)
+        else:
+            ret = self.invoke(target, data)
+
+        if isinstance(ret, target):
+            return ret
         return None
 
     @staticmethod
@@ -614,7 +601,7 @@ class Typist(pyd.BaseModel):
         annotations = ut.instance_aliases(target)
         return {key: typist.flexcast(val, annotations.get(key, None)) for key, val in items}
 
-    def _to_enum(self, data: object, target: type[EnumType]) -> EnumType | None:
+    def _to_enum[E: Enum](self, data: object, target: type[E]) -> E | None:
         """Cast data to an Enum or Flag type.
 
         Args:
@@ -625,8 +612,7 @@ class Typist(pyd.BaseModel):
         """
         # I. If the enum has it's own read method, try that first on any datatype
         if read_method := self.get_method(target, 'read'):
-            success, ret = self.invoke(read_method, data)
-            if success and ret:
+            if (ret := self.invoke(read_method, data)) is not None:
                 return ret
 
         # II. Next, try some Flag-specific transformations
@@ -656,11 +642,9 @@ class Typist(pyd.BaseModel):
                 return ret
         elif isinstance(data, Enum):
             if read_method:
-                success, ret = self.invoke(read_method, data.value)
-                if success and ret:
+                if (ret := self.invoke(read_method, data.value)) is not None:
                     return ret
-                success, ret = self.invoke(read_method, data.name)
-                if success and ret:
+                if (ret := self.invoke(read_method, str(data.name))) is not None:
                     return ret
 
             if data.name in target.__members__:
@@ -670,7 +654,7 @@ class Typist(pyd.BaseModel):
 
         return None
 
-    def _to_time(self, data: object, target: type[TimeType]) -> TimeType | None:
+    def _to_time[T: Time](self, data: object, target: type[T]) -> T | None:
         """Convert a string or number to a datetime or timedelta object, if possible."""
         if not isinstance(data, Atomic):
             data = str(data)
@@ -701,7 +685,7 @@ class Typist(pyd.BaseModel):
             fire.error(f'Cannot cast from {type(data)} to time; {e}')
         return None
 
-    def _str_to_time(self, data: str, target: type[TimeType]) -> TimeType | None:
+    def _str_to_time[T: Time](self, data: str, target: type[T]) -> T | None:
         """Convert a string to a Time object using various parsing strategies.
 
         Args:
@@ -749,7 +733,7 @@ class Typist(pyd.BaseModel):
                 return target(days=d.day, seconds=d.second, microseconds=d.microsecond)
         return None
 
-    def _num_to_time(self, data: int | float, target: type[TimeType]) -> TimeType | None:
+    def _num_to_time[T: Time](self, data: int | float, target: type[T]) -> T | None:
         """Convert a number to a Time object treating it as a timestamp or ordinal.
 
         Args:
@@ -778,9 +762,9 @@ class Typist(pyd.BaseModel):
             return target(seconds=float(data))
         return None
 
-    def _to_map(
-        self, data: object, tvar: type[MapType], details: MyType | None = None
-    ) -> MapType | None:
+    def _to_map[M: dict](
+        self, data: object, tvar: type[M], details: MyType | None = None
+    ) -> M | None:
         """Cast data to a mapping type (dict, Counter, etc.).
 
         Args:
@@ -801,14 +785,14 @@ class Typist(pyd.BaseModel):
             with ctx.suppress(Exception):
                 return self.from_yaml(data, tvar)
 
-        # II. Main Case: cast maps and map-ready lists of 2-tuples ("items")
-        if items := ut.map_items(data):
+        # II.i. Main Case: cast maps and map-ready lists of 2-tuples ("items")
+        if ut.is_map(data) and (items := ut.map_items(data)):
             keys, values = mi.unzip(items)
             key_data = self.multicast(keys, details.key_type, skip=False)
             val_data = self.multicast(values, details.val_type, skip=False)
             return tvar(dict(zip(key_data, val_data, strict=True)))
 
-        # II. Cast counters, the only map type that takes an iter of single items
+        # II.ii. Cast counters, the only map type that takes an iter of single items
         if issubclass(tvar, Counter) and isinstance(data, Series):
             if details.key_type:
                 data = self.multicast(data, details.key_type, skip=False)
@@ -816,9 +800,9 @@ class Typist(pyd.BaseModel):
 
         return None
 
-    def _to_series(
-        self, data: object, tvar: type[SeriesType], details: MyType | None = None
-    ) -> SeriesType | None:
+    def _to_series[S: Series](
+        self, data: object, tvar: type[S], details: MyType | None = None
+    ) -> S | None:
         """Cast data to a series type (list, tuple, set, deque), splitting strings.
 
         Args:
@@ -841,6 +825,7 @@ class Typist(pyd.BaseModel):
         elif isinstance(data, Mapping):
             # II.ii. Split maps into two-tuples if possible, otherwise fail early
             #        This is to avoid unintentional parsing of just a map's keys
+            breakpoint()
             if (items := ut.map_items(data)) and (
                 not details.val_type or details.val_type.is_map_item()
             ):
@@ -882,20 +867,7 @@ class Typist(pyd.BaseModel):
             #       e.g. one.oneA:two splits on colons, but one.oneA splits on periods
             return list(filter(bool, map(str.strip, data.split(char))))
 
-        return None
-
-    @staticmethod
-    def type_partition(container: Iterable, t0: type[C], t1: type[T]) -> tuple[list[C], list[T]]:
-        """Partition a container into two lists based on type.
-
-        Args:
-            container: The iterable to partition.
-            t0: First type (for type objects).
-            t1: Second type (for non-type objects).
-        Returns:
-            Tuple of two lists: (type objects, non-type objects).
-        """
-        return tuple(map(list, mi.partition(lambda x: isinstance(x, type), container)))
+        return [data] if self.wraps else None
 
     @classmethod
     def _concretize(cls, target: MyType, data: object) -> MyType:
@@ -917,6 +889,8 @@ class Typist(pyd.BaseModel):
                 new_main = _dt.main_type
             else:
                 new_main = dict
+        elif main in {abc.MutableSet, abc.Set}:
+            new_main = set
         elif main in ABSTRACT_SEQS:
             if isinstance(data, Series) and (_dt := MyType.parse(type(data))):
                 new_main = _dt.main_type
@@ -1025,7 +999,12 @@ class Typist(pyd.BaseModel):
     # ---------------
     # `*1` COMPARISON
     # ---------------
-    def check[T](self, data: object, tvar: type[T]) -> TypeGuard[T]:
+    # @overload
+    # def check[T](self, data, tvar: type[T]) -> TypeGuard[T]: ...
+    # @overload
+    # def check[U: types.UnionType](self, data, tvar: U) -> TypeGuard[U]: ...
+
+    def check[T](self, data, tvar: type[T]) -> TypeIs[T]:
         """Check if a data matches a type variable. See `MyType.check()` for details."""
         return MyType.parse(tvar).check(data)
 
@@ -1105,6 +1084,26 @@ class Typist(pyd.BaseModel):
         t1 = MyType.metaparse(rhs)
         return self.match(t0, t1, intersect)
 
+    @classmethod
+    def type_partition[T0, T1 = object](
+        cls,
+        data: Iterable[T0 | T1],
+        tvar: type[T0],
+    ) -> tuple[list[T0], list[T1]]:
+        """Separate out all the items matching the given type in the given container.
+
+        Args:
+            data: The iterable to partition.
+            tvar: The type to partition by.
+        Returns:
+            1. A list of only items that are (subclasses of) the first type.
+            2. A list with the rest.
+        """
+        myty = MyType.parse(tvar)
+        if not myty:
+            raise ValueError(f'Type is currently unhandled, and cannot be used: {tvar}')
+        return tuple(map(list, mi.partition(myty.check, data)))
+
     def seek_usage(self, lhs: TypeArg, rhs: type | MyType) -> bool:
         """Check if a type is used anywhere within another type's structure.
 
@@ -1120,7 +1119,7 @@ class Typist(pyd.BaseModel):
             return True
 
         if inspect.isclass(rhs):
-            # III.ii.a.
+            # III.ii.a. Recurse into class members
             return any(self.seek_usage(t0, ann) for ann in ut.instance_fields(rhs).values())
         elif t1.val_type:
             # III.ii.b. Recurse into container values
@@ -1131,12 +1130,12 @@ class Typist(pyd.BaseModel):
     # `*2` COERCION
     # -------------
     @overload
-    def cast(self, data: object, tvar: type[Value]) -> Value | None: ...
+    def cast[V](self, data: object, tvar: type[V]) -> V | None: ...
 
     @overload
     def cast(self, data: object, tvar: Any) -> Any | None: ...
 
-    def cast(self, data: object, tvar: type[Value] | Any) -> Value | Any | None:
+    def cast[V](self, data: object, tvar: type[V] | Any) -> V | Any | None:
         """Attempt to cast/coerce the  data to the given type, returning None if unsuccessful."""
         # I. Return null if the target is invalid
         if data is None or tvar in {None, Any}:
@@ -1171,9 +1170,12 @@ class Typist(pyd.BaseModel):
         res = self.cast(data, tvar)
         return res if res is not None else data
 
-    def multicast(
-        self, values: Iterable[Any], tvar: type[Value] | Any, skip: bool = False
-    ) -> list[Value] | list:
+    def multicast[V](
+        self,
+        values: Iterable[Any],
+        tvar: type[V] | Any,
+        skip: bool = False,
+    ) -> list[V] | list:
         """Cast multiple values to a target type.
 
         Args:
@@ -1588,7 +1590,7 @@ class Typist(pyd.BaseModel):
     def from_toml(
         self,
         file: FileParam,
-        tvar: type[F] = type[dict],  # ty:ignore[invalid-parameter-default]
+        tvar: type[F] = dict,  # ty:ignore[invalid-parameter-default]
         cast: bool = True,
     ) -> F:
         """Load data from TOML file or string, then cast to target type. See `from_file()`.
@@ -1626,7 +1628,7 @@ class Typist(pyd.BaseModel):
     def from_pickle(
         self,
         file: FileParam,
-        tvar: type[F] = type[dict],  # ty:ignore[invalid-parameter-default]
+        tvar: type[F] = dict,  # ty:ignore[invalid-parameter-default]
         cast: bool = True,
     ) -> F:
         """Load data from Pickle file or bytes, then cast to target type. See `from_file()`.
@@ -1763,14 +1765,7 @@ class Typist(pyd.BaseModel):
     # ---------------
     # `*5` INVOCATION
     # ---------------
-    def try_method(self, obj: object, methods: str, *args, **kwargs) -> tuple[bool, Any, Callable]:
-        """A thin wrapper that calls `get_method()`, then `invoke()` if successful."""
-        if fn := self.get_method(obj, methods):
-            success, result = self.invoke(fn, *args, **kwargs)
-            return success, result, fn
-        return False, None, lambda *a, **k: None
-
-    def get_str_method(self, obj: object, *extra_methods: str) -> Callable | None:
+    def get_str_method(self, obj: object, *extra_methods: str) -> Callable[[...], str] | None:
         """Get a string conversion method from an object.
 
         Args:
@@ -1779,7 +1774,7 @@ class Typist(pyd.BaseModel):
         Returns:
             First found string conversion method, or None if none found.
         """
-        return self.get_method(obj, *extra_methods, 'write', 'to_string', '__str__')
+        return self.get_method(obj, *extra_methods, 'write', 'to_string', 'toString', '__str__')
 
     def get_method(self, obj: object, *methods: str) -> Callable | None:
         """Get the first available method from an object by name.
@@ -1798,7 +1793,7 @@ class Typist(pyd.BaseModel):
     @classmethod
     def invocable(
         cls, sig: Callable | inspect.Signature, *args: object, **kwargs: object
-    ) -> None | inspect.BoundArguments:
+    ) -> inspect.BoundArguments | None:
         """Check if a function can be called with the given arguments.
 
         This method validates that the provided arguments can be bound to the function's
@@ -1846,22 +1841,22 @@ class Typist(pyd.BaseModel):
                 return bound
         return None
 
-        # III. Perform type checking on the bound arguments
-        # for param_name, param in sig.parameters.items():
-        #     if param.annotation is not inspect.Parameter.empty:
-        #         value = bound.arguments.get(param_name)
-        #         # Skip type checking for None values and varargs/varkwargs
-        #         if param.kind in {param.VAR_POSITIONAL, param.VAR_KEYWORD}:
-        #             continue
-        #         if value is not None and not self.check(value, param.annotation):
-        #             return None
-        # IV. Return the original arguments (they passed validation)
-        # return bound.args, bound.kwargs
+    @overload
+    @classmethod
+    def invoke[V](cls, func: Callable[[...], V], *args, **kwargs) -> V | None: ...
+
+    @overload
+    @classmethod
+    def invoke[V](cls, func: Callable[[...], V], *args, _strict: Literal[True], **kwargs) -> V: ...
 
     @classmethod
-    def invoke(
-        cls, func: Callable[[...], T] | None, *args: object, **kwargs: object
-    ) -> tuple[bool, T | None]:
+    def invoke[V](
+        cls,
+        func: Callable[[...], V],
+        *args,
+        _strict: bool = False,
+        **kwargs,
+    ) -> V | None:
         """Attempt to call a function with the given arguments.
 
         This method first validates the arguments using invocable(), then calls the function
@@ -1870,27 +1865,93 @@ class Typist(pyd.BaseModel):
         Args:
             func: The function to call.
             *args: Positional arguments to pass to the function.
+            _strict: If set, this method will raise a ValueError rather than returning None.
             **kwargs: Keyword arguments to pass to the function.
 
         Returns:
             A tuple of (success, result) where success is True if the call succeeded,
             and result is the return value of the function (or None if it failed).
-        """
-        if not func:
-            return (False, None)
 
+        Raises:
+            ValueError: If `_strict` is set and the function doesn't exist or couldn't be called.
+        """
         # I. Check if the function can be called with the given arguments
-        if (bound := cls.invocable(func, *args, **kwargs)) is not None:
+        if func and (bound := cls.invocable(func, *args, **kwargs)) is not None:
             try:
                 # II. Unpack the validated arguments and call the function
-                result = func(*bound.args, **bound.kwargs)
-                return True, result
+                return func(*bound.args, **bound.kwargs)
             except Exception as e:
                 name = getattr(func, '__name__', '[ANONYMOUS_FUNCTION]')
                 fire.error(
                     f'Failed to invoke {name} with args={bound.args}, kwargs={bound.kwargs}: {e}'
                 )
-        return False, None
+        if _strict:
+            raise ValueError(f'Cannot invoke function `{func}` with given arguments.')
+        return None
+
+    @overload
+    def try_method[T](
+        self,
+        obj: object,
+        methods: str | _Series[str],
+        *args,
+        _tvar: type[T],
+        **kwargs,
+    ) -> T | None: ...
+
+    @overload
+    def try_method[T](
+        self, obj: object, methods: str | _Series[str], *args, **kwargs
+    ) -> object | None: ...
+
+    @overload
+    def try_method[T](
+        self,
+        obj: object,
+        methods: str | _Series[str],
+        *args,
+        _tvar: type[T],
+        _strict: Literal[True],
+        **kwargs,
+    ) -> T: ...
+
+    @overload
+    def try_method[T](
+        self,
+        obj: object,
+        methods: str | _Series[str],
+        *args,
+        _tvar: None = None,
+        _strict: Literal[True],
+        **kwargs,
+    ) -> object: ...
+
+    def try_method[T](
+        self,
+        obj: object,
+        methods: str | _Series[str],
+        *args,
+        _tvar: type[T] | None = None,
+        _strict: bool = False,
+        **kwargs,
+    ) -> T | object | None:
+        """A thin wrapper that calls `get_method()`, then `invoke()` if successful."""
+        if isinstance(methods, str):
+            methods = (methods,)
+
+        if fn := self.get_method(obj, *methods):
+            ret = self.invoke(fn, *args, _strict=_strict, **kwargs)
+            if ret is None:
+                if _strict:
+                    raise ValueError(f'typist.invoke({fn}) returned None unexpectedly.')
+            elif _tvar is not None:
+                if _cast := self.cast(ret, _tvar):
+                    return _cast
+                elif _strict:
+                    raise ValueError(f'{fn} returned `{type(ret)}`, cannot cast to `{_tvar}`.')
+        elif _strict:
+            raise ValueError(f'No method found on {type(obj)} w/ name in list {methods}.')
+        return None
 
 
 Typist._setup()

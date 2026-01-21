@@ -4,6 +4,7 @@
 ### STANDARD
 
 ### EXTERNAL
+import regex as re
 import pytest as pyt
 
 ### INTERNAL
@@ -33,8 +34,12 @@ class TestRegexStore:
     # -------------------
     # `.` Initial Methods
     # -------------------
-    # TODO: more tests
     def test_new(self, store: RegexStore) -> None:
+        # test lazy-loading
+        assert len(store.patterns) == 0
+        assert isinstance(store['_parenthetical'], re.Pattern)
+        assert len(store.patterns) > 0
+
         assert len(store.patterns) == len(store.definitions)
 
     # -------------------

@@ -2,16 +2,11 @@
 
 version: '3'
 
-env:
-    FORCE_COLOR: 1
-
 vars:
     SRC_DIR: ./my
     DOC_DIR: ./docs
     API_DIR: '{{.DOC_DIR}}/_source'
     OUT_DIR: '{{.DOC_DIR}}/_build'
-
-dotenv: []
 
 tasks:
     # ------

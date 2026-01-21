@@ -2,8 +2,8 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import TypeVar
-from collections.abc import Hashable
+from typing import TypeVar, Any
+from collections.abc import Hashable, Iterable, Mapping, ItemsView
 from collections import deque
 from datetime import date, datetime, time, timedelta
 from enum import Enum
@@ -22,7 +22,7 @@ import jinja2 as jn
 BASIS_ROOT_DIR = Path(__file__).parent
 assert BASIS_ROOT_DIR.exists() and BASIS_ROOT_DIR.is_dir()
 
-TEMPLATE_DIR = BASIS_ROOT_DIR / "templates"
+TEMPLATE_DIR = BASIS_ROOT_DIR / 'templates'
 assert TEMPLATE_DIR.exists() and TEMPLATE_DIR.is_dir()
 
 ############
@@ -31,19 +31,25 @@ assert TEMPLATE_DIR.exists() and TEMPLATE_DIR.is_dir()
 # ---------
 # CONSTANTS
 # ---------
-DELIM = " // "
+DELIM = ' // '
 
 # -----
 # TYPES
 # -----
-T = TypeVar("T")
-C = TypeVar("C")
-Key = TypeVar("Key", bound=Hashable)
-Keys = TypeVar("Keys", bound=tuple)
-Value = TypeVar("Value")
+T = TypeVar('T')
+C = TypeVar('C')
+Key = TypeVar('Key', bound=Hashable)
+Keys = TypeVar('Keys', bound=tuple)
+Value = TypeVar('Value')
+
+_K = TypeVar('_K', bound=Hashable)
+_V = TypeVar('_V')
 
 Series = list | tuple | set | deque
-MapItems = list[tuple] | tuple[tuple] | deque[tuple] | set[tuple]
+type _Series[V] = list[V] | tuple[V, ...] | set[V] | deque[V]
+
+Map = Mapping[Any, Any] | Iterable[tuple[Any, Any]], ItemsView
+type _Map[K: Hashable, V] = Mapping[K, V] | list[tuple[K, V]] | ItemsView[K, V]
 
 Time = date | datetime | time | timedelta
 Atomic = str | int | float | bool | bytes | Enum | Time

@@ -2,7 +2,8 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import Any, Mapping, ClassVar
+from typing import Any, ClassVar
+from collections.abc import Mapping
 import more_itertools as mi
 from collections import deque, defaultdict
 
@@ -20,38 +21,108 @@ cls = Predicate
 ############
 class TestPredicate:
     SAMPLES: ClassVar[dict[str, Predicate]] = dict(
-        basic=cls.new(dict(k1=['A', 'B'], k2=['C'])),
-        dupes=cls.new(dict(k1=['A', 'B', 'B'], k2=['C', 'D', 'C']), duplicates=True),
-        nests=cls.new(dict(root=dict(c1=['A'], c2=['B', 'C']), k1=['D'])),
+        basic=cls.new(k1=['A', 'B'], k2=['C']),
+        dupes=cls.new(k1=['A', 'B', 'B'], k2=['C', 'D', 'C'], duplicates=True),
+        nests=cls.new(k1=dict(c1=dict(c11=['A']), c2=['B', 'C']), k2=['D']),
     )
 
     # -------------------
     # `.` Initial Methods
     # -------------------
     @pyt.mark.parametrize(
-        'data, expected',
+        'args, kwargs, expected',
         [
-            (dict(k1='A'), dict(k1=['A'])),
-            (dict(k1=['A', 'B']), dict(k1=['A', 'B'])),
-            ([('k1', ['A', 'B'])], dict(k1=['A', 'B'])),
-            ([('k1', 'A')], dict(k1=['A'])),
+            (None, None, dict()),
             (
+                [dict(k1='AB')],
+                None,
+                dict(k1=['AB']),
+            ),
+            (
+                [dict(k1=['A', 'B'])],
+                None,
+                dict(k1=['A', 'B']),
+            ),
+            (
+                [[('k1', ['A', 'B'])]],
+                None,
+                dict(k1=['A', 'B']),
+            ),
+            (
+                [[('k1', 'A')]],
+                None,
+                dict(k1=['A']),
+            ),
+            (
+                None,
+                dict(k1='A'),
+                dict(k1=['A']),
+            ),
+            (
+                None,
+                dict(k1=['A', 'B']),
+                dict(k1=['A', 'B']),
+            ),
+            (
+                None,
+                dict(k1=[1, 2]),
+                dict(k1=['1', '2']),
+            ),
+            (
+                None,
                 dict(parent=dict(k1='A', child=dict(grandchild='B'))),
                 {'parent.k1': ['A'], 'parent.child.grandchild': ['B']},
             ),
-            ({}, {}),
-            (cls.new(dict(k1=['A'])), dict(k1=['A'])),
-            ('{"k1": "A", "k2": "B"}', dict(k1=['A'], k2=['B'])),
-            (['{"k1": "A", "k2": "B"}'], dict(k1=['A'], k2=['B'])),
-            (['"k1": "A"', '"k2": "B"'], dict(k1=['A'], k2=['B'])),
             (
-                [('parent.child.grandchild', ['A']), ('numbers', ['5', '10', '15'])],
+                [cls.new(k1=['A'])],
+                None,
+                dict(k1=['A']),
+            ),
+            (
+                ['{"k1": "A", "k2": "B"}'],
+                None,
+                dict(k1=['A'], k2=['B']),
+            ),
+            (
+                [[('parent.child.grandchild', ['A']), ('numbers', ['5', '10', '15'])]],
+                None,
                 {'parent.child.grandchild': ['A'], 'numbers': ['5', '10', '15']},
+            ),
+            (None, dict(duplicates=True), []),
+            (
+                None,
+                dict(k1=['A', 'B', 'B'], duplicates=True),
+                dict(k1=['A', 'B', 'B']),
+            ),
+            (
+                None,
+                dict(k1=['A', 'B', 'B'], duplicates=False),
+                dict(k1=['A', 'B']),
+            ),
+            (
+                [SAMPLES['basic']],
+                None,
+                dict(k1=['A', 'B'], k2=['C']),
+            ),
+            (
+                [SAMPLES['nests']],
+                None,
+                {'k1.c1.c11': ['A'], 'k1.c2': ['B', 'C'], 'k2': ['D']},
+            ),
+            (
+                [SAMPLES['dupes']],
+                dict(duplicates=True),
+                dict(k1=['A', 'B', 'B'], k2=['C', 'D', 'C']),
+            ),
+            (
+                [SAMPLES['dupes']],
+                dict(duplicates=False),
+                dict(k1=['A', 'B'], k2=['C', 'D', 'C']),
             ),
         ],
     )
-    def test_new(self, data: Any, expected: dict[str, list[str]]):
-        result = cls.new(data)
+    def test_new(self, args: list | None, kwargs: dict | None, expected: dict[str, list[str]]):
+        result = cls.new(*(args or []), **(kwargs or {}))
         assert result.data == expected
 
     @pyt.mark.parametrize(
@@ -60,7 +131,8 @@ class TestPredicate:
             ({}, None, {}),
             (SAMPLES['basic'], None, dict(k1=['A', 'B'], k2=['C'])),
             (SAMPLES['basic'], dict[str, str], dict(k1='A', k2='C')),
-            (SAMPLES['basic'], dict[str, None], dict(k1=['A', 'B'], k2=['C'])),
+            (SAMPLES['basic'], dict[str, set[str]], dict(k1={'A', 'B'}, k2={'C'})),
+            (SAMPLES['basic'], dict[str, list[set[str]]], dict(k1=[{'A'}, {'B'}], k2=[{'C'}])),
             (SAMPLES['basic'], dict[str, Buffer], dict(k1=Buffer.new('A'), k2=Buffer.new('C'))),
             (SAMPLES['basic'], list[str], ['"k1": ["A", "B"]', '"k2": ["C"]']),
             (SAMPLES['basic'], str, '{"k1": ["A", "B"], "k2": ["C"]}'),
@@ -100,7 +172,7 @@ class TestPredicate:
             ),
         ],
     )
-    def test_serialize(self, data: dict[str, list[str]], typevar: type | None, expected: Any):
+    def test_serialize(self, data: dict[str, list[str]], typevar: type | None, expected):
         pred = cls.new(data)
         result = pred.serialize(tvar=typevar)
         assert result == expected
@@ -121,22 +193,17 @@ class TestPredicate:
     def test_escape(self, text: str, expected: str):
         assert cls._escape(text) == expected
 
+    @pyt.mark.parametrize(
+        'field, val, expected',
+        [],
+    )
+    def test_cast_arg(self, field: str, val, dupllicates: bool, expected: dict[str, list[str]]):
+        result = dict(cls._cast_arg(field, val, duplicates=True))
+        assert result == expected
+
     # -------------------
     # `+` Primary Methods
     # -------------------
-    @pyt.mark.parametrize(
-        'field, val, expected',
-        [
-            ('k1', 'A', dict(k1=['A'])),
-            ('k1', ['A', 'B'], dict(k1=['A', 'B'])),
-            ('k1', ['A', 'B', 'B'], dict(k1=['A', 'B', 'B'])),
-            ('k1.child', 'val', {'k1.child': ['val']}),
-            ('parent.child.grandchild', ['A'], {'parent.child.grandchild': ['A']}),
-        ],
-    )
-    def test_cast(self, field: str, val: Any, expected: dict[str, list[str]]):
-        result = dict(cls.cast(field, val, duplicates=True))
-        assert result == expected
 
     @pyt.mark.parametrize(
         'data, expected',
@@ -178,7 +245,7 @@ class TestPredicate:
             ),
         ],
     )
-    def test_to_and_from_yaml(self, data: Any, expected: list[str]):
+    def test_to_and_from_yaml(self, data, expected: list[str]):
         # I. Test to_yaml
         pred = Predicate.new(data, duplicates=True)
         serialized = pred.to_yaml()
@@ -188,21 +255,6 @@ class TestPredicate:
         # II. Test from_yaml
         deserialized = Predicate.from_yaml(serialized, duplicates=True)
         assert deserialized.to_yaml() == serialized
-
-    @pyt.mark.parametrize(
-        'data, dupes, expected',
-        [
-            (dict(), True, []),
-            (SAMPLES['dupes'], False, [('k1', ['A', 'B']), ('k2', ['C', 'D'])]),
-            (SAMPLES['dupes'], True, [('k1', ['A', 'B', 'B']), ('k2', ['C', 'D', 'C'])]),
-            (SAMPLES['nests'], False, [('root.c1', ['A']), ('root.c2', ['B', 'C']), ('k1', ['D'])]),
-        ],
-    )
-    def test_import_map(
-        self, data: dict | Predicate, dupes: bool, expected: list[tuple[str, list[str]]]
-    ):
-        result = list(cls.import_map(data, duplicates=dupes))
-        assert result == expected
 
     # ------------------
     # `*` Public Methods
@@ -225,7 +277,7 @@ class TestPredicate:
             ('existing', 'new_val', dict(existing=['new_val'])),
         ],
     )
-    def test_setitem(self, key: str, val: Any, expected: dict):
+    def test_setitem(self, key: str, val, expected: dict):
         pred = cls.new(self.SAMPLES['basic'])
         pred[key] = val
         for exp_key, exp_val in expected.items():
@@ -253,14 +305,14 @@ class TestPredicate:
             (SAMPLES['basic'], dict(K1=['A']), False),  # case sensitivity
         ],
     )
-    def test_contains(self, lhs: dict | Predicate, rhs: object, expected: bool):
+    def test_contains(self, lhs: Predicate, rhs: object, expected: bool):
         pred = cls.new(lhs, duplicates=False)
         assert (rhs in pred) == expected
 
     @pyt.mark.parametrize(
         'lhs, rhs, expected',
         [
-            (dict(k1=['A']), dict(k1=['A', 'A']), False),
+            (cls.new(k1=['A']), dict(k1=['A', 'A']), False),
             (SAMPLES['basic'], dict(k1=['B', 'B', 'A']), False),
             (SAMPLES['dupes'], dict(k1=['B', 'B', 'A']), True),
         ],
@@ -285,7 +337,7 @@ class TestPredicate:
             ),
         ],
     )
-    def test_eq(self, lhs: Any, rhs: Any, expected: bool):
+    def test_eq(self, lhs, rhs, expected: bool):
         pred = cls.new(lhs, duplicates=True)
         assert (pred == rhs) == expected
 
@@ -295,12 +347,11 @@ class TestPredicate:
             (SAMPLES['basic'], (2, 3)),
             (SAMPLES['dupes'], (2, 6)),
             (SAMPLES['nests'], (3, 4)),
-            ({}, (0, 0)),
+            (cls(), (0, 0)),
         ],
     )
-    def test_len_and_size(self, data: Any, expected: tuple[int, int]):
-        pred = cls.new(data, duplicates=True)
-        assert (len(pred), pred.size) == expected
+    def test_len_and_size(self, data, expected: tuple[int, int]):
+        assert (len(data), data.size) == expected
 
     @pyt.mark.parametrize(
         'key, default, expected',
@@ -311,8 +362,7 @@ class TestPredicate:
         ],
     )
     def test_get(self, key: str, default: list, expected: list):
-        pred = cls.new(self.SAMPLES['basic'])
-        assert pred.get(key, default) == expected
+        assert self.SAMPLES['basic'].get(key, default) == expected
 
     @pyt.mark.parametrize(
         'lhs, rhs, expected',
@@ -328,7 +378,7 @@ class TestPredicate:
             (dict(k1=['A']), dict(), dict(k1=['A'])),
         ],
     )
-    def test_add(self, lhs: Any, rhs: Any, expected: dict):
+    def test_add(self, lhs, rhs, expected: dict):
         pred0, pred1 = cls.new(lhs), cls.new(rhs)
         result = pred0 + pred1
         assert result.data == expected
@@ -347,7 +397,7 @@ class TestPredicate:
             (dict(k1=['A']), dict(), dict(k1=['A'])),
         ],
     )
-    def test_or(self, lhs: Any, rhs: Any, expected: dict):
+    def test_or(self, lhs, rhs, expected: dict):
         pred0, pred1 = cls.new(lhs), cls.new(rhs)
         assert pred0 | pred1 == expected
 
@@ -361,7 +411,7 @@ class TestPredicate:
             (dict(k1=['A']), {}, dict(k1=['A'])),
         ],
     )
-    def test_sub(self, lhs: Any, rhs: Any, expected: dict):
+    def test_sub(self, lhs, rhs, expected: dict):
         pred0, pred1 = cls.new(lhs), cls.new(rhs)
         assert pred0 - pred1 == expected
 
@@ -375,10 +425,8 @@ class TestPredicate:
         ],
     )
     def test_and(self, lhs: dict, rhs: dict, expected: dict):
-        pred1 = cls.new(lhs)
-        pred2 = cls.new(rhs)
-        result = pred1 & pred2
-        assert result == expected
+        result = cls.new(lhs) & cls.new(rhs)
+        assert result == cls.new(expected)
 
     # --------------
     # `*2` Accessors
@@ -389,12 +437,11 @@ class TestPredicate:
             (SAMPLES['basic'], [('k1', ['A', 'B']), ('k2', ['C'])]),
         ],
     )
-    def test_accessors(self, data: Any, expected: list[tuple[str, list[str]]]):
-        pred = cls.new(data)
-        assert pred.items() == expected
+    def test_accessors(self, data: Predicate, expected: list[tuple[str, list[str]]]):
+        assert data.items() == expected
         keys, values = map(list, mi.unzip(expected))
-        assert pred.keys() == keys
-        assert pred.values() == values
+        assert data.keys() == keys
+        assert data.values() == values
 
     # -------------
     # `*3` Mutators

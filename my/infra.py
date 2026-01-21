@@ -48,7 +48,7 @@ _V = TypeVar('_V')
 Series = list | tuple | set | deque
 type _Series[V] = list[V] | tuple[V, ...] | set[V] | deque[V]
 
-Map = Mapping[Any, Any] | Iterable[tuple[Any, Any]], ItemsView
+Map = Mapping[Any, Any] | Iterable[tuple[Any, Any]] | ItemsView
 type _Map[K: Hashable, V] = Mapping[K, V] | list[tuple[K, V]] | ItemsView[K, V]
 
 Time = date | datetime | time | timedelta

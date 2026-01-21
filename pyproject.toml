@@ -105,5 +105,5 @@ Homepage = "https://gitlab.com/doering-thinking-machines/modules/basis"
 exclude = ["my/templates/"]
 
 [tool.pytest]
-addopts = ["--cov=my", "--cov-report=term-missing", "--cov-report=xml"]
+# addopts = ["--cov=my", "--cov-report=term-missing", "--cov-report=xml"]
 testpaths = ["test"]

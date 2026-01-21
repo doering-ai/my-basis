@@ -88,7 +88,7 @@ class TestPredicate:
                 None,
                 {'parent.child.grandchild': ['A'], 'numbers': ['5', '10', '15']},
             ),
-            (None, dict(duplicates=True), []),
+            (None, dict(duplicates=True), dict()),
             (
                 None,
                 dict(k1=['A', 'B', 'B'], duplicates=True),
@@ -117,7 +117,7 @@ class TestPredicate:
             (
                 [SAMPLES['dupes']],
                 dict(duplicates=False),
-                dict(k1=['A', 'B'], k2=['C', 'D', 'C']),
+                dict(k1=['A', 'B'], k2=['C', 'D']),
             ),
         ],
     )
@@ -133,7 +133,11 @@ class TestPredicate:
             (SAMPLES['basic'], dict[str, str], dict(k1='A', k2='C')),
             (SAMPLES['basic'], dict[str, set[str]], dict(k1={'A', 'B'}, k2={'C'})),
             (SAMPLES['basic'], dict[str, list[set[str]]], dict(k1=[{'A'}, {'B'}], k2=[{'C'}])),
-            (SAMPLES['basic'], dict[str, Buffer], dict(k1=Buffer.new('A'), k2=Buffer.new('C'))),
+            (
+                SAMPLES['basic'],
+                dict[str, list[Buffer]],
+                dict(k1=[Buffer.new('A'), Buffer.new('B')], k2=Buffer.new('C')),
+            ),
             (SAMPLES['basic'], list[str], ['"k1": ["A", "B"]', '"k2": ["C"]']),
             (SAMPLES['basic'], str, '{"k1": ["A", "B"], "k2": ["C"]}'),
             (SAMPLES['basic'], list[int], [('k1', ['A', 'B']), ('k2', ['C'])]),

@@ -5,6 +5,7 @@
 from typing import Any, Literal
 import typing
 import types
+import collections.abc as abc
 from collections.abc import Mapping, Callable, Collection, Sequence
 from collections import Counter, deque
 from datetime import date, datetime, time, timedelta, UTC
@@ -293,12 +294,26 @@ class TestTypist:
             ('no', bool, False),
             ('n', bool, False),
             ('Disabled', bool, False),
-            # ---- NOOPS ----
+            ('   42   ', int, 42),
+            # ---- Bytes/Buffer ----
+            ('hello', bytes, b'hello'),
+            (b'world', str, 'world'),
+            (b'   3.14   ', float, 3.14),
+            # ---- Edge Cases ----
+            ([], str, '[]'),
+            ({}, str, '{}'),
+            (set(), str, 'set()'),
+            ('maybe', bool, True),  # matches the rest of python
+            # ---- Failures ----
+            ('abc', int, None),
+            ('12.34.56', float, None),
+            # ---- NOOPs ----
+            ('   ', str, ''),
             ('hello', str, 'hello'),
             (5, int, 5),
         ],
     )
-    def test_cast(self, data: Any, target: type, expected: object):
+    def test_cast__atomics(self, data: Any, target: type, expected: object):
         assert typist.cast(data, target) == expected
 
     @pyt.mark.parametrize(
@@ -308,6 +323,8 @@ class TestTypist:
             ([1, 2, 3], list[str], ['1', '2', '3']),
             ({1, 2, 3}, list[int], [1, 2, 3]),
             (['a', 'b', 'c'], set[str], {'a', 'b', 'c'}),
+            (['abc'], set[str], {'abc'}),
+            ('abc', set[str], {'abc'}),
             # ---- Deques ----
             (deque(['1', '5.5', '10']), set[float], {1.0, 5.5, 10.0}),
             ((1, 2, 3), deque[int], deque([1, 2, 3])),
@@ -323,6 +340,11 @@ class TestTypist:
             (['1', '5', '10'], Sequence[int], [1, 5, 10]),
             ({'1', '5', '10'}, Collection[int], {1, 5, 10}),
             (['1', '5', '10'], Sequence[str], ['1', '5', '10']),
+            (['1', '5', '10'], abc.Sequence, ['1', '5', '10']),
+            (['1', '5', '10'], abc.MutableSequence, ['1', '5', '10']),
+            (['1', '5', '10'], abc.MutableSet, {'1', '5', '10'}),
+            # ---- Class Children ----
+            (['a', 'b'], list[Buffer], [Buffer.new('a'), Buffer.new('b')]),
         ],
     )
     def test_cast__series(self, data: Any, target: type, expected: object):
@@ -493,8 +515,8 @@ class TestTypist:
         [
             # ---- Catching NOOPs ----
             ('1', int | float | bool | str, '1'),
-            ('1', list[str] | str, 1),
-            (['1'], str | list[str], ['1']),  # avoid deserializing
+            ('1', list[str] | str, '1'),  # avoid wrapping
+            (['1'], str | list[str], ['1']),  # avoid unwrapping
             ((1, 2), tuple[str, ...] | tuple[int, int], (1, 2)),
             # ---- Avoiding problematic clauses ----
             ('1', None | int, 1),
@@ -505,7 +527,7 @@ class TestTypist:
             ('-1.5', int | float, -1.5),
             (['1', '2'], str | list[int], [1, 2]),
             (['1.0', '2.0'], str | list[int] | list[float], [1.0, 2.0]),
-            (['enabled', 'OFF'], str | list[bool], [1, 2]),
+            (['enabled', 'OFF'], str | list[bool], [True, False]),
         ],
     )
     def test_cast__unions(self, data: list, target: type, expected: object):
@@ -533,19 +555,16 @@ class TestTypist:
         assert typist.cast(data, target) == expected
 
     def test_cast__firsts_and_atomics(self):
-        assert typist.cast(['A', 'B'], str) == 'A'
-        assert typist.cast(['A'], str) == 'A'
-        assert typist.cast([], str) is None
+        assert typist.cast([1, 2], int) == 1
+        assert typist.cast([1], int) == 1
 
         typist.firsts = False
-        assert typist.cast(['A', 'B'], str) is None
-        assert typist.cast(['A'], str) == 'A'
-        assert typist.cast([], str) is None
+        assert typist.cast([1, 2], int) is None
+        assert typist.cast([1], int) == 1
 
         typist.atomics = False
-        assert typist.cast(['A', 'B'], str) is None
-        assert typist.cast(['A'], str) is None
-        assert typist.cast([], str) is None
+        assert typist.cast([1, 2], int) is None
+        assert typist.cast([1], int) is None
 
         typist.firsts = typist.atomics = True
 

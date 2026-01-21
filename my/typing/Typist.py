@@ -269,7 +269,8 @@ class Typist(pyd.BaseModel):
         Returns:
             Integer score where higher values indicate better fit.
         """
-        if not option.main_type:
+        # I. Validate and parse args, catching edge cases
+        if not (tvar := option.main_type):
             return -10
         elif option.check(data):
             return 10
@@ -277,21 +278,31 @@ class Typist(pyd.BaseModel):
             return max(*(cls._score_option(data, subopt) for subopt in option.args))
 
         c0 = isinstance(data, Collection)
-        c1 = issubclass(option.main_type, Collection)
+        c1 = issubclass(tvar, Collection)
         a0 = isinstance(data, Atomic)
-        a1 = issubclass(option.main_type, Atomic)
+        a1 = issubclass(tvar, Atomic)
 
+        # II. "Main" score: compare the base types, especially atomics vs. collections
         score = 0
-        if isinstance(data, option.main_type):
+        if isinstance(data, tvar):
+            # Base type match (tho if we got here, we know that it isn't perfect)
             score += 3
         elif a0 and a1:
+            # Both atomic types
             score += 2
         elif a0 or a1 or c0 or c1:
+            # Otherwise, if we understood *anything* then we know there's a mismatch
             score -= 2
 
-        if c0 and c1:
+        # III. Type-specific cases
+        if a0 and a1:
+            # III.i. Particularly apt atomic casts
+            if isinstance(data, int) and issubclass(tvar, bool):
+                score += 1 if data in {0, 1} else -1
+        elif c0 and c1:
+            # III.ii. Compare the nested values of collection generics
             score += 2
-            if ut.is_map(data) and issubclass(option.main_type, Mapping):
+            if ut.is_map(data) and issubclass(tvar, Mapping):
                 score += 2
                 if option.key_type is None:
                     score += 1
@@ -303,7 +314,7 @@ class Typist(pyd.BaseModel):
                         score += 2
                     if cls.match(tuple(set(map(type, vals))), option.val_type):
                         score += 2
-            elif isinstance(data, Series) and issubclass(option.main_type, Series):
+            elif isinstance(data, Series) and issubclass(tvar, Series):
                 score += 2
 
                 if option.val_type is None:
@@ -444,6 +455,7 @@ class Typist(pyd.BaseModel):
         ):
             data = mi.first(data)
 
+        ret = None
         if isinstance(data, target):
             return data
         elif issubclass(target, Enum):
@@ -459,9 +471,9 @@ class Typist(pyd.BaseModel):
         elif issubclass(target, str) and (fn := self.get_str_method(data)):
             ret = self.invoke(fn)
 
-        if ret is None:
+        if ret is None or not isinstance(ret, target):
             with ctx.suppress(ValueError, TypeError):
-                ret = target(data)
+                ret = target(data if ret is None else ret)
         return ret
 
     def _enum_to_atomic[A: Atomic](self, data: Enum, target: type[A]) -> A | None:
@@ -559,10 +571,16 @@ class Typist(pyd.BaseModel):
             issubclass(target, float) and self.RGXS['float'].fullmatch(data)
         ):
             return target(data)
+
         elif issubclass(target, bool) and self.RGXS['bool'].fullmatch(data):
             return target(self.RGXS['bool_true'].fullmatch(data))
+
         elif issubclass(target, Time):
             return self._str_to_time(data, target)
+
+        elif issubclass(target, bytes):
+            return target(data.encode())
+
         return None
 
     def _to_class[C](self, data: object, target: type[C]) -> C | None:
@@ -575,7 +593,7 @@ class Typist(pyd.BaseModel):
             Class instance if successful, None otherwise.
         """
         # I. First, try to use the semi-standard `new()` method if available
-        if (ret := self.try_method(target, 'new', _tvar=target)) is not None:
+        if (ret := self.try_method(target, 'new', data, _tvar=target)) is not None:
             return ret
 
         if ut.is_map(data):
@@ -819,13 +837,12 @@ class Typist(pyd.BaseModel):
             assert tvar is not None, f'Cannot parse series type from {tvar}'
 
         # II. Preprocess data into an iterable form
-        if isinstance(data, str) and self.splits:
+        if isinstance(data, str):
             # II.i. Split strings if configured to do so
             data = self._split_str(data)
         elif isinstance(data, Mapping):
             # II.ii. Split maps into two-tuples if possible, otherwise fail early
             #        This is to avoid unintentional parsing of just a map's keys
-            breakpoint()
             if (items := ut.map_items(data)) and (
                 not details.val_type or details.val_type.is_map_item()
             ):
@@ -855,17 +872,15 @@ class Typist(pyd.BaseModel):
         Returns:
             List of split strings if delimiters found, None otherwise.
         """
-        # I. Null/invalid cases
-        if not data:
-            return None
-        elif data[0] == '[' and data[-1] == ']' and data.count('[') == 1:
-            # II. Split yaml-like flow sequences
-            with ctx.suppress(Exception):
-                return self.from_yaml(data, list[str], cast=False)
-        elif char := next(filter(data.__contains__, [',', '//', ':', '.']), ''):
-            # III. Split on common delimiters in order of preference
-            #       e.g. one.oneA:two splits on colons, but one.oneA splits on periods
-            return list(filter(bool, map(str.strip, data.split(char))))
+        if self.splits and data:
+            if data[0] == '[' and data[-1] == ']' and data.count('[') == 1:
+                # II. Split yaml-like flow sequences
+                with ctx.suppress(Exception):
+                    return self.from_yaml(data, list[str], cast=False)
+            elif char := next(filter(data.__contains__, [',', '//', ':', '.']), ''):
+                # III. Split on common delimiters in order of preference
+                #       e.g. one.oneA:two splits on colons, but one.oneA splits on periods
+                return list(filter(bool, map(str.strip, data.split(char))))
 
         return [data] if self.wraps else None
 

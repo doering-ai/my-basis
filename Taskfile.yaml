@@ -14,11 +14,12 @@ tasks:
     # ------
     test: uv run pytest {{.CLI_ARGS}}
 
-    test:dev: uv run pytest --sw -vv {{.CLI_ARGS}}
+    test:dev: uv run pytest --sw -vv --no-cov {{.CLI_ARGS}}
 
-    test:pdb: uv run pytest -s --pdb --sw -vv {{.CLI_ARGS}}
+    test:pdb: uv run pytest -s --pdb --sw -vv --no-cov {{.CLI_ARGS}}
 
-    test:cov: uv run pytest --cov=my --cov-report=term-missing {{.CLI_ARGS}}
+    test:cov: uv run pytest --cov=my --cov-report=term-missing --cov-report=markdown
+        {{.CLI_ARGS}}
 
     # ------
     # Sphinx

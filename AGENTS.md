@@ -4,19 +4,48 @@ The MyBasis Python package (imported as `my`) contains a variety of utilities ge
 
 It is developed with usage as a library in mind, and given its broad scope, is organized into a mostly-flat structure.
 The source code is found in `my/`, broken up further into ~7 subpackages.
-The corresponding PyTest files for each individual python file are present in matching subdirectories of `tests/`.
+The corresponding PyTest files for each individual python file are present in matching subdirectories of `tests/`, and the Sphinx w/ MyST documents for the project are found in `docs/`.
+
+## Ethos
+
+- Beautiful is better than ugly.
+- Explicit is better than implicit.
+- Simple is better than complex.
+- Complex is better than complicated.
+- Flat is better than nested.
+- Sparse is better than dense.
+- Readability counts.
+- Special cases aren't special enough to break the rules.
+- Although practicality beats purity.
+- Errors should never pass silently.
+- Unless explicitly silenced.
+- In the face of ambiguity, refuse the temptation to guess.
+- There should be one-- and preferably only one --obvious way to do it.
+- Although that way may not be obvious at first unless you're Dutch.
+- Now is better than never.
+- Although never is often better than *right* now.
+- If the implementation is hard to explain, it's a bad idea.
+- If the implementation is easy to explain, it may be a good idea.
+- Namespaces are one honking great idea -- let's do more of those!
 
 ## Commands
 
-- **Testing:**
-  - `uv run pytest` - Run all unit tests.
-  - `uv run pytest -k <pattern>` - Run all unit tests matching `<pattern>`.
-  - `uv run pytest --cov=my --cov-report=term-missing` - Run all unit tests with coverage report for the `my` package.
+For details of various commands, consult `/Taskfile`. Here's a lit of the main commands; pass `-- ARGS` to forward ARGS to the underlying tool.
+
+### Testing
+
+The below Taskfile tasks are simple wrappers are singular `uv run pytest` commands.
+
+- `task test`: Run a full pytest suite with minimal args.
+- `task test:dev`: Run pytest with flags for debugging one test at a time.
+- `task test:pdb`: Run pytest with the `--pdb` flag enabled.
+- `task test:cov`: Run a full pytest suite with a coverage report.
+
+#### Documentation
+
+- `task docs`: Build the Sphinx documentation via `sphinx-build`.
 
 ## Dependencies
-
-The project has many dependencies, but the most important are listed here.
-Consult pyproject.toml or run `uv tree -d 1` for a full list.
 
 ### Development
 
@@ -60,7 +89,7 @@ In general, the project makes extensive use of classes, both in typical object-o
 
 Large classes are almost always broken down into four subsections, each delimited by a wrapped commment like so:
 
-```py
+```python
 class MyClass:
     """ [Docstring explaining the purpose of this class.] """
     # [Static class variables here]
@@ -95,5 +124,6 @@ For exceptions, add `# type: ignore` to the end of the line.
 
 ### Docstrings
 
-Each class and function should have a docstring describing its purpose, parameters, and return value(s).
+Each public class and function should have a docstring describing its purpose, parameters, and return value(s).
+Docstrings follow the Google format for python docstrings.
 Do not include type annotations in the docstring.

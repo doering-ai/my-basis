@@ -12,8 +12,9 @@ from collections.abc import (
     Iterator,
     Mapping,
     Sequence,
+    MutableSequence,
 )
-from collections import Counter, defaultdict
+from collections import Counter, defaultdict, deque
 import functools as ft
 
 ### EXTERNAL
@@ -600,6 +601,25 @@ class IterUtils:
             List with elements at masked indices removed.
         """
         return [item for i, item in enumerate(data) if i not in mask]
+
+    @classmethod
+    def drop_duplicates(cls, data: MutableSequence) -> None:
+        """Remove duplicate elements from a list, preserving order.
+
+        Args:
+            data: Iterable to process.
+        """
+        seen: set = set()
+        to_drop = []
+        for i, item in enumerate(data):
+            if item not in seen:
+                seen.add(item)
+            else:
+                to_drop.append(i)
+
+        if to_drop:
+            for index in reversed(to_drop):
+                del data[index]
 
 
 iter_utils = IterUtils

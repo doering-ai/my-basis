@@ -38,7 +38,7 @@ class GroupKind(MyEnum, Flag):
     BEHIND = auto()  #: Positive lookbehind assertion -- `(?<=...)`.
     NOT_AHEAD = auto()  #: Negative lookahead assertion -- `(?!...)`.
     NOT_BEHIND = auto()  #: Negative lookbehind assertion -- `(?<!...)`.
-    DEFINE = auto()  #: Group for defining subpatterns without capturing.
+    DEFINE = auto()  #: Group for defining subpatterns without capturing -- `(?(DEFINE)...)`.
 
     _NAMED = PARAM | INVOC | SUBST  #: Combined flag for all named groups
     _LOOKAHEADS = AHEAD | NOT_AHEAD  #: Union of lookahead groups

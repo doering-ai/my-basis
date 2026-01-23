@@ -103,16 +103,16 @@ class Predicate(pyd.BaseModel):
         target = typist.parse(tvar)
         if not target:
             return source
-        val_type = target.val_type.main_type if target.val_type else None
+        vvar = target.val_type
 
         # IV. Expand nested structures into new dicts
-        if ut.any_has_any(source.keys(), '.') and (val_type is None or issubclass(val_type, dict)):
+        if ut.any_has_any(source.keys(), '.') and (vvar is None or typist.match(vvar, Mapping)):
             ret = {}
             leaves, nodes = map(list, mi.partition(lambda item: '.' in item[0], source.items()))
             if leaves:
                 ret |= dict(leaves)
             if nodes:
-                node_items = list(sorted((tuple(key.split('.')), values) for key, values in nodes))
+                node_items = [(tuple(key.split('.')), values) for key, values in sorted(nodes)]
                 ret |= self._deepen(node_items)
         else:
             ret = source
@@ -218,7 +218,7 @@ class Predicate(pyd.BaseModel):
         """Serialize a nested dictionary structure."""
         # I. Separate leaves from branches
         leaves, branches = mi.partition(lambda item: len(item[0]) > 1, node_items)
-        ret = dict(leaves)
+        ret = {key[0]: val for key, val in leaves}
 
         # II. Group the keys by their first item and recurse
         for base, _items in it.groupby(branches, key=lambda item: item[0][0]):

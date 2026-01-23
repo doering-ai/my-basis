@@ -136,11 +136,11 @@ class TestPredicate:
             (
                 SAMPLES['basic'],
                 dict[str, list[Buffer]],
-                dict(k1=[Buffer.new('A'), Buffer.new('B')], k2=Buffer.new('C')),
+                dict(k1=[Buffer.new('A'), Buffer.new('B')], k2=[Buffer.new('C')]),
             ),
             (SAMPLES['basic'], list[str], ['"k1": ["A", "B"]', '"k2": ["C"]']),
             (SAMPLES['basic'], str, '{"k1": ["A", "B"], "k2": ["C"]}'),
-            (SAMPLES['basic'], list[int], [('k1', ['A', 'B']), ('k2', ['C'])]),
+            (SAMPLES['basic'], list, [('k1', ['A', 'B']), ('k2', ['C'])]),
             # Known Classes
             (dict(k1=['1', '2']), dict[str, deque[int]], dict(k1=deque([1, 2]))),
             (

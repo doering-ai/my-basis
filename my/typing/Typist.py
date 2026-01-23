@@ -14,7 +14,7 @@ from collections.abc import (
     Sequence,
     Hashable,
 )
-from collections import Counter, deque
+from collections import Counter, deque, defaultdict
 from copy import deepcopy
 from datetime import date, datetime, time, timedelta, UTC
 from enum import Enum, Flag
@@ -805,10 +805,17 @@ class Typist(pyd.BaseModel):
 
         # II.i. Main Case: cast maps and map-ready lists of 2-tuples ("items")
         if ut.is_map(data) and (items := ut.map_items(data)):
+            kvar, vvar = details.key_type, details.val_type
             keys, values = mi.unzip(items)
-            key_data = self.multicast(keys, details.key_type, skip=False)
-            val_data = self.multicast(values, details.val_type, skip=False)
-            return tvar(dict(zip(key_data, val_data, strict=True)))
+            if kvar:
+                keys = self.multicast(keys, kvar, skip=False)
+            if vvar:
+                values = self.multicast(values, vvar, skip=False)
+            new_data = dict(zip(keys, values, strict=True))
+
+            if issubclass(tvar, defaultdict):
+                return tvar(vvar.main_type if vvar else None, new_data)
+            return tvar(new_data)
 
         # II.ii. Cast counters, the only map type that takes an iter of single items
         if issubclass(tvar, Counter) and isinstance(data, Series):
@@ -1019,17 +1026,20 @@ class Typist(pyd.BaseModel):
     # @overload
     # def check[U: types.UnionType](self, data, tvar: U) -> TypeGuard[U]: ...
 
-    def check[T](self, data, tvar: type[T]) -> TypeIs[T]:
+    @classmethod
+    def check[T](cls, data, tvar: type[T]) -> TypeIs[T]:
         """Check if a data matches a type variable. See `MyType.check()` for details."""
         return MyType.parse(tvar).check(data)
 
-    def all_are[T](self, iterable: Iterable, tvar: type[T]) -> TypeGuard[Iterable[T]]:
+    @classmethod
+    def all_are[T](cls, iterable: Iterable, tvar: type[T]) -> TypeGuard[Iterable[T]]:
         """Check if all values in an iterable match a type variable."""
-        return all(self.check(value, tvar) for value in list(iterable))
+        return all(cls.check(value, tvar) for value in list(iterable))
 
-    def any_are[E, T](self, iterable: Iterable[E], tvar: type[T]) -> TypeGuard[Iterable[E | T]]:
+    @classmethod
+    def any_are[E, T](cls, iterable: Iterable[E], tvar: type[T]) -> TypeGuard[Iterable[E | T]]:
         """Check if any value in an iterable matches a type variable."""
-        return any(self.check(value, tvar) for value in list(iterable))
+        return any(cls.check(value, tvar) for value in list(iterable))
 
     @classmethod
     def match(cls, lhs: TypeArg, rhs: TypeArg, intersect: bool = False) -> bool:
@@ -1111,34 +1121,41 @@ class Typist(pyd.BaseModel):
             data: The iterable to partition.
             tvar: The type to partition by.
         Returns:
-            1. A list of only items that are (subclasses of) the first type.
-            2. A list with the rest.
+            1. A list with the rest.
+            2. A list of only items that are (subclasses of) the first type.
         """
         myty = MyType.parse(tvar)
         if not myty:
             raise ValueError(f'Type is currently unhandled, and cannot be used: {tvar}')
         return tuple(map(list, mi.partition(myty.check, data)))
 
-    def seek_usage(self, lhs: TypeArg, rhs: type | MyType) -> bool:
+    def seek_usage(self, target: TypeArg, container: type | MyType) -> bool:
         """Check if a type is used anywhere within another type's structure.
 
         Args:
-            lhs: The type to search for.
-            rhs: The type to search within.
+            target: The type to search for.
+            container: The type to search within.
         Returns:
-            True if lhs is used within rhs's type structure.
+            True if target is used within container's type structure.
         """
-        t0 = MyType.parse(lhs)
-        t1 = MyType.parse(rhs)
+        t0 = MyType.parse(target)
+        t1 = MyType.parse(container)
         if self.match(t0, t1, intersect=True):
             return True
 
-        if inspect.isclass(rhs):
+        if inspect.isclass(container):
             # III.ii.a. Recurse into class members
-            return any(self.seek_usage(t0, ann) for ann in ut.instance_fields(rhs).values())
-        elif t1.val_type:
+            return any(self.seek_usage(t0, ann) for ann in ut.instance_fields(container).values())
+        else:
             # III.ii.b. Recurse into container values
-            return self.seek_usage(t0, t1.val_type)
+            if t1.key_type and self.seek_usage(t0, t1.key_type):
+                return True
+
+            if t1.val_type:
+                return self.seek_usage(t0, t1.val_type)
+            elif t1.literal_members and t1.origin is tuple:
+                return any(self.seek_usage(t0, arg) for arg in t1.literal_members)
+
         return False
 
     # -------------
@@ -1315,35 +1332,50 @@ class Typist(pyd.BaseModel):
         cases: dict[type | Callable[[object], bool], Callable[[object], Any]] | None = None,
         full: bool = False,
     ) -> Any:
-        """Recursively transform the given object into serialization-ready, standardized types."""
-        # I. Immediately return atomic values as-is
+        """Recursively simplify the given object into serialization-ready, standardized types.
+
+        This method is undeniably an opinionated way of preparing data for export, but it should
+        be easy enough to change or add some of these decisions using `cases`. That said, some
+        example type changes are:
+
+        - All pydantic models are converted to dicts using their `model_dump()` method.
+        - All series (sets, lists, deques, and subclasses) are cast to lists.
+        - All maps (dicts, defaultdict, Counters) are cast to dicts.
+        - All enums and time types are converted to strings.
+
+        Args:
+            data: The source data to serialize.
+            cases: Optional special-case handlers for specific types, that trigger at all depths.
+            full: If True, include unset/default fields for pydantic models.
+        """
+        # 0. If the caller specified a special handler, call that instead
+        if cases:
+            for case, handler in cases.items():
+                if (isinstance(case, type) and isinstance(data, case)) or (
+                    inspect.isfunction(case) and case(data)
+                ):
+                    return handler(data) if handler is not None else data
+
+        # I. Cast special atomics to strings, and return others as-is
         if isinstance(data, Atomic):
-            return data
+            if isinstance(data, Enum | Time):
+                return self._to_atomic(data, str)
+            else:
+                return data
 
-        # II. Cast special types (times, enums, etc.) to strings
-        elif isinstance(data, Enum | Time):
-            return self._to_atomic(data, str)
-
-        # III. Look for familiar functions on models, else treat them as dictionaries
-        if isinstance(data, pyd.BaseModel):
-            if cases:
-                # II.i. If the caller specified a special handler, call that instead
-                for case, handler in cases.items():
-                    if (isinstance(case, type) and isinstance(data, case)) or case(data):
-                        return handler(data)
-
+        # II. Look for familiar functions on models, else treat them as dictionaries
+        elif isinstance(data, pyd.BaseModel):
             if fn := self.get_method(data, 'serialize'):
-                # II.ii. Shortcut to a model-specific `serialize()` function
+                # II.i. Shortcut to a model-specific `serialize()` function
                 return fn()
 
-            # II.iii. Rely on the model's serializers and treat the result as a dict
-            data = (
-                data.model_dump()
-                if full
-                else data.model_dump(exclude_unset=True, exclude_defaults=True)
-            )
+            # II.ii. Rely on the model's serializers and treat the result as a dict
+            if full:
+                data = data.model_dump()
+            else:
+                data = data.model_dump(exclude_unset=True, exclude_defaults=True)
 
-        # IV. Handle collections by recursing over their elements
+        # III. Recurse into collections
         if isinstance(data, Collection):
             _recur = ft.partial(self.serialize, cases=cases, full=full)
             if isinstance(data, Series):
@@ -1392,25 +1424,24 @@ class Typist(pyd.BaseModel):
         # III. Shared fields are recursively merged if possible, otherwise overwritten
         for key, new in shared:
             old = base[key]
-            if self.all_are([old, new], Collection):
-                # _cast = self.cast(new, MyType.metaparse(old))
-                tvar = type(old)
-                if (_cast := self.cast(new, tvar)) is None:
-                    pass  # Fall through to overwrite
+            if isinstance(old, Collection) and isinstance(new, Collection):
+                tvar = MyType.metaparse(old)
+                if tvar.main_type is None or (_cast := self.cast(new, tvar)) is None:
+                    base[key] = new
                 elif isinstance(old, dict):
-                    base[key] = tvar(self.assemble(old, _cast, copy=False))
-                    continue
-                elif issubclass(tvar, set):
-                    old.update(tvar(new))
-                    continue
-                elif issubclass(tvar, Sequence):
+                    self.assemble(old, _cast, copy=False)
+                elif isinstance(old, set):
+                    old.update(_cast)
+                elif isinstance(old, Series):
                     old.extend(new)
                     if not dups:
-                        base[key] = old = tvar(mi.unique_everseen(old))
+                        ut.drop_duplicates(old)
                     if sort:
                         old.sort()
-                    continue
-            base[key] = new
+                else:
+                    base[key] = new
+            else:
+                base[key] = new
 
         # IV. Recursively merge other models into the result if present
         if rest:
@@ -1575,20 +1606,24 @@ class Typist(pyd.BaseModel):
         Returns:
             Loaded and cast data from the file/string.
         """
+        # I. Parse the content using an external library
         if not file:
+            # I.i. Empty case
             return tvar()
         elif isinstance(file, Path):
+            # I.ii. Local case: Read directly from file
             ut.validate_file(file)
             ret = srsly.read_yaml(file)
         else:
+            # I.iii. Main Case: Attempt to parse in-memory YAML strings
             if isinstance(file, bytes):
                 file = file.decode()
             if file.strip().startswith('```yaml'):
                 file = '\n\n'.join(self.RGXS['yaml'].findall(file))
 
-            # Attempt to parse in-memory YAML strings
             ret = srsly.yaml_loads(file)
 
+        # II. Verify & format the response
         if isinstance(ret, tvar):
             return ret
         elif cast:
@@ -1827,6 +1862,38 @@ class Typist(pyd.BaseModel):
         if not isinstance(sig, inspect.Signature):
             assert callable(sig), f'Invalid function provided: {sig}'
             sig = inspect.signature(sig)
+
+        # II. Attempt to bind the arguments to the signature
+        binding = cls._attempt_binding(sig, args, kwargs)
+
+        # III. Typecheck the proposed binding
+        if binding and len(binding.arguments) > 0:
+            for name, value in binding.arguments.items():
+                param = sig.parameters[name]
+                if (ann := param.annotation) is inspect.Parameter.empty:
+                    continue
+                if param.kind == param.VAR_POSITIONAL:
+                    if not isinstance(value, tuple):
+                        value = (value,)
+
+                    for item in value:
+                        if not cls.check(item, ann):
+                            return None
+                elif param.kind == param.VAR_KEYWORD:
+                    assert isinstance(value, dict)
+                    for item in value.values():
+                        if not cls.check(item, ann):
+                            return None
+                else:
+                    if not cls.check(value, ann):
+                        return None
+
+        return binding
+
+    @classmethod
+    def _attempt_binding(
+        cls, sig: inspect.Signature, args: tuple, kwargs: dict
+    ) -> inspect.BoundArguments | None:
         params = list(sig.parameters.values())
 
         # II.i. Naive attempt
@@ -1891,7 +1958,9 @@ class Typist(pyd.BaseModel):
             ValueError: If `_strict` is set and the function doesn't exist or couldn't be called.
         """
         # I. Check if the function can be called with the given arguments
-        if func and (bound := cls.invocable(func, *args, **kwargs)) is not None:
+        if not func:
+            return None
+        elif (bound := cls.invocable(func, *args, **kwargs)) is not None:
             try:
                 # II. Unpack the validated arguments and call the function
                 return func(*bound.args, **bound.kwargs)

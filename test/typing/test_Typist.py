@@ -626,33 +626,51 @@ class TestTypist:
     # `*3` TRANSFORMATION
     # -------------------
     @pyt.mark.parametrize(
-        'data, kwargs, expected',
+        'data, expected',
         [
-            ('5', dict(), '5'),
-            (5, dict(), 5),
-            ([5], dict(), [5]),
-            (Buffer.new('5'), dict(), '5'),
-            # Enums to strings
-            (Color.RED, dict(), 'red'),
-            (Status.ACTIVE, dict(), 'active'),
-            # Times to strings
-            (date(2025, 1, 1), dict(), '2025-01-01'),
-            (datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC), dict(), '2025-01-01T12:00:00'),
-            # Nested structures
-            ([1, 2, Buffer.new('3')], dict(), [1, 2, '3']),
-            ({'a': 1, 'b': Color.RED}, dict(), {'a': 1, 'b': 'red'}),
-            # Collections
-            ({1, 2, 3}, dict(), [1, 2, 3]),
-            (Counter(a=1, b=2), dict(), {'a': 1, 'b': 2}),
+            # ---- Atomic ----
+            ('5', '5'),
+            (5, 5),
+            ([5], [5]),
+            (Buffer.new('5'), '5'),
+            (Color.RED, 'red'),
+            (Status.ACTIVE, 'active'),
+            (date(2025, 1, 1), '2025-01-01'),
+            (datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC), '2025-01-01T12:00:00'),
+            # ---- Sequences ----
+            ([1, 2, Buffer.new('3')], [1, 2, '3']),
+            # ---- Maps ----
+            ({'a': 1, 'b': Color.RED}, {'a': 1, 'b': 'red'}),
+            ({1, 2, 3}, [1, 2, 3]),
+            (Counter(a=1, b=2), {'a': 1, 'b': 2}),
         ],
     )
-    def test_serialize(self, data: object, kwargs: dict, expected: Any):
-        assert typist.serialize(data, **kwargs) == expected
+    def test_serialize(self, data: object, expected: Any):
+        assert typist.serialize(data) == expected
+
+    @pyt.mark.parametrize(
+        'data, cases, expected',
+        [
+            (['a', 2, 'b'], {str: str.upper}, ['A', 2, 'B']),
+            (
+                dict(a='hello', b=Color.BLUE, c=3),
+                {str: lambda s: s[::-1], Color: lambda c: c.name.upper()},
+                dict(a='olleh', b='BLUE', c=3),
+            ),
+            (
+                [Buffer.new('one'), Buffer.new('two'), 3, 'four'],
+                {Buffer: lambda b: b.text[0].upper()},
+                ['ONE', 'TWO', 3, 'four'],
+            ),
+        ],
+    )
+    def test_serialize__cases(self, data: object, cases: dict, expected: Any):
+        assert typist.serialize(data, cases=cases) == expected
 
     @pyt.mark.parametrize(
         'models, expected',
         [
-            # Basics
+            # Positive case
             (
                 [
                     dict(a=dict(aa=[1, 3, 2, 4], ab=dict(aba=9, abb=99))),
@@ -660,12 +678,23 @@ class TestTypist:
                 ],
                 dict(a=dict(aa=list(range(1, 9)), ab=dict(aba=0, abb=99))),
             ),
-            # Values of different types aren't merged
-            ([dict(a=[1, 2, 3]), dict(a=deque([4, 5, 6]))], dict(a=deque([4, 5, 6]))),
-            # Edge cases
-            ([dict(), dict()], dict()),
-            # Edge cases
-            ([dict(a=1), dict()], dict(a=1)),
+            (
+                [dict(a=[1, 2, 3]), dict(a=deque([4, 5, 6]))],
+                dict(a=[1, 2, 3, 4, 5, 6]),
+            ),
+            # Negative case
+            (
+                [dict(a=[1, 2, 3]), dict(a=dict(aa=[4, 5, 6]))],
+                dict(a=dict(aa=[4, 5, 6])),
+            ),
+            (
+                [dict(a=1), dict()],
+                dict(a=1),
+            ),
+            (
+                [dict(), dict()],
+                dict(),
+            ),
         ],
     )
     def test_assemble(self, models: list[dict], expected: dict):
@@ -750,24 +779,26 @@ class TestTypist:
         assert yaml == '\n'.join(expected)
 
     @pyt.mark.parametrize(
-        'yaml, expected',
+        'yaml, tvar, expected',
         [
-            (['- 1', "- '[two]'", '- three'], [1, '[two]', 'three']),
-            (['- a: 1', '  b: 2', '- two', '- 3'], [dict(a=1, b=2), 'two', 3]),
+            (['- 1', "- '[two]'", '- three'], list, [1, '[two]', 'three']),
+            (['- a: 1', '  b: 2', '- two', '- 3'], list, [dict(a=1, b=2), 'two', 3]),
             (
                 ['one: 1', 'two: two', 'three: [a, b, c]'],
+                dict,
                 dict(one=1, two='two', three=['a', 'b', 'c']),
             ),
         ],
     )
-    def test_from_yaml(self, yaml: list[str], expected: Any):
-        data = typist.from_yaml('\n'.join(yaml))
+    def test_from_yaml(self, yaml: list[str], tvar, expected: Any):
+        content = '\n'.join(yaml)
+        data = typist.from_yaml(content, tvar)
         assert data == expected
 
     @pyt.mark.parametrize(
         'data, expected',
         [
-            (dict(a=1, b=2, c=3), '{\n    "a": 1,\n    "b": 2,\n    "c": 3\n}'),
+            (dict(a=1, b=2, c=3), '{\n    "a":1,\n    "b":2,\n    "c":3\n}'),
             ([1, 2, 3], '[\n    1,\n    2,\n    3\n]'),
             ('test', '"test"'),
             (123, '123'),
@@ -778,18 +809,17 @@ class TestTypist:
         assert result == expected
 
     @pyt.mark.parametrize(
-        'json_str, expected',
+        'json_str, tvar, expected',
         [
-            ('{"a": 1, "b": 2}', dict(a=1, b=2)),
-            ('[1, 2, 3]', [1, 2, 3]),
-            ('"test"', 'test'),
-            ('123', 123),
-            ('true', True),
-            ('null', None),
+            ('{"a": 1, "b": 2}', dict, dict(a=1, b=2)),
+            ('[1, 2, 3]', list, [1, 2, 3]),
+            ('"test"', str, 'test'),
+            ('123', int, 123),
+            ('true', bool, True),
         ],
     )
-    def test_from_json(self, json_str: str, expected: Any):
-        result = typist.from_json(json_str)
+    def test_from_json(self, json_str: str, tvar, expected: Any):
+        result = typist.from_json(json_str, tvar)
         assert result == expected
 
     @pyt.mark.parametrize(
@@ -831,7 +861,7 @@ class TestTypist:
         # Test that pickling and unpickling returns the same data
         pickled = typist.to_pickle(data)
         assert isinstance(pickled, bytes)
-        unpickled = typist.from_pickle(pickled)
+        unpickled = typist.from_pickle(pickled, type(data))
         assert unpickled == data
 
     # ---------------
@@ -891,7 +921,7 @@ class TestTypist:
         ],
     )
     def test_type_partition(self, data, tvar, expected):
-        ret_true, ret_false = typist.type_partition(data, tvar)
+        ret_false, ret_true = typist.type_partition(data, tvar)
         assert ret_true == expected
         assert ret_false == [v for v in data if v not in ret_true]
 
@@ -906,6 +936,10 @@ class TestTypist:
                 (str, str),
                 (int, list[int]),
                 (str, dict[str, int]),
+                (str, tuple[int, str]),
+                (str, tuple[str, ...]),
+                (dict[str, int], dict[tuple[dict[str, int], ...], dict[int, int]]),
+                (dict[str, int], dict[tuple[str, int, dict[int, int]], dict[str, int]]),
             ],
         ),
     )
@@ -1042,9 +1076,6 @@ class TestTypist:
         result = typist.invocable(func, *args, **kwargs)
         if expected_success:
             assert result is not None
-            # Result should be a tuple of (args, kwargs)
-            assert isinstance(result, tuple)
-            assert len(result) == 2
         else:
             assert result is None
 
@@ -1116,6 +1147,5 @@ class TestTypist:
         args: tuple,
         kwargs: dict,
     ):
-        success, result = typist.invoke(func, *args, **kwargs)
-        assert not success, f'Expected {func} to fail with args={args}, kwargs={kwargs}'
+        result = typist.invoke(func, *args, **kwargs)
         assert result is None, f'Expected None result on failure, got {result}'

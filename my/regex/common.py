@@ -111,8 +111,8 @@ COMMON_RGXS = RegexStore.new(
     ],
     # Symbolic Date Patterns
     y=r'[01]?\d{3}|20[012]\d|\d\d',
-    m=r'[01]?\d',
-    d=r'[0123]?\d',
+    m=r'0?[1-9]|1[0-2]',
+    d=r'0[1-9]|[12]?\d|3[0-1]',
     _date=r'(?P>y)[-\/.](?P>m)(?:[-\/.](?P>d))?',  # Preferred ymd only
     _symbolic_date=(
         '|:',
@@ -124,10 +124,28 @@ COMMON_RGXS = RegexStore.new(
     ),
     # Atomic date patterns
     day=(
-        r'(?i)\b[0123]?\d(?:st|nd|rd|th)?\b',
+        r'(?i)\b(?P>d)(?:st|nd|rd|th)?\b',
         lambda s: s[:2] if len(s) > 1 and s[1].isdigit() else s[0],
     ),
-    month=r'(?i)\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b',
+    month=(
+        '|:i',
+        r'\b',
+        [
+            r'jan(?:uary)?',
+            r'feb(?:ruary)?',
+            r'mar(?:ch)?',
+            'apr(?:il)?',
+            'may',
+            'june?',
+            'july?',
+            'aug(?:ust)?',
+            'sep(?:t(?:em(?:ber)?)?)?',
+            'oct(?:ob(?:er)?)?',
+            'nov(?:em(?:ber)?)?',
+            'dec(?:em(?:ber)?)?',
+        ],
+        r'\b',
+    ),
     season=r'(?i),? ?\b(?:fall|autumn|winter|spring|summer)\b,? ?',
     year=(
         r'(?<![[:alnum:]])(?:1?\d\d\d|20[01]\d|202[0-6]|\'\d\d)(?=$|[\W_a-p])',

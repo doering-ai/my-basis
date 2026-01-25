@@ -50,7 +50,9 @@ class GroupKind(MyEnum, Flag):
     @override
     @classmethod
     def read(cls, value: str | int | list | MyEnum) -> 'GroupKind':
-        if isinstance(value, str):
+        if not value:
+            return cls(0)
+        elif isinstance(value, str):
             for kind, prefixes in reversed(_PREFIXES):
                 if any(value.startswith(prefix) for prefix in prefixes):
                     return kind

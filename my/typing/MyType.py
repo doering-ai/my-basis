@@ -35,7 +35,7 @@ class MyType(pyd.BaseModel):
     UNHANDLED_TYPES: ClassVar[set[str]] = {
         '',
         'Any',
-        'object',
+        # 'object',
         # Functional
         'Generator',
         'Iterator',

@@ -11,6 +11,7 @@ import pydantic as pyd
 import more_itertools as mi
 
 ### INTERNAL
+from ..infra import Series
 
 
 ############
@@ -27,28 +28,45 @@ class Command(pyd.BaseModel):
      / `execute_async()`. To chain commands together, use the provided `out` and `pipe` options.
     """
 
-    command: str
-    args: list[str] = []
-    kwargs: dict[str, Any] = {}
+    model_config = pyd.ConfigDict()
 
-    preserve_underscores: bool = False
-    single_dashes: bool = False
-    named_args_last: bool = False
-    verbose: bool = False
+    class Options(pyd.BaseModel):
+        """Configuration options for command assembly."""
 
-    out: str | None = None
-    pipe: Self | None = None
+        verbose: bool = False  #: Print the assembled command before execution.
+
+        preserve_underscores: bool = False  #: Underscores in flag names are not changed to hyphens.
+        single_dashes: bool = False  #: Use single dashes for all flags.
+        named_args_last: bool = False  #: Positional arguments are placed after named arguments.
+        flag_assignment: bool = False  #: Use "=" to connect flags to their values.
+        always_quote: bool = False  #: Always quote argument values, even if not strictly necessary.
+
+        out: str | None = None  #: Redirect command output to a file. Not compatible w/ `pipe`.
+        pipe: 'Command | None' = None  #: Pipe command output to another command.
+
+    command: str  #: Base command name.
+    args: list[Any] = []  #: Positional arguments.
+    kwargs: dict[str, Any] = {}  #: Keyword arguments (converted to flags).
+    options: Options = pyd.Field(default_factory=Options)  #: Assembly options.
 
     # -------------------
     # `.` Initial Methods
     # -------------------
     @pyd.model_validator(mode='after')
     def _validate_command(self) -> Self:
-        assert self.out is None or self.pipe is None, 'Cannot define both output and pipe at once.'
+        assert self.options.out is None or self.options.pipe is None, (
+            'Cannot define both output and pipe at once.'
+        )
         return self
 
     @classmethod
-    def new(cls, command: str, *args: str, **kwargs: Any) -> Self:
+    def new(
+        cls,
+        command: str,
+        *args: str,
+        options: dict | Options | None = None,
+        **kwargs: Any,
+    ) -> Self:
         """Create a new command instance.
 
         Args:
@@ -58,11 +76,19 @@ class Command(pyd.BaseModel):
         Returns:
             Configured Command instance.
         """
-        options = {}
-        if opt_keys := set(kwargs.keys()) & _command_fields:
-            options = {k: kwargs.pop(k) for k in opt_keys}
+        if options is None:
+            options = cls.Options()
+        elif isinstance(options, dict):
+            if (pipe := options.get('pipe', None)) and not isinstance(pipe, Command):
+                if isinstance(pipe, dict):
+                    options['pipe'] = cls.new(**pipe)
+                elif isinstance(pipe, Series):
+                    options['pipe'] = cls.new(*pipe)
+                else:
+                    options['pipe'] = cls.new(str(pipe))
+            options = cls.Options(**options)
 
-        return cls(command=command, args=list(args), kwargs=kwargs, **options)
+        return cls(command=command, args=list(args), kwargs=kwargs, options=options)
 
     # -------------------
     # `-` Private Methods
@@ -74,14 +100,7 @@ class Command(pyd.BaseModel):
         Returns:
             String representations with appropriate quoting.
         """
-        ret = []
-        for arg in self.args:
-            if isinstance(arg, int | float):
-                ret.append(f'{arg}')
-            else:
-                arg = str(arg)
-                ret.append(f'"{arg}"' if '"' not in arg else f'{arg}')
-        return ret
+        return list(map(self.quote_value, self.args))
 
     @property
     def named_args(self) -> list[str]:
@@ -93,27 +112,31 @@ class Command(pyd.BaseModel):
         ret = []
         for key, val in self.kwargs.items():
             # I.i. Format python identifiers for the command line (e.g. my_arg -> my-arg)
-            if not self.preserve_underscores and '_' in key:
+            if not self.options.preserve_underscores and '_' in key:
                 key = key.replace('_', '-')
             # I.ii. Determine single vs double dash prefix
-            key = ('-' if self.single_dashes or len(key) == 1 else '--') + key
+            key = ('-' if self.options.single_dashes or len(key) == 1 else '--') + key
+            # I.iii. Determine assignment vs space separator
+            sep = '=' if self.options.flag_assignment else ' '
 
             # II. Write plain arg if it's an atomic type, otherwise wrap in quotes
             if isinstance(val, bool) and val:
                 ret.append(key)
-            elif isinstance(val, int | float):
-                ret.append(f'{key} {val}')
             else:
-                # Find the quote style least likely to cause problems for this value
-                valstr = str(val)
-                if '"' in valstr:
-                    if "'" not in valstr:
-                        ret.append(f"{key} '{valstr}'")
-                        continue
-                    else:
-                        valstr = valstr.replace('"', '\\"')
-                ret.append(f'{key} "{valstr}"')
+                ret.append(f'{key}{sep}{self.quote_value(val)}')
         return ret
+
+    def quote_value(self, value: Any) -> str:
+        """Quote a value for safe shell usage."""
+        value = str(value)
+        if '"' in value:
+            if "'" not in value:
+                return f"'{value}'"
+            else:
+                return f'"{value.replace('"', '\\"')}"'
+        elif ' ' in value or self.options.always_quote:
+            return f'"{value}"'
+        return value
 
     # -------------------
     # `+` Primary Methods
@@ -126,23 +149,31 @@ class Command(pyd.BaseModel):
             sections = [self.named_args, self.positional_args]
 
             # II. Order the positional & keyword segments appropriately
-            if self.named_args_last:
+            if self.options.named_args_last:
                 sections = [sections[1], sections[0]]
             parts.extend(mi.flatten(sections))
 
-        if self.out:
-            parts.append(f'>> {self.out}')
-        elif self.pipe:
-            parts.append(f'| {self.pipe}')
+        if self.options.out:
+            parts.append(f'>> {self.options.out}')
+        elif self.options.pipe:
+            parts.append(f'| {self.options.pipe}')
 
         ret = ' '.join(parts)
-        if self.verbose:
+        if self.options.verbose:
             print(ret)
         return ret
 
     # ------------------
     # `*` Public Methods
     # ------------------
+    def __str__(self) -> str:
+        """Get the assembled command as a string."""
+        return self.assemble()
+
+    def __bool__(self) -> bool:
+        """A command is truthy if it has any content."""
+        return bool(self.command or self.args)
+
     def execute(self) -> tuple[int, str, str]:
         """Execute a shell command synchronously.
 
@@ -207,6 +238,3 @@ class Command(pyd.BaseModel):
             (return_code, stdout, stderr).
         """
         return await cls.new(command, *args, **kwargs).execute_async()
-
-
-_command_fields = set(Command.model_fields.keys()) - {'cmd', 'args', 'kwargs'}

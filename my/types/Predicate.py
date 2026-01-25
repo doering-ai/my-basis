@@ -16,7 +16,7 @@ import json
 ### INTERNAL
 from ..infra import T, Series, Map, _Series
 from ..utils import ut
-from ..typing import Typist
+from ..typing import Typist, MyType
 
 # Create a local typist with the most permissive possible configuration.
 typist = Typist(firsts=True, atomics=True, splits=True, wraps=True)
@@ -103,17 +103,17 @@ class Predicate(pyd.BaseModel):
         target = typist.parse(tvar)
         if not target:
             return source
-        vvar = target.val_type
+        kvar, vvar = target.key_type, target.val_type
 
         # IV. Expand nested structures into new dicts
-        if ut.any_has_any(source.keys(), '.') and (vvar is None or typist.match(vvar, Mapping)):
+        if ut.any_has_any(source.keys(), '.') and (
+            vvar is None or typist.match(vvar, Mapping, intersect=True)
+        ):
             ret = {}
-            leaves, nodes = map(list, mi.partition(lambda item: '.' in item[0], source.items()))
-            if leaves:
-                ret |= dict(leaves)
-            if nodes:
-                node_items = [(tuple(key.split('.')), values) for key, values in sorted(nodes)]
-                ret |= self._deepen(node_items)
+            leaves, nodes = mi.partition(lambda item: '.' in item[0], source.items())
+            ret |= dict(leaves)
+            if node_items := [(tuple(key.split('.')), values) for key, values in sorted(nodes)]:
+                ret |= self._deepen(node_items, kvar, vvar)
         else:
             ret = source
 
@@ -214,18 +214,35 @@ class Predicate(pyd.BaseModel):
         return str(val)
 
     @classmethod
-    def _deepen(cls, node_items: list[tuple[tuple[str, ...], list[str]]]) -> dict[str, list[str]]:
+    def _deepen(
+        cls,
+        node_items: list[tuple[tuple[str, ...], list[str]]],
+        kvar: MyType | None,
+        vvar: MyType | None,
+    ) -> dict[str, Any]:
         """Serialize a nested dictionary structure."""
         # I. Separate leaves from branches
         leaves, branches = mi.partition(lambda item: len(item[0]) > 1, node_items)
-        ret = {key[0]: val for key, val in leaves}
+        ret = {}
+        for key, val in leaves:
+            _key = key[0]
+            if kvar is not None:
+                _key = typist.cast(_key, kvar)
+                assert _key is not None, f'Failed to cast key {key[0]} to {kvar}.'
+
+            _val = val
+            if vvar is not None:
+                _val = typist.cast(_val, vvar)
+                assert _val is not None, f'Failed to cast {val} to {vvar}.'
+
+            ret[_key] = _val
 
         # II. Group the keys by their first item and recurse
         for base, _items in it.groupby(branches, key=lambda item: item[0][0]):
             items = [(key[1:], vals) for key, vals in _items]
             lens = {len(key) for key, _ in items}
             assert 0 not in lens, f'A node w/ children cannot also have its own values: {items=}'
-            ret[base] = cls._deepen(items)
+            ret[base] = cls._deepen(items, kvar, vvar)
 
         return ret
 
@@ -357,6 +374,8 @@ class Predicate(pyd.BaseModel):
 
     def __iadd__(self, other: Map | Self) -> Self:
         """Add all values from another predicate into this one, appending to existing fields."""
+        if not other:
+            return self
         if isinstance(other, Predicate):
             other = other.data
 
@@ -369,6 +388,8 @@ class Predicate(pyd.BaseModel):
 
     def __ior__(self, other: Map | Self) -> Self:
         """Update this predicate with fields from another, leaving overwriting up to defaults."""
+        if not other:
+            return self
         if isinstance(other, Predicate):
             other = other.data
 
@@ -385,17 +406,16 @@ class Predicate(pyd.BaseModel):
             other = other.data
 
         if not other:
-            return self
+            self.data.clear()
         elif isinstance(other, Series) and typist.all_are(other, str):
             for key in self.keyset - set(other):
                 del self.data[key]
-            return self
         else:
             if not isinstance(other, Predicate):
                 pred = Predicate.new(other, duplicates=self.duplicates)
             shared_keys = self.keyset & pred.keyset
             self.data = {key: ut.common_elements(self[key], other[key]) for key in shared_keys}
-            return self
+        return self
 
     def __isub__(self, other: Map | _Series[str] | Self) -> Self:
         """Remove values from this predicate that are present in the other."""

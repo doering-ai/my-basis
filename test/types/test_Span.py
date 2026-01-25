@@ -20,32 +20,30 @@ class TestSpan:
     # `.` Initial Methods
     # -------------------
     @pyt.mark.parametrize(
-        'arg0, arg1, expected',
+        'args, expected',
         [
             # Tuple inputs
-            ((1, 3), -1, (1, 3)),
-            ((0, 10), -1, (0, 10)),
-            ((5, 5), -1, (5, 5)),
+            ([(1, 3)], (1, 3)),
+            ([(0, 10)], (0, 10)),
+            ([(5, 5)], (5, 5)),
             # Two numeric arguments
-            (1, 3, (1, 3)),
-            (0, 10, (0, 10)),
-            (5, 5, (5, 5)),
+            ([1, 3], (1, 3)),
+            ([0, 10], (0, 10)),
+            ([5, 5], (5, 5)),
             # String inputs with delimiters
-            ('1-3', -1, (1, 3)),
-            ('0/10', -1, (0, 10)),
-            ('5,5', -1, (5, 5)),
-            ('1 - 3', -1, (1, 3)),
-            ('0 / 10', -1, (0, 10)),
-            ('5 , 5', -1, (5, 5)),
+            (['1-3'], (1, 3)),
+            (['0/10'], (0, 10)),
+            (['5,5'], (5, 5)),
+            (['1 - 3'], (1, 3)),
+            (['0 / 10'], (0, 10)),
+            (['5 , 5'], (5, 5)),
             # String with second argument
-            ('5', 10, (5, 10)),
-            ('0', 1, (0, 1)),
+            (['5', 10], (5, 10)),
+            (['0', 1], (0, 1)),
         ],
     )
-    def test_constructor_valid(
-        self, arg0: str | int | tuple[int, int], arg1: int, expected: tuple[int, int]
-    ):
-        span = Span(arg0) if arg1 == -1 else Span(arg0, arg1)
+    def test_new(self, args: list, expected: tuple[int, int]):
+        span = Span(*args)
         assert span == expected
 
     def test_constructor_span_input(self):

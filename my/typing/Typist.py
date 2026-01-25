@@ -1051,34 +1051,40 @@ class Typist(pyd.BaseModel):
             intersect: If `True`, check for any overlap between the two types
                        rather than full subset coverage.
         """
-        # I.i. Any & None (i.e. unspecified) are always true, but unhandled MyTypes are always false
+        # I. Parse the types (if they're already parsed, no work is done)
+        if isinstance(lhs, MyType):
+            t0, lhs = lhs, lhs.src_type
+        else:
+            t0 = MyType.parse(lhs)
+
+        if isinstance(rhs, MyType):
+            t1, rhs = rhs, rhs.src_type
+        else:
+            t1 = MyType.parse(rhs)
+
+        # II.i. Any & None (i.e. unspecified) are true, but unhandled MyTypes are always false
         if {lhs, rhs} & {Any, None}:
             return True
-        elif not (lhs and rhs):
+        elif not (t0 and t1):
             return False
 
-        # II. Check cache based on simple stringification
-        n0 = str(lhs.src_type if isinstance(lhs, MyType) else lhs)
-        n1 = str(rhs.src_type if isinstance(rhs, MyType) else rhs)
+        # II.i. Check cache based on simple stringification
+        cache_key = str(lhs), str(rhs)
         if intersect:
-            n1 += '.I'
-        if (cached := cls.MATCH_CACHE[n0, n1]) is not None:
+            cache_key = (cache_key[0], cache_key[1] + '.I')
+        if (cached := cls.MATCH_CACHE[*cache_key]) is not None:
             return cached
-
-        # III. Parse the types (if they're already parsed, no work is done)
-        t0 = MyType.parse(lhs)
-        t1 = MyType.parse(rhs)
 
         ret = False
         _recur = ft.partial(cls.match, intersect=intersect)
         if t0.literal_members or t1.literal_members:
-            # II. Literal case
+            # III.i. Literal case
             ret = cls._match_literals(t0, t1, intersect)
         elif not (mt0 := t0.main_type) or not (mt1 := t1.main_type):
-            # II. Unhandled case
+            # III.ii. Unhandled case
             ret = False
         elif t0.is_split or t1.is_split:
-            # III. Unions case
+            # III.iii. Unions case
             lhs_options = t0.args if t0.is_split else [t0]
             rhs_options = t1.args if t1.is_split else [t1]
             fn = any if intersect else all
@@ -1092,7 +1098,7 @@ class Typist(pyd.BaseModel):
                 ret &= _recur(t0.val_type, t1.val_type)
 
         # Cache & return
-        cls.MATCH_CACHE[n0, n1] = ret
+        cls.MATCH_CACHE[*cache_key] = ret
         return ret
 
     def match_instances(self, lhs: object, rhs: object, intersect: bool = False) -> bool:

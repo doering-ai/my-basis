@@ -40,7 +40,9 @@ class RegexDebugger(RegexStore):
         Returns:
             New RegexDebugger with all patterns from the store.
         """
-        return cls.model_construct(**store.model_dump())
+        new = cls.model_construct(**store.model_dump())
+        new.options = store.options.model_copy()
+        return new
 
     # -------------------
     # `-` Private Methods
@@ -90,7 +92,7 @@ class RegexDebugger(RegexStore):
             start_idx -= 1
 
         # II. Slice out the snippet and 'sanitize' it so that it's exportable to any regex platform
-        snippet = str(atoms[start_idx:failed_idx])
+        snippet = str(atoms[start_idx : failed_idx + 1])
 
         # III. Identify the groups referenced in the snippet and collect just those definitions
         groups_invoked = self.parse_invocations(snippet)
@@ -217,7 +219,7 @@ class RegexDebugger(RegexStore):
     # ------------------
     def debug(
         self,
-        names: list[str],
+        names: str | list[str],
         text: str,
         matched: bool,
         expected: bool = True,
@@ -237,6 +239,8 @@ class RegexDebugger(RegexStore):
             ValueError: If matched and expected are both False (no failure to debug).
         """
         assert names
+        if isinstance(names, str):
+            names = [names]
         name = names[0].upper() + (f'.{func}()' if func else '')
 
         term_width = ut.get_terminal_width()
@@ -245,21 +249,21 @@ class RegexDebugger(RegexStore):
             self._format_early_return,
             name=name,
             text=text,
-            expressions='\n\n'.join(map(self.sanitize, names)),
+            expr='\n\n'.join(map(self.sanitize, names)),
         )
 
         # II. Analyze the failure case
         if matched and expected:
             # II.i. Incorrect case
-            output.extend(preamble('INCORRECTLY MATCHED, returning the wrong data.'))
+            output.extend(preamble(explanation='INCORRECTLY MATCHED, returning the wrong data.'))
 
         elif matched and not expected:
             # II.ii. Unexpected case
-            output.extend(preamble('UNEXPECTEDLY MATCHED when it should have failed.'))
+            output.extend(preamble(explanation='UNEXPECTEDLY MATCHED when it should have failed.'))
 
         elif expected and not matched:
             # II.iii. Main case
-            output.extend(preamble('FAILED TO MATCH the full text.'))
+            output.extend(preamble(explanation='FAILED TO MATCH the full text.'))
             for i, _name in enumerate(names):
                 if len(names) > 1:
                     output.append(ut.wrap(f'`{i}` DEBUGGING {_name.upper()}...', char='=', width=4))

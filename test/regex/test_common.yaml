@@ -1,0 +1,515 @@
+# General patterns
+_nw:
+    - '!'
+    - '@'
+    - '#'
+    - '$'
+    - '_'
+    - ' '
+    - "\n"
+    - "\t"
+    # Negative:
+    - [a]
+    - [Z]
+    - [5]
+
+_delim:
+    - {text: '^start', func: search}
+    - {text: 'end$', func: search}
+    - {text: 'word!next', func: search}
+    - {text: 'word@next', func: search}
+    - {text: 'word#next', func: search}
+    # Negative (these are not delimiters):
+    - ['word-next']
+    - ['word.next']
+    - ['word next']
+
+_ws:
+    - {text: ' word', func: search}
+    - {text: 'test word', func: search}
+    - {text: '(word', func: search}
+    - {text: 'start', func: search}
+    # Negative:
+    - ['&word']
+    - ['test&word']
+
+_we:
+    - {text: 'word ', func: search}
+    - {text: 'word)', func: search}
+    - {text: 'word!', func: search}
+    - {text: 'word', func: search}
+    # Negative:
+    - ['word&']
+    - ['wordalpha']
+
+# Web patterns
+_http:
+    - 'http://'
+    - 'https://'
+    - 'HTTP://'
+    - 'HTTPS://'
+    - 'www.'
+    - 'www2.'
+    - 'http://www.'
+    - 'https://www.'
+    # Negative:
+    - ['ftp://']
+    - ['htp://']
+    - ['ww.']
+
+tld:
+    - {text: abc.com, func: search}
+    - {text: abc.org, func: search}
+    - {text: abc.edu, func: search}
+    - {text: abc.uk, func: search}
+    - {text: abc.co, func: search}
+    - {text: abc.info, func: search}
+    # Negative:
+    - {text: 'abc.COM', func: search, expect_none: True}
+    - {text: 'abc.a', func: search, expect_none: True}
+    - {text: 'abc.12345', func: search, expect_none: True}
+    - {text: 'abc.domain.', func: search, expect_none: True}
+    - {text: 'domain.', func: search, expect_none: True,}
+
+url:
+    - ['http://uchicago.edu/founders', 'uchicago.edu/founders']
+    - ['https://www.example.com/page', 'example.com/page']
+    - ['www.google.com/search?q=test', 'google.com/search?q=test']
+    - ['http://github.com/user/repo', 'github.com/user/repo']
+    - ['example.org/path/to/page', 'example.org/path/to/page']
+    - ['www.site.co.uk/page', 'site.co.uk/page']
+    - ['https://sub.domain.com/a/b/c', 'sub.domain.com/a/b/c']
+    # Archive URLs get cleaned:
+    - ['web.archive.org/web/20081205101019/http://www.site.org', 'site.org']
+    # Negative:
+    - ['not-a-url']
+    - ['just.text']
+    - ['co/short']
+
+md_url:
+    - {text: '[link text](http://example.com)', alias: link text, target: 'http://example.com'}
+    - {text: '[GitHub](https://github.com)', alias: GitHub, target: 'https://github.com'}
+    - {text: '[my site](www.example.org/page)', alias: my site, target: www.example.org/page}
+    - {text: '[ spaces ](http://test.com)', alias: spaces, target: 'http://test.com'}
+    - {text: '[one\ntwo](url)', func: search, alias: 'one\ntwo', target: url}
+    # Negative (image syntax):
+    - ['![image](url.png)']
+    # Negative (not markdown links):
+    - ['[text] (url)']
+    - ['text(url)']
+
+# Numeric patterns
+_roman_numeral:
+    # Positive:
+    - I
+    - ii
+    - III
+    - iv
+    - V
+    - VI
+    - vii
+    - VIII
+    - ix
+    - X
+    - XI
+    - xiv
+    - XV
+    - XIX
+    - XX
+    - XXX
+    - XL
+    - L
+    - LX
+    - LXX
+    - LXXX
+    - XC
+    - C
+    - CC
+    - CCC
+    - CD
+    - D
+    - DC
+    - DCC
+    - DCCC
+    - CM
+    - M
+    - MM
+    - MMM
+    - MCMXCIX
+    - mcxi
+    - McxI
+    - MMXXIV
+    - mdcclxxvi
+
+    # Negative:
+    - ['']
+    - ['MCMCM']
+    - ['XIVI']
+    - ['LL']
+    - ['VV']
+    - ['DD']
+    - ['IIII']
+    - ['VX']
+    - ['LC']
+    - ['DM']
+    - ['IC']
+    - ['XM']
+
+# Symbolic Date Patterns
+y:
+    - '2024'
+    - '1999'
+    - '0001'
+    - '99'
+    - '01'
+    - '2019'
+    - '2029'
+    - '123'
+    # Negative:
+    - ['2030']
+    - ['2040']
+    - ['20245']
+
+m:
+    - '1'
+    - '01'
+    - '09'
+    - '10'
+    - '11'
+    - '12'
+    # Negative:
+    - ['13']
+    - ['20']
+    - ['00']
+
+d:
+    - '1'
+    - '01'
+    - '15'
+    - '28'
+    - '29'
+    - '30'
+    - '31'
+    # Negative:
+    - ['32']
+    - ['40']
+    - ['99']
+
+_symbolic_date:
+    - '2024/01/15'
+    - '2024-12-31'
+    - '2024.06.01'
+    - '99/12/25'
+    - '2024/01'
+    - '2024-12'
+    - '01/2024'
+    - '12/31/2024'
+    - '15-06-99'
+    # Negative:
+    - ['not-a-date']
+    - ['2024']
+
+# Atomic date patterns
+day:
+    - {text: '1st', day: '1'}
+    - {text: '2nd', day: '2'}
+    - {text: '3rd', day: '3'}
+    - {text: '4th', day: '4'}
+    - {text: '10th', day: '10'}
+    - {text: '21st', day: '21'}
+    - {text: '22nd', day: '22'}
+    - {text: '23rd', day: '23'}
+    - {text: '31st', day: '31'}
+    - {text: '1', day: '1'}
+    - {text: '15', day: '15'}
+    - {text: '25', day: '25'}
+    # Negative:
+    - ['32nd']
+    - ['40th']
+    - ['99th']
+
+month:
+    - jan
+    - january
+    - January
+    - JANUARY
+    - Jan
+    - feb
+    - february
+    - mar
+    - march
+    - apr
+    - april
+    - may
+    - May
+    - jun
+    - june
+    - jul
+    - july
+    - aug
+    - august
+    - sep
+    - sept
+    - september
+    - oct
+    - october
+    - nov
+    - november
+    - dec
+    - december
+    - December
+    # Negative:
+    - ['jantober']
+    - ['jany']
+    - ['months']
+    - ['maybe']
+
+season:
+    - spring
+    - Spring
+    - summer
+    - Summer
+    - fall
+    - Fall
+    - autumn
+    - Autumn
+    - winter
+    - Winter
+    - ', spring'
+    - 'spring, '
+    - ', winter, '
+    # Negative:
+    - ['springs']
+    - ['falling']
+    - ['wintry']
+
+year:
+    - {text: '2024', year: '2024'}
+    - {text: '1999', year: '1999'}
+    - {text: '1776', year: '1776'}
+    - {text: '2001', year: '2001'}
+    - {text: '2026', year: '2026'}
+    - {text: "'24", year: '2024'}
+    - {text: "'99", year: '2099'}
+    - {text: "'01", year: '2001'}
+    - {text: '999', year: '999'}
+    - {text: '500', year: '500'}
+    # Negative:
+    - ['2027']
+    - ['2030']
+    - ['2040']
+    - ['20245']
+    - ['12345']
+
+epoch:
+    - B.C.E
+    - B.C.E.
+    - BCE
+    - C.E
+    - C.E.
+    - CE
+    - A.D
+    - A.D.
+    - AD
+    - ', B.C.E'
+    - ', A.D.'
+    - ' BCE'
+    - ' CE '
+    # Negative:
+    - [B.C]
+    - [BC]
+    - ['B.C.E.E']
+    - ['ACE']
+    - ['AB']
+
+# Molecular date patterns
+_sep:
+    - ' '
+    - '-'
+    - ' - '
+    - 'to'
+    - ' to '
+    - 'and'
+    - ' and '
+    - ''
+    # Any separator pattern:
+    - {text: ' through ', func: search,}
+
+_years:
+    - {text: '1469-70', year: ['1469']}
+    - {text: '2020-2021', year: ['2020', '2021']}
+    - {text: '2020-21', year: '2020'}
+    - {text: '2020-present', year: ['2020']}
+    - {text: '1999 B.C.E', year: ['1999'], epoch: ['B.C.E']}
+    - {text: '500 A.D.', year: ['500'], epoch: ['A.D.']}
+    # Negative:
+    - ['in2020']
+    - ['y2020']
+    - ['(2020)']
+
+_months:
+    - {text: 'april-june', month: ['april', 'june']}
+    - {text: 'January', month: ['January']}
+    - {text: 'Jan-Feb', month: ['Jan', 'Feb']}
+    - {text: ', March', month: ['March']}
+    - {text: 'April, ', month: ['April']}
+    - {text: ', May, ', month: ['May']}
+    - {text: 'June to July', month: ['June', 'July']}
+    - {text: 'aug-sep', month: ['aug', 'sep']}
+    # Negative:
+    - ['not-a-month']
+
+_day_month:
+    - {text: '1 June', day: ['1'], month: ['June']}
+    - {text: '15 april', day: ['15'], month: ['april']}
+    - {text: '1st January', day: ['1'], month: ['January']}
+    - {text: '25th Dec', day: ['25'], month: ['Dec']}
+    - {text: '1-15 March', day: ['1', '15'], month: ['March']}
+    - {text: '10-12 May', day: ['10', '12'], month: ['May']}
+    # Negative:
+    - ['June 1']
+    - ['April 15']
+
+_month_day:
+    - {text: 'June 1', month: ['June'], day: ['1']}
+    - {text: 'April 15', month: ['April'], day: ['15']}
+    - {text: 'January 1st', month: ['January'], day: ['1']}
+    - {text: 'Dec 25th', month: ['Dec'], day: ['25']}
+    - {text: 'March 1-15', month: ['March'], day: ['1', '15']}
+    - {text: 'May 10-12', month: ['May'], day: ['10', '12']}
+    - {text: ', June 1', month: ['June'], day: ['1']}
+    - {text: 'July 4, ', month: ['July'], day: ['4']}
+    # Negative:
+    - ['1 June']
+    - ['15 April']
+
+_ymd_date:
+    - '1958'
+    - {text: '2020 June', year: 2020, month: June}
+    - {text: '2019 spring', year: 2019, season: spring}
+    - {text: '2024 April 15', year: 2024, month: April, day: 15}
+    - {text: '1999-2000 December', year: [1999, 2000], month: December}
+    - {text: '2020 Jan-Feb', year: 2020, month: [Jan, Feb]}
+    - {text: '2020 summer', year: 2020, season: summer}
+    # Negative:
+    - ['June 2020']
+    - ['April 15, 2024']
+
+_mdy_date:
+    - '1958'
+    - {text: 'June 2020', month: June, year: 2020}
+    - {text: 'spring 2019', season: spring, year: 2019}
+    - {text: 'April 15, 2024', month: April, day: 15, year: 2024}
+    - {text: 'December 1999-2000', month: December, year: [1999, 2000]}
+    - {text: 'Jan-Feb 2020', month: [Jan, Feb], year: 2020}
+    - {text: 'summer 2020', season: summer, year: 2020}
+    # Negative:
+    - ['2020 June']
+    - ['2024 April 15']
+
+_dmy_date:
+    - {text: 1 June 2016, year: 2016, month: June, day: 1}
+    - {text: December 2006, func: search, year: 2006, month: December}
+    - {text: '15 April 2024', day: 15, month: April, year: 2024}
+    - {text: '25 Dec 1999', day: 25, month: Dec, year: 1999}
+    - {text: 'spring 2020', season: spring, year: 2020}
+    - {text: 'June 2020', month: June, year: 2020}
+    - {text: '1st January 2000', day: 1, month: January, year: 2000}
+    # Negative:
+    - ['June 1, 2016']
+    - ['2016 June 1']
+
+_latent_date:
+    - {text: 1 july 2019, year: 2019, month: july, day: 1}
+    - {text: 1 july 2019b, year: 2019, month: july, day: 1}
+    - {text: april-june 2004, year: 2004, month: ['april', 'june']}
+    - {text: '2020 summer', year: 2020, season: summer}
+    - {text: 'June 1, 2020', month: June, day: 1, year: 2020}
+    - {text: '15 April 2024', day: 15, month: April, year: 2024}
+    - {text: 'spring', season: spring}
+    - {text: 'December', month: December}
+    - {text: '1999-2001', year: [1999, 2001]}
+    - {text: '2020 B.C.E', year: 2020, epoch: B.C.E}
+    - {text: 'winter 500 A.D.', season: winter, year: 500, epoch: A.D.}
+    - {text: 'Jan-Mar', month: [Jan, Mar]}
+    # Negative:
+    - ['not a date']
+    - ['random text']
+
+# Name patterns
+list:
+
+image:
+
+namespace_prefix:
+
+# Detritus Patterns for cleaners
+nowiki_detritus:
+
+url_detritus:
+    # Archive.org prefixes:
+    - {text: 'web.archive.org/web/20081205101019/http://site.com', func: search}
+    - {text: 'archive.org/web/12345678901234/https://example.org', func: search}
+    - {text: 'http://web.archive.org/web/20200101000000/http://test.com', func: search}
+    # HTTP prefixes at start:
+    - {text: 'http://example.com/path', func: search}
+    - {text: 'https://example.com', func: search}
+    - {text: 'www.example.com', func: search}
+    # Trailing detritus:
+    - {text: 'site.com#anchor', func: search}
+    - {text: 'site.com.', func: search}
+    - {text: 'site.com,', func: search}
+    - {text: "site.com'", func: search}
+    - {text: 'site.com"', func: search}
+    - {text: 'site.com#section1', func: search,}
+
+# Prose patterns
+_preposition:
+    - a
+    - an
+    - as
+    - at
+    - and
+    - also
+    - by
+    - from
+    - for
+    - is
+    - in
+    - into
+    - or
+    - of
+    - on
+    - onto
+    - to
+    - the
+    - than
+    - through
+    - thru
+    - up
+    - upon
+    - unto
+    - until
+    - via
+    - with
+    - within
+    - without
+    - '&'
+    # Case insensitive:
+    - A
+    - An
+    - THE
+    - And
+    - OR
+    - To
+    - FROM
+    # With word boundaries:
+    - {text: ' and ', func: search}
+    - {text: 'word the word', func: search}
+    - {text: '(in)', func: search}
+    # Negative (not standalone prepositions):
+    - ['android']
+    - ['theory']
+    - ['form']
+    - ['option']
+    - ['thorough']

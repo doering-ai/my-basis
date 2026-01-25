@@ -197,14 +197,6 @@ class TestPredicate:
     def test_escape(self, text: str, expected: str):
         assert cls._escape(text) == expected
 
-    @pyt.mark.parametrize(
-        'field, val, expected',
-        [],
-    )
-    def test_cast_arg(self, field: str, val, dupllicates: bool, expected: dict[str, list[str]]):
-        result = dict(cls._cast_arg(field, val, duplicates=True))
-        assert result == expected
-
     # -------------------
     # `+` Primary Methods
     # -------------------
@@ -402,7 +394,7 @@ class TestPredicate:
         ],
     )
     def test_or(self, lhs, rhs, expected: dict):
-        pred0, pred1 = cls.new(lhs), cls.new(rhs)
+        pred0, pred1 = cls.new(lhs, overwrite=True), cls.new(rhs)
         assert pred0 | pred1 == expected
 
     @pyt.mark.parametrize(

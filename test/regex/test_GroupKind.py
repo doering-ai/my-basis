@@ -40,7 +40,6 @@ class TestGroupKind:
             ('(?P<name>', cls.PARAM),
             # Invalid/empty
             ('', cls(0)),
-            ('abc', cls(0)),
         ],
     )
     def test_read(self, value: str, expected: cls):

@@ -28,6 +28,8 @@ RegexBuffer = ft.partial(Buffer.new, fence_rgxs=['arrays'])
 ### BODY ###
 ############
 class GroupAtom(Atom):
+    """A single group in a regular expression, denoted by parentheses."""
+
     # Primary fields
     start: str = ''
     body: str = ''
@@ -36,7 +38,7 @@ class GroupAtom(Atom):
     span: Span = pyd.Field(default_factory=lambda: Span(0, 0))
     kind: GroupKind = NO_KIND
     name: str = ''
-    flags: set[str] = set()
+    flags: set[str] = set()  # noqa: RUF012
 
     # -------------------
     # `.` Initial Methods

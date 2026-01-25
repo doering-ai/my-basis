@@ -38,12 +38,6 @@ class Span(tuple[int, int]):
         if isinstance(arg0, Span):
             return arg0
 
-        elif isinstance(arg0, Iterable):
-            # I. Handle tuple input
-            arg0 = tuple(arg0)
-            assert len(arg0) == 2, 'Tuple must have exactly 2 elements'
-            x0, x1 = int(arg0[0]), int(arg0[1])  # type: ignore
-
         elif isinstance(arg0, str):
             # II. Handle string input with delimiters
             parts = cls.DELIM_RGX.split(arg0)
@@ -52,6 +46,12 @@ class Span(tuple[int, int]):
                 x0, x1 = int(parts[0]), int(parts[1])
             else:
                 x0, x1 = int(arg0), int(arg1 if arg1 != -1 else arg0)
+
+        elif isinstance(arg0, Iterable):
+            # I. Handle tuple input
+            arg0 = tuple(arg0)
+            assert len(arg0) == 2, 'Tuple must have exactly 2 elements'
+            x0, x1 = int(arg0[0]), int(arg0[1])  # type: ignore
 
         elif arg0 == arg1:
             # III. Handle empty parameters and points

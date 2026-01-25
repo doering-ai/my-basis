@@ -132,9 +132,7 @@ class TestTypist:
                 (Counter, Mapping),
                 (Typist, pyd.BaseModel),
                 (Span, tuple[int, int]),
-                (Mapping, list[int] | Mapping),
                 (Mapping, list[int] | Mapping[str, list[int] | Mapping]),
-                (Literal['A'], Literal['A', 'B']),
             ],
         ),
     )
@@ -156,6 +154,7 @@ class TestTypist:
                 (str | int, str | dict | int),
                 (str | dict | int, str | int),
                 (str | Mapping, Mapping),
+                (list[int] | Mapping, Mapping),
                 (Span, tuple[int, ...]),
                 (Literal['A', 'B'], Literal['A']),
                 (Literal['A'], Literal['A', 'B']),

@@ -5,7 +5,6 @@
 from collections import deque
 from collections.abc import Collection, Mapping, Sequence
 from types import ModuleType
-import typing
 from typing import Annotated, Any
 import functools as ft
 import importlib as imp
@@ -69,9 +68,7 @@ class SyntaxUtils:
         Returns:
             GetPydanticSchema validator for use with Annotated types.
         """
-        return pyd.GetPydanticSchema(
-            lambda _, __: pyd_schema.is_instance_schema(cls=tvar)
-        )
+        return pyd.GetPydanticSchema(lambda _, __: pyd_schema.is_instance_schema(cls=tvar))
 
     # Regex
     RegexField = Annotated[re.Pattern, pyd_schemify(re.Pattern)]
@@ -93,9 +90,7 @@ class SyntaxUtils:
             Dictionary mapping lowercase field names to their type annotations.
         """
         if issubclass(cls, pyd.BaseModel):
-            annotations = {
-                field: info.annotation for field, info in cls.model_fields.items()
-            }
+            annotations = {field: info.annotation for field, info in cls.model_fields.items()}
         elif inspect.isclass(cls):
             annotations = {
                 field: ann
@@ -107,9 +102,7 @@ class SyntaxUtils:
             return {}
 
         return {
-            field: ann
-            for field, ann in annotations.items()
-            if field.islower() and ann is not None
+            field: ann for field, ann in annotations.items() if field.islower() and ann is not None
         }
 
     @ft.lru_cache(maxsize=1024)
@@ -220,7 +213,7 @@ class SyntaxUtils:
         Returns:
             Imported ModuleType object.
         """
-        pathstr = file.with_suffix("").relative_to(root).as_posix().replace("/", ".")
+        pathstr = file.with_suffix('').relative_to(root).as_posix().replace('/', '.')
         return imp.import_module(pathstr)
 
     # -----------
@@ -237,8 +230,8 @@ class SyntaxUtils:
             inst: Object instance to clear cached properties from.
             *properties: Property names to clear. If empty, uses inst.CACHED_PROPERTIES.
         """
-        if not properties and hasattr(inst, "CACHED_PROPERTIES"):
-            properties = tuple(getattr(inst, "CACHED_PROPERTIES"))
+        if not properties and hasattr(inst, 'CACHED_PROPERTIES'):
+            properties = tuple(getattr(inst, 'CACHED_PROPERTIES'))
 
         for prop in properties:
             if prop in inst.__dict__:

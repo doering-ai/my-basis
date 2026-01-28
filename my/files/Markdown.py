@@ -50,7 +50,7 @@ class Markdown(pyd.BaseModel):
             r'(?sm)^# (?P=tags)?(?P=title)',
             r'(?P=prose)(?=\n+# |\Z)',
         ],
-        node=[r'(?sm)(?P=header)', r'(?P=prose)', r'(?=^#{1,6} |\Z)'],
+        node=[r'(?sm)(?P=header) *\n+(?P=prose)\n*(?=^#{1,6} |\Z)'],
     )
 
     # Metadata
@@ -227,7 +227,7 @@ class Markdown(pyd.BaseModel):
 
     @classmethod
     def _trace_path(cls, ancestor: 'Markdown', target: str | list[int]) -> list['Markdown']:
-        """Returns all nodes between the ancestor (inclusive) and descendant (exclusive).
+        """Returns all nodes between the ancestor and descendant (inclusive).
 
         Args:
             ancestor: Starting Markdown node (ancestor).
@@ -249,8 +249,7 @@ class Markdown(pyd.BaseModel):
         # I. Find the path from the ancestor to the descendant
         ret: list[Markdown] = [ancestor]
         for digit in digits:
-            n = len(ret[-1].nodes)
-            if digit >= n:
+            if digit >= (n := len(ret[-1].nodes)):
                 logfire.error(f'Index {digit} OOB of {ret[-1].title} (n={n})')
                 return []
             ret.append(ret[-1].nodes[digit])
@@ -264,6 +263,9 @@ class Markdown(pyd.BaseModel):
             end: Last child index (exclusive, default: all children).
         """
         n = len(self.nodes)
+        if start >= n:
+            return
+
         end = end if end is not None else n
         assert 0 <= start <= end <= n, f'Invalid range: ({start}, {end}) where n={n}'
         for i, child in enumerate(self.nodes[start:end], start):
@@ -286,7 +288,7 @@ class Markdown(pyd.BaseModel):
             if descendants := cls._stack_nodes(nodes, child.level):
                 # Don't normally parse Notes nodes that are parseable as yaml data
                 note_idx = ut.find(descendants, lambda n: n.title == 'Notes')
-                if note_idx and (note_data := descendants[note_idx].from_yaml()):
+                if note_idx != -1 and (note_data := descendants[note_idx].from_yaml()):
                     descendants.pop(note_idx)
                     child.notes = note_data
                 child.nodes = descendants
@@ -416,7 +418,7 @@ class Markdown(pyd.BaseModel):
         Returns:
             Matching Markdown node or None.
         """
-        if max_d and 0 <= child < len(self.nodes):
+        if max_d != 0 and 0 <= child < len(self.nodes):
             return self.nodes[child]
         else:
             return None
@@ -433,13 +435,10 @@ class Markdown(pyd.BaseModel):
         Returns:
             Matching Markdown node or None.
         """
-        if not self.nodes or not max_d:
-            return None
-
         title = title.lower()
         return next(
             filter(
-                lambda node: node and node.title.lower() == title,
+                lambda node: node.title.lower() == title,
                 self.walk(False, asc, max_d),
             ),
             None,
@@ -457,10 +456,11 @@ class Markdown(pyd.BaseModel):
         Returns:
             Matching Markdown node or None.
         """
-        if not self.nodes or not max_d or not path:
+        if not self.nodes or not max_d or path is None:
             return None
-
-        if len(path) > max_d:
+        elif not path:
+            return self
+        elif len(path) > max_d > 0:
             logfire.warn(f'Exceeded max depth {max_d} w/ {len(path)} digits')
             return None
         return trace[-1] if (trace := self.trace_path(path)) else None
@@ -471,7 +471,7 @@ class Markdown(pyd.BaseModel):
         Args:
             target: Target index string or list of child indices.
         Returns:
-            List of nodes from this node (inclusive) to target (exclusive).
+            List of nodes from this node to target (inclusive).
             Empty list if target not found or invalid.
         """
         return Markdown._trace_path(self, target)
@@ -542,7 +542,7 @@ class Markdown(pyd.BaseModel):
                 prose=match.at('prose'),
                 # Metadata
                 level=len(match.at('marks')),
-                tags=match.get('tag'),
+                tags=match['tag'],
                 idx=match.at('idx'),
             )
             for match in Markdown.RGXS.finditer('node', text)
@@ -567,7 +567,12 @@ class Markdown(pyd.BaseModel):
             Dictionary of parsed YAML data with child nodes as nested keys.
         """
         # Handle top-level data
-        ret = typist.from_yaml(str(self.prose)) if self.prose else {}
+        ret = {}
+        if self.prose:
+            try:
+                ret = typist.from_yaml(str(self.prose))
+            except TypeError:
+                return {}
 
         # Interpret children as sub-dictionaries
         for child in self.nodes:
@@ -597,6 +602,9 @@ class Markdown(pyd.BaseModel):
     def __str__(self) -> str:
         return self.to_string()
 
+    def __bool__(self) -> bool:
+        return bool(self.title or self.prose)
+
     def pop(self, **kwargs) -> 'Markdown | None':
         """Remove and return a descendant node.
 
@@ -611,13 +619,13 @@ class Markdown(pyd.BaseModel):
 
         # II. Identify the parent of the target node
         path = self.trace_path(target.idx)
-        assert path, 'Path trace failed'
-        parent = path[-1]
+        assert len(path) >= 2, 'Path trace failed'
+        parent = path[-2]
 
         # III. Remove the node and update its siblings' matrices
-        index = parent.nodes.index(target)
-        parent.nodes.pop(index)
-        parent.refresh_indices(index)
+        child_index = self._digit_to_num(target.idx[-1])
+        parent.nodes.pop(child_index)
+        parent.refresh_indices(start=child_index)
         return target
 
     def replace(self, orig: str | Pattern, new: str) -> None:
@@ -634,10 +642,11 @@ class Markdown(pyd.BaseModel):
         """Returns the number of nodes in this markdown object."""
         return len(self.nodes)
 
-    def __isub__(self, nodes: Collection[str]) -> None:
+    def __isub__(self, nodes: Collection[str]) -> Self:
         """Removes nodes with the given indices from this markdown object."""
         for title in nodes:
             if node := self.pop(title=title):
                 logfire.info(f'Removed node: {node.title} ({node.idx})')
             else:
                 logfire.warn(f'Node not found: {title}')
+        return self

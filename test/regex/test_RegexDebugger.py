@@ -156,7 +156,7 @@ class TestRegexDebugger:
         assert isinstance(group, GroupAtom)
         assert debugger._do_drill(group) == expected
 
-    def test_curate__basic(self, debugger: RegexDebugger):
+    def test_curate(self, debugger: RegexDebugger):
         # Create simple atoms
         atoms = Regex('hello world')
         failed_idx = 6  # 'world' failed

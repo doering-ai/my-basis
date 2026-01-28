@@ -152,7 +152,7 @@ class TestCommand:
     # ------------------
     # `*` Public Methods
     # ------------------
-    def test_execute__basic(self):
+    def test_execute(self):
         """Test basic command execution."""
         cmd = cls.new('echo', 'hello')
         code, stdout, stderr = cmd.execute()
@@ -168,7 +168,7 @@ class TestCommand:
         assert stderr != ''
 
     @pyt.mark.asyncio
-    async def test_execute_async__basic(self):
+    async def test_execute_async(self):
         """Test async command execution."""
         cmd = cls.new('echo', 'hello async')
         code, stdout, stderr = await cmd.execute_async()

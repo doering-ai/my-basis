@@ -236,9 +236,9 @@ class RegexStore(pyd.BaseModel):
         """Apply a formatting function to a regex definition value, if possible."""
         if isinstance(value, Pattern):
             pass
-        elif isinstance(value, tuple) and len(value) == 2 and callable(value[1]):
+        elif isinstance(value, tuple) and len(value) == 2:
             val, parser = value  # type: ignore
-            if isinstance(val, str):
+            if isinstance(val, str) and callable(parser):
                 with ctx.suppress(Exception):
                     return (fn(val), parser)
         else:

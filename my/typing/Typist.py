@@ -1632,10 +1632,12 @@ class Typist(pyd.BaseModel):
         # II. Verify & format the response
         if isinstance(ret, tvar):
             return ret
+        elif not ret:
+            return tvar()
         elif cast:
-            return tvar(ret)
-        else:
-            raise TypeError(f'Expected `{tvar}`, got `{type(ret)}`.')
+            with ctx.suppress(ValueError):
+                return tvar(ret)
+        raise TypeError(f'Expected `{tvar}`, got `{type(ret)}`.')
 
     @overload
     def from_toml(self, file: FileParam) -> dict: ...

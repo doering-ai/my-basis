@@ -1,6 +1,6 @@
-# MyBasis: A Python Toolkit
+# myBasis: A Python Toolkit
 
-MyBasis is a library built to provide a variety of useful doodads for high-level Python development of all kinds, with a special eye towards ergonomics, Unix-style composability, and thorough documentation & testing.
+myBasis is a library built to provide a variety of useful doodads for high-level Python development of all kinds, with a special eye towards ergonomics, Unix-style composability, and thorough documentation & testing.
 
 It's aimed at Python developers of all kinds, but it's especially worth a perusal if you're...
 

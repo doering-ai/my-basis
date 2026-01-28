@@ -5,6 +5,7 @@
 from collections.abc import Hashable, Iterator
 import functools as ft
 import more_itertools as mi
+import math
 
 ### EXTERNAL
 import pydantic as pyd
@@ -23,7 +24,7 @@ class NestedCache[Keys: tuple, Value](pyd.BaseModel):
     across child caches based on their sizes.
     """
 
-    signature: tuple
+    signature: tuple[type, ...]
 
     children: dict[Hashable, 'NestedCache'] = {}
     data: dict = {}
@@ -73,21 +74,21 @@ class NestedCache[Keys: tuple, Value](pyd.BaseModel):
 
         key, *keys = keys
         if self.depth == 1:
-            count = 1 if key not in self.data else 0
+            ret = 1 if key not in self.data else 0
             self.data[key] = value
-            self.size += count
-            return count
+            self.size += ret
         else:
             if key not in self.children:
                 self.children[key] = NestedCache(signature=self.signature[1:])
             ret = self.children[key].set(keys, value)
             self.size += ret
-            return ret
+
+        if self.size > self.max_size:
+            self.prune(self.bucket_size)
+        return ret
 
     def __setitem__(self, keys: list | tuple, value: Value) -> None:
         self.set(keys, value)
-        if self.size > self.max_size:
-            self.prune(self.bucket_size)
 
     def delete(self, keys: list | tuple) -> int:
         """Delete a value at the specified key path.
@@ -125,6 +126,12 @@ class NestedCache[Keys: tuple, Value](pyd.BaseModel):
     def __bool__(self) -> bool:
         return self.size > 0
 
+    def __repr__(self) -> str:
+        return f'NestedCache({self.signature}, size={self.size})'
+
+    def __str__(self) -> str:
+        return str(self.data)
+
     def items(self) -> Iterator[tuple[Keys, Value]]:
         """Iterator over all key-value pairs in the cache."""
         if self.depth == 1:
@@ -154,19 +161,20 @@ class NestedCache[Keys: tuple, Value](pyd.BaseModel):
         Returns:
             Actual number of items removed.
         """
+        assert n > 0, 'Prune count must be positive'
+        count = 0
         if self.depth == 1:
-            orig = len(self.data)
             for key in mi.take(n, self.data.keys()):
                 del self.data[key]
-            count = orig - len(self.data)
-
+                count += 1
         else:
-            count = 0
-            for _, child in self.children.items():
+            for child in self.children.values():
                 if not child:
                     continue
-                target = round((child.size / self.size) * n)
+                target = math.ceil((child.size / self.size) * n)
                 count += child.prune(target)
+                if count >= n:
+                    break
 
         self.size -= count
         return count

@@ -1,6 +1,6 @@
 # Agent Development Guidelines
 
-The MyBasis Python package (imported as `my`) contains a variety of utilities generally centered around the topics of text processing, functional programming, and runtime type coercion.
+The myBasis Python package (imported as `my`) contains a variety of utilities generally centered around the topics of text processing, functional programming, and runtime type coercion.
 
 It is developed with usage as a library in mind, and given its broad scope, is organized into a mostly-flat structure.
 The source code is found in `my/`, broken up further into ~7 subpackages.
@@ -32,20 +32,35 @@ The corresponding PyTest files for each individual python file are present in ma
 
 For details of various commands, consult `/Taskfile`. Here's a lit of the main commands; pass `-- ARGS` to forward ARGS to the underlying tool.
 
-### Testing
+### PyTest Commands
 
-The below Taskfile tasks are simple wrappers are singular `uv run pytest` commands.
+```zsh
+# Run All Tests
+task test
 
-- `task test`: Run a full pytest suite with minimal args.
-- `task test:dev`: Run pytest with flags for debugging one test at a time.
-- `task test:pdb`: Run pytest with the `--pdb` flag enabled.
-- `task test:cov`: Run a full pytest suite with a coverage report.
+# Run Specific Test File
+task test -- -v test/apis/test_Environment.py
 
-#### Documentation
+# Run Specific Test
+task test -- -v test/apis/test_Environment.py::TestEnvironment::test_get__basic
 
-- `task docs`: Build the Sphinx documentation via `sphinx-build`.
+# Calculate Coverage
+task test:cov
 
-## Dependencies
+# Debug Mode
+task test:pdb  # Drops into debugger on failure
+task test:dev  # For debugging one test at a time
+```
+
+### Sphinx Documentation Commmands
+
+```zsh
+task docs # Build the Sphinx documentation via `sphinx-build`.
+```
+
+## Key Dependencies
+
+For a full list of dependencies, see `pyproject.toml`
 
 ### Development
 
@@ -69,21 +84,43 @@ The below Taskfile tasks are simple wrappers are singular `uv run pytest` comman
 
 - `more-itertools`: additional iteration utilities beyond the standard library
 
-## Style
+## Specifics
+
+### Testing Guide
+
+Whenevery you're making siginifant changes to test files, be sure to read and apply `test/README.md`.
 
 ### File Structure
 
 Almost all Python files in the project contain one or more of the following sections, each delineated by a large, wrapped comment:
 
-1. `HEAD`: This is where imports are defined in three subsections: `STANDARD` (the python stdlib), `EXTERNAL` (dependencies installed via `uv` and controlled by `pyproject.toml`), and `INTERNAL` (other files in this project or an imported library that we wrote).
+```python
+############
+### HEAD ###
+############
+""" 
+This is where imports are defined in three subsections: `STANDARD` (the python stdlib), `EXTERNAL` (dependencies installed via `uv` and controlled by `pyproject.toml`), and `INTERNAL` (other files in this project or an imported library that we wrote).
+"""
 
-1. `DATA`: This is where dataclasses (usually Pydantic BaseModels) and module-level constants are defined.
+############
+### DATA ###
+############
+"""This is where dataclasses (usually Pydantic BaseModels) and module-level constants are defined."""
 
-1. `BODY`: This is where the main functionality of the file is implemented.
+############
+### BODY ###
+############
+"""This is where the main functionality of the file is implemented."""
 
-1. `MAIN`: The entrypoint code for executing this file on the commandline as a script, often with handling of arguments via `argparse`.
+############
+### MAIN ###
+############
+"""
+The entrypoint code for executing this file on the commandline as a script, often with handling of arguments via `argparse`.
+"""
+```
 
-### Classes
+### Class Sections
 
 In general, the project makes extensive use of classes, both in typical object-oriented situations and for general code organization using static classes and/or singletons.
 

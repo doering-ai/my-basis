@@ -241,6 +241,7 @@ class TestBuffer:
             ('` welcome` ', '` ', 'welcome', []),
             ('` welcome` ', '`', ' welcome` ', []),
             (' `one` `two` ', ' ', '`one` `two`', ['one', 'two']),
+            (' `one` `two` ', '', '`one` `two`', ['one', 'two']),
             ('`one` `two`', '`', 'one` `two', [' ']),
         ],
     )

@@ -341,6 +341,7 @@ class Buffer(pyd.BaseModel):
         """
         if not isinstance(source, np.ndarray):
             source = np.array(source)
+        assert not isinstance(source, list)
 
         return (
             source[source[:, 1] <= ref_span[0]],
@@ -357,6 +358,7 @@ class Buffer(pyd.BaseModel):
             pos: Position to start shifting from
         """
         if isinstance(spans, np.ndarray):
+            assert not isinstance(spans, list)
             fulls = spans[:, 0] >= pos
             partials = ~fulls & (spans[:, 1] > pos)
             if fulls.any():
@@ -480,6 +482,19 @@ class Buffer(pyd.BaseModel):
         for s0, s1 in self.fences:
             yield Span((s0, s1))
 
+    def __repr__(self) -> str:
+        contents = []
+        if len(self) > 50:
+            contents.append(f'"{self.text[0][:50]}..."')
+        else:
+            contents.append(f'"{self.text[0]}"')
+
+        contents.append(f'len={len(self)}')
+        if self.uid:
+            contents.append(f'uid="{self.uid}"')
+
+        return 'Buffer(' + ', '.join(contents) + ')'
+
     def __str__(self) -> str:
         return self.serialize()
 
@@ -602,6 +617,7 @@ class Buffer(pyd.BaseModel):
         Returns:
             The same (modified) Buffer instance.
         """
+        chars = chars or ' \t\n\r\v\f'
         n_left = len(list(it.takewhile(lambda x: x in chars, self.text[0])))
         n_right = len(list(it.takewhile(lambda i: self[i] in chars, range(-1, -len(self), -1))))
         if n_left or n_right:

@@ -2,6 +2,7 @@
 ### HEAD ###
 ############
 # Standard imports
+from typing import Any
 from collections.abc import Hashable, Coroutine, Callable, Iterable
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -80,7 +81,7 @@ class PickleCache[Key: Hashable, Value](pyd.BaseModel):
 
     def write(self) -> None:
         """Write current data to pickle file and update timestamps."""
-        with open(self.file, 'wb') as ptr:
+        with Path.open(self.file, 'wb') as ptr:
             pkl.dump(self.data, ptr)
         self.last_read = self.last_write = ut.posix()
 
@@ -105,7 +106,7 @@ class PickleCache[Key: Hashable, Value](pyd.BaseModel):
         self.data.update(other)
         return self
 
-    def get(self, key: Key, default: None) -> Value | None:
+    def get(self, key: Key, default: Any | None = None) -> Value | None:
         """Get value for key, returning default if not found."""
         return self.data.get(key, default)
 

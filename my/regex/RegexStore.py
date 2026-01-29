@@ -187,7 +187,7 @@ class RegexStore(pyd.BaseModel):
 
         # III. Preformat the given definitions with the user-defined formatter function
         if (fn := self.options.init_formatter) is not None:
-            definitions = ut.val_map(ft.partial(self.format_definition, fn=fn), definitions)
+            definitions = ut.val_map(lambda v: self.format_definition(fn, v), definitions)
 
         # IV. Set the values of the store
         for name, val in definitions.items():
@@ -538,17 +538,19 @@ class RegexStore(pyd.BaseModel):
 
         _, captures = self._read_match(match)
         if parseable := list(filter(self.parsers.__contains__, captures.keys())):
-            pd = ParseData(captures=captures, starts={f: match.starts(f) for f in captures.keys()})
+            _pd = ParseData(captures=captures, starts={f: match.starts(f) for f in captures.keys()})
             for field, parser in [(f, self.parsers[f]) for f in parseable]:
-                pd.set_field(field)
+                _pd.set_field(field)
 
                 if isinstance(parser, str):
-                    pd.interleave(pd.field, parser, list(zip(pd.start, pd.value, strict=True)))
+                    _pd.interleave(_pd.field, parser, list(zip(_pd.start, _pd.value, strict=True)))
                 elif isinstance(parser, dict):
-                    pd.apply_dict_parser(parser, self.patterns[field])  # type: ignore
+                    _pd.apply_dict_parser(parser, self.patterns[field])  # type: ignore
+                elif callable(parser):
+                    _pd.apply_func_parser(parser)
                 else:
-                    pd.apply_func_parser(parser)
-            captures = pd.captures
+                    raise ValueError(f'Unsupported parser type: {type(parser)}')
+            captures = _pd.captures
 
         # IV. Removed unnecessary "hidden" values
         hidden_fields = [key for key in captures.keys() if key[0] == '_' and key != pattern_name]
@@ -651,8 +653,12 @@ class RegexStore(pyd.BaseModel):
                 local_groups.add(group.name)
             elif group.kind == GroupKind.INVOC and group.name != name:
                 # Intentional reference to a defined subroutine
-                assert group.name in self.definitions, f'Unknown group invoked: {group.name}'
-                groups_used.add(group.name)
+                if group.name in self.definitions:
+                    groups_used.add(group.name)
+                elif group.name in local_groups:
+                    pass
+                else:
+                    raise ValueError(f'Undefined group invoked: {group.name}')
 
         # III. Recursively fetch dependencies for the used groups
         groups_used = self.find_all_invocations(groups_used)
@@ -763,6 +769,15 @@ class RegexStore(pyd.BaseModel):
     # --------------
     # `*0` Overrides
     # --------------
+    def __repr__(self) -> str:
+        options = [
+            key for key in self.Options.model_fields.keys() if getattr(self.options, key, False)
+        ]
+        body = ', '.join(f'{k}' for k, v in mi.take(2, reversed(self.definitions.items())))
+        if len(self) > 2:
+            body += f', and {len(self) - 2} more...'
+        return f'<RegexStore w/ {body} (options={options})>'
+
     def __len__(self) -> int:
         _ = self.load
         return len(self.patterns)
@@ -1185,7 +1200,10 @@ class RegexStore(pyd.BaseModel):
             head, *body = body
         elif print_head and isinstance(pattern, str) and pattern in self:
             head = mi.first(Regex.atomize(self.patterns[pattern].pattern))
-            assert isinstance(head, GroupAtom) and head.kind == GroupKind.DEFINE
+
+            # Catch headless (very simple) patterns
+            if not (isinstance(head, GroupAtom) and head.kind == GroupKind.DEFINE):
+                head = Atom()
 
         # II. Pretty-print the body & head separately
         kwargs = dict(maxdepth=6, threshold=48) | kwargs

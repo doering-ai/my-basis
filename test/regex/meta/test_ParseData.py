@@ -2,7 +2,6 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import Any
 
 ### EXTERNAL
 import pytest as pyt
@@ -10,8 +9,6 @@ import regex as re
 
 ### INTERNAL
 from my.regex.meta import ParseData
-from my.regex import MatchData
-from ...conftest import boolmap
 
 ############
 ### DATA ###
@@ -28,11 +25,7 @@ class TestParseData:
     # -------------------
     def test_init__empty(self):
         pd = cls()
-        assert pd.captures == {}
-        assert pd.starts == {}
-        assert pd.field == ''
-        assert pd.value == []
-        assert pd.start == []
+        assert not any([pd.captures, pd.starts, pd.field, pd.value, pd.start])
 
     def test_init__with_data(self):
         pd = cls(
@@ -156,7 +149,7 @@ class TestParseData:
         pd.set_field('field')
 
         # Parser remaps 'name' to 'names' field
-        parser = {'names': 'name'}
+        parser = {'name': 'names'}
 
         pd.apply_dict_parser(parser, pattern)
 
@@ -173,7 +166,7 @@ class TestParseData:
         )
         pd.set_field('data')
 
-        parser = {'keys': 'key', 'values': 'val'}
+        parser = {'key': 'keys', 'val': 'values'}
 
         pd.apply_dict_parser(parser, pattern)
 
@@ -189,7 +182,7 @@ class TestParseData:
         )
         pd.set_field('text')
 
-        parser = {'words': 'word'}
+        parser = {'word': 'words'}
 
         pd.apply_dict_parser(parser, pattern)
 
@@ -206,7 +199,7 @@ class TestParseData:
         pd.set_field('field')
 
         # Parser maps field that doesn't exist in pattern
-        parser = {'output': 'nonexistent'}
+        parser = {'nonexistent': 'output'}
 
         pd.apply_dict_parser(parser, pattern)
 
@@ -438,9 +431,9 @@ class TestParseData:
         with pyt.raises(AssertionError, match='Invalid field'):
             pd.set_field('field')
 
-    # ----------------
+    # -----------------
     # Integration Tests
-    # ----------------
+    # -----------------
     def test_workflow__multiple_parsers(self):
         """Test applying multiple parsers in sequence."""
         pd = cls(
@@ -480,7 +473,7 @@ class TestParseData:
         pd.set_field('dates')
 
         # Remap to new field names
-        parser = {'years': 'year', 'months': 'month', 'days': 'day'}
+        parser = {'year': 'years', 'month': 'months', 'day': 'days'}
 
         pd.apply_dict_parser(parser, pattern)
 
@@ -600,7 +593,7 @@ class TestParseData:
         )
         pd.set_field('text')
 
-        parser = {'words': 'word'}
+        parser = {'word': 'words'}
 
         pd.apply_dict_parser(parser, pattern)
 

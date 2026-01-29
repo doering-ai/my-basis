@@ -95,7 +95,7 @@ class ParseData(pyd.BaseModel):
             rgx: Pattern to re-match captured values with.
         """
         matches = [MatchData(match=rgx.fullmatch(val)) for val in self.value]
-        trips: list[tuple[str, int, str]] = []
+        trips: list[tuple[str, int, str]]
         trips = [
             (key, start + rel_start, value)
             for start, data in zip(self.start, matches, strict=True)
@@ -104,8 +104,8 @@ class ParseData(pyd.BaseModel):
         ]
 
         affected_fields = set(parser.keys()) & {key for key, _, _ in trips}
-        for dest in affected_fields:
-            src = parser[dest]
+        for src in affected_fields:
+            dest = parser[src]
             self.interleave(src, dest, [t[1:] for t in trips if t[0] == src])
 
     def apply_func_parser(self, parser: Callable[[str], dict[str, str] | str]) -> None:

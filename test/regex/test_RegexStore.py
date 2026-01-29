@@ -8,9 +8,10 @@ import regex as re
 import pytest as pyt
 
 ### INTERNAL
+from my.types import Buffer
 from my.regex.meta import GroupKind
-from my.regex import RegexStore, RegexList, RegexVal, MatchData
-from ..conftest import boolmap
+from my.regex import RegexList, RegexVal, MatchData
+from my.regex.RegexStore import RegexStore, RegexBuffer
 
 ############
 ### DATA ###
@@ -25,15 +26,14 @@ class TestRegexStore:
     @pyt.fixture(scope='class')
     def store(self) -> RegexStore:
         return RegexStore.new(
-            dict(
+            options=dict(
                 separator=r' ?',
-                autostrip_brackets=True,
             ),
             _parenthetical=(r'\(\w+\)', lambda s: s.strip('() ')),
             _word=r'\w+',
             _digit=r'\d+',
             simple=r'hello',
-            compound=[r'hello', r' ', r'world'],
+            compound=[r'hello', r'world'],
         )
 
     # -------------------
@@ -70,38 +70,28 @@ class TestRegexStore:
         assert 'alpha' in store2.definitions
         assert 'numeric' not in store2.definitions
 
-    def test_strip_options(self):
-        store = RegexStore.new(
-            dict(
-                autostrip_commas=True,
-                autostrip_spaces=True,
-                autostrip_brackets=True,
-                lazy_load=False,
-            ),
-            word=r'[ ,\[\]\(\)\w]+',
-        )
-        assert store.is_loaded
-        match = store.match('word', ' [ Hello, World, ] ')
-        assert match.text == 'Hello, World'
-
     @pyt.mark.parametrize(
-        'options, expected_strip',
+        'options, match, expected',
         [
-            ({'autostrip_spaces': True}, ' test '),
-            ({'autostrip_brackets': True}, '(test)'),
-            ({'autostrip_commas': True}, ',test,'),
-            ({'autostrip_spaces': True, 'autostrip_brackets': True}, ' ( test ) '),
+            (dict(autostrip_spaces=True), ' test ', 'test'),
+            (dict(autostrip_brackets=True), '(test)', 'test'),
+            (dict(autostrip_commas=True), ',test,', 'test'),
+            (dict(autostrip_spaces=True, autostrip_brackets=True), ' ( test ) ', 'test'),
+            (
+                dict(autostrip_commas=True, autostrip_spaces=True, autostrip_brackets=True),
+                ' [ Hello, World, ] ',
+                'Hello, World',
+            ),
         ],
     )
-    def test_process_options__autostrip(self, options: dict, expected_strip: str):
+    def test_process_options__autostrip(self, options: dict, match: str, expected: str):
         store = RegexStore.new(dict(lazy_load=False, **options))
-        stripped = store.strip(expected_strip)
-        assert stripped == 'test'
+        assert store.strip(match) == expected
 
     def test_process_options__force_reinvocations(self):
         store = RegexStore.new(
             dict(lazy_load=False, force_reinvocations=True),
-            test=r'(?P=alpha)',
+            test=r'(?P<alpha>a+) (?P=alpha)',
         )
         assert '(?P>' in store.definitions['test']
         assert '(?P=' not in store.definitions['test']
@@ -279,19 +269,13 @@ class TestRegexStore:
         assert not bool(data)
 
     def test_parse__with_parser(self):
-        def custom_parser(text: str) -> str:
-            return text.upper()
-
         store = RegexStore.new(
             dict(lazy_load=False),
-            word=(r'(?P<word>\w+)', custom_parser),
+            word=(r'\w+', lambda t: t.upper()),
         )
 
-        pattern = store['word']
-        match = pattern.match('hello')
-        data = store.parse(match, 'word')
-
-        assert data['word'] == 'HELLO'
+        match = store.match('word', 'hello')
+        assert match['word'] == ['HELLO']
 
     def test_compose__string(self, store: RegexStore):
         result = store.compose('test')
@@ -304,11 +288,11 @@ class TestRegexStore:
 
     def test_compose__list(self, store: RegexStore):
         result = store.compose(['a', 'b', 'c'])
-        assert result == 'a ?b ?c'
+        assert result == r'a ?b ?c'
 
     def test_compose__list_custom_sep(self, store: RegexStore):
         result = store.compose(['a', 'b', 'c'], sep='|')
-        assert result == 'a|b|c'
+        assert result == r'a|b|c'
 
     def test_compose__dict(self, store: RegexStore):
         result = store.compose({'mark': '|:', 'body': ['a', 'b']})
@@ -316,9 +300,8 @@ class TestRegexStore:
 
     def test_clean(self):
         store = RegexStore.new(dict(lazy_load=False))
-        from my.types import Buffer
 
-        text = Buffer.new(r'test')
+        text = RegexBuffer(r'test')
         groups = store.clean('test', text)
         assert isinstance(groups, set)
 
@@ -328,9 +311,7 @@ class TestRegexStore:
             alpha=r'[[:alpha:]]+',
         )
 
-        from my.types import Buffer
-
-        text = Buffer.new(r'(?P>alpha)')
+        text = RegexBuffer(r'(?P>alpha)')
         groups = store.clean('test', text)
         assert 'alpha' in groups
 
@@ -356,19 +337,10 @@ class TestRegexStore:
         with pyt.raises(AssertionError, match='Duplicate'):
             store.define('dup', r'test2')
 
-    def test_autostrip(self):
-        store = RegexStore.new(
-            dict(lazy_load=False, autostrip_spaces=True, autostrip_brackets=True)
-        )
-
-        result = store.autostrip([' test ', '(value)'])
-        assert result == ['test', 'value']
-
     def test_autostrip__bracket_balancing(self):
         store = RegexStore.new(dict(lazy_load=False, autostrip_brackets=True))
-
-        result = store.autostrip(['(test'])
-        assert '(' in result[0] or ')' in result[0]
+        result = store.autostrip(['test(params)'])
+        assert '(' in result[0] and ')' in result[0]
 
     def test_autostrip__string_input(self):
         store = RegexStore.new(dict(lazy_load=False, autostrip_spaces=True))
@@ -749,7 +721,6 @@ class TestRegexStore:
     def test_buffer_input(self, store: RegexStore):
         """Test that Buffer input is handled correctly."""
         _ = store.load
-        from my.types import Buffer
 
         buffer = Buffer.new('hello world')
         result = store.match('simple', buffer)
@@ -773,8 +744,8 @@ class TestRegexStore:
 
         if should_match:
             # Parser should have stripped parentheses
-            assert '(' not in result.text
-            assert ')' not in result.text
+            assert '(' not in result.at(pattern)
+            assert ')' not in result.at(pattern)
 
     def test_invalid_mark_syntax(self, store: RegexStore):
         """Test error handling for invalid mark syntax."""

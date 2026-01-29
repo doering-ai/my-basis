@@ -3,8 +3,8 @@
 ```{py:currentmodule} my.caches.FileCache
 ```
 
-```{autoclass} my.caches.FileCache
+```{autoclass} FileCache
 ---
-members: true
+members:
 ---
 ```

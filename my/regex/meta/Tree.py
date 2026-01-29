@@ -619,5 +619,5 @@ class Tree(pyd.BaseModel):
             return self.branches
 
     def export_branches(self) -> list[Regex]:
-        """Export just the branches of this block."""
+        """Export the branches of this block as standalone expressions."""
         return list(map(self.contextualize, self.branches))

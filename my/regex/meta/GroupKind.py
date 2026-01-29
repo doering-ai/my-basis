@@ -81,3 +81,5 @@ _PREFIXES: list[tuple[GroupKind, list[str]]] = [
     (GroupKind.NOT_BEHIND, ['(?<!']),
     (GroupKind.DEFINE, ['(?(DEFINE)']),
 ]
+
+NO_KIND = GroupKind(0)

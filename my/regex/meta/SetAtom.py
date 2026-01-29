@@ -10,7 +10,7 @@ import pydantic as pyd
 
 ### INTERNAL
 from ...types import Span
-from .meta_patterns import META_RGXS
+from .meta_rgxs import META_RGXS
 from .Atom import Atom
 
 
@@ -18,6 +18,8 @@ from .Atom import Atom
 ### BODY ###
 ############
 class SetAtom(Atom):
+    """A character set in a regular expression, denoted by square brackets (e.g. `[a-zA-Z]`)."""
+
     span: Span = pyd.Field(default_factory=lambda: Span(0, 0))
     body: str = ''
 
@@ -35,9 +37,11 @@ class SetAtom(Atom):
 
     @ft.cached_property
     def members(self) -> list[Atom]:
+        """The individual atoms that make up this set. Only valid for simple sets."""
         escaped_body = META_RGXS['special_characters'].sub(r'\\\1', self.body)
         return list(Atom.plain_atomize(escaped_body))
 
     @ft.cached_property
     def is_simple(self) -> bool:
+        """Whether this set is "simple" (i.e. contains no set operators)."""
         return super().is_simple and not self._has_set_operator(self.body)

@@ -36,6 +36,8 @@ def _no_spans() -> SpanArray:
 NO_ESC = r'(?<!(?:^|[^\\])\\)'
 DEBUG = False
 
+PairMode = Literal['all', 'roots', 'leaves']
+
 
 ############
 ### BODY ###
@@ -378,7 +380,7 @@ class Buffer(pyd.BaseModel):
     def raw_pair_iterator(
         self,
         rgx: Pattern,
-        mode: Literal['all', 'roots', 'leaves'] = 'all',
+        mode: PairMode = 'all',
         b0: int = 0,
         b1: int = -1,
     ) -> Iterator[Pair]:
@@ -799,7 +801,7 @@ class Buffer(pyd.BaseModel):
     def pair_iterator(
         self,
         rgx: Pattern,
-        mode: Literal['all', 'roots', 'leaves'] = 'all',
+        mode: PairMode = 'all',
         b0: int = 0,
         b1: int = -1,
     ) -> Iterator[tuple[Span, str, str, str]]:

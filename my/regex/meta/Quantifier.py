@@ -10,7 +10,7 @@ from pydantic_core import core_schema as pyds
 import regex as re
 
 ### INTERNAL
-from .meta_patterns import META_RGXS
+from .meta_rgxs import META_RGXS
 
 
 ############
@@ -18,6 +18,8 @@ from .meta_patterns import META_RGXS
 ############
 @ft.total_ordering
 class Quantifier:
+    """Subatomic syntax that specifies how many times the atom is allowed to occur."""
+
     RGX: ClassVar[re.Pattern] = META_RGXS['quant']
     Modes: ClassVar = Literal['try', 'overwrite', 'join']
 
@@ -27,6 +29,7 @@ class Quantifier:
     # `.` Initial Methods
     # -------------------
     def __init__(self, data: str | Self = '') -> None:
+        """Initialize a Quantifier from a string or another Quantifier."""
         if isinstance(data, Quantifier):
             self.data = data.data
         elif data := data.lstrip(')'):
@@ -45,9 +48,10 @@ class Quantifier:
     # `+` Primary Methods
     # -------------------
     def join(self, other: str | Self) -> Self | None:
-        """
-        Create a copy of this quantifier with the given quantifier applied. If the two quantifiers
-        cannot be simply combined, return `None` to indicate that nested groups are needed.
+        """Create a copy of this quantifier with the given quantifier applied.
+
+        If the two quantifiers cannot be simply combined, return `None` to indicate that nested
+        groups are needed.
         """
         cls = self.__class__
         if isinstance(other, str):
@@ -74,6 +78,12 @@ class Quantifier:
         return None
 
     def as_optional(self) -> Self | None:
+        """Create a copy of this quantifier made optional, if possible (e.g. `+` -> `*`).
+
+        Unlike `as_required()`, this function may not always succeed, as there are valid quantifiers
+        that cannot be made optional without wrapping them (i.e. `(?:...)?`) -- namely, this applies
+        to range quantifiers that start beyond 1 (e.g. `{3,5}`).
+        """
         cls = self.__class__
         if self.is_optional:
             return cls(self)
@@ -88,6 +98,7 @@ class Quantifier:
             return None
 
     def as_required(self) -> Self:
+        """Create a copy of this quantifier made NON-optional (e.g. `*` -> `+`)."""
         cls = self.__class__
         if not self.is_optional:
             return cls(self)
@@ -139,9 +150,11 @@ class Quantifier:
             raise TypeError(f'Unsupported type for Quantifier comparison: {type(other)}')
 
     def startswith(self, prefix: str) -> bool:
+        """Check if the quantifier starts with the given prefix."""
         return self.data.startswith(prefix)
 
     def endswith(self, suffix: str) -> bool:
+        """Check if the quantifier ends with the given suffix."""
         return self.data.endswith(suffix)
 
     def __getitem__(self, key: slice | int) -> str:
@@ -155,14 +168,17 @@ class Quantifier:
     # ---------------
     @ft.cached_property
     def is_simple(self) -> bool:
+        """Check if the quantifier is "simple" (i.e. `''` or `'?'`), for optimization purposes."""
         return self.data in ('', '?')
 
     @ft.cached_property
     def is_optional(self) -> bool:
+        """Check if the quantifier allows zero occurrences."""
         return bool(self.data) and (
             self.data == '?' or self.data.startswith('{0,') or self.data.startswith('*')
         )
 
     @ft.cached_property
     def is_greedy(self) -> bool:
+        """Check if the quantifier is greedy (i.e. does not end with `?`)."""
         return len(self) <= 1 or not self.data.endswith('?')

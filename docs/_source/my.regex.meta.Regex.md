@@ -5,6 +5,6 @@
 
 ```{autoclass} Regex
 ---
-members: true
+members:
 ---
 ```

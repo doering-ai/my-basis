@@ -2,7 +2,7 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import Any, Literal
+from typing import Any
 import itertools as it
 import functools as ft
 
@@ -12,7 +12,8 @@ import numpy as np
 import regex as re
 
 ### INTERNAL
-from my.types import Span, Buffer
+from my.types import Span
+from my.types.Buffer import Buffer, PairMode
 from ..conftest import boolmap
 
 ############
@@ -117,9 +118,7 @@ class TestBuffer:
             ),
         ],
     )
-    def test_pair_iterator(
-        self, text: str, mode: Literal['all', 'roots', 'leaves'], expected: list[str]
-    ):
+    def test_pair_iterator(self, text: str, mode: PairMode, expected: list[str]):
         buf = DefBuf(text)
         rgx = re.compile(r'(?P<start>{{)|(?P<end>}})')
         for (span, _, body, _), exp in zip(buf.pair_iterator(rgx, mode), expected, strict=True):

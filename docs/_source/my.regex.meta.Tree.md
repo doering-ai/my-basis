@@ -3,8 +3,8 @@
 ```{py:currentmodule} my.regex.meta.Tree
 ```
 
-```{autoclass} my.regex.meta.Tree
+```{autoclass} Tree
 ---
-members: true
+members:
 ---
 ```

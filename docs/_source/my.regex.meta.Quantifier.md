@@ -5,6 +5,6 @@
 
 ```{autoclass} Quantifier
 ---
-members: true
+members:
 ---
 ```

@@ -2,7 +2,7 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import Self, ClassVar, Literal
+from typing import Self, ClassVar
 from collections.abc import Iterator, Sequence, Generator
 import functools as ft
 import itertools as it
@@ -12,21 +12,13 @@ import more_itertools as mi
 from pydantic_core import core_schema as pyds
 
 ### INTERNAL
-from ...types import Buffer
-from .meta_patterns import META_RGXS
-from .GroupKind import GroupKind
+from ...types.Buffer import Buffer, PairMode
+from .meta_rgxs import META_RGXS, RegexBuffer
+from .GroupKind import GroupKind, NO_KIND
 from .Quantifier import Quantifier
 from .Atom import Atom
 from .GroupAtom import GroupAtom
 from .SetAtom import SetAtom
-
-
-############
-### DATA ###
-############
-NO_KIND = GroupKind(0)
-PairMode = Literal['all', 'roots', 'leaves']
-RegexBuffer = ft.partial(Buffer.new, fence_rgxs=['arrays'])
 
 
 ############

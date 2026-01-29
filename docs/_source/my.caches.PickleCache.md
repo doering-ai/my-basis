@@ -3,8 +3,8 @@
 ```{py:currentmodule} my.caches.PickleCache
 ```
 
-```{autoclass} my.caches.PickleCache
+```{autoclass} PickleCache
 ---
-members: true
+members:
 ---
 ```

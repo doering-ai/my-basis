@@ -4,12 +4,9 @@
 ```
 
 ```{autoclass} SyntaxUtils
----
-members: false
----
 ```
 
-### Normalization
+## `I` Normalization
 
 ```{automethod} SyntaxUtils.fill_tree
 ```
@@ -17,12 +14,12 @@ members: false
 ```{automethod} SyntaxUtils.tree_size
 ```
 
-### Annotation
+## `II` Annotation
 
 ```{automethod} SyntaxUtils.pyd_schemify
 ```
 
-### Reflection
+## `III` Reflection
 
 ```{automethod} SyntaxUtils.instance_fields
 ```
@@ -36,7 +33,7 @@ members: false
 ```{automethod} SyntaxUtils.import_module
 ```
 
-### Caching
+## `IV` Caching
 
 ```{automethod} SyntaxUtils.clear_cached_properties
 ```

@@ -53,7 +53,7 @@ RegexDef = (
 RegexBuffer = ft.partial(Buffer.new, fence_rgxs=['arrays'])
 
 # Allowed regex search functions
-RegexFunction = Literal['match', 'fullmatch', 'search', 'polymatch']
+MatchFunction = Literal['match', 'fullmatch', 'full', 'search', 'polymatch', 'poly']
 
 
 # ---------
@@ -893,6 +893,9 @@ class RegexStore(pyd.BaseModel):
         names, text = self._validate_automatch_params(names, text)
         return self._autoparse('fullmatch', names, text)
 
+    #: Alias for `fullmatch()`
+    full: ClassVar = fullmatch
+
     def search(self, names: str | Iterable[str], text: str | Buffer) -> MatchData:
         """Search for one of the named patterns anywhere in text.
 
@@ -973,6 +976,9 @@ class RegexStore(pyd.BaseModel):
 
         return delims, sections
 
+    #: Alias for `fullsplit()`
+    split: ClassVar = fullsplit
+
     def polymatch(self, name: str, text: str | Buffer) -> MatchData:
         """Find all matches and merge their captures into a single MatchData.
 
@@ -1003,13 +1009,16 @@ class RegexStore(pyd.BaseModel):
 
         return MatchData(data=pd.captures)
 
+    #: Alias for `polymatch()`
+    poly: ClassVar = polymatch
+
     # -------------------------
     # `*2` Functional Utilities
     # -------------------------
     def partial(
         self,
         name: str,
-        func: Literal['match', 'fullmatch', 'search', 'polymatch'] = 'match',
+        func: MatchFunction = 'match',
     ) -> Callable[[str | Buffer], MatchData]:
         """Create a partially applied matching function for a pattern.
 
@@ -1026,7 +1035,7 @@ class RegexStore(pyd.BaseModel):
         self,
         name: str,
         texts: Iterable[str],
-        func: Literal['match', 'fullmatch', 'search', 'polymatch'] = 'match',
+        func: MatchFunction = 'match',
     ) -> Iterable[MatchData]:
         """Apply a pattern to multiple texts.
 
@@ -1044,7 +1053,7 @@ class RegexStore(pyd.BaseModel):
         self,
         name: str,
         texts: Iterable[str],
-        func: Literal['match', 'fullmatch', 'search', 'polymatch'] = 'match',
+        func: MatchFunction = 'match',
     ) -> Iterable[str]:
         """Filter texts by whether they match a pattern.
 

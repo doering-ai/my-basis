@@ -24,5 +24,5 @@ my.regex.meta.SetAtom
 my.regex.meta.Quantifier
 my.regex.meta.GroupKind
 my.regex.meta.ParseData
-my.regex.meta.meta_patterns
+my.regex.meta.meta_rgxs
 ```

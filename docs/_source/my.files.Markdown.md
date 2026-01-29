@@ -5,6 +5,6 @@
 
 ```{autoclass} Markdown
 ---
-members: true
+members:
 ---
 ```

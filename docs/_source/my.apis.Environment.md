@@ -8,6 +8,6 @@
 
 ```{autoclass} Environment
 ---
-members: true
+members:
 ---
 ```

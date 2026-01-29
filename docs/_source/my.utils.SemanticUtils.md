@@ -4,12 +4,9 @@
 ```
 
 ```{autoclass} SemanticUtils
----
-members: false
----
 ```
 
-### Formatting
+## `I` Formatting
 
 ```{automethod} SemanticUtils.decimal_to_roman
 ```
@@ -17,12 +14,12 @@ members: false
 ```{automethod} SemanticUtils.roman_to_decimal
 ```
 
-### Amounts
+## `II` Amounts
 
 ```{automethod} SemanticUtils.format_amount
 ```
 
-### Pluralization
+## `III` Pluralization
 
 ```{automethod} SemanticUtils.to_singular
 ```
@@ -30,7 +27,7 @@ members: false
 ```{automethod} SemanticUtils.to_ordinal
 ```
 
-### Identifiers
+## `IV` Identifiers
 
 ```{automethod} SemanticUtils.validate_identifier
 ```

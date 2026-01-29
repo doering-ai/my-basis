@@ -5,6 +5,6 @@
 
 ```{autoclass} MyEnum
 ---
-members: true
+members:
 ---
 ```

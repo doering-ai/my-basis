@@ -18,6 +18,8 @@ tasks:
 
     test:pdb: uv run pytest -s --pdb --sw -vv --no-cov {{.CLI_ARGS}}
 
+    test:ssu: uv run pytest --snapshot-update {{.CLI_ARGS}}
+
     test:cov: uv run pytest --cov=my --cov-report=term-missing --cov-report=markdown:docs/coverage.md
         {{.CLI_ARGS}}
 
@@ -27,8 +29,9 @@ tasks:
     docs:
         desc: Extract python docstrings into MyST files, then (re)build the finalized
             HTML files.
-        cmd: uv run sphinx-build -c {{.DOC_DIR}} --fail-on-warning {{.CLI_ARGS}} {{.API_DIR}}
-            {{.OUT_DIR}}
+        cmd: >-
+            uv run sphinx-build --conf-dir {{.DOC_DIR}} --fail-on-warning --nitpicky
+            {{.CLI_ARGS}} {{.API_DIR}} {{.OUT_DIR}}
         sources:
             - '{{.SRC_DIR}}/**/*.py'
             - '{{.API_DIR}}/*'

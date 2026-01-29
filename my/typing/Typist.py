@@ -99,7 +99,7 @@ class Typist(pyd.BaseModel):
     and special non-type forms (e.g. `Annotated` and `Literal`).
 
     That said, not all possible type annotations are covered -- see the `Typist.SPECIAL_TYPES`
-    attribute for a ~~complete~~ best-effort list of unhandled annotations.
+    attribute for a best-effort list of unhandled annotations.
 
     #### `II` Comparison
     ##### Type Comparison ("matching")

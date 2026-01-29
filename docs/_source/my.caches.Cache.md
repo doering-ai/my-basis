@@ -5,6 +5,6 @@
 
 ```{autoclass} Cache
 ---
-members: true
+members:
 ---
 ```

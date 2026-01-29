@@ -4,12 +4,9 @@
 ```
 
 ```{autoclass} TextUtils
----
-members: false
----
 ```
 
-### Manipulation & Regex
+## `I` Manipulation & Regex
 
 ```{automethod} TextUtils.replace
 ```
@@ -26,7 +23,7 @@ members: false
 ```{automethod} TextUtils.multi_rgx
 ```
 
-### Formatting
+## `II` Formatting
 
 ```{automethod} TextUtils.strip_quotes
 ```

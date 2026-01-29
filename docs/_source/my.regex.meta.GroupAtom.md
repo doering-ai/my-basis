@@ -5,6 +5,6 @@
 
 ```{autoclass} GroupAtom
 ---
-members: true
+members:
 ---
 ```

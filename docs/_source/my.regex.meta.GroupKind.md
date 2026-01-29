@@ -5,6 +5,6 @@
 
 ```{autoclass} GroupKind
 ---
-members: true
+members:
 ---
 ```

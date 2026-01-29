@@ -5,6 +5,6 @@
 
 ```{autoclass} Command
 ---
-members: true
+members:
 ---
 ```

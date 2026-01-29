@@ -2,23 +2,31 @@
 ### HEAD ###
 ############
 ### STANDARD
+import functools as ft
 
 ### EXTERNAL
 import regex as re
 
 ### INTERNAL
 from ...utils import ut
+from ...types import Buffer
 
 re.DEFAULT_VERSION: re.RegexFlag = re.VERSION1
 
 ############
 ### DATA ###
 ############
+RegexBuffer = ft.partial(Buffer.new, fence_rgxs=['arrays'])
+
 NO_ESC = r'(?<!^\\|[^\\]\\)'
 NON_ESC = r'(?:^|[^\\]|\\\\)'
 QUANT = r'(?>\?|[*+][?+]?|\{\d+(?:,\d*)?\}[?+]?)?'
 FLAGS = r'(?P<flags>-?[afiLmsuxwif]+|[afiLmsuxwif]+-[afiLmsuxwif]+)'
 
+############
+### BODY ###
+############
+#: Dictionary of meta-regex patterns used for parsing and analyzing regular expressions.
 META_RGXS: dict[str, re.Pattern] = ut.regex_dict(
     # ---------------
     # Building Blocks
@@ -77,5 +85,15 @@ META_RGXS: dict[str, re.Pattern] = ut.regex_dict(
     # -------------
     # Miscellaneous
     # -------------
-    url_detritus=r'(?>^(?:\S*?archive\S*?\/\d{14}\/)?(?P>_http)?(?=\S{4,}$)|(?:#[^\/]+|[.,\'"])$',
+    url_detritus=ut.multi_rgx(
+        ''.join(
+            [
+                r'^(?:\S*?archive\S*?\/\d{14}\/)?',
+                r'(?:\b(?i:https?:\/\/|www\w*\.){1,2})?'
+                r'(?=\S{4,}$)',
+            ]
+        ),
+        r'#[^\/]+$',
+        r'[.,\'"\/]+$',
+    ),
 )

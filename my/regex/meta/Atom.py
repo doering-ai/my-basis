@@ -10,7 +10,7 @@ import functools as ft
 import pydantic as pyd
 
 ### INTERNAL
-from .meta_patterns import META_RGXS
+from .meta_rgxs import META_RGXS
 from .Quantifier import Quantifier
 
 

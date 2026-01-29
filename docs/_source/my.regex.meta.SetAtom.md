@@ -5,6 +5,6 @@
 
 ```{autoclass} SetAtom
 ---
-members: true
+members:
 ---
 ```

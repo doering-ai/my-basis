@@ -5,6 +5,6 @@
 
 ```{autoclass} Buffer
 ---
-members: true
+members:
 ---
 ```

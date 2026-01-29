@@ -4,12 +4,9 @@
 ```
 
 ```{autoclass} SystemUtils
----
-members: false
----
 ```
 
-### Date & Time
+## `I` Date & Time
 
 ```{automethod} SystemUtils.posix
 ```
@@ -17,7 +14,7 @@ members: false
 ```{automethod} SystemUtils.posix_since
 ```
 
-### Filesystem
+## `II` Filesystem
 
 ```{automethod} SystemUtils.validate_dir
 ```
@@ -28,7 +25,7 @@ members: false
 ```{automethod} SystemUtils.path_sub
 ```
 
-### Terminal
+## `III` Terminal
 
 ```{automethod} SystemUtils.get_terminal_width
 ```
@@ -45,7 +42,7 @@ members: false
 ```{automethod} SystemUtils.confirm
 ```
 
-### Logging
+## `IV` Logging
 
 ```{automethod} SystemUtils.setup_py_logging
 ```
@@ -62,12 +59,9 @@ members: false
 ```{automethod} SystemUtils.setup_warnings
 ```
 
-### Metrics
+## `V` Metrics
 
 ```{automethod} SystemUtils.setup_metrics
-```
-
-```{automethod} SystemUtils.wrapper
 ```
 
 ```{automethod} SystemUtils.measure_context

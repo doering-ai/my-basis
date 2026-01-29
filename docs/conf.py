@@ -177,7 +177,7 @@ source_suffix = {
 # myst_commonmark_only = False
 # myst_disable_syntax = []
 # myst_url_schemes = None
-# myst_heading_anchors = None
+myst_heading_anchors = 3
 # myst_heading_slug_func = None
 # myst_substitutions = {}
 # myst_html_meta = {}
@@ -295,18 +295,18 @@ def autodoc_skip_member(
     return skip or bool(RGXS.fullmatch('autodoc_skip', name))
 
 
-def _get_symbol(container: object, container_name: str, *path: str) -> object | None:
-    obj = container
+def _get_symbol(container: object, container_name: str, *path: str) -> tuple[str, object] | None:
     if not path:
         return None
-    elif path[0] == getattr(obj, '__name__', ''):
+    elif path[0] == getattr(container, '__name__', ''):
         path = path[1:]
 
+    obj = container
     for part in path:
         obj = getattr(obj, part, None)
         if obj is None:
             return None
-    return obj
+    return '.'.join(path), obj
 
 
 def _child_ref(obj: Any, ref_symbols: list[str]) -> object | None:
@@ -359,7 +359,7 @@ def _expand_reference(ref_symbols: list[str], obj: Any) -> str:
         role = 'const'
     else:
         role = 'data'
-    return f'{{py:{role}}}{ref}'
+    return f'{{py:{role}}}`{ref}`'
 
 
 def autodoc_process_docstring(
@@ -379,7 +379,7 @@ def autodoc_process_docstring(
         did_change = False
         for match in RGXS.finditer('local_reference', buf):
             if var := match.at('envvar').strip('$'):
-                newtext = f'{{envvar}}{var}'
+                newtext = f'{{envvar}}`{var}`'
                 buf.replace(match.span, newtext)
                 did_change = True
                 continue
@@ -415,5 +415,5 @@ def autodoc_process_docstring(
 
 def setup(app: Any):
     """Register custom Sphinx event handlers."""
-    app.connect('autodoc-skip-member', autodoc_skip_member)
-    app.connect('autodoc-process-docstring', autodoc_process_docstring)
+    # app.connect('autodoc-skip-member', autodoc_skip_member)
+    # app.connect('autodoc-process-docstring', autodoc_process_docstring)

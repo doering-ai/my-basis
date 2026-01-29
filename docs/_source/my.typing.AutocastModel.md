@@ -5,6 +5,6 @@
 
 ```{autoclass} AutocastModel
 ---
-members: true
+members:
 ---
 ```

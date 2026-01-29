@@ -4,12 +4,9 @@
 ```
 
 ```{autoclass} IterUtils
----
-members: false
----
 ```
 
-### `0` CONSTRUCTION
+## `I` Construction
 
 ```{automethod} IterUtils.build
 ```
@@ -26,7 +23,7 @@ members: false
 ```{automethod} IterUtils.bucket
 ```
 
-### `1` SELECTION
+## `II` Selection
 
 ```{automethod} IterUtils.find
 ```
@@ -49,7 +46,7 @@ members: false
 ```{automethod} IterUtils.get_any
 ```
 
-### `2` APPLICATION
+## `III` Application
 
 ```{automethod} IterUtils.val_map
 ```
@@ -60,15 +57,12 @@ members: false
 ```{automethod} IterUtils.chain_map
 ```
 
-### `3` EXECUTION
+## `IV` Execution
 
 ```{automethod} IterUtils.repeat_until_complete
 ```
 
-### `4` PRESENCE
-
-```{automethod} IterUtils.wrapper
-```
+## `V` Presence
 
 ```{automethod} IterUtils.has_all
 ```
@@ -94,7 +88,7 @@ members: false
 ```{automethod} IterUtils.any_has_any
 ```
 
-### `5` COMPARISON
+## `VI` Comparison
 
 ```{automethod} IterUtils.shared_prefix
 ```
@@ -105,7 +99,7 @@ members: false
 ```{automethod} IterUtils.common_elements
 ```
 
-### `6` MODIFICATION
+## `VII` Modification
 
 ```{automethod} IterUtils.drop_at
 ```

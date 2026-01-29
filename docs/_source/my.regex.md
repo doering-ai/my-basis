@@ -16,6 +16,7 @@ maxdepth: 2
 ---
 my.regex.RegexStore
 my.regex.common
+extended_regex_syntax
 my.regex.MatchData
 my.regex.RegexDebugger
 my.regex.meta

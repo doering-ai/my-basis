@@ -3,8 +3,8 @@
 ```{py:currentmodule} my.caches.NestedCache
 ```
 
-```{autoclass} my.caches.NestedCache
+```{autoclass} NestedCache
 ---
-members: true
+members:
 ---
 ```

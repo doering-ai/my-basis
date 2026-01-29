@@ -3,8 +3,8 @@
 ```{py:currentmodule} my.regex.meta.Atom
 ```
 
-```{autoclass} my.regex.meta.Atom
+```{autoclass} Atom
 ---
-members: true
+members:
 ---
 ```

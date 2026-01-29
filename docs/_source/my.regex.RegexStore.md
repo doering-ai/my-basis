@@ -5,6 +5,6 @@
 
 ```{autoclass} my.regex.RegexStore
 ---
-members: true
+members:
 ---
 ```

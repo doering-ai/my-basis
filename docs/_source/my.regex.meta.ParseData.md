@@ -5,6 +5,6 @@
 
 ```{autoclass} ParseData
 ---
-members: true
+members:
 ---
 ```

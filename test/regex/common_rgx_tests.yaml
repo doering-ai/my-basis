@@ -436,33 +436,6 @@ _latent_date:
     - ['not a date']
     - ['random text']
 
-# Name patterns
-list:
-
-image:
-
-namespace_prefix:
-
-# Detritus Patterns for cleaners
-nowiki_detritus:
-
-url_detritus:
-    # Archive.org prefixes:
-    - {text: 'web.archive.org/web/20081205101019/http://site.com', func: search}
-    - {text: 'archive.org/web/12345678901234/https://example.org', func: search}
-    - {text: 'http://web.archive.org/web/20200101000000/http://test.com', func: search}
-    # HTTP prefixes at start:
-    - {text: 'http://example.com/path', func: search}
-    - {text: 'https://example.com', func: search}
-    - {text: 'www.example.com', func: search}
-    # Trailing detritus:
-    - {text: 'site.com#anchor', func: search}
-    - {text: 'site.com.', func: search}
-    - {text: 'site.com,', func: search}
-    - {text: "site.com'", func: search}
-    - {text: 'site.com"', func: search}
-    - {text: 'site.com#section1', func: search,}
-
 # Prose patterns
 _preposition:
     - a
@@ -508,8 +481,8 @@ _preposition:
     - {text: 'word the word', func: search}
     - {text: '(in)', func: search}
     # Negative (not standalone prepositions):
-    - ['android']
-    - ['theory']
-    - ['form']
-    - ['option']
-    - ['thorough']
+    - [android]
+    - [theory]
+    - [form]
+    - [option]
+    - [thorough]

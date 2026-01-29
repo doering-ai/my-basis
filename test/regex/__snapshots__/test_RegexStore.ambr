@@ -1,0 +1,16 @@
+# serializer version: 1
+# name: TestRegexStore.test_pretty_print
+  '''
+  h
+  e
+  l
+  l
+  o
+   ?
+  w
+  o
+  r
+  l
+  d
+  '''
+# ---

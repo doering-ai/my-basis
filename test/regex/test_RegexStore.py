@@ -2,6 +2,7 @@
 ### HEAD ###
 ############
 ### STANDARD
+import inspect
 
 ### EXTERNAL
 import regex as re
@@ -650,6 +651,27 @@ class TestRegexStore:
         result = store.match('test', 'hello')
         assert ut.has_none(result.data, '_internal', '_hidden')
 
+    @pyt.mark.parametrize(
+        'func, alias, text',
+        [
+            ('fullmatch', 'full', '(paren) suffix'),
+            ('polymatch', 'poly', '(paren0) suffix (paren1)'),
+            ('fullsplit', 'split', 'prefix (paren0) suffix'),
+        ],
+    )
+    def test_automatch__aliases(self, store: RegexStore, func: str, alias: str, text: str):
+        _ = store.load
+        fn0 = getattr(store, func)
+        fn1 = getattr(store, alias)
+        assert fn0 and fn1
+        sig0 = inspect.signature(fn0)
+        sig1 = inspect.signature(fn1)
+        assert sig0.parameters == sig1.parameters
+
+        m0 = fn0('_parenthetical', text)
+        m1 = fn1('_parenthetical', text)
+        assert m0 == m1
+
     # -------------------------
     # `*2` Functional Utilities
     # -------------------------
@@ -756,6 +778,16 @@ class TestRegexStore:
                 'balticseawind.org',
             ),
             ('https://www.gbif.org/species/113225725', 'gbif.org/species/113225725'),
+            ('web.archive.org/web/20081205101019/http://site.com/', 'site.com'),
+            ('archive.org/web/12345678901234/https://example.org/', 'example.org'),
+            ('http://web.archive.org/web/20200101000000/http://example.com/a/b', 'example.com/a/b'),
+            ('http://example.com/path', 'example.com/path'),
+            ('https://example.com', 'example.com'),
+            ('www.example.com', 'example.com'),
+            ('  site.com.  ', 'site.com'),
+            ("site.com,'", 'site.com'),
+            ('site.com."', 'site.com'),
+            ('site.com/#weird_path/#section1"', 'site.com/#weird_path'),
         ],
     )
     def test_format_url(self, target: str, expected: str):
@@ -799,7 +831,7 @@ class TestRegexStore:
         result = store.pretty_print('compound')
         assert isinstance(result, str)
         assert len(result) > 0
-        snapshot.assert_match(result, 'pretty_print_compound.txt')
+        assert result == snapshot
 
     def test_pretty_print__no_head(self, store: RegexStore):
         _ = store.load

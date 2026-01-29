@@ -5,6 +5,6 @@
 
 ```{autoclass} Span
 ---
-members: true
+members:
 ---
 ```

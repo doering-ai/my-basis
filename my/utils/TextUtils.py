@@ -27,7 +27,7 @@ class TextUtils:
     Parts of this class overlap in scope with `RegexStore` (namely `regex_dict()`), but ultimately
     present a much more lightweight interface for simple (or dependency-sensitive...) regex tasks.
     As with the store, all regex compiled through these methods supports the regex module's
-    [extended regex syntax](/mrab-regex-syntax.my).
+    [extended regex syntax](./extended_regex_syntax.md).
     """
 
     RGXS: ClassVar[dict[str, Pattern]] = {}  # written at bottom of file

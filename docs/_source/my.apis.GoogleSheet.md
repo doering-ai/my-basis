@@ -5,6 +5,6 @@
 
 ```{autoclass} GoogleSheet
 ---
-members: true
+members:
 ---
 ```

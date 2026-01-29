@@ -5,6 +5,6 @@
 
 ```{autoclass} Predicate
 ---
-members: true
+members:
 ---
 ```

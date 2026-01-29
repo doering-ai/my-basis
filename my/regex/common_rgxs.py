@@ -12,6 +12,7 @@ from .RegexStore import RegexStore
 ############
 ### BODY ###
 ############
+#: Store of miscellaneous general patterns, for direct and/or indirect use.
 COMMON_RGXS = RegexStore.new(
     options=dict(
         separator='',

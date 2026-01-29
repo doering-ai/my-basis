@@ -10,7 +10,7 @@ import pydantic as pyd
 
 ### INTERNAL
 from ...types import Span, Buffer
-from .meta_patterns import META_RGXS
+from .meta_rgxs import META_RGXS
 from .GroupKind import GroupKind
 from .Atom import Atom
 
@@ -65,6 +65,7 @@ class GroupAtom(Atom):
     # `-` Private Methods
     # -------------------
     def read_data(self) -> None:
+        """Reads the raw `data` field in order to populate `start`, `body`, and `kind`."""
         # I.i. Separate out the opening syntax (e.g. `(?:`)
         match = META_RGXS['group'].match(self.data)
         assert match is not None, f'Invalid group: {self.data}'
@@ -80,6 +81,7 @@ class GroupAtom(Atom):
         self.body = rest.rsplit(')', 1)[0]
 
     def infer_name(self) -> None:
+        """Infers the name of the group if it is a named capture, invocation, or substitution."""
         if self.kind == GroupKind.PARAM:
             # I. Named capture groups's names are part of 'start', not 'body'
             assert '>' in self.body, f'Invalid named capture self: {self.body}'
@@ -91,6 +93,7 @@ class GroupAtom(Atom):
             self.start += self.name
 
     def infer_flags(self) -> None:
+        """Infers the flags of the group if it is a flag group."""
         if self.start.endswith(':'):
             # I. Plain groups appear to be flag groups, but actually do have content
             self.kind = GroupKind.PLAIN
@@ -113,8 +116,10 @@ class GroupAtom(Atom):
 
     @ft.cached_property
     def is_simple(self) -> bool:
+        """Whether this group is plain (`(?:...)`) or atomic (`(?>...)`) w/ a simple quantifier."""
         return super().is_simple and self.kind in GroupKind._SIMPLE
 
     @ft.cached_property
     def inline_flags(self) -> Atom:
+        """An Atom representing the inline flags of this group."""
         return Atom(rf'(?{"".join(sorted(self.flags))})') if self.flags else Atom('')

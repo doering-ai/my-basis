@@ -5,6 +5,6 @@
 
 ```{autoclass} Typist
 ---
-members: true
+members:
 ---
 ```

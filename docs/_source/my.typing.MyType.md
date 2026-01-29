@@ -3,8 +3,8 @@
 ```{py:currentmodule} my.typing.MyType
 ```
 
-```{autoclass} Typist
+```{autoclass} MyType
 ---
-members: true
+members:
 ---
 ```

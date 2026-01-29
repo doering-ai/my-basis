@@ -1,6 +1,12 @@
-## Text Utilities
+# `TextUtils`: Text Utilities
+
+```{py:currentmodule} my.utils.TextUtils
+```
 
 ```{autoclass} TextUtils
+---
+members: false
+---
 ```
 
 ### Manipulation & Regex

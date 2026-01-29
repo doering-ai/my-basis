@@ -1,6 +1,9 @@
-## Environment Variable Interface
+# `Environment`: Ergonomic, Concise Shell Variable Interface
 
-```{autodata} my.apis.Environment.env
+```{py:currentmodule} my.apis.Environment
+```
+
+```{autodata} env
 ```
 
 ```{autoclass} Environment

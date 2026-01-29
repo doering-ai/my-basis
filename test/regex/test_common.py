@@ -76,38 +76,6 @@ class TestCommonRegexes:
     # `.` Initial Methods
     # -------------------
     @pyt.mark.parametrize(
-        'target, expected',
-        [
-            (
-                'web.archive.org/web/20081205101019/http://www.balticseawind.org',
-                'balticseawind.org',
-            ),
-            (
-                'https://www.web.archive.org/web/20081205101019/http://www.balticseawind.org',
-                'balticseawind.org',
-            ),
-            ('https://www.gbif.org/species/113225725', 'gbif.org/species/113225725'),
-        ],
-    )
-    def test_format_url(self, target: str, expected: str):
-        assert format_url(target) == expected
-
-    @pyt.mark.parametrize(
-        'target, expected',
-        [
-            ('', r'(?P>_ws)(?P>_we)'),
-            (['one', 'two'], [r'(?P>_ws)', r'one', r'two', r'(?P>_we)']),
-            (('[]:', ['part1', 'part2']), ('[]:', r'(?P>_ws)', ['part1', 'part2'], r'(?P>_we)')),
-            (
-                ('[]:', r'pre', ['part1', 'part2'], r'suf'),
-                ('[]:', r'(?P>_ws)pre', ['part1', 'part2'], r'suf(?P>_we)'),
-            ),
-        ],
-    )
-    def test_atom(self, target, expected):
-        assert atom(target) == expected
-
-    @pyt.mark.parametrize(
         'name, index',
         [
             (name, index)

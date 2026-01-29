@@ -1,4 +1,10 @@
-## Buffer
+# `Buffer`: A Performant, Mutable Text Buffer
 
-```{autoclass} my.types.Buffer
+```{py:currentmodule} my.types.Buffer
+```
+
+```{autoclass} Buffer
+---
+members: true
+---
 ```

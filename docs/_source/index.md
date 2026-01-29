@@ -1,4 +1,4 @@
-# myBasis: A Python Toolkit
+# `myBasis`: A Python Toolkit
 
 myBasis is a library built to provide a variety of useful doodads for high-level Python development of all kinds, with a special eye towards ergonomics, Unix-style composability, and thorough documentation & testing.
 
@@ -8,7 +8,7 @@ It's aimed at Python developers of all kinds, but it's especially worth a perusa
 
 - ...convinced Python has accidentally become the best functional language ever released, and thus always on the lookout for ways to write more **readable, concise functional code**.
 
-- ...building AI agents where **"vibe" typing** can save you a few thousand tokens per slightly-mistaken tool call.
+- ...building AI agents where **"vibe" typing** can save you thousands of tokens per slightly-mistaken tool call.
 
 - ...looking for a clean, easily-extensible way to interact with **Google Sheets**.
 
@@ -22,11 +22,11 @@ The package is organized into seven subpackages, which are (in rough order from 
 ---
 maxdepth: 2
 ---
-1. My Utilities </api/my.utils>
-2. Type Casting </api/my.typing>
-3. Useful Types </api/my.types>
-4. Regex Stores </api/my.regex>
-5. Local Caches </api/my.caches>
-6. API Wrappers </api/my.apis>
-7. File Formats </api/my.files>
+1. My Utilities <my.utils>
+2. Type Casting <my.typing>
+3. Useful Types <my.types>
+4. Regex Stores <my.regex>
+5. Local Caches <my.caches>
+6. API Wrappers <my.apis>
+7. File Formats <my.files>
 ```

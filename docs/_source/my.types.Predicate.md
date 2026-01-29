@@ -1,4 +1,10 @@
-## Predicate
+# `Predicate`: A General, Highly-serializable Data Structure
 
-```{autoclass} my.types.Predicate
+```{py:currentmodule} my.types.Predicate
+```
+
+```{autoclass} Predicate
+---
+members: true
+---
 ```

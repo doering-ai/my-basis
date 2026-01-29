@@ -2,8 +2,8 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import Literal, ClassVar
-from collections.abc import Callable, Iterable
+from typing import Literal, ClassVar, overload
+from collections.abc import Callable, Iterable, Mapping
 import textwrap
 import itertools as it
 
@@ -78,22 +78,38 @@ class TextUtils:
         )
         return parts
 
+    @overload
     @staticmethod
     def regex_dict(
-        expressions: dict[T, str | tuple[str, ...] | Pattern] | dict[T, str] | None = None,
-        compile_function: Callable[..., Pattern] = re.compile,
+        expressions: Mapping[str, str | Pattern] | None = None,
+        **kwargs: str | Pattern,
+    ) -> dict[str, Pattern]: ...
+
+    @overload
+    @staticmethod
+    def regex_dict[P](
+        expressions: Mapping[T, P | Pattern] | None = None,
+        compile_function: Callable[[P], Pattern] = re.compile,
+        **kwargs: P | Pattern,
+    ) -> dict[T, Pattern]: ...
+
+    @staticmethod
+    def regex_dict[P = str](
+        expressions: Mapping[T, str | P | Pattern] | None = None,
+        compile_function: Callable[[P], Pattern] = re.compile,
+        **kwargs: str | P | Pattern,
     ) -> dict[T, Pattern]:
         """Compile the expression strings in the given dictionary, mapping names to Patterns.
 
         Args:
             expressions: A mapping of string names to regular expressions (compiled or otherwise).
             compile_function: Function to compile patterns (default: re.compile).
+            **kwargs: Additional named patterns to include.
         Returns:
             The expressions mapping with all values now compiled.
         """
-        if expressions is None:
-            expressions = {}
         ret = {}
+        expressions: dict[T, str | P | Pattern] = dict(expressions or {}) | kwargs
         for key, val in expressions.items():
             if isinstance(val, Pattern):
                 ret[key] = val

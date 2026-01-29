@@ -1,6 +1,12 @@
-## System Utilities
+# `SystemUtils`: System Utilities
+
+```{py:currentmodule} my.utils.SystemUtils
+```
 
 ```{autoclass} SystemUtils
+---
+members: false
+---
 ```
 
 ### Date & Time

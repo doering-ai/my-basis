@@ -1,6 +1,12 @@
-## Iteration Utilities
+# `IterUtils`: Iteration Utilities
+
+```{py:currentmodule} my.utils.IterUtils
+```
 
 ```{autoclass} IterUtils
+---
+members: false
+---
 ```
 
 ### `0` CONSTRUCTION

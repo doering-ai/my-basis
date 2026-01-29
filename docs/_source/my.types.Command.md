@@ -1,4 +1,10 @@
-## Command
+# `Command`: A Normalized, Programatically-defined Shell Command
 
-```{autoclass} my.types.Command
+```{py:currentmodule} my.types.Command
+```
+
+```{autoclass} Command
+---
+members: true
+---
 ```

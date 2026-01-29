@@ -1,4 +1,10 @@
-## Markdown
+# `Markdown`: A Hierarchically Indexed Markdown Document
 
-```{autoclass} my.files.Markdown
+```{py:currentmodule} my.files.Markdown
+```
+
+```{autoclass} Markdown
+---
+members: true
+---
 ```

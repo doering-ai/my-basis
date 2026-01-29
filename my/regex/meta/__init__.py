@@ -1,4 +1,4 @@
-from .meta_patterns import META_RGXS, FLAGS, NO_ESC, NON_ESC, QUANT
+from .meta_rgxs import META_RGXS, FLAGS, NO_ESC, NON_ESC, QUANT
 from .ParseData import ParseData
 from .Quantifier import Quantifier
 from .GroupKind import GroupKind

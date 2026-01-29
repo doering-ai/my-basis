@@ -93,22 +93,23 @@ class RegexStore(pyd.BaseModel):
     # ----------------
     # Meta Expressions
     # ----------------
+    #: A dictionary of useful patterns for decomposing expressions
     META_RGXS: ClassVar[dict[str, re.Pattern]] = META_RGXS
 
     # -------
     # Members
     # -------
-    # Uncompiled expressions, ready for reuse
+    #: Uncompiled expressions, ready for **reuse**
     definitions: dict[str, str] = {}
 
-    # Compiled expressions, ready for invocation
+    #: Compiled expressions, ready for **invocation**
     patterns: dict[str, ut.RegexField] = {}
 
-    # Expression-specific parsers of match data
+    #: Expression-specific parsers of match data
     parsers: dict[str, RegexParser] = {}
     routers: dict[str, list[str]] = {}
 
-    # Function used to clean matched strings
+    #: Function used to clean matched strings
     strip: Callable[[str], str] = pyd.Field(default=lambda x: x, exclude=True)
     lazy_queue: deque[Callable[[], None]] = pyd.Field(default_factory=deque, exclude=True)
     is_loaded: bool = pyd.Field(default=True, exclude=True)
@@ -120,17 +121,35 @@ class RegexStore(pyd.BaseModel):
     class Options(pyd.BaseModel):
         """Configuration options for RegexStore behavior -- must be set at initialization time."""
 
+        # -------------------
         # Convenience options
+        # -------------------
+        #: Function to format ***only*** definitions provided at initialization time.
         init_formatter: Callable[..., str] | None = None
+        #: Function to format definitions always, whenever they're created.
         formatter: Callable[..., str] | None = None
+        #: The default expression inserted between elements of a list when processing definitions.
         separator: str = r' *'
+        #: Whether to convert `(...)` groups to `(?:...)`, allowing for cleaner definitions.
         force_named_groups: bool = False
+        #: Whether to convert `(?P=name)` group *substitutions* to `(?P>name)` group *invocations*,
+        #: used primarily for text editors that don't recognize the latter syntax.
+        #: To write substitutions while this is enabled, use the alternate `\g<name>` syntax.
         force_reinvocations: bool = True
+        #: Whether to delay compilation of patterns until first use.
+        #: Even very large stores compile in milliseconds, but this is enabled by default so that
+        #: invalid definitions don't raise exceptions before logging and/or error handling is setup.
         lazy_load: bool = True
 
+        # ------------------
         # Autostrip behavior
+        # ------------------
+        #: Whether to automatically strip spaces from matched group values (` text ` -> `text`).
         autostrip_spaces: bool = True
+        #: Whether to automatically strip brackets from matched group values (e.g.
+        #: `([func(params)]){}` -> `func(params)`).
         autostrip_brackets: bool = False
+        #: Whether to automatically strip commas from matched group values (e.g. `a,b,` -> `a,b`).
         autostrip_commas: bool = False
 
     options: Options = pyd.Field(default_factory=Options)
@@ -176,7 +195,7 @@ class RegexStore(pyd.BaseModel):
         definitions: dict[str, RegexDef | Any],
     ) -> None:
         """Initial loading of patterns into the store, including imports and formatting."""
-        # II. Import the requested patterns from other stores
+        # I. Import the requested patterns from other stores
         if imports:
             for source, names in imports:
                 for name in source.find_all_invocations(set(names)):
@@ -185,11 +204,11 @@ class RegexStore(pyd.BaseModel):
                     if name in source.parsers:
                         self.parsers[name] = source.parsers[name]
 
-        # III. Preformat the given definitions with the user-defined formatter function
+        # II. Preformat the given definitions with the user-defined formatter function
         if (fn := self.options.init_formatter) is not None:
             definitions = ut.val_map(lambda v: self.format_definition(fn, v), definitions)
 
-        # IV. Set the values of the store
+        # III. Set the values of the store
         for name, val in definitions.items():
             self[name] = val
 
@@ -207,12 +226,12 @@ class RegexStore(pyd.BaseModel):
     @pyd.model_validator(mode='after')
     def _process_options(self) -> Self:
         """Finalize the store by setting up the autostrip function based on member variables."""
+        # I. Setup the "autostrip" handler
         strip_string = ''
         if self.options.autostrip_spaces:
             strip_string += ' '
         if self.options.autostrip_brackets:
             strip_string += '()[]'
-
         if self.options.autostrip_commas:
             strip_string += ','
 
@@ -221,6 +240,7 @@ class RegexStore(pyd.BaseModel):
         else:
             self.strip = lambda text: text
 
+        # II. Modify all expressions to use invocations if requested
         if self.options.force_reinvocations:
             self.definitions = {
                 key: val.replace('(?P=', '(?P>') for key, val in self.definitions.items()
@@ -640,7 +660,7 @@ class RegexStore(pyd.BaseModel):
         Raises:
             AssertionError: If local group names conflict with predefined groups.
         """
-        # I. Replace the convenience syntax with the actual, ugly syntax
+        # I. Modify all expressions to use invocations if requested
         if self.options.force_reinvocations:
             text.replace('(?P=', '(?P>')
 
@@ -650,9 +670,10 @@ class RegexStore(pyd.BaseModel):
 
         for group in Regex.group_iterator(text, mask=GroupKind._NAMED):
             if group.kind == GroupKind.PARAM:
+                # Named subroutine definition
                 local_groups.add(group.name)
             elif group.kind == GroupKind.INVOC and group.name != name:
-                # Intentional reference to a defined subroutine
+                # Intentional reference to a named subroutine
                 if group.name in self.definitions:
                     groups_used.add(group.name)
                 elif group.name in local_groups:
@@ -955,8 +976,10 @@ class RegexStore(pyd.BaseModel):
     def polymatch(self, name: str, text: str | Buffer) -> MatchData:
         """Find all matches and merge their captures into a single MatchData.
 
-        Unlike findall which returns separate MatchData objects, this merges all
-        captures from all matches into one result, preserving order by start position.
+        Unlike findall which returns separate MatchData objects, this merges all captures from all
+        matches into one result, preserving order by start position.
+
+        **This is the only such method that doesn't have an analogue in the `re` standard library.**
 
         Args:
             name: Pattern name to search for.
@@ -1132,9 +1155,75 @@ class RegexStore(pyd.BaseModel):
 
         return ''
 
-    # ---------
-    # `*4` Misc
-    # ---------
+    # ----------------------------
+    # `*4` Expression Construction
+    # ----------------------------
+    @staticmethod
+    def format_url(target: str) -> str:
+        """Removes archive.org prefixes, URL fragments, and trailing punctuation from URLs.
+
+        Args:
+            target: The URL string to format.
+        Returns:
+            The cleaned URL string with detritus removed and trimmed.
+        """
+        return META_RGXS['url_detritus'].sub('', target).strip('/. ')
+
+    @staticmethod
+    def atom(*contents: RegexVal) -> RegexVal:
+        """Wraps regex content in word-boundary assertions for atomic matching.
+
+        This function takes one or more regex values and wraps them in word start (`(?P>_ws)`)
+        and word end (`(?P>_we)`) boundary assertions. This ensures the pattern matches complete
+        words or atomic units rather than partial matches.
+
+        Args:
+            *contents: One or more regex values (strings, lists, or tuples) to wrap.
+        Returns:
+            A regex value wrapped with word boundary assertions. Format depends on input:
+            - Multiple contents: tuple with all wrapped together
+            - Single string: string with boundaries
+            - Single list: list with boundaries prepended/appended
+            - Single tuple: tuple with boundaries integrated based on mark type
+        Raises:
+            ValueError: If no content provided or tuple has invalid length.
+        """
+        if not contents:
+            raise ValueError('No content provided')
+        elif len(contents) > 1:
+            return ('[]:', r'(?P>_ws)', list(contents), r'(?P>_we)')
+
+        content = contents[0]
+
+        if isinstance(content, str):
+            # I. Simple string case
+            return rf'(?P>_ws){content}(?P>_we)'
+        elif isinstance(content, list):
+            # II. List case
+            return [r'(?P>_ws)', *content, r'(?P>_we)']
+        elif isinstance(content, tuple):
+            # III. Tuple case
+            mark, body = '', ''
+            prefix, suffix = '', ''
+            if len(content) == 2:
+                mark, body = content  # ty:ignore[invalid-assignment]
+                prefix, suffix = '', ''
+            elif len(content) == 4:
+                mark, prefix, body, suffix = content  # ty:ignore[invalid-assignment]
+            else:
+                raise ValueError(f'Invalid content tuple: {content}')
+
+            if mark[-1] in '*+' or '>' in mark:
+                return ('[]:', [r'(?P>_ws)', content, r'(?P>_we)'])
+            else:
+                return (mark, rf'(?P>_ws){prefix}', body, rf'{suffix}(?P>_we)')
+        else:
+            # IV. Error case
+            raise ValueError(f'Invalid content: {content}')
+
+    # --------------------------
+    # `*5` Development Utilities
+    # --------------------------
     def sanitize(self, pattern: str | Pattern | Buffer | Regex | Atom) -> str:
         """Sanitize a pattern by normalizing inline flag syntax.
 
@@ -1156,18 +1245,22 @@ class RegexStore(pyd.BaseModel):
             (META_RGXS['inline_flags'], r'(?:(?\1)'),
         )
 
-    def tree_print(
+    def pretty_print(
         self,
         pattern: str | Pattern | Buffer | Regex | Atom,
         print_head: bool = True,
-        **kwargs: Any,
+        depth: int = 0,
+        maxdepth: int = 6,
+        threshold: int = 48,
     ) -> str:
         """Pretty-print a regex pattern as an indented multiline tree structure.
 
         Args:
             pattern: The name of an existing pattern, a compiled pattern, or a raw expression.
             print_head: Whether to include the pattern header (i.e. `(?:DEFINE)...)`) in output.
-            **kwargs: Additional arguments passed to `_tree_print()`.
+            depth: Current recursion depth.
+            maxdepth: Maximum depth to print before truncating branches.
+            threshold: Maximum length of a branch before truncating.
         Returns:
             Multi-line string representation with indentation showing nesting.
         """
@@ -1206,7 +1299,7 @@ class RegexStore(pyd.BaseModel):
                 head = Atom()
 
         # II. Pretty-print the body & head separately
-        kwargs = dict(maxdepth=6, threshold=48) | kwargs
+        kwargs = dict(maxdepth=maxdepth, threshold=threshold, depth=depth)
         ret = self._tree_print(body, **kwargs)
         if print_head and head:
             ret = f'{self._tree_print(head, **kwargs)}\n{ret}'

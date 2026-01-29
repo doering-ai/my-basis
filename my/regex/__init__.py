@@ -1,14 +1,12 @@
 from .meta import META_RGXS, ParseData, Quantifier, GroupKind, Atom, GroupAtom, SetAtom, Regex, Tree
 from .MatchData import MatchData
 from .RegexStore import RegexStore, RegexParser, RegexTup, RegexList, RegexVal, RegexDef
-from .common import format_url, atom, COMMON_RGXS
+from .common_rgxs import COMMON_RGXS
 from .RegexDebugger import RegexDebugger
 
-import regex as re
-
-re.DEFAULT_VERSION = re.VERSION1
-
 __all__ = [
+    'RegexStore',
+    'RegexDebugger',
     'GroupKind',
     'Atom',
     'GroupAtom',
@@ -16,17 +14,13 @@ __all__ = [
     'Regex',
     'Tree',
     'Quantifier',
-    'META_RGXS',
     'MatchData',
     'ParseData',
-    'RegexStore',
     'RegexParser',
     'RegexTup',
     'RegexList',
     'RegexVal',
     'RegexDef',
-    'format_url',
-    'atom',
+    'META_RGXS',
     'COMMON_RGXS',
-    'RegexDebugger',
 ]

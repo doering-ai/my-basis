@@ -27,7 +27,7 @@ tasks:
     docs:
         desc: Extract python docstrings into MyST files, then (re)build the finalized
             HTML files.
-        cmd: uv run sphinx-build -c {{DOC_DIR}} --fail-on-warning {{.CLI_ARGS}} {{.API_DIR}}
+        cmd: uv run sphinx-build -c {{.DOC_DIR}} --fail-on-warning {{.CLI_ARGS}} {{.API_DIR}}
             {{.OUT_DIR}}
         sources:
             - '{{.SRC_DIR}}/**/*.py'

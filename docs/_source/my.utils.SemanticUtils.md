@@ -1,6 +1,12 @@
-## Semantic Utilities
+# `SemanticUtils`: Semantic Utilities
+
+```{py:currentmodule} my.utils.SemanticUtils
+```
 
 ```{autoclass} SemanticUtils
+---
+members: false
+---
 ```
 
 ### Formatting

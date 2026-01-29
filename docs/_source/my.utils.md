@@ -3,7 +3,10 @@ numbering:
   title: true
 ---
 
-# My Utilities
+# `my.utils`: Pure, Typed Functional Utilities
+
+```{py:currentmodule} my.utils
+```
 
 The `utils` subpackage provides a comprehensive collection of utility functions organized into specialized classes that are combined into a unified `Utils` interface and exported under the alias `ut`. This design allows methods to be called as `ut.method()` regardless of which utility class defines them, providing a clean, flat namespace for common operations.
 

@@ -1,4 +1,10 @@
-## MyEnum
+# `MyEnum`: AbstractBaseClass for Flexible Enumerations
 
-```{autoclass} my.types.MyEnum
+```{py:currentmodule} my.types.MyEnum
+```
+
+```{autoclass} MyEnum
+---
+members: true
+---
 ```

@@ -22,7 +22,8 @@ class ParseData(pyd.BaseModel):
     Supports merging, rearranging, and transforming captures based on parser functions.
 
     It is available for use via the public API, but should only really be useful if you're looking
-    to extend `RegexStore`s parsing functionality considerably.
+    to extend `RegexStore`'s parsing functionality. The vast majority of users should never need to
+    know that this class exists!
     """
 
     #: Current captured fields and their values.
@@ -31,14 +32,9 @@ class ParseData(pyd.BaseModel):
     #: The start positions (within the original string) of the captured values.
     starts: dict[str, list[int]] = {}
 
-    #: The cached name of the field that is currently being processed.
-    field: str = ''
-
-    #: Cached values.
-    value: list[str] = []
-
-    #: Cached start positions.
-    start: list[int] = []
+    field: str = ''  #: Cached name of the field being processed, set by `set_field()`.
+    value: list[str] = []  #: Cached captures, set by `set_field()`.
+    start: list[int] = []  #: Cached starts, set by `set_field()`.
 
     # -------------------
     # `.` Initial Methods

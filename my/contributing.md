@@ -7,16 +7,16 @@ If you're interested in contributing the project, simply get in touch, open an i
 
 ### Design Philosophy
 
-1. I readily except
+TODO
 
 ### Subpackage Dependency Tree
 
 When adding new relative imports to any of the modules in this package, make sure to either respect or update this structure (in order to prevent circular dependencies).
 
 - `utils` imports nothing.
-    - `caches` imports `utils`
-        - `typing` imports `utils` and `caches`
-            - `types` imports `utils` and `typing`
-                - `apis` imports `utils` and `types`
-                - `regex` imports `utils` and `types`
-                    - `files` imports `utils`, `typing`, `types`, and `regex`
+  - `caches` imports `utils`
+    - `typing` imports `utils` and `caches`
+      - `types` imports `utils` and `typing`
+        - `apis` imports `utils` and `types`
+        - `regex` imports `utils` and `types`
+          - `files` imports `utils`, `typing`, `types`, and `regex`

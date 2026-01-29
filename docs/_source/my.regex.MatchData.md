@@ -1,4 +1,7 @@
-## MatchData
+# `MatchData`: An Ergonomic, Parsed Regex Match
 
-```{autoclass} my.regex.MatchData
+```{py:currentmodule} my.regex.MatchData
+```
+
+```{autoclass} MatchData
 ```

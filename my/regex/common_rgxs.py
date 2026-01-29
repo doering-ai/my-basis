@@ -6,90 +6,29 @@
 ### EXTERNAL
 
 ### INTERNAL
-from .RegexStore import RegexStore, RegexVal
+from .RegexStore import RegexStore
 
 
 ############
 ### BODY ###
-############
-def format_url(target: str) -> str:
-    """Cleans and formats a URL by removing detritus and trailing characters.
-
-    Removes archive.org prefixes, URL fragments, and trailing punctuation from URLs
-    to produce a clean, canonical form.
-
-    Args:
-        target: The URL string to format.
-    Returns:
-        The cleaned URL string with detritus removed and trimmed.
-    """
-    return COMMON_RGXS['url_detritus'].sub('', target).strip('/. ')
-
-
-def atom(*contents: RegexVal) -> RegexVal:
-    """Wraps regex content in word-boundary assertions for atomic matching.
-
-    This function takes one or more regex values and wraps them in word start (`_ws`)
-    and word end (`_we`) boundary assertions. This ensures the pattern matches complete
-    words or atomic units rather than partial matches.
-
-    Args:
-        *contents: One or more regex values (strings, lists, or tuples) to wrap.
-    Returns:
-        A regex value wrapped with word boundary assertions. Format depends on input:
-        - Multiple contents: tuple with all wrapped together
-        - Single string: string with boundaries
-        - Single list: list with boundaries prepended/appended
-        - Single tuple: tuple with boundaries integrated based on mark type
-    Raises:
-        ValueError: If no content provided or tuple has invalid length.
-    """
-    if not contents:
-        raise ValueError('No content provided')
-    elif len(contents) > 1:
-        return ('[]:', r'(?P>_ws)', list(contents), r'(?P>_we)')
-
-    content = contents[0]
-
-    if isinstance(content, str):
-        return rf'(?P>_ws){content}(?P>_we)'
-    elif isinstance(content, list):
-        return [r'(?P>_ws)', *content, r'(?P>_we)']
-    elif isinstance(content, tuple):
-        mark, body = '', ''
-        prefix, suffix = '', ''
-        if len(content) == 2:
-            mark, body = content
-            prefix, suffix = '', ''
-        elif len(content) == 4:
-            mark, prefix, body, suffix = content
-        else:
-            raise ValueError(f'Invalid content tuple: {content}')
-
-        if mark[-1] in '*+' or '>' in mark:
-            return ('[]:', [r'(?P>_ws)', content, r'(?P>_we)'])
-        else:
-            return (mark, rf'(?P>_ws){prefix}', body, rf'{suffix}(?P>_we)')
-    else:
-        raise ValueError(f'Invalid content: {content}')
-
-
-############
-### DATA ###
 ############
 COMMON_RGXS = RegexStore.new(
     options=dict(
         separator='',
         lazy_load=True,
     ),
+    # ----------------
     # General patterns
+    # ----------------
     _nw=r'[\W_]',
     _delim=r'^|$|[[\W_]--[-.\s]]',
     _ws=r' ?(?<![&[:alnum:]])',
     _we=r'(?![&[:alnum:]])',
     _period=('[]:', [('|<=', [r'[^[:alpha:]]', r'[[:alpha:]]{3}']), r'\.(?P>_we)']),
     _dot=('[]:', [('|<!', [r'[^[:alpha:]]', r'[[:alpha:]]{3}']), r'\.(?P>_we)']),
+    # ------------
     # Web patterns
+    # ------------
     _http=r'\b(?i:https?:\/\/|www\w*\.){1,2}',
     tld=r'(?<=[[:lower:]])\.[a-z]{2,4}(?![[:lower:]])',
     url=(
@@ -97,7 +36,7 @@ COMMON_RGXS = RegexStore.new(
             r'(?<!\]\()\b',
             ('|:', [r'(?P>_http)[^\s\[\]]+', r'[^\s\[\]\/]{3,}(?P>tld)\/[^\s\[\]]+']),
         ],
-        format_url,
+        RegexStore.format_url,
     ),
     md_url=r'(?<![!\[])\[ *(?P<alias>[^\]\n]+?) *\]\((?P<target>[^\)\n]+?)\)',
     # Numeric patterns
@@ -109,7 +48,9 @@ COMMON_RGXS = RegexStore.new(
         ('|:?', [r'IX', r'VI{1,3}', r'I?V', r'I{1,3}']),
         r'(?![[:alnum:]])',
     ],
-    # Symbolic Date Patterns
+    # -----------------
+    # ISO Date Patterns
+    # -----------------
     y=r'[01]?\d{3}|20[012]\d|\d\d',
     m=r'0?[1-9]|1[0-2]',
     d=r'0[1-9]|[12]?\d|3[0-1]',
@@ -122,7 +63,9 @@ COMMON_RGXS = RegexStore.new(
             r'(?P>m)[-/.](?P>d)[-/.](?P>y)',
         ],
     ),
+    # --------------------
     # Atomic date patterns
+    # --------------------
     day=(
         r'(?i)\b(?P>d)(?:st|nd|rd|th)?\b',
         lambda s: s[:2] if len(s) > 1 and s[1].isdigit() else s[0],
@@ -152,7 +95,9 @@ COMMON_RGXS = RegexStore.new(
         lambda s: f'20{s[1:]}' if s.startswith("'") else s,
     ),
     epoch=r',? ?(?:(?:B\.?)?C\.?\.?E|A\.?D\.?)',
+    # -----------------------
     # Molecular date patterns
+    # -----------------------
     _sep=r' ?[-[:alpha:]]* ?',
     _years=[
         ('|<=', [r'^', r'[ \(]']),
@@ -203,15 +148,9 @@ COMMON_RGXS = RegexStore.new(
         ],
         r'(?:\/.+)?',
     ),
-    # Detritus patterns
-    url_detritus=(
-        '|>',
-        [
-            r'^(?:\S*?archive\S*?\/\d{14}\/)?(?P>_http)?(?=\S{4,}$)',
-            r'(?:#[^\/]+|[.,\'"])$',
-        ],
-    ),
+    # --------------
     # Prose patterns
+    # --------------
     _preposition=(
         '<|>i',
         r'(?P>_ws)',

@@ -1,6 +1,12 @@
-## Syntax Utilities
+# `SyntaxUtils`: Syntax Utilities
+
+```{py:currentmodule} my.utils.SyntaxUtils
+```
 
 ```{autoclass} SyntaxUtils
+---
+members: false
+---
 ```
 
 ### Normalization

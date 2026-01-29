@@ -1,4 +1,7 @@
-## Common Regular Expressions
+# `COMMON_RGXS`: Some Useful Regular Expressions
 
-```{automodule} my.regex.common
+```{py:currentmodule} my.regex.common_rgxs
+```
+
+```{autodata} COMMON_RGXS
 ```

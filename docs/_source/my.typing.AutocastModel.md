@@ -1,4 +1,10 @@
-## AutocastModel
+# `AutocastModel`: Advanced Coercion for Pydantic Models
 
-```{autoclass} my.typing.AutocastModel
+```{py:currentmodule} my.typing.AutocastModel
+```
+
+```{autoclass} AutocastModel
+---
+members: true
+---
 ```

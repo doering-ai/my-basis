@@ -1,4 +1,10 @@
-## MyType
+# `MyType`: A Powerful-yet-constrained Type Wrapper
 
-```{autoclass} my.typing.Typist
+```{py:currentmodule} my.typing.MyType
+```
+
+```{autoclass} Typist
+---
+members: true
+---
 ```

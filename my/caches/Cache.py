@@ -1,14 +1,14 @@
 ############
 ### HEAD ###
 ############
-# Standard imports
+### STANDARD
 from collections.abc import Hashable
 import more_itertools as mi
 
-# External imports
+### EXTERNAL
 import pydantic as pyd
 
-# Internal imports
+### INTERNAL
 
 
 ############

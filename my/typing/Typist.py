@@ -90,8 +90,7 @@ class Typist(pyd.BaseModel):
     single project. If that's not you, just use the global instance `typist`!
     ```
 
-
-    ##### Parsing
+    #### `I` Parsing
     The features of Typist that most diverge from what's capable with the standard library rely
     on the `parse()` method, which decomposes a given type so that other methods can intelligently
     handly each part in turn. By far the most likely usecase is for containers such as
@@ -102,7 +101,29 @@ class Typist(pyd.BaseModel):
     That said, not all possible type annotations are covered -- see the `Typist.SPECIAL_TYPES`
     attribute for a ~~complete~~ best-effort list of unhandled annotations.
 
-    ##### Coercion
+    #### `II` Comparison
+    ##### Type Comparison ("matching")
+    Type matching (mostly via `match()`) determines whether a value or type is a valid subset of
+    another type. As opposed to the stdlib's `issubclass()`, Typist handles subtypes of generics
+    recursively; for example, `dict[str, int]` matches `Mapping[str, int]` and
+    `Collection[Sequence, int]`, but not `Mapping[str, str]` or `Collection[int]`.
+
+    Matching results are cached using a `NestedCache` for performance.
+
+    A small number of non-atomic yet common types are handled with custom logic:
+    `tuple[int, str, float]` only matches another tuple with the same length and member types,
+    whereas `tuple[int, ...]` matches any-length tuples of ints.
+
+    ##### Object Comparison ("checking")
+    Runtime data can be compared to other data using `match_instances()`, but obviously the primary
+    usecase is to bring type-checking functionality into runtime in an ergonomic, idiomatic way.
+    For this, Typist publishes `check()` for individual object/type pairs, and `all_are()` for
+    asserting the types of the contents of containers.
+
+    All of these methods use the TypeGuard protocol to enable type-narrowing in conditional
+    statements, complementing static type-checkers like mypy or ty.
+
+    #### `III` Coercion
     The core functionality is **intelligent type coercion via `cast()` and `flexcast()`,**  which
     both try their absolute hardest to find a reasonable mapping between any two types. Obviously
     this is definitionally impossible to do perfectly for all possible types, but it has been tested
@@ -120,41 +141,20 @@ class Typist(pyd.BaseModel):
     consistently for both reading and writing, the implied instability/inconsistency can be
     minimized.
 
-    ##### Comparison
-    ###### Type Comparison ("matching")
-    Type matching (mostly via `match()`) determines whether a value or type is a valid subset of
-    another type. As opposed to the stdlib's `issubclass()`, Typist handles subtypes of generics
-    recursively; for example, `dict[str, int]` matches `Mapping[str, int]` and
-    `Collection[Sequence, int]`, but not `Mapping[str, str]` or `Collection[int]`.
 
-    Matching results are cached using a `NestedCache` for performance.
-
-    A small number of non-atomic yet common types are handled with custom logic:
-    `tuple[int, str, float]` only matches another tuple with the same length and member types,
-    whereas `tuple[int, ...]` matches any-length tuples of ints.
-
-    ###### Object Comparison ("checking")
-    Runtime data can be compared to other data using `match_instances()`, but obviously the primary
-    usecase is to bring type-checking functionality into runtime in an ergonomic, idiomatic way.
-    For this, Typist publishes `check()` for individual object/type pairs, and `all_are()` for
-    asserting the types of the contents of containers.
-
-    All of these methods use the TypeGuard protocol to enable type-narrowing in conditional
-    statements, complementing static type-checkers like mypy or ty.
-
-    ##### Transformation
+    #### `IV` Transformation
     Typist provides more than just type coercion, which is ideally a minimally-semantic process.
     Namely, the `serialize()`, `assemble()` and `distill()` methods are built to flatten, combine
     together, and split apart complex nested data structures composed of sequences, mappings, and
     even Pydantic objects.
 
-    ##### Persistence
+    #### `V` Persistence
     For reading and writing typed data to and from disk, Typist provides `to_file()` and
     `from_file()`. In just one short statement, users can interface with three file
     formats--**YAML, JSON, and Pickle**--using the very highly performant [`srsly`](https://github.com/explosion/srsly)
     library.
 
-    ##### Invocation
+    #### `VI` Invocation
     Finally, `invoke()` provides safe function calling with automatic type casting of arguments
     and return values. It inspects function signatures to determine expected types, casts provided
     arguments accordingly, and casts the return value to the annotated return type. This enables
@@ -1013,19 +1013,17 @@ class Typist(pyd.BaseModel):
     # ------------------
     # `*` Public Methods
     # ------------------
+    # ------------
+    # `*1` PARSING
+    # ------------
     @staticmethod
     def parse(tvar: Any) -> MyType:
         """Parse a type annotation into a MyType instance. See `MyType.parse()` for details."""
         return MyType.parse(tvar)
 
     # ---------------
-    # `*1` COMPARISON
+    # `*2` COMPARISON
     # ---------------
-    # @overload
-    # def check[T](self, data, tvar: type[T]) -> TypeGuard[T]: ...
-    # @overload
-    # def check[U: types.UnionType](self, data, tvar: U) -> TypeGuard[U]: ...
-
     @classmethod
     def check[T](cls, data, tvar: type[T]) -> TypeIs[T]:
         """Check if a data matches a type variable. See `MyType.check()` for details."""
@@ -1165,7 +1163,7 @@ class Typist(pyd.BaseModel):
         return False
 
     # -------------
-    # `*2` COERCION
+    # `*3` COERCION
     # -------------
     @overload
     def cast[V](self, data: object, tvar: type[V]) -> V | None: ...
@@ -1330,7 +1328,7 @@ class Typist(pyd.BaseModel):
         raise TypeError(f'Cannot cast file data of type `{type(data)}` to `{tvar}`.')
 
     # -------------------
-    # `*3` TRANSFORMATION
+    # `*4` TRANSFORMATION
     # -------------------
     def serialize(
         self,
@@ -1506,7 +1504,7 @@ class Typist(pyd.BaseModel):
         return distillate
 
     # ----------------
-    # `*4` PERSISTENCE
+    # `*5` PERSISTENCE
     # ----------------
     @overload
     def from_file(self, file: str | Path) -> dict: ...
@@ -1821,7 +1819,7 @@ class Typist(pyd.BaseModel):
         return pickle.dumps(obj, **kwargs)
 
     # ---------------
-    # `*5` INVOCATION
+    # `*6` INVOCATION
     # ---------------
     def get_str_method(self, obj: object, *extra_methods: str) -> Callable[[...], str] | None:
         """Get a string conversion method from an object.

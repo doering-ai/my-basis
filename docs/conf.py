@@ -297,7 +297,9 @@ def autodoc_skip_member(
 
 def _get_symbol(container: object, container_name: str, *path: str) -> object | None:
     obj = container
-    if path[0] == getattr(obj, '__name__', ''):
+    if not path:
+        return None
+    elif path[0] == getattr(obj, '__name__', ''):
         path = path[1:]
 
     for part in path:
@@ -334,7 +336,7 @@ def _global_ref(ref_symbols: list[str]) -> object | None:
 
 
 def _expand_reference(ref_symbols: list[str], obj: Any) -> str:
-    if not all(map(str.isidentifier, ref_symbols)):
+    if not (ref_symbols and all(map(str.isidentifier, ref_symbols))):
         return ''
 
     ref = None

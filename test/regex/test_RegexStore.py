@@ -8,7 +8,7 @@ import regex as re
 import pytest as pyt
 
 ### INTERNAL
-from my.types import Buffer
+from my import Buffer, ut
 from my.regex.meta import GroupKind
 from my.regex import RegexList, RegexVal, MatchData
 from my.regex.RegexStore import RegexStore, RegexBuffer
@@ -70,6 +70,27 @@ class TestRegexStore:
         assert 'alpha' in store2.definitions
         assert 'numeric' not in store2.definitions
 
+    def test_new__init_formatter(self):
+        def formatter(val):
+            if isinstance(val, str):
+                return val.upper()
+            return val
+
+        store = RegexStore.new(
+            dict(lazy_load=False, init_formatter=formatter),
+            test='test',
+        )
+
+        # The formatter should have been applied
+        assert 'TEST' in store.definitions['test']
+
+    def test_new__empty(self):
+        store = RegexStore.new(dict(lazy_load=False))
+
+        assert len(store) == 0
+        assert store.keys() == []
+        assert store.values() == []
+
     @pyt.mark.parametrize(
         'options, match, expected',
         [
@@ -96,6 +117,15 @@ class TestRegexStore:
         assert '(?P>' in store.definitions['test']
         assert '(?P=' not in store.definitions['test']
 
+    def test_process_options__force_named_groups(self):
+        store = RegexStore.new(
+            dict(lazy_load=False, force_named_groups=True),
+            test=r'(test)',
+        )
+
+        assert '(?:' in store.definitions['test']
+        assert store.definitions['test'].count('(') == store.definitions['test'].count('(?:')
+
     # -------------------
     # `-` Private Methods
     # -------------------
@@ -115,6 +145,10 @@ class TestRegexStore:
     )
     def test_parse_mark(self, mark: str, expected: tuple[str, str, str], store: RegexStore):
         assert store._parse_mark(mark) == expected
+
+    def test_parse_mark__invalid(self, store: RegexStore):
+        with pyt.raises(AssertionError):
+            store._parse_mark('invalid_mark_syntax_!@#$%')
 
     def test_render_definitions(self, store: RegexStore):
         _ = store.load
@@ -278,17 +312,16 @@ class TestRegexStore:
         assert match['word'] == ['HELLO']
 
     def test_compose__string(self, store: RegexStore):
-        result = store.compose('test')
-        assert result == 'test'
+        assert store.compose('test') == 'test'
+        assert store.compose('') == ''
 
     def test_compose__pattern(self, store: RegexStore):
         pattern = re.compile(r'test')
-        result = store.compose(pattern)
-        assert result == 'test'
+        assert store.compose(pattern) == 'test'
 
     def test_compose__list(self, store: RegexStore):
-        result = store.compose(['a', 'b', 'c'])
-        assert result == r'a ?b ?c'
+        assert store.compose(['a', 'b', 'c']) == r'a ?b ?c'
+        assert store.compose([]) == ''
 
     def test_compose__list_custom_sep(self, store: RegexStore):
         result = store.compose(['a', 'b', 'c'], sep='|')
@@ -297,6 +330,22 @@ class TestRegexStore:
     def test_compose__dict(self, store: RegexStore):
         result = store.compose({'mark': '|:', 'body': ['a', 'b']})
         assert 'a' in result and 'b' in result
+
+    def test_compose_group(self):
+        store = RegexStore.new(dict(lazy_load=False))
+
+        complex_def = ('|:', ['a', ('[]:', ['b', ('|:', ['c', 'd'])]), 'e'])
+        result = store.compose(complex_def)
+
+        assert isinstance(result, str)
+        assert 'a' in result and 'e' in result
+
+    def test_compose_group__subroutine_mark(self, store: RegexStore):
+        _ = store.load
+        result = store.compose_group('|&', ['_word', '_digit'])
+
+        assert '(?&_word)' in result
+        assert '(?&_digit)' in result
 
     def test_clean(self):
         store = RegexStore.new(dict(lazy_load=False))
@@ -535,18 +584,71 @@ class TestRegexStore:
         _ = store.load
         delims, sections = store.fullsplit(pattern_name, text)
         assert sections == expected_sections
+        assert len(delims) == len(sections)
 
     def test_fullsplit__collapse(self, store: RegexStore):
         _ = store.load
         delims, sections = store.fullsplit('_word', 'one  two', collapse=True)
-        # Collapsed empty sections
         assert '' not in sections[1:]
+        assert len(delims) == len(sections)
+
+    def test_fullsplit__fail(self, store: RegexStore):
+        _ = store.load
+        delims, sections = store.fullsplit('_digit', 'no digits here')
+        assert delims == ['']
+        assert sections == ['no digits here']
 
     def test_polymatch(self, store: RegexStore):
         _ = store.load
         result = store.polymatch('_word', 'one two three')
         assert bool(result)
-        # Should contain all matches merged
+        assert result['_word'] == ['one', 'two', 'three']
+
+    def test_polymatch__fail(self, store: RegexStore):
+        _ = store.load
+        result = store.polymatch('_digit', 'no digits here')
+        assert not result
+
+    def test_automatch__race_conditions(self, store: RegexStore):
+        _ = store.load
+        result = store.match(['simple', '_word'], 'hello')
+
+        assert bool(result)
+        assert result.text == 'hello'
+
+    def test_automatch__buffer_input(self, store: RegexStore):
+        _ = store.load
+
+        buffer = Buffer.new('hello world')
+        result = store.match('simple', buffer)
+        assert bool(result)
+
+    @pyt.mark.parametrize(
+        'text, pattern, should_match',
+        [
+            ('(test)', '_parenthetical', True),
+            ('(hello)', '_parenthetical', True),
+            ('test', '_parenthetical', False),
+        ],
+    )
+    def test_automatch__parsers(
+        self, store: RegexStore, text: str, pattern: str, should_match: bool
+    ):
+        _ = store.load
+        result = store.match(pattern, text)
+        assert bool(result) == should_match
+        if should_match:
+            assert ut.has_none(result.at(pattern), '(', ')')
+
+    def test_automatch__hidden_field_removal(self):
+        store = RegexStore.new(
+            dict(lazy_load=False),
+            _hidden=r'(?P<_internal>\w+)',
+            test=r'(?P>_hidden)',
+        )
+
+        result = store.match('test', 'hello')
+        assert ut.has_none(result.data, '_internal', '_hidden')
 
     # -------------------------
     # `*2` Functional Utilities
@@ -639,9 +741,44 @@ class TestRegexStore:
         result = store.expand_match('router', 'hello')
         assert isinstance(result, str)
 
-    # ---------
-    # `*4` Misc
-    # ---------
+    # ----------------------------
+    # `*4` Expression Construction
+    # ----------------------------
+    @pyt.mark.parametrize(
+        'target, expected',
+        [
+            (
+                'web.archive.org/web/20081205101019/http://www.balticseawind.org',
+                'balticseawind.org',
+            ),
+            (
+                'https://www.web.archive.org/web/20081205101019/http://www.balticseawind.org',
+                'balticseawind.org',
+            ),
+            ('https://www.gbif.org/species/113225725', 'gbif.org/species/113225725'),
+        ],
+    )
+    def test_format_url(self, target: str, expected: str):
+        assert cls.format_url(target) == expected
+
+    @pyt.mark.parametrize(
+        'target, expected',
+        [
+            ('', r'(?P>_ws)(?P>_we)'),
+            (['one', 'two'], [r'(?P>_ws)', r'one', r'two', r'(?P>_we)']),
+            (('[]:', ['part1', 'part2']), ('[]:', r'(?P>_ws)', ['part1', 'part2'], r'(?P>_we)')),
+            (
+                ('[]:', r'pre', ['part1', 'part2'], r'suf'),
+                ('[]:', r'(?P>_ws)pre', ['part1', 'part2'], r'suf(?P>_we)'),
+            ),
+        ],
+    )
+    def test_atom(self, target, expected):
+        assert cls.atom(target) == expected
+
+    # --------------------------
+    # `*5` Development Utilities
+    # --------------------------
     def test_sanitize__pattern_name(self, store: RegexStore):
         _ = store.load
         result = store.sanitize('simple')
@@ -657,158 +794,16 @@ class TestRegexStore:
         result = store.sanitize(r'test(?m)pattern')
         assert isinstance(result, str)
 
-    def test_tree_print(self, store: RegexStore):
+    def test_pretty_print(self, store: RegexStore, snapshot):
         _ = store.load
-        result = store.tree_print('compound')
+        result = store.pretty_print('compound')
         assert isinstance(result, str)
         assert len(result) > 0
+        snapshot.assert_match(result, 'pretty_print_compound.txt')
 
-    def test_tree_print__no_head(self, store: RegexStore):
+    def test_pretty_print__no_head(self, store: RegexStore):
         _ = store.load
-        result = store.tree_print('simple', print_head=False)
+        result = store.pretty_print('simple', print_head=False)
         assert isinstance(result, str)
-
-    # ----------------
-    # Edge Cases Tests
-    # ----------------
-    def test_lazy_loading_thread_safety(self):
-        """Test that lazy loading works correctly with threading."""
-        store = RegexStore.new(
-            dict(lazy_load=True),
-            test=r'test',
-        )
-
-        assert not store.is_loaded
-        _ = store.load
-        assert store.is_loaded
-
-    def test_empty_store(self):
-        """Test operations on empty store."""
-        store = RegexStore.new(dict(lazy_load=False))
-
-        assert len(store) == 0
-        assert store.keys() == []
-        assert store.values() == []
-
-    def test_complex_nested_composition(self):
-        """Test deeply nested regex composition."""
-        store = RegexStore.new(dict(lazy_load=False))
-
-        complex_def = ('|:', ['a', ('[]:', ['b', ('|:', ['c', 'd'])]), 'e'])
-        result = store.compose(complex_def)
-
-        assert isinstance(result, str)
-        assert 'a' in result and 'e' in result
-
-    def test_force_named_groups(self):
-        """Test that positional groups are converted to non-capturing."""
-        store = RegexStore.new(
-            dict(lazy_load=False, force_named_groups=True),
-            test=r'(test)',
-        )
-
-        assert '(?:' in store.definitions['test']
-        assert store.definitions['test'].count('(') == store.definitions['test'].count('(?:')
-
-    def test_multiple_pattern_match_first_wins(self, store: RegexStore):
-        """Test that when matching multiple patterns, first match wins."""
-        _ = store.load
-        result = store.match(['simple', '_word'], 'hello')
-
-        assert bool(result)
-        assert result.text == 'hello'
-
-    def test_buffer_input(self, store: RegexStore):
-        """Test that Buffer input is handled correctly."""
-        _ = store.load
-
-        buffer = Buffer.new('hello world')
-        result = store.match('simple', buffer)
-        assert bool(result)
-
-    @pyt.mark.parametrize(
-        'text, pattern, should_match',
-        [
-            ('(test)', '_parenthetical', True),
-            ('(hello)', '_parenthetical', True),
-            ('test', '_parenthetical', False),
-        ],
-    )
-    def test_parser_application(
-        self, store: RegexStore, text: str, pattern: str, should_match: bool
-    ):
-        """Test that parsers are applied correctly."""
-        _ = store.load
-        result = store.match(pattern, text)
-        assert bool(result) == should_match
-
-        if should_match:
-            # Parser should have stripped parentheses
-            assert '(' not in result.at(pattern)
-            assert ')' not in result.at(pattern)
-
-    def test_invalid_mark_syntax(self, store: RegexStore):
-        """Test error handling for invalid mark syntax."""
-        with pyt.raises(AssertionError):
-            store._parse_mark('invalid_mark_syntax_!@#$%')
-
-    def test_compose_group__subroutine_mark(self, store: RegexStore):
-        """Test compose_group with subroutine mark."""
-        _ = store.load
-        result = store.compose_group('|&', ['_word', '_digit'])
-
-        assert '(?&_word)' in result
-        assert '(?&_digit)' in result
-
-    def test_hidden_field_removal(self):
-        """Test that hidden fields (starting with _) are removed from results."""
-        store = RegexStore.new(
-            dict(lazy_load=False),
-            _hidden=r'(?P<_internal>\w+)',
-            test=r'(?P>_hidden)',
-        )
-
-        result = store.match('test', 'hello')
-        # _internal should not be in final result
-        assert '_internal' not in result.data
-
-    def test_format_definition(self):
-        """Test that init_formatter is applied to definitions."""
-
-        def formatter(val):
-            if isinstance(val, str):
-                return val.upper()
-            return val
-
-        store = RegexStore.new(
-            dict(lazy_load=False, init_formatter=formatter),
-            test='test',
-        )
-
-        # The formatter should have been applied
-        assert 'TEST' in store.definitions['test']
-
-    def test_compose_empty_string(self, store: RegexStore):
-        """Test composing empty string."""
-        result = store.compose('')
-        assert result == ''
-
-    def test_compose_empty_list(self, store: RegexStore):
-        """Test composing empty list."""
-        result = store.compose([])
-        assert result == ''
-
-    def test_fullsplit_no_matches(self, store: RegexStore):
-        """Test fullsplit when pattern doesn't match."""
-        _ = store.load
-        delims, sections = store.fullsplit('_digit', 'no digits here')
-
-        assert delims == ['']
-        assert sections == ['no digits here']
-
-    def test_polymatch_no_matches(self, store: RegexStore):
-        """Test polymatch when pattern doesn't match."""
-        _ = store.load
-        result = store.polymatch('_digit', 'no digits here')
-
-        assert not bool(result)
+        assert len(result) > 0
+        # Just ensure it works -- no need for another snapshot

@@ -1,4 +1,10 @@
-## Span
+# `Span`: An Ergonomic Wrapper for `tuple[int, int]`
 
-```{autoclass} my.types.Span
+```{py:currentmodule} my.types.Span
+```
+
+```{autoclass} Span
+---
+members: true
+---
 ```

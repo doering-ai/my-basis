@@ -1,4 +1,10 @@
-## UniqueId
+# `UniqueId`: A Minimal Wrapper around `uuid4`
 
-```{autoclass} my.types.UniqueId
+```{py:currentmodule} my.types.UniqueId
+```
+
+```{autoclass} UniqueId
+---
+members: true
+---
 ```

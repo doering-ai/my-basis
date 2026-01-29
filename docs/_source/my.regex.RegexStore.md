@@ -1,8 +1,10 @@
-## RegexStore
+# `RegexStore`: Readable, Optimized Regular Expressions
 
-```{automodule} my.regex.RegexStore
+```{py:currentmodule} my.regex.RegexStore
+```
+
+```{autoclass} my.regex.RegexStore
 ---
 members: true
-undoc-members: true
 ---
 ```

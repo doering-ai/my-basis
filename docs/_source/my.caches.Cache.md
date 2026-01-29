@@ -1,4 +1,10 @@
-## Cache
+# `Cache`: Basic, Extensible In-Memory Caching
 
-```{autoclass} my.caches.Cache
+```{py:currentmodule} my.caches.Cache
+```
+
+```{autoclass} Cache
+---
+members: true
+---
 ```

@@ -1,0 +1,14 @@
+{
+    "$schema": "sublime://packagecontrol.io/schemas/dependencies",
+    "*": {
+        ">=4096": [
+            "sublime_lib",
+            "pydantic",
+            "pydantic-core",
+            "more-itertools",
+            "pyyaml",
+            "typing-extensions",
+            "regex"
+        ]
+    }
+}

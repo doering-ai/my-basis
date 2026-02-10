@@ -2,7 +2,7 @@
 ### I. METADATA ###
 ###################
 [project]
-name = "MySublimeBasis"
+name = "mysublime-basis"
 version = "0.1.0"
 description = "A basis for using, extending, and designing SublimeText plugins."
 requires-python = "==3.8.*"
@@ -12,10 +12,19 @@ urls = { Homepage = "https://gitlab.com/doering-thinking-machines/libs/sublime/b
 ########################
 ### II. DEPENDENCIES ###
 ########################
-dependencies = [""]
+dependencies = [
+    "more-itertools>=10.5.0",
+    "pydantic>=2.10.6",
+    "regex>=2024.11.6",
+]
 
 [dependency-groups]
-dev = ["ruff>=0.14.14", "ty>=0.0.14", "sublime-stubs"]
+dev = [
+    "ruff>=0.14.14",
+    "ty>=0.0.14",
+    "sublime-stubs",
+    "types-regex>=2024.11.6.20241221",
+]
 
 
 #########################
@@ -26,9 +35,12 @@ requires = ["uv_build>=0.8.13,<0.9.0"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]
-module-name = "mysublime_basis"
+module-name = "mySublimeBasis"
 module-root = ""
+namespace = true
 
 [tool.uv.sources]
-# mybasis = { path = "../../basis", editable = true }
 sublime-stubs = { path = "../_stubs", editable = true }
+
+[tool.ruff]
+target-version = "py38"

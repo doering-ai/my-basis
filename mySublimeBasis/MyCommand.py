@@ -4,11 +4,15 @@
 # --------
 # Standard
 # --------
-from typing import Any, Iterator, Union, Tuple, Dict, Iterable
+from __future__ import annotations
+from typing import Any, Union, TYPE_CHECKING
 import re
 import inspect
 import functools as ft
 from abc import abstractmethod, ABC
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 # --------
 # External
@@ -19,8 +23,8 @@ from sublime import Region, Edit, Selection
 # --------
 # Internal
 # --------
-from src.Comment import Comment
-from src.Header import Header
+from .Comment import Comment
+from .Header import Header
 
 
 ############
@@ -54,7 +58,7 @@ class MyCommand(sbp.TextCommand, ABC):
     # -------------------
     # `-` Private Methods
     # -------------------
-    def _syntax_vars(self, pos: int = 0) -> Dict[str, str]:
+    def _syntax_vars(self, pos: int = 0) -> dict[str, str]:
         shell_vars = self.view.meta_info('shellVariables', pos)
         assert isinstance(shell_vars, list)
         return {item['name']: item['value'] for item in shell_vars}
@@ -128,7 +132,7 @@ class MyCommand(sbp.TextCommand, ABC):
         """Read the text in the given region."""
         return self.view.substr(region)
 
-    def write(self, pos: Union[Region, Tuple[int, int], int], text: str) -> None:
+    def write(self, pos: Union[Region, tuple[int, int], int], text: str) -> None:
         """Write the given text at the given position or region."""
         if isinstance(pos, int):
             self.view.insert(self.edit, pos, text)

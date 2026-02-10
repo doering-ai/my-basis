@@ -2,12 +2,16 @@
 ### HEAD ###
 ############
 # Standard
-from typing import ClassVar, Dict, Optional, Tuple, Union, List, Iterator, Iterable
+from __future__ import annotations
+from typing import ClassVar, Union, TYPE_CHECKING
 from dataclasses import dataclass
 import re
 from enum import Flag, auto
 import itertools as it
 import functools as ft
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator, Iterable
 
 # External
 
@@ -20,6 +24,8 @@ from .Comment import Comment
 ### DATA ###
 ############
 class IdxStyle(Flag):
+    """The style of a header's index string."""
+
     NONE = 0
     SYMBOL = auto()  # 0, -, +, x [0, 3]
     NUMBER = auto()  # 0, 1, 2, ... [0, 9] (or [0, ...) with separators)
@@ -38,8 +44,10 @@ class IdxStyle(Flag):
 @ft.total_ordering
 @dataclass
 class Header(Comment):
+    """Represents a header comment with a title and optional index tag."""
+
     QUAD: ClassVar[str] = '.-+*'
-    RGXS: ClassVar[Dict[str, re.Pattern]] = dict(
+    RGXS: ClassVar[dict[str, re.Pattern]] = dict(
         idx=re.compile(rf'(?:(?:[.\-+*]|\d)\.?|{ROMAN_RGX.pattern}\.){{1,5}}'),
         roman=ROMAN_RGX,
     )
@@ -53,7 +61,8 @@ class Header(Comment):
     # `.` Initial Methods
     # -------------------
     @classmethod
-    def new(cls, comment: Comment, level: int = 1) -> 'Header':
+    def new(cls, comment: Comment, level: int = 1) -> Header:
+        """Create a Header from a Comment by parsing its text and validating its format."""
         assert comment.n_lines == 3, 'Header comment must be exactly three lines.'
         header = cls(
             level=level,
@@ -84,11 +93,11 @@ class Header(Comment):
     # -------------------
     @staticmethod
     def _are_delims(t0: str, t1: str, level: int = 1) -> bool:
-        """
-        Determine if a line of text is a header delimiter based on the specified level.
+        """Determine if a line of text is a header delimiter based on the specified level.
 
         Args:
-            text: The line of text to check.
+            t0: The first supposed delimiter line.
+            t1: The second supposed delimiter line.
             level: 0 for HEAD/DATA/BODY/MAIN, 1 for body sections, -1 for any.
         """
         t0 = t0.strip()
@@ -101,7 +110,7 @@ class Header(Comment):
         )
 
     @classmethod
-    def _read_idx_part(cls, part: str) -> Tuple[IdxStyle, int]:
+    def _read_idx_part(cls, part: str) -> tuple[IdxStyle, int]:
         part = part.strip(' .:`')
         assert '.' not in part
         if not part:
@@ -150,9 +159,9 @@ class Header(Comment):
 
     def _collect_siblings(
         self,
-        iterator: Optional[Iterable['Header']],
+        iterator: Iterable[Header] | None,
         reverse: bool = False,
-    ) -> Iterator['Header']:
+    ) -> Iterator[Header]:
         if iterator is None:
             return
         for rhs in iterator:
@@ -161,7 +170,7 @@ class Header(Comment):
             elif self.level == rhs.level and self.col == rhs.col:
                 yield rhs
 
-    def is_parent_of(self, child: 'Header') -> bool:
+    def _is_parent_of(self, child: Header) -> bool:
         return child.level == self.level + 1 or (
             child.level == self.level
             and child.col == self.col
@@ -173,11 +182,8 @@ class Header(Comment):
     # `+` Primary Methods
     # -------------------
     @classmethod
-    def generate(cls, text: str, col: int, mark: str, level: int) -> List[str]:
-        """
-        Returns:
-            The delta number of characters.
-        """
+    def generate(cls, text: str, col: int, mark: str, level: int) -> list[str]:
+        """Generate the text of a new header."""
         assert text and mark and level >= 0, 'Invalid arguments for header generation.'
 
         if level == 0:
@@ -196,35 +202,50 @@ class Header(Comment):
 
     def find_family(
         self,
-        before: List['Header'],
-        after: List['Header'],
-    ) -> Tuple[Optional['Header'], List['Header'], List['Header']]:
+        before: list[Header],
+        after: list[Header],
+    ) -> tuple[Header | None, list[Header], list[Header]]:
+        """Find the parent, siblings, and children of this header."""
         parent = self.find_parent(before)
         older, younger = self.find_siblings(before, after)
         children = self.find_children(after)
         return parent, [*older, self, *younger], children
 
-    def find_parent(self, others: List['Header']) -> Optional['Header']:
-        return next((p for p in reversed(others) if p < self and p.is_parent_of(self)), None)
+    def find_parent(self, others: list[Header]) -> Header | None:
+        """Find the parent of this header (e.g. for `123`, return `12`)."""
+        return next((p for p in reversed(others) if p < self and p._is_parent_of(self)), None)
 
-    def find_children(self, others: List['Header']) -> List['Header']:
+    def find_children(self, others: list[Header]) -> list[Header]:
+        """Find the children of this header (e.g. for `12`, return `121`, `122`, etc.)."""
         after = list(filter(lambda other: other > self, others))
-        if after and self.is_parent_of(after[0]):
+        if after and self._is_parent_of(after[0]):
             heir, *after = after
             return [heir, *heir._collect_siblings(after)]
         return []
 
     def find_siblings(
         self,
-        before: Optional[List['Header']] = None,
-        after: Optional[List['Header']] = None,
-    ) -> Tuple[List['Header'], List['Header']]:
+        before: list[Header] | None = None,
+        after: list[Header] | None = None,
+    ) -> tuple[list[Header], list[Header]]:
+        """Find the siblings of this header (e.g. for `12`, return `11`, `13`, etc.)."""
         older = list(self._collect_siblings(before, reverse=True))
         younger = list(self._collect_siblings(after))
         return older, younger
 
     @classmethod
-    def idx_to_parts(cls, idx: str) -> Tuple[bool, List[Tuple[IdxStyle, int]]]:
+    def idx_to_parts(cls, idx: str) -> tuple[bool, list[tuple[IdxStyle, int]]]:
+        """Decompose a header index string into its style and position components.
+
+        Examples:
+            - `1.2a` -> `[(NUMBER, 1), (NUMBER, 2), (ALPHAL, 1)]`
+        Args:
+            idx: The index string to decompose.
+        Returns:
+            A tuple of (is_dotted, parts), where is_dotted indicates if the original index used dots
+            as separators, and parts is a list of (style, position) tuples for each component of
+            the index.
+        """
         is_dotted = '.' in idx
         idx = idx.strip(' .:`')
         parts = list(filter(bool, idx.split('.')) if is_dotted else idx)
@@ -232,7 +253,15 @@ class Header(Comment):
         return is_dotted, list(map(cls._read_idx_part, parts))
 
     @classmethod
-    def parts_to_idx(cls, *parts: Tuple[IdxStyle, int], is_dotted: bool = False) -> str:
+    def parts_to_idx(cls, *parts: tuple[IdxStyle, int], is_dotted: bool = False) -> str:
+        """Compose a header index string from its style and position components.
+
+        Args:
+            *parts: A variable number of (style, position) tuples for each component of the index.
+            is_dotted: Whether to use dots as separators between components.
+        Returns:
+            The composed index string.
+        """
         ret = list(it.starmap(cls._write_idx_part, parts))
         if (
             is_dotted
@@ -253,6 +282,7 @@ class Header(Comment):
 
     @property
     def idx(self) -> str:
+        """Extract the index tag from this header's tag, if it exists and is valid."""
         if (word := self.tag.split(' ', maxsplit=1)[0]) and self.RGXS['idx'].fullmatch(word):
             return word
         return ''
@@ -269,9 +299,10 @@ class Header(Comment):
         cls,
         idx: str,
         *,
-        place: Tuple[int, Union[int, List[int]]] = (0, 0),
-        shift: Tuple[int, Union[int, List[int]]] = (0, 0),
+        place: tuple[int, Union[int, list[int]]] = (0, 0),
+        shift: tuple[int, Union[int, list[int]]] = (0, 0),
     ) -> str:
+        """Calculate a new index string by placing or shifting the given index string."""
         place_v, place_h = place
         shift_v, shift_h = shift
         assert any([place_v, place_h, shift_v, shift_h]), 'Must specify at least one argument.'
@@ -304,7 +335,7 @@ class Header(Comment):
             if isinstance(place_h, int):
                 parts[-1] = parts[-1][0], place_h
             else:
-                parts = [(style, pos) for (style, _), pos in zip(parts, place_h, strict=True)]
+                parts = [(style, pos) for (style, _), pos in zip(parts, place_h, strict=False)]
         elif shift_h:
             if isinstance(shift_h, int):
                 style, last = parts[-1]

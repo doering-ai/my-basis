@@ -2,12 +2,13 @@
 ### HEAD ###
 ############
 # STANDARD
-from typing import Union, List
+from __future__ import annotations
+from typing import Union
 from dataclasses import dataclass
 import functools as ft
 
 # EXTERNAL
-from sublime import Region  # type: ignore
+from sublime import Region
 
 # INTERNAL
 
@@ -18,9 +19,11 @@ from sublime import Region  # type: ignore
 @ft.total_ordering
 @dataclass
 class Comment:
+    """Represents source code comment consisting of one or more lines of text."""
+
     # Dependent
-    lines: List[Region]
-    texts: List[str]
+    lines: list[Region]
+    texts: list[str]
     row: int = 1
     col: int = 1
 
@@ -85,7 +88,7 @@ class Comment:
         assert r0 < r1, f'Invalid region to check containment ({r0}, {r1}).'
         return self.row <= r0 and self.row + self.n_lines >= r1
 
-    def __add__(self, other: object) -> 'Comment':
+    def __add__(self, other: object) -> Comment:
         if not isinstance(other, Comment):
             raise NotImplementedError(f'Cannot add Comment with {type(other)}.')
         elif self.follows(other):
@@ -100,7 +103,7 @@ class Comment:
                 col=self.col,
             )
 
-    def __getitem__(self, key: Union[int, slice]) -> 'Comment':
+    def __getitem__(self, key: Union[int, slice]) -> Comment:
         if isinstance(key, int):
             return Comment(
                 lines=self.lines[key : key + 1],
@@ -123,29 +126,32 @@ class Comment:
     # ---------------
     @property
     def start(self) -> int:
+        """The start position (in characters) of the comment."""
         return self.lines[0].begin() if self else 0
 
     @property
     def end(self) -> int:
+        """The end position (in characters) of the comment."""
         return self.lines[-1].end() if self else 0
 
     @property
     def region(self) -> Region:
+        """The Region object representing the entire comment."""
         return Region(self.start, self.end) if self else Region(0, 0)
 
     @property
     def n_lines(self) -> int:
+        """The number of lines in the comment."""
         return len(self.lines)
 
     @property
     def size(self) -> int:
-        # newlines = self.n_lines - 1
-        # indents = (self.col - 1) * self.n_lines
-        # return sum(map(len, self.lines)) + newlines + indents
+        """The size of the comment in characters, including newlines and indentation."""
         return self.end - self.start
 
     # ------------
     # `*2` Methods
     # ------------
-    def follows(self, other: 'Comment') -> bool:
+    def follows(self, other: Comment) -> bool:
+        """Returns True if this comment immediately follows the other comment."""
         return self.row == other.row + other.n_lines and self.col == other.col

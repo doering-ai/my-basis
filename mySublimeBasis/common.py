@@ -11,7 +11,7 @@ import re
 # --------
 # External
 # --------
-import jinja2 as jn
+# import jinja2 as jn
 
 # --------
 # Internal
@@ -28,10 +28,10 @@ assert ADMIN_DIR.exists() and ADMIN_DIR.is_dir(), f'Invalid admin directory {ADM
 DIARY_DIR: Path = Path(env.get('MY_DIARIES', '~/my/admin/notes/diaries')).expanduser()
 assert DIARY_DIR.exists() and DIARY_DIR.is_dir(), f'Invalid diary directory {DIARY_DIR}'
 
-templates = ADMIN_DIR / 'env/sublime/User/templates'
-JINJA_ENV = jn.Environment(
-    loader=jn.FileSystemLoader(str(templates)), trim_blocks=True, lstrip_blocks=True
-)
+# templates = ADMIN_DIR / 'env/sublime/User/templates'
+# JINJA_ENV = jn.Environment(
+#     loader=jn.FileSystemLoader(str(templates)), trim_blocks=True, lstrip_blocks=True
+# )
 
 RGXS = dict(
     arch_dir=re.compile(r'^_\d_[a-z]+$'),

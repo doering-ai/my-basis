@@ -1,16 +1,26 @@
+###################
+### I. METADATA ###
+###################
 [project]
 name = "MySublimeBasis"
 version = "0.1.0"
 description = "A basis for using, extending, and designing SublimeText plugins."
-requires-python = ">=3.13"
-dependencies = ["mybasis"]
+requires-python = "==3.8.*"
+urls = { Homepage = "https://gitlab.com/doering-thinking-machines/libs/sublime/basis" }
 
-[project.urls]
-Homepage = "https://gitlab.com/doering-thinking-machines/libs/sublime/basis"
+
+########################
+### II. DEPENDENCIES ###
+########################
+dependencies = [""]
 
 [dependency-groups]
-dev = ["ruff>=0.14.14", "ty>=0.0.14"]
+dev = ["ruff>=0.14.14", "ty>=0.0.14", "sublime-stubs"]
 
+
+#########################
+### III. BUILD SYSTEM ###
+#########################
 [build-system]
 requires = ["uv_build>=0.8.13,<0.9.0"]
 build-backend = "uv_build"
@@ -20,4 +30,5 @@ module-name = "mysublime_basis"
 module-root = ""
 
 [tool.uv.sources]
-mybasis = { path = "../../basis", editable = true }
+# mybasis = { path = "../../basis", editable = true }
+sublime-stubs = { path = "../_stubs", editable = true }

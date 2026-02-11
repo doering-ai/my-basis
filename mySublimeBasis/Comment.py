@@ -4,11 +4,11 @@
 # STANDARD
 from __future__ import annotations
 from typing import Union
-from dataclasses import dataclass
 import functools as ft
 
 # EXTERNAL
-from sublime import Region
+import sublime as sb
+import pydantic as pyd
 
 # INTERNAL
 
@@ -17,13 +17,12 @@ from sublime import Region
 ### DATA ###
 ############
 @ft.total_ordering
-@dataclass
-class Comment:
+class Comment(pyd.BaseModel):
     """Represents source code comment consisting of one or more lines of text."""
 
     # Dependent
-    lines: list[Region]
-    texts: list[str]
+    lines: list[sb.Region] = []
+    texts: list[str] = []
     row: int = 1
     col: int = 1
 
@@ -104,8 +103,9 @@ class Comment:
             )
 
     def __getitem__(self, key: Union[int, slice]) -> Comment:
+        cls = type(self)
         if isinstance(key, int):
-            return Comment(
+            return cls(
                 lines=self.lines[key : key + 1],
                 texts=self.texts[key : key + 1],
                 row=self.row + key,
@@ -113,7 +113,7 @@ class Comment:
                 mark=self.mark,
             )
         else:
-            return Comment(
+            return cls(
                 lines=self.lines[key],
                 texts=self.texts[key],
                 row=self.row + (key.start or 0),
@@ -135,9 +135,9 @@ class Comment:
         return self.lines[-1].end() if self else 0
 
     @property
-    def region(self) -> Region:
+    def region(self) -> sb.Region:
         """The Region object representing the entire comment."""
-        return Region(self.start, self.end) if self else Region(0, 0)
+        return sb.Region(self.start, self.end) if self else sb.Region(0, 0)
 
     @property
     def n_lines(self) -> int:

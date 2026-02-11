@@ -24,6 +24,7 @@ dev = [
     "ty>=0.0.14",
     "sublime-stubs",
     "types-regex>=2024.11.6.20241221",
+    "typing-extensions>=4.13.2",
 ]
 
 

@@ -6,7 +6,6 @@
             "pydantic",
             "pydantic-core",
             "more-itertools",
-            "pyyaml",
             "typing-extensions",
             "regex"
         ]

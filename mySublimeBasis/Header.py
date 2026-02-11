@@ -4,7 +4,6 @@
 # Standard
 from __future__ import annotations
 from typing import ClassVar, Union, TYPE_CHECKING
-from dataclasses import dataclass
 import re
 from enum import Flag, auto
 import itertools as it
@@ -42,7 +41,6 @@ class IdxStyle(Flag):
 ### BODY ###
 ############
 @ft.total_ordering
-@dataclass
 class Header(Comment):
     """Represents a header comment with a title and optional index tag."""
 
@@ -335,15 +333,13 @@ class Header(Comment):
             if isinstance(place_h, int):
                 parts[-1] = parts[-1][0], place_h
             else:
-                parts = [(style, pos) for (style, _), pos in zip(parts, place_h, strict=False)]
+                parts = [(style, pos) for (style, _), pos in zip(parts, place_h)]  # noqa: B905
         elif shift_h:
             if isinstance(shift_h, int):
                 style, last = parts[-1]
                 parts[-1] = style, last + shift_h
             else:
-                parts = [
-                    (style, cur + shift) for (style, cur), shift in zip(parts, shift_h, strict=True)
-                ]
+                parts = [(style, cur + shift) for (style, cur), shift in zip(parts, shift_h)]  # noqa: B905
 
         if any(pos < 0 for _, pos in parts):
             raise IndexError(f'Horizontal change out of bounds ({place_h=}, {shift_h=}, {orig_h=})')

@@ -66,6 +66,11 @@ exclude_patterns = [
     'Thumbs.db',
 ]
 
+# myst-parser.readthedocs.io/en/latest/configuration.html#myst-warnings
+suppress_warnings = [
+    'myst.strikethrough',
+]
+
 # ------
 # Python
 # ------

@@ -1,0 +1,198 @@
+English regulars:
+    # Simple -s
+    - [dogs, dog]
+    - [cats, cat]
+    - [books, book]
+    - [tables, table]
+    - [computers, computer]
+
+    # -es for words ending in s/x/z/ch/sh
+    - [boxes, box]
+    - [classes, class]
+    - [dishes, dish]
+    - [watches, watch]
+    - [foxes, fox]
+    - [quizzes, quiz]
+    - [buzzes, buzz]
+    - [churches, church]
+    - [bushes, bush]
+    - [glasses, glass]
+    - [kisses, kiss]
+    - [gases, gas]
+    - [gasses, gas]
+    - [buses, bus]
+    - [busses, bus]
+
+    # Consonant + y → ies
+    - [cities, city]
+    - [berries, berry]
+    - [babies, baby]
+    - [stories, story]
+    - [parties, party]
+    - [candies, candy]
+    - [ladies, lady]
+    - [countries, country]
+    - [companies, company]
+    - [flies, fly]
+    - [spies, spy]
+
+    # Vowel + y → s (not ies)
+    - [boys, boy]
+    - [days, day]
+    - [keys, key]
+    - [toys, toy]
+
+    # -f/-fe → -ves
+    - [leaves, leaf]
+    - [lives, life]
+    - [knives, knife]
+    - [wives, wife]
+    - [wolves, wolf]
+    - [halves, half]
+    - [calves, calf]
+    - [shelves, shelf]
+    - [thieves, thief]
+    - [loaves, loaf]
+    - [scarves, scarf]
+    - [elves, elf]
+
+    # -f/-fe exceptions that take -s
+    - [roofs, roof]
+    - [chiefs, chief]
+    - [beliefs, belief]
+    - [cliffs, cliff]
+    - [proofs, proof]
+    - [safes, safe]
+    - [chefs, chef]
+
+    # -o endings → -oes
+    - [tomatoes, tomato]
+    - [potatoes, potato]
+    - [heroes, hero]
+    - [echoes, echo]
+    - [torpedoes, torpedo]
+    - [vetoes, veto]
+
+    # -o endings → -os (exceptions)
+    - [photos, photo]
+    - [pianos, piano]
+    - [memos, memo]
+    - [solos, solo]
+    - [studios, studio]
+    - [radios, radio]
+    - [zoos, zoo]
+
+vowel-change irregulars:
+    - [men, man]
+    - [women, woman]
+    - [teeth, tooth]
+    - [feet, foot]
+    - [geese, goose]
+    - [mice, mouse]
+    - [lice, louse]
+no-change plurals:
+    - [species, species]
+    - [sheep, sheep]
+    - [deer, deer]
+    - [fish, fish]
+    - [moose, moose]
+    - [salmon, salmon]
+    - [trout, trout]
+    - [series, series]
+    - [means, means]
+    - [aircraft, aircraft]
+    - [spacecraft, spacecraft]
+    - [offspring, offspring]
+    - [crossroads, crossroads]
+    - [headquarters, headquarters]
+-en plurals:
+    - [oxen, ox]
+    - [children, child]
+    - [brethren, brother]
+suppletive (different word):
+    - [people, person]
+latin -us → -i:
+    - [cacti, cactus]
+    - [fungi, fungus]
+    - [foci, focus]
+    - [nuclei, nucleus]
+    - [radii, radius]
+    - [alumni, alumnus]
+    - [stimuli, stimulus]
+    - [syllabi, syllabus]
+    - [termini, terminus]
+
+    # Exceptions
+    - [campuses, campus]
+    - [viruses, virus]
+    - [bonuses, bonus]
+    - [choruses, chorus]
+    - [octopuses, octopus]
+
+latin -um → -a:
+    - [data, datum]
+    - [media, medium]
+    - [bacteria, bacterium]
+    - [curricula, curriculum]
+    - [memoranda, memorandum]
+    - [strata, stratum]
+    - [addenda, addendum]
+    - [spectra, spectrum]
+    - [errata, erratum]
+    - [millennia, millennium]
+    - [aquaria, aquarium]
+
+latin -is → -es:
+    - [analyses, analysis]
+    - [bases, basis]
+    - [crises, crisis]
+    - [theses, thesis]
+    - [axes, axis]
+    - [hypotheses, hypothesis]
+    - [synopses, synopsis]
+    - [oases, oasis]
+    - [parentheses, parenthesis]
+    - [ellipses, ellipsis]
+    - [diagnoses, diagnosis]
+    - [syntheses, synthesis]
+    - [neuroses, neurosis]
+
+greek -on → -a:
+    - [phenomena, phenomenon]
+    - [criteria, criterion]
+    - [automata, automaton]
+    - [polyhedra, polyhedron]
+
+latin -a → -ae:
+    - [formulae, formula]
+    - [antennae, antenna]
+    - [larvae, larva]
+    - [vertebrae, vertebra]
+    - [algae, alga]
+    - [nebulae, nebula]
+    - [amoebae, amoeba]
+
+latin -ex/-ix → -ices:
+    - [indices, index]
+    - [vertices, vertex]
+    - [appendices, appendix]
+    - [matrices, matrix]
+    - [apices, apex]
+    - [vortices, vortex]
+    - [codices, codex]
+
+latin neuter third declension:
+    - [genera, genus]
+    - [corpora, corpus]
+    - [opera, opus]
+
+edge cases:
+    # Case preservation
+    - [CITIES, CITY]
+    - [DOGS, DOG]
+    - [MEN, MAN]
+    - [PEOPLE, PERSON]
+
+    # Mixed case
+    - [Cities, City]
+    - [Dogs, Dog]

@@ -1,4 +1,4 @@
-# Extended Regex Syntax
+# Extended Regex Syntax in Python
 
 This file provides a concise reference for [Matthew Barnett's `regex` package](https://github.com/mrabarnett/mrab-regex), a popular extension of [the standard `re` module](https://docs.python.org/3/library/re.html) that adds desperately-needed regex features (both long-awaited and brand-new).
 
@@ -12,13 +12,19 @@ Some of the additions -- say, better support for emojis and non-roman script -- 
 
 ...and on and on!
 
-I originally created this reference for my own use by reorganizing Matthew's fantastic `README.md`, but have since added some brief elaborations, cross-references, & links to [https://regular-expressions.info](https://www.regular-expressions.info) in order to make it more useful to both beginners and experts.
+This document started as a simple reorganization of Matthew's fantastic `README.md`, but I have since added some brief elaborations, cross-references, & links to [https://regular-expressions.info](https://www.regular-expressions.info) in order to make it more useful to both beginners and experts. Any allusions to "we" refer to Matthew and his fellow maintainers.
 
-If you're new to regex in general, I reccommend you start with [that tutorial](https://www.regular-expressions.info), [python's tutorial](https://docs.python.org/3/howto/regex.html), and/or python's [documentation for the `re` module](https://docs.python.org/3/library/re.html).
+If you're new to regex in general, I reccommend you start by reading [python's quick tutorial](https://docs.python.org/3/howto/regex.html), skimming [regular-expression.info's much more in-depth tutorials](https://www.regular-expressions.info), and/or consulting python's [documentation for the `re` module](https://docs.python.org/3/library/re.html) directly. **For completeness, I have included brief quotes from the `re` documentation to set the stage for many of the extensions -- look out for "See Also" notes.**
 
 ## Flags
 
 _([regular-expressions.info lesson](https://www.regular-expressions.info/modifiers.html))_
+
+```{admonition} [Basic Syntax](https://docs.python.org/3/library/re.html#flags)
+---
+class: hint
+---
+```
 
 ### Scoped Flags
 
@@ -263,14 +269,14 @@ _([regular-expressions.info lesson](https://www.regular-expressions.info/conditi
 
 #### Lookarounds in Conditionals
 
-The test of a conditional pattern can be a lookaround.
+The test of a conditional pattern can be a lookaround:
 
 ```python
 regex.match(r'(?(?=\d)\d+|\w+)', '123abc') # -> 123
 regex.match(r'(?(?=\d)\d+|\w+)', 'abc123') # -> abc123
 ```
 
-This is not quite the same as putting a lookaround in the first branch of a pair of alternatives.
+This is not quite the same as putting a lookaround in the first branch of a pair of alternatives:
 
 ```python
 regex.match(r'(?:(?=\d)\d+\b|\w+)', '123abc') # -> 123abc

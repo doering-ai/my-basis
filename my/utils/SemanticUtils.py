@@ -5,12 +5,16 @@
 from typing import Literal, ClassVar
 from collections.abc import Callable
 import keyword
+import itertools as it
 
 ### EXTERNAL
 import regex as re
 
-### INTERNAL
+### INTERNAL (NOTE: If adding new internal imports, update the comments in `__init__.py`)
 from .IterUtils import iter_utils
+from .TextUtils import text_utils
+
+re.DEFAULT_VERSION = re.VERSION1
 
 
 ############
@@ -132,49 +136,112 @@ class SemanticUtils:
     # -----------------
     # `2` PLURALIZATION
     # -----------------
-    SINGULAR_MAP: ClassVar[list[tuple[str, Callable]]] = [
-        # I. Singletons
-        (r'^(un|sub|self|meta)$', lambda t: t),
-        (r'^(nucleus|knowledge|nexus|network)$', lambda t: t),
-        (r'^(stratum|society|identity|geist)$', lambda t: t),
-        # II. Irregulars
-        (r'^(media|species|evidence|series|equipment)$', lambda t: t),
-        (r'^genera$', lambda t: 'genus'),
-        (r'^people$', lambda t: 'person'),
-        (r'^synopses$', lambda t: 'synopsis'),
-        (r'^(bu|ga|bia)sses$', lambda t: t[:-3]),
-        # III. Archaics
-        (r'(rt|d)ices$', lambda t: t[:-4] + 'ex'),
-        (r'(mena|mata)$', lambda t: t[:-1] + 'on'),
-        (r'(an?t|[xn]im|cul)a$', lambda t: t[:-1] + 'um'),
-        (r'theses$', lambda t: t[:-2] + 'is'),
-        # IV. Regulars
-        (r'ies$', lambda t: t[:-3] + 'y'),
-        (r'(canvas|[^oa]us|ss|x|[rt]ch)es$', lambda t: t[:-2]),
-        (r'(lea|li|el)ves$', lambda t: t[:-3] + 'f'),
-        # V. Base Case
-        (r's$', lambda t: t[:-1]),
-    ]
+    type Singularizer = tuple[re.Pattern, Callable[[str], str]]
+    SINGULAR_MAP: ClassVar[list[Singularizer]] = text_utils.regex_array(
+        # ======================
+        # I. SPECIFIC IRREGULARS
+        # ======================
+        (r'(?i)^people$', lambda _: 'person'),
+        (r'(?i)^media$', lambda _: 'medium'),
+        (r'(?i)^genera$', lambda _: 'genus'),
+        (r'(?i)^corpora$', lambda _: 'corpus'),
+        (r'(?i)^opera$', lambda _: 'opus'),
+        (r'(?i)^criteria$', lambda _: 'criterion'),
+        # =====================
+        # II. NO-CHANGE PLURALS
+        # =====================
+        (
+            r'(?i)^(species|evidence|series|equipment|sheep|deer|fish|moose|salmon|trout|means|aircraft|spacecraft|offspring|crossroads|headquarters)$',
+            lambda t: t,
+        ),
+        # ============================
+        # III. VOWEL-CHANGE IRREGULARS
+        # ============================
+        (r'(?i)^men$', lambda _: 'man'),
+        (r'(?i)^women$', lambda _: 'woman'),
+        (r'(?i)^teeth$', lambda _: 'tooth'),
+        (r'(?i)^feet$', lambda _: 'foot'),
+        (r'(?i)^geese$', lambda _: 'goose'),
+        (r'(?i)^mice$', lambda _: 'mouse'),
+        (r'(?i)^lice$', lambda _: 'louse'),
+        #### -EN PLURALS ####
+        (r'(?i)^oxen$', lambda _: 'ox'),
+        (r'(?i)^children$', lambda _: 'child'),
+        (r'(?i)^brethren$', lambda _: 'brother'),
+        # ==============
+        # V. LATIN/GREEK
+        # ==============
+        (r'(?i)(cact|fung|foc|nucle|radi|alumn|stimul|syllab|termin)i$', lambda t: t[:-1] + 'us'),
+        (r'(?i)(formul|antenn|larv|vertebr|alg|nebul|amoeb)ae$', lambda t: t[:-1]),
+        (r'(?i)(append|matr)ices$', lambda t: t[:-4] + 'ix'),
+        (r'(?i)(vert|vort|ind|cod|ap)ices$', lambda t: t[:-4] + 'ex'),
+        (
+            r'(?i)(dat|medi|bacteri|curricul|memorand|strat|addend|spectr|errat|millenni|aquari)a$',
+            lambda t: t[:-1] + 'um',
+        ),
+        (
+            r'(?i)(analys|bas|cris|thes|ax|hypothes|synops|oas|parenthes|ellips|diagnos|synthes|neuros)es$',
+            lambda t: t[:-2] + 'is',
+        ),
+        #### IRREGULARS ####
+        (r'(?i)^phenomena$', lambda _: 'phenomenon'),
+        (r'(?i)^automata$', lambda _: 'automaton'),
+        (r'(?i)^polyhedra$', lambda _: 'polyhedron'),
+        # ========================
+        # X. DOUBLE CONSONANT + ES
+        # ========================
+        (r'(?i)^quizzes$', lambda _: 'quiz'),  # quiz doubles to quizzes
+        (r'(?i)^(bu|ga|bia)sses$', lambda t: t[:-3]),  # busses, gasses, biasses
+        (r'(?i)^(gas|bus)es$', lambda t: t[:-2]),  # gases, buses (American spelling)
+        # ===========================
+        # XI. REGULAR ENGLISH PLURALS
+        # ===========================
+        # Consonant + y → ies
+        (r'(?i)([^aeiou])ies$', lambda t: t[:-3] + 'y'),
+        # -f/-fe → -ves (specific words ending in -fe)
+        (r'(?i)(kni|wi|li)ves$', lambda t: t[:-3] + 'fe'),
+        # -f/-fe → -ves (words ending in -f)
+        (r'(?i)(lea|el|wol|cal|hal|shel|thie|loa|scar)ves$', lambda t: t[:-3] + 'f'),
+        # -o → -oes
+        (r'(?i)([^aeiou])oes$', lambda t: t[:-2]),
+        # -es for words ending in s/x/z/ch/sh
+        (r'(?i)(ss|x|[sz]h|ch|z)es$', lambda t: t[:-2]),
+        # -us/-os exceptions that use -es/-os (not Latin -i)
+        (r'(?i)(campus|virus|bonus|chorus|octopus)es$', lambda t: t[:-2]),
+        (r'(?i)(photo|piano|memo|solo|studio|radio|zoo)s$', lambda t: t[:-1]),
+        # ==============
+        # XII. BASE CASE
+        # ==============
+        (r'(?i)s$', lambda t: t[:-1]),
+    )
 
     @classmethod
-    def to_singular(cls, plural: str) -> str:
+    def to_singular(cls, plural: str, overrides: list[Singularizer] | None = None) -> str:
         """Convert plural English word to singular form.
 
         Handles regular plurals, irregulars, and archaic forms.
 
         Args:
             plural: Plural word to convert (case-insensitive).
+            overrides: Optional list of (regex, handler) pairs to override default rules.
         Returns:
             Singular form of the word.
         Raises:
             ValueError: If no singularization rule matches.
             AssertionError: If result is empty string.
         """
-        plural = plural.lower()
-        for regex, handler in cls.SINGULAR_MAP:
-            if re.search(regex, plural):
+        if overrides is None:
+            overrides = []
+        for regex, handler in it.chain(overrides, cls.SINGULAR_MAP):
+            if regex.search(plural) is not None:
                 singular = handler(plural)
                 assert len(singular) > 0, f'Empty singular form for {plural}'
+                # Preserve case based on input
+                if len(plural) > 1:
+                    if plural[1].isupper():  # All caps (e.g., "MEN" or "CITIES")
+                        singular = singular.upper()
+                    elif plural[0].isupper():  # Title case (e.g., "Men" or "Cities")
+                        singular = singular[0].upper() + singular[1:]
                 return singular
 
         raise ValueError(f'Failed to convert {plural} to singular form.')

@@ -13,12 +13,14 @@ import inspect
 ### EXTERNAL
 from pydantic_core import core_schema as pyd_schema
 import pydantic as pyd
-import pandas as pd
 import regex as re
 
-### INTERNAL
+### INTERNAL (NOTE: If adding new internal imports, update the comments in `__init__.py`)
 from ..infra import T, C, Series
 from .IterUtils import iter_utils
+
+
+re.DEFAULT_VERSION = re.VERSION1
 
 
 ############
@@ -73,9 +75,6 @@ class SyntaxUtils:
     # Regex
     RegexField = Annotated[re.Pattern, pyd_schemify(re.Pattern)]
     MatchField = Annotated[re.Match, pyd_schemify(re.Match)]
-
-    # Pandas
-    DataFrameField = Annotated[pd.DataFrame, pyd_schemify(pd.DataFrame)]
 
     # --------------
     # `2` REFLECTION

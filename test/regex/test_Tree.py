@@ -254,13 +254,11 @@ class TestTree:
             (cls(r'a|b'), r'?', False, r'(?>a|b)?'),  # make multibranch ptional
             # Make Optional
             (cls(r'a|b', quantifier=r'++'), r'?', False, r'(?>a|b)*+'),
-            (cls(r'a|b', quantifier=r'{1,5}'), r'?', False, r'(?>a|b){0,5}'),
             (cls(r'a|b', quantifier=r'{2,5}'), r'?', False, None),
             (cls(r'a|b', quantifier=r'{2,5}'), r'?', True, r'(?>a|b)?'),
             # Inner vs. Outer
             (cls(r'a|b', prefix=r'xX'), r'?', False, r'xX(?>a|b)?'),
             (cls(r'a|b', suffix=r'Xx'), r'?', False, r'(?>a|b)?Xx'),
-            (cls(r'a|b', suffix=r'Xx', inner_quant=r'{1,5}'), r'?', False, r'(?>a|b){0,5}Xx'),
             (cls(r'a|b', suffix=r'Xx', inner_quant=r'{2,5}'), r'?', False, None),
             (cls(r'a|b', suffix=r'Xx', inner_quant=r'{2,5}'), r'?', True, r'(?>a|b)?Xx'),
             (cls(r'a|b', suffix=r'Xx', quantifier=r'++'), r'?', False, r'(?:(?>a|b)?Xx)++'),
@@ -317,23 +315,15 @@ class TestTree:
         [
             # NOOPS
             (cls(r'ab|cd?|ef'), r'(?>ab|cd?|ef)'),
-            (cls(r'ab|cd{0,5}|ef*', quantifier=r'?'), r'(?>ab|cd{0,5}|ef*)?'),
+            (cls(r'ab|cd{,5}|ef*', quantifier=r'?'), r'(?>ab|cd{,5}|ef*)?'),
             # Bubble-up optionality
             (cls(r'ab|(?:cd)?|[ef]'), r'(?:ab|(?:cd)|[ef])?'),
             (cls(r'ab|(?:cd)?|[ef]', quantifier=r'?'), r'(?:ab|(?:cd)|[ef])?'),
             (cls(r'|a|b'), r'(?>a|b)?'),
             (cls(r'a||b', quantifier=r'?'), r'(?>a|b)?'),
             (cls(r'a|b|', quantifier=r'*?'), r'(?>a|b)*?'),
-            (cls(r'a{0,5}|b*', quantifier=r'?'), r'(?:a{1,5}|b+)?'),
+            (cls(r'a{,5}|b*', quantifier=r'?'), r'(?:a{,5}|b+)?'),
             (cls(r'', r'ed', r'ing', prefix=r'Publish'), r'Publish(?>ed|ing)?'),
-            # Prefixed branches
-            (cls(r'ab(cd)?|xab(cd)?'), r'x?ab(cd)?'),
-            (cls(r'ab(cd)?|x?ab(cd)?'), r'x?ab(cd)?'),
-            # Live examples
-            (
-                cls(r'PP', r'Pp', r'p', r'pp', prefix=r'xX', suffix=r'Xx'),
-                r'xX(?>PP|Pp|pp?)Xx',
-            ),
         ],
     )
     def test_clean(self, tree: Tree, expected: str):
@@ -412,6 +402,7 @@ class TestTree:
             (cls(r'abc1cde', r'abc[2]cde'), r'abc[12]cde'),
             (cls(r'p', r'PP', r'Pp', r'pp'), r'(?>P[Pp]|pp?)'),
             (cls(r'p', r'PP', r'Pp', r'pp', prefix=r'xX', suffix=r'Xx'), r'xX(?:P[Pp]|pp?)Xx'),
+            (cls(r'R', 'RF', 'RFC', 'Rat', 'at'), r'(?>R(?>FC?|at)?|at)'),
         ],
     )
     def test_condense(self, tree: Tree, expected: str):

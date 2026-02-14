@@ -2,11 +2,10 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import Self, Any
+from typing import Self, Any, overload
 from collections.abc import Sequence, Iterator, Generator
 import itertools as it
 import more_itertools as mi
-import functools as ft
 
 ### EXTERNAL
 import pydantic as pyd
@@ -130,6 +129,8 @@ class Tree(pyd.BaseModel):
         Returns:
             True if this tree can be joined atomically (i.e. with `(?>...)`), False otherwise.
         """
+        if not all(self.branches):
+            return False
         if self.suffix:
             search_space = (atom for branch in self.branches for atom in branch)
         else:
@@ -235,7 +236,7 @@ class Tree(pyd.BaseModel):
         elif overwrite:
             setattr(self, field, new)
             return True
-        elif (prod := value | new) is not None:
+        elif (prod := value & new) is not None:
             setattr(self, field, prod)
             return True
         else:
@@ -253,6 +254,14 @@ class Tree(pyd.BaseModel):
             data = data.quantify(self.quantifier)
         return data
 
+    @classmethod
+    def _partition_candidates(
+        cls, branch: Regex, candidates: Iterator[Regex]
+    ) -> tuple[Iterator[Regex], Iterator[Regex]]:
+        rest, suffixed = mi.partition(lambda br: br.startswith(branch), candidates)
+        _, prefixed = mi.partition(lambda br: br.endswith(branch), rest)
+        return suffixed, prefixed
+
     # -------------------
     # `+` Primary Methods
     # -------------------
@@ -268,21 +277,21 @@ class Tree(pyd.BaseModel):
             Every possible permutation we can make with the expanded contents of that branch, that
             are still nonetheless isomorphic to the original branch when taken as a set.
         """
-        # I. Build a list of positional subblocks, representing the possible values of each atom
+        # I. Build a list of positional subtrees, representing the possible values of each atom
         count = 0
-        atom_blocks: list[list[Regex]] = []
+        subtrees: list[list[Regex]] = []
         for atom in branch:
-            if count < self.max_expand and len(atom_block := self.expand_atom(atom)) > 1:
+            if count < self.max_expand and len(_subtree := self.expand_atom(atom)) > 1:
                 # I.i. Expand this atom into a multiple branches
-                atom_blocks.append(atom_block.export_branches())
+                subtrees.append(_subtree.export_branches())
                 count += 1
             else:
                 # I.ii. Else just store it as one single-atom branch
-                atom_blocks.append([Regex(atom)])
+                subtrees.append([Regex(atom)])
 
         # II. If any atoms were split, yield all possible permutations of the overall branch
         if count:
-            yield from map(Regex, it.product(*atom_blocks))
+            yield from (Regex(*product) for product in it.product(*subtrees))
         else:
             yield branch
 
@@ -423,16 +432,15 @@ class Tree(pyd.BaseModel):
             and self.quantifier == other.quantifier
         )
 
-    @ft.singledispatchmethod
-    def __getitem__(self, key):
-        raise TypeError
+    @overload
+    def __getitem__(self, key: int) -> Regex: ...
 
-    @__getitem__.register
-    def _get_branch(self, key: int) -> Regex:
-        return self.branches[key]
+    @overload
+    def __getitem__(self, key: slice) -> Self: ...
 
-    @__getitem__.register
-    def _get_branches(self, key: slice) -> Self:
+    def __getitem__(self, key: int | slice) -> Regex | Self:
+        if isinstance(key, int):
+            return self.branches[key]
         return self.new(*self.branches[key])
 
     # ---------------
@@ -460,9 +468,8 @@ class Tree(pyd.BaseModel):
         Returns:
             A quantifier that can be applied to the whole set of branches.
         """
+        # I. FIRST PASS
         to_drop: set[int] = set()
-
-        # I. Identify branches to drop or combine
         for i, branch in enumerate(self.branches):
             n = len(branch)
             if not branch:
@@ -472,22 +479,10 @@ class Tree(pyd.BaseModel):
             elif n == 1 and branch.one.is_optional and self.set_quantifier(r'?'):
                 # I.ii. Single atom -- check for optionality
                 branch[0] = branch.one.as_required()
-            else:
-                # I.iii. Look for a copy of this branch with a monoatomic prefix or suffix
-                candidates = [
-                    other
-                    for j, other in enumerate(self.branches)
-                    if (j != i and j not in to_drop and len(other) == n + 1)
-                ]
-                if suffixed := next((br for br in candidates if br[:-1] == branch), None):
-                    to_drop.add(i)
-                    suffixed[-1] = suffixed[-1].as_optional()
-                elif prefixed := next((br for br in candidates if br[1:] == branch), None):
-                    to_drop.add(i)
-                    prefixed[0] = prefixed[0].as_optional()
-
         if to_drop:
             self.branches = ut.drop_at(self.branches, to_drop)
+        to_drop.clear()
+
         return self
 
     def expand(self) -> Self:
@@ -550,8 +545,8 @@ class Tree(pyd.BaseModel):
         cls = self.__class__
 
         # I. Prepare the block; the main stage is the "factor" step, where prefixes are found
-        self.sort().factor()
-        self.sort().clean()
+        # breakpoint()
+        self.sort().clean().factor().clean()
 
         # II. Recursively replace the block's body with an equivalent tree
         if not self:

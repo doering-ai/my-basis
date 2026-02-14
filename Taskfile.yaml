@@ -9,9 +9,16 @@ vars:
     OUT_DIR: '{{.DOC_DIR}}/_build'
 
 tasks:
-    # ------
-    # PyTest
-    # ------
+    # ---------
+    # Packaging
+    # ---------
+    sync:
+        cmd: uv sync --all-extras
+        aliases: [install, setup]
+
+    # -------
+    # Testing
+    # -------
     test: uv run pytest {{.CLI_ARGS}}
 
     test:dev: uv run pytest --sw -vv --no-cov {{.CLI_ARGS}}
@@ -39,3 +46,7 @@ tasks:
             - '{{.DOC_DIR}}/conf.py'
         generates: ['{{.OUT_DIR}}/*.html']
 
+    docs:clean:
+        desc: Remove all generated documentation files.
+        cmd: rm -rf {{.OUT_DIR}}/*
+        generates: ['{{.OUT_DIR}}/*.html']

@@ -61,7 +61,7 @@ class TestTextUtils:
     def test_regex_array(self):
         """Test compiling array of (pattern, replacement) tuples."""
         array = [(r'\d+', 'NUM'), (r'\w+', 'WORD')]
-        result = cls.regex_array(array)
+        result = cls.regex_array(*array)
         assert len(result) == 2
         assert isinstance(result[0][0], re.Pattern)
         assert result[0][1] == 'NUM'

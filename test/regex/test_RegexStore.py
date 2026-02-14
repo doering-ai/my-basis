@@ -3,14 +3,17 @@
 ############
 ### STANDARD
 import inspect
+from pathlib import Path
+import random
 
 ### EXTERNAL
 import regex as re
 import pytest as pyt
+import more_itertools as mi
 
 ### INTERNAL
-from my import Buffer, ut
-from my.regex.meta import GroupKind
+from my import Buffer, ut, typist
+from my.regex.meta import GroupKind, Tree
 from my.regex import RegexList, RegexVal, MatchData
 from my.regex.RegexStore import RegexStore, RegexBuffer
 
@@ -36,6 +39,14 @@ class TestRegexStore:
             simple=r'hello',
             compound=[r'hello', r'world'],
         )
+
+    @pyt.fixture(scope='class')
+    def importas_data(self) -> set[str]:
+        file = Path(__file__).parent / 'importas_example.yaml'
+        assert file.exists() and file.is_file()
+        data = set(typist.from_yaml(file)['IMPORT_AS_PREFIXES'])
+        assert len(data) > 100
+        return data
 
     # -------------------
     # `.` Initial Methods
@@ -451,7 +462,7 @@ class TestRegexStore:
 
     def test_ior__from_dict(self):
         store = RegexStore.new(dict(lazy_load=False))
-        store |= {'new1': r'test1', 'new2': r'test2'}
+        store |= dict(new1=r'test1', new2=r'test2')
 
         assert 'new1' in store
         assert 'new2' in store
@@ -839,3 +850,76 @@ class TestRegexStore:
         assert isinstance(result, str)
         assert len(result) > 0
         # Just ensure it works -- no need for another snapshot
+
+    # -----------------------------
+    # `^0` ImportAs Example Dataset
+    # -----------------------------
+    def test_router_tree__importas(self, importas_data: set[str], pytestconfig, snapshot):
+        data = importas_data
+        store = RegexStore.new(
+            options=dict(lazy_load=False),
+            importas=('<|>', list(sorted(data))),
+        )
+
+        # III. Create negative examples by adding three random letters to each entry
+        _a, _z = ord('a'), ord('z')
+        _rand = lambda: chr(random.randint(_a, _z))
+        negative_examples: set[str] = set(
+            mi.flatten(
+                [prefix + c, c + prefix] for prefix in data for _ in range(10) if (c := _rand())
+            )
+        )
+        negative_examples -= data
+        print(f'Loaded {len(negative_examples)} negative examples total.')
+
+        # IV. Test the router tree against both positive and negative examples
+        _fn = store.partial('importas', 'full')
+        false_negatives, true_positives = map(list, mi.partition(_fn, data))
+        true_negatives, false_positives = map(list, mi.partition(_fn, negative_examples))
+
+        verbosity: int = pytestconfig.getoption('verbose')
+        if verbosity > 0 and (false_negatives or false_positives):
+            true_positives.sort()
+            true_negatives.sort()
+            false_positives.sort()
+            false_negatives.sort()
+            out = []
+            out.extend(
+                [
+                    f'TRUE POSITIVE RATE: {len(true_positives) / len(data):.2%}',
+                    f'TRUE NEGATIVE RATE: {len(true_negatives) / len(negative_examples):.2%}'
+                    f'\t' + ', '.join(sorted(false_positives)),
+                ]
+            )
+            if false_negatives:
+                out.extend(
+                    [
+                        '\nFALSE NEGATIVES: ',
+                        '\t[' + ', '.join(sorted(false_negatives)) + ']',
+                    ]
+                )
+            if false_positives:
+                out.extend(
+                    [
+                        '\nFALSE POSITIVES: ',
+                        '\t[' + ', '.join(sorted(false_positives)) + ']',
+                    ]
+                )
+
+            if verbosity > 2:
+                out.extend(['', '', 'REGEX:', '', store.pretty_print('importas')])
+            print('\n'.join(out))
+
+        assert len(false_negatives) == 0 and len(false_positives) == 0
+        assert store.pretty_print('importas') == snapshot
+
+    def test_expand__importas(self, store: RegexStore, importas_data: set[str], snapshot):
+        data = importas_data
+
+        # Copy setup logic from `store.compose_tree()`
+        rendered_branches = [store.compose(branch, sep='|') for branch in data]
+        tree = Tree.new(*sorted(rendered_branches))
+        tree.expand()
+        rendered = tree.render()
+        printed = store.pretty_print(rendered)
+        assert len(printed.splitlines()) == len(data) + 2

@@ -12,6 +12,8 @@ from pydantic_core import core_schema as pyds
 ### INTERNAL
 from ..infra import Series, DELIM
 
+re.DEFAULT_VERSION = re.VERSION1
+
 
 ############
 ### BODY ###

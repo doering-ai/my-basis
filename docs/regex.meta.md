@@ -3,7 +3,7 @@ numbering:
   title: true
 ---
 
-# `my.regex.meta`: Internal, Purpose-Built Regex Metatypes
+# `my.regex.meta`: Internal Regex Metatypes
 
 ```{py:currentmodule} my.regex.meta
 ```
@@ -16,13 +16,13 @@ These modules are described as "internal" because they were clearly designed wit
 ---
 maxdepth: 1
 ---
-my.regex.meta.Tree
-my.regex.meta.Regex
-my.regex.meta.Atom
-my.regex.meta.GroupAtom
-my.regex.meta.SetAtom
-my.regex.meta.Quantifier
-my.regex.meta.GroupKind
-my.regex.meta.ParseData
-my.regex.meta.meta_rgxs
+regex.meta.Tree
+regex.meta.Regex
+regex.meta.Atom
+regex.meta.GroupAtom
+regex.meta.SetAtom
+regex.meta.Quantifier
+regex.meta.GroupKind
+regex.meta.ParseData
+regex.meta.meta_rgxs
 ```

@@ -14,5 +14,5 @@ The `files` subpackage provides structured representations and utilities for wor
 ---
 maxdepth: 2
 ---
-my.files.Markdown
+files.Markdown
 ```

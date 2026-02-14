@@ -3,7 +3,7 @@
 ############
 ### STANDARD
 from typing import Literal, ClassVar, overload
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Mapping, Hashable
 import textwrap
 import itertools as it
 
@@ -14,8 +14,11 @@ from unidecode import unidecode
 import pydantic as pyd
 
 ### INTERNAL
-from ..infra import T
+# NOTE: If adding new internal imports, update the comments in `__init__.py`
 from .IterUtils import iter_utils
+
+
+re.DEFAULT_VERSION = re.VERSION1
 
 
 ############
@@ -78,27 +81,12 @@ class TextUtils:
         )
         return parts
 
-    @overload
     @staticmethod
-    def regex_dict(
-        expressions: Mapping[str, str | Pattern] | None = None,
-        **kwargs: str | Pattern,
-    ) -> dict[str, Pattern]: ...
-
-    @overload
-    @staticmethod
-    def regex_dict[P](
-        expressions: Mapping[T, P | Pattern] | None = None,
-        compile_function: Callable[[P], Pattern] = re.compile,
-        **kwargs: P | Pattern,
-    ) -> dict[T, Pattern]: ...
-
-    @staticmethod
-    def regex_dict[P = str](
-        expressions: Mapping[T, str | P | Pattern] | None = None,
-        compile_function: Callable[[P], Pattern] = re.compile,
-        **kwargs: str | P | Pattern,
-    ) -> dict[T, Pattern]:
+    def regex_dict[K: Hashable, V = str](
+        expressions: Mapping[K, V | Pattern] | None = None,
+        compile_function: Callable[[V], Pattern] = re.compile,
+        **kwargs: V | Pattern,
+    ) -> dict[K, Pattern]:
         """Compile the expression strings in the given dictionary, mapping names to Patterns.
 
         Args:
@@ -109,33 +97,44 @@ class TextUtils:
             The expressions mapping with all values now compiled.
         """
         ret = {}
-        expressions: dict[T, str | P | Pattern] = dict(expressions or {}) | kwargs
-        for key, val in expressions.items():
+        _expr: dict[K, str | V | Pattern] = dict(expressions or {}) | kwargs  # type: ignore
+        for key, val in _expr.items():
             if isinstance(val, Pattern):
                 ret[key] = val
             else:
-                ret[key] = compile_function(val)
+                ret[key] = compile_function(val)  # type: ignore
         return ret
 
+    @overload
     @staticmethod
-    def regex_array(
-        array: Iterable[tuple[str | Pattern, str]],
+    def regex_array(*args: tuple[str | Pattern, str]) -> list[tuple[Pattern, str]]: ...
+
+    @overload
+    @staticmethod
+    def regex_array[V = str](
+        *args: tuple[str | Pattern, V],
         compile_function: Callable[..., Pattern] = re.compile,
-    ) -> list[tuple[Pattern, str]]:
+    ) -> list[tuple[Pattern, V]]: ...
+
+    @staticmethod
+    def regex_array[V = str](
+        *args: tuple[str | Pattern, V],
+        compile_function: Callable[..., Pattern] = re.compile,
+    ) -> list[tuple[Pattern, V]]:
         """Compile the expressions in a list of two-tuples, effectively mapping Patterns to strings.
 
         Args:
             array: Iterable of (pattern, replacement) tuples.
+            *args: Additional (pattern, replacement) tuples to include.
             compile_function: Function to compile patterns (default: re.compile).
         Returns:
             List of (compiled_pattern, replacement) tuples.
         """
         ret = []
-        for key, val in array:
-            if isinstance(key, Pattern):
-                ret.append((key, val))
-            else:
-                ret.append((compile_function(key), val))
+        for key, val in args:
+            if not isinstance(key, Pattern):
+                key = compile_function(key)
+            ret.append((key, val))
         return ret
 
     @staticmethod

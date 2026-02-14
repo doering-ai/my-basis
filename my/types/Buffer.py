@@ -20,6 +20,8 @@ import numpy.typing as npt
 from ..utils import ut
 from .Span import Span
 
+re.DEFAULT_VERSION = re.VERSION1
+
 ############
 ### DATA ###
 ############
@@ -76,11 +78,9 @@ class Buffer(pyd.BaseModel):
         )
     )
     WRITE_MAP: ClassVar[list[tuple[Pattern, str]]] = ut.regex_array(
-        [
-            (r'[\s[:punct:]]', ' '),
-            (r'\n', '\n'),
-            (r'^\n|\n\n|\n$', '\n\n'),
-        ]
+        (r'[\s[:punct:]]', ' '),
+        (r'\n', '\n'),
+        (r'^\n|\n\n|\n$', '\n\n'),
     )
 
     #: The primary content of each instance. Should always be read via `__str__` for clarity,

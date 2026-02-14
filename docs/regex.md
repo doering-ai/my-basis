@@ -12,12 +12,12 @@ The `regex` subpackage provides a comprehensive framework for working with advan
 
 ```{toctree}
 ---
-maxdepth: 2
+maxdepth: 1
 ---
-my.regex.RegexStore
-my.regex.common
-extended_regex_syntax
-my.regex.MatchData
-my.regex.RegexDebugger
-my.regex.meta
+regex.extended_syntax
+regex.RegexStore
+regex.MatchData
+regex.common
+regex.RegexDebugger
+regex.meta
 ```

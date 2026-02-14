@@ -43,6 +43,8 @@ from ..utils import ut
 from ..caches import NestedCache
 from .MyType import MyType
 
+re.DEFAULT_VERSION = re.VERSION1
+
 ############
 ### DATA ###
 ############
@@ -241,8 +243,8 @@ class Typist(pyd.BaseModel):
             offset: Indentation delta between a parent and a child sequence's bullet points.
             sort_keys: Whether to sort mapping keys on output.
         """
-        cls.YAML_CONFIG.indent(mapping=4, sequence=6, offset=4)
-        cls.YAML_CONFIG.sort_base_mapping_type_on_output = sort_keys
+        cls.YAML_CONFIG.indent(mapping=mapping, sequence=sequence, offset=offset)
+        cls.YAML_CONFIG.sort_base_mapping_type_on_output = sort_keys  # type: ignore
 
     # -------------------
     # `-` Private Methods
@@ -353,7 +355,7 @@ class Typist(pyd.BaseModel):
         """
         if old.origin and old.args:
             new_args = (arg.src_type for arg in old.args)
-            new_src = new_origin[*new_args]
+            new_src = new_origin[*new_args]  # type: ignore
         else:
             new_src = new_origin
 
@@ -397,7 +399,7 @@ class Typist(pyd.BaseModel):
         if issubclass(main, Atomic):
             return self._to_atomic(data, main)
         elif issubclass(main, Mapping):
-            return self._to_map(data, main, target)
+            return self._to_map(data, main, target)  # type: ignore
         elif issubclass(main, Series):
             return self._to_series(data, main, target)
         elif inspect.isclass(main):
@@ -437,6 +439,8 @@ class Typist(pyd.BaseModel):
                 ret = target.origin(it.starmap(self.cast, zip(data, target.args, strict=True)))
             else:
                 return None
+        else:
+            return None
 
         return ret if target.literal_check(ret) else None
 
@@ -473,8 +477,8 @@ class Typist(pyd.BaseModel):
 
         if ret is None or not isinstance(ret, target):
             with ctx.suppress(ValueError, TypeError):
-                ret = target(data if ret is None else ret)
-        return ret
+                ret = target(data if ret is None else ret)  # type: ignore
+        return ret  # type: ignore
 
     def _enum_to_atomic[A: Atomic](self, data: Enum, target: type[A]) -> A | None:
         """Convert an Enum to an atomic type (str, int, float, bool, bytes).
@@ -868,7 +872,7 @@ class Typist(pyd.BaseModel):
         with ctx.suppress(TypeError):
             if data and isinstance(data, Series) and details.val_type:
                 data = self.multicast(data, details.val_type, skip=False)
-            return tvar(data)
+            return tvar(data)  # type: ignore
         return None
 
     def _split_str(self, data: str) -> list[str] | None:
@@ -977,7 +981,7 @@ class Typist(pyd.BaseModel):
                 fn = ut.has_any if intersect else ut.has_all
                 return fn(t1.literal_members, *t0.literal_members)
 
-            elif issubclass(o0, o1) and issubclass(o1, tuple):
+            elif issubclass(o0, o1) and issubclass(o1, tuple):  # type: ignore
                 # I.ii. Two positional tuples must always match exactly
                 return len(t0.args) == len(t1.args) and all(
                     it.starmap(_recur, zip(t0.args, t1.args, strict=True))
@@ -1131,7 +1135,7 @@ class Typist(pyd.BaseModel):
         myty = MyType.parse(tvar)
         if not myty:
             raise ValueError(f'Type is currently unhandled, and cannot be used: {tvar}')
-        return tuple(map(list, mi.partition(myty.check, data)))
+        return tuple(map(list, mi.partition(myty.check, data)))  # type: ignore
 
     def seek_usage(self, target: TypeArg, container: type | MyType) -> bool:
         """Check if a type is used anywhere within another type's structure.
@@ -1299,9 +1303,9 @@ class Typist(pyd.BaseModel):
         if isinstance(data, tvar):
             return data
         elif issubclass(type(data), tvar):
-            return tvar(data)
+            return tvar(data)  # type: ignore
         elif not data:
-            return tvar()
+            return tvar()  # type: ignore
 
         # II. Casting from atomics
         if isinstance(data, Atomic):
@@ -1436,7 +1440,7 @@ class Typist(pyd.BaseModel):
                     self.assemble(old, _cast, copy=False)
                 elif isinstance(old, set):
                     old.update(_cast)
-                elif isinstance(old, Series):
+                elif isinstance(old, list):
                     old.extend(new)
                     if not dups:
                         ut.drop_duplicates(old)
@@ -1533,7 +1537,7 @@ class Typist(pyd.BaseModel):
         """
         if not file:
             fire.error('No file provided.')
-            return tvar()
+            return tvar()  # type: ignore
         elif not isinstance(file, Path):
             file = Path(str(file)).expanduser()
         ut.validate_file(file)
@@ -1572,7 +1576,7 @@ class Typist(pyd.BaseModel):
             Loaded and cast data from the file/string.
         """
         if not file:
-            return tvar()
+            return tvar()  # type: ignore
         elif isinstance(file, Path):
             ut.validate_file(file)
             ret = srsly.read_json(file)
@@ -1584,7 +1588,7 @@ class Typist(pyd.BaseModel):
         if isinstance(ret, tvar):
             return ret
         elif cast:
-            return tvar(ret)
+            return tvar(ret)  # type: ignore
         else:
             raise TypeError(f'Expected `{tvar}`, got `{type(ret)}`.')
 
@@ -1613,7 +1617,7 @@ class Typist(pyd.BaseModel):
         # I. Parse the content using an external library
         if not file:
             # I.i. Empty case
-            return tvar()
+            return tvar()  # type: ignore
         elif isinstance(file, Path):
             # I.ii. Local case: Read directly from file
             ut.validate_file(file)
@@ -1631,10 +1635,10 @@ class Typist(pyd.BaseModel):
         if isinstance(ret, tvar):
             return ret
         elif not ret:
-            return tvar()
+            return tvar()  # type: ignore
         elif cast:
             with ctx.suppress(ValueError):
-                return tvar(ret)
+                return tvar(ret)  # type: ignore
         raise TypeError(f'Expected `{tvar}`, got `{type(ret)}`.')
 
     @overload
@@ -1660,7 +1664,7 @@ class Typist(pyd.BaseModel):
             Loaded and cast data from the file/string.
         """
         if not file:
-            return tvar()
+            return tvar()  # type: ignore
         elif isinstance(file, Path):
             ret = tomllib.loads(file.read_text())
         else:
@@ -1671,7 +1675,7 @@ class Typist(pyd.BaseModel):
         if isinstance(ret, tvar):
             return ret
         elif cast:
-            return tvar(ret)
+            return tvar(ret)  # type: ignore
         else:
             raise TypeError(f'Expected `{tvar}`, got `{type(ret)}`.')
 
@@ -1698,7 +1702,7 @@ class Typist(pyd.BaseModel):
             Loaded and cast data from the file/string.
         """
         if not file:
-            return tvar()
+            return tvar()  # type: ignore
         elif isinstance(file, Path):
             ret = pickle.loads(file.read_bytes())
         else:
@@ -1709,7 +1713,7 @@ class Typist(pyd.BaseModel):
         if isinstance(ret, tvar):
             return ret
         elif cast:
-            return tvar(ret)
+            return tvar(ret)  # type: ignore
         else:
             raise TypeError(f'Expected `{tvar}`, got `{type(ret)}`.')
 
@@ -1749,6 +1753,7 @@ class Typist(pyd.BaseModel):
         """
         obj = self.serialize(data)
         text = self.YAML_CONFIG.dump(obj, **kwargs)
+        assert isinstance(text, str), 'Failed to write YAML data.'
 
         # If we printed a root array, de-intent it
         if isinstance(data, Series) and text.startswith(' '):
@@ -1804,6 +1809,10 @@ class Typist(pyd.BaseModel):
 
         # II. Serialize w/ default params
         text = tomli_w.dumps(obj, **kwargs)
+
+        # If requested, wrap in markdown bactics
+        if wrap:
+            text = f'```toml\n{text}\n```'
         return text
 
     def to_pickle(self, data: FileData, **kwargs) -> bytes:
@@ -1821,7 +1830,7 @@ class Typist(pyd.BaseModel):
     # ---------------
     # `*6` INVOCATION
     # ---------------
-    def get_str_method(self, obj: object, *extra_methods: str) -> Callable[[...], str] | None:
+    def get_str_method(self, obj: object, *extra_methods: str) -> Callable[..., str] | None:
         """Get a string conversion method from an object.
 
         Args:
@@ -1931,16 +1940,16 @@ class Typist(pyd.BaseModel):
 
     @overload
     @classmethod
-    def invoke[V](cls, func: Callable[[...], V], *args, **kwargs) -> V | None: ...
+    def invoke[V](cls, func: Callable[..., V], *args, _strict: Literal[True], **kwargs) -> V: ...
 
     @overload
     @classmethod
-    def invoke[V](cls, func: Callable[[...], V], *args, _strict: Literal[True], **kwargs) -> V: ...
+    def invoke[V](cls, func: Callable[..., V], *args, **kwargs) -> V | None: ...
 
     @classmethod
     def invoke[V](
         cls,
-        func: Callable[[...], V],
+        func: Callable[..., V],
         *args,
         _strict: bool = False,
         **kwargs,
@@ -1986,27 +1995,12 @@ class Typist(pyd.BaseModel):
         methods: str | _Series[str],
         *args,
         _tvar: type[T],
-        **kwargs,
-    ) -> T | None: ...
-
-    @overload
-    def try_method[T](
-        self, obj: object, methods: str | _Series[str], *args, **kwargs
-    ) -> object | None: ...
-
-    @overload
-    def try_method[T](
-        self,
-        obj: object,
-        methods: str | _Series[str],
-        *args,
-        _tvar: type[T],
         _strict: Literal[True],
         **kwargs,
     ) -> T: ...
 
     @overload
-    def try_method[T](
+    def try_method(
         self,
         obj: object,
         methods: str | _Series[str],
@@ -2015,6 +2009,21 @@ class Typist(pyd.BaseModel):
         _strict: Literal[True],
         **kwargs,
     ) -> object: ...
+
+    @overload
+    def try_method[T](
+        self,
+        obj: object,
+        methods: str | _Series[str],
+        *args,
+        _tvar: type[T],
+        **kwargs,
+    ) -> T | None: ...
+
+    @overload
+    def try_method(
+        self, obj: object, methods: str | _Series[str], *args, **kwargs
+    ) -> object | None: ...
 
     def try_method[T](
         self,

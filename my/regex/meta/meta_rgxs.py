@@ -11,7 +11,7 @@ import regex as re
 from ...utils import ut
 from ...types import Buffer
 
-re.DEFAULT_VERSION: re.RegexFlag = re.VERSION1
+re.DEFAULT_VERSION = re.VERSION1
 
 ############
 ### DATA ###
@@ -45,14 +45,14 @@ META_RGXS: dict[str, re.Pattern] = ut.regex_dict(
         pre=NO_ESC,
     ),
     atom=ut.multi_rgx(
-        ut.multi_rgx(
+        ut.multi_rgx(  # Escaped characters
             r'\d+|g<\d+>',
             r'L<\w+>',
             r'[Pp]\{[[:alpha:]]+\}',
             r'.',
             pre=r'\\',
-        ),  # Escaped characters
-        r'(?<!\[)\[(?s:[^\\\[\]]+|\\.|\[.+?\])*\](?!\])',  # Character sets
+        ),
+        r'(?<!\[)\[(?s:[^\\\[\]]++|\\.|\[.+?\])*\](?!\])',  # Character sets
         r'[^\\]',  # Any other single character
         pre=NO_ESC,
         suf=QUANT,
@@ -61,12 +61,12 @@ META_RGXS: dict[str, re.Pattern] = ut.regex_dict(
     # Second-order decomposition (parts of atoms)
     # -------------------------------------------
     quant=ut.multi_rgx(
-        r'\?',
-        r'[*+][?+]?',
-        r'\{\d+(?:,\d*)?\}[?+]?',
+        r'[?*+]',
+        r'\{(?=,?\d)\d*,?\d*\}',
         pre=NO_ESC,
-        suf=r'$',
+        suf=r'[?+]?',
     ),
+    opt_quant=r'^(?:[?*]|{0?)',
     set_operator=rf'^\[?(?:\^|[^\[].*?{NO_ESC}(?>--?|~~|&&|\|\|))',
     inline_flags=rf'{NO_ESC}\(\?{FLAGS}:',
     special_characters=NO_ESC + r'([+*?()|.^$])',

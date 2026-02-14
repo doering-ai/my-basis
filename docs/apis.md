@@ -15,6 +15,6 @@ Currently it focuses on two primary concerns: environment variable management an
 ---
 maxdepth: 2
 ---
-my.apis.Environment
-my.apis.GoogleSheet
+apis.Environment
+apis.GoogleSheet
 ```

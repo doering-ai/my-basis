@@ -2,8 +2,8 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import Self, ClassVar
-from collections.abc import Iterator, Sequence, Generator
+from typing import Self, ClassVar, overload
+from collections.abc import Iterator, Sequence, Generator, Iterable
 import functools as ft
 import itertools as it
 import more_itertools as mi
@@ -35,7 +35,7 @@ class Regex:
     # -------------------
     # `.` Initial Methods
     # -------------------
-    def __init__(self, *args: str | Atom | Sequence[Atom] | Iterator[Atom] | Self) -> None:
+    def __init__(self, *args: str | Atom | Iterable[Atom] | Self) -> None:
         """Construct a new instead from a very flexible set of positional arguments."""
         self.data = list(filter(bool, mi.flatten(map(self._parse_arg, args))))
 
@@ -49,8 +49,9 @@ class Regex:
         Returns:
             Tuple of atomic regex components (characters, groups, character sets, etc.).
         """
-        if isinstance(expr, cls):
-            return iter(expr.data)
+        if isinstance(expr, Regex):
+            yield from expr.data
+            return
 
         g_prev = 0
         for group_atom in cls.group_iterator(expr, mode='roots'):
@@ -128,17 +129,15 @@ class Regex:
     # `-` Private Methods
     # -------------------
     @classmethod
-    def _parse_arg(cls, arg: str | Atom | Sequence[Atom] | Iterator[Atom] | Self) -> Iterator[Atom]:
+    def _parse_arg(cls, arg: str | Atom | Iterable[Atom] | Self) -> Iterator[Atom]:
         if isinstance(arg, Atom):
             yield arg
         elif isinstance(arg, Regex):
             yield from arg.data
         elif isinstance(arg, str):
             yield from cls.atomize(arg)
-        elif isinstance(arg, (Sequence | Iterator)):
-            yield from mi.flatten(map(cls._parse_arg, arg))
         else:
-            raise TypeError(f'Unsupported type for Regex initialization: {type(arg)}')
+            yield from mi.flatten(map(cls._parse_arg, arg))
 
     # -------------------
     # `+` Primary Methods
@@ -219,38 +218,37 @@ class Regex:
     def __bool__(self) -> bool:
         return any(map(bool, self.data))
 
-    @ft.singledispatchmethod
-    def __getitem__(self, key):
-        raise TypeError(f'Unsupported type for Regex indexing: {type(key)}')
+    @overload
+    def __getitem__(self, key: int) -> Atom: ...
 
-    @__getitem__.register
-    def _get_pos(self, key: int) -> Atom:
-        return self.data[key]
+    @overload
+    def __getitem__(self, key: slice) -> Self: ...
 
-    @__getitem__.register
-    def _get_slice(self, key: slice) -> Self:
+    def __getitem__(self, key: int | slice) -> Atom | Self:
+        if isinstance(key, int):
+            return self.data[key]
         return self.__class__(self.data[key])
 
-    @ft.singledispatchmethod
-    def __setitem__(self, key, value):
-        raise TypeError(f'Unsupported types for Regex assignment: {type(key)}, {type(value)}')
+    @overload
+    def __setitem__(self, key: int, value: str | Atom) -> None: ...
 
-    @__setitem__.register
-    def _set_pos(self, key: int, value: str | Atom) -> None:
-        if isinstance(value, str):
-            value = mi.one(self.atomize(value))
-        self.data[key] = value
+    @overload
+    def __setitem__(self, key: slice, value: str | Sequence[Atom] | Self) -> None: ...
 
-    @__setitem__.register
-    def _set_slice(self, key: slice, value: str | Sequence[Atom] | Self) -> None:
-        if isinstance(value, str):
-            self.data[key] = list(self.atomize(value))
-        elif isinstance(value, Regex):
-            self.data[key] = value.data
-        elif isinstance(value, Sequence):
-            self.data[key] = list(map(Atom, value))
+    def __setitem__(self, key: int | slice, value: str | Atom | Sequence[Atom] | Self) -> None:
+        if isinstance(key, int):
+            if isinstance(value, str):
+                value = mi.one(self.atomize(value))
+            self.data[key] = value  # type: ignore
         else:
-            raise TypeError(f'Unsupported type for Regex assignment: {type(value)}')
+            if isinstance(value, str):
+                self.data[key] = list(self.atomize(value))
+            elif isinstance(value, Regex):
+                self.data[key] = value.data
+            elif isinstance(value, Sequence):
+                self.data[key] = list(map(Atom, value))
+            else:
+                raise TypeError(f'Unsupported type for Regex assignment: {type(value)}')
 
     def __add__(self, other: object) -> Self:
         cls = self.__class__
@@ -366,4 +364,18 @@ class Regex:
 
     def split(self) -> Iterator[Self]:
         """Split the Regex instance into branches at top-level '|' atoms."""
-        yield from map(Regex, mi.split_at(self.data, lambda atom: atom == self.SPLITTER))
+        yield from map(self.__class__, mi.split_at(self.data, lambda atom: atom == self.SPLITTER))
+
+    def startswith(self, other: str | Atom | Self) -> bool:
+        """Check if this Regex starts with the given pattern."""
+        other_atoms = Regex(other).data
+        if len(other_atoms) > len(self):
+            return False
+        return self.data[: len(other_atoms)] == other_atoms
+
+    def endswith(self, other: str | Atom | Self) -> bool:
+        """Check if this Regex ends with the given pattern."""
+        other_atoms = Regex(other).data
+        if len(other_atoms) > len(self):
+            return False
+        return self.data[-len(other_atoms) :] == other_atoms

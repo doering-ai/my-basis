@@ -1,11 +1,12 @@
 from .IterUtils import IterUtils, iter_utils
-from .SyntaxUtils import SyntaxUtils, syntax_utils  # USES: iter
-from .SemanticUtils import SemanticUtils, semantic_utils  # USES: iter
-from .TextUtils import TextUtils, text_utils  # USES: iter
-from .SystemUtils import SystemUtils, system_utils  # USES: text
+from .SyntaxUtils import SyntaxUtils, syntax_utils  # <- iter
+from .TextUtils import TextUtils, text_utils  # <- iter
+from .SemanticUtils import SemanticUtils, semantic_utils  # <- text, iter
+from .SystemUtils import SystemUtils, system_utils  # <- text (<- iter)
+from .MetricUtils import MetricUtils, metric_utils  # <- system (<- text <- iter)
 
 
-class Utils(IterUtils, TextUtils, SystemUtils, SemanticUtils, SyntaxUtils):
+class Utils(IterUtils, TextUtils, SystemUtils, SemanticUtils, SyntaxUtils, MetricUtils):
     """A class combining all of the the utility classes into one convenient static interface."""
 
 
@@ -27,4 +28,6 @@ __all__ = [
     'semantic_utils',
     'SyntaxUtils',
     'syntax_utils',
+    'MetricUtils',
+    'metric_utils',
 ]

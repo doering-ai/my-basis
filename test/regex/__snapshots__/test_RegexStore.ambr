@@ -1,16 +1,208 @@
 # serializer version: 1
 # name: TestRegexStore.test_pretty_print
+  'hello ?world'
+# ---
+# name: TestRegexStore.test_router_tree__importas
   '''
-  h
-  e
-  l
-  l
-  o
-   ?
-  w
-  o
-  r
-  l
-  d
+  (?>
+  	AA
+  |	CV?
+  |	D(?>V|ata)?
+  |	E[CT]
+  |	F[FT]?
+  |	G(?>BC|MM|PU)
+  |	I(?>ND|Pd)
+  |	K(?>NN|TF)?
+  |	L(?>2|(?:|D)A|R)?
+  |	N(?>A|COG|P)?
+  |	P(?>D|LT|ool)?
+  |	QDA
+  |	R(?>FC?|at)?
+  |	S(?>FS|P|oup)?
+  |	Tk?
+  |	UKF
+  |	_np
+  |	a(?>
+  		c
+  	|	gp?
+  	|	i(?>oh?|p)
+  	|	lt?
+  	|	mp
+  	|	n(?>im|s)
+  	|	pi?
+  	|	t
+  	|	uc?
+  	|	xl
+  	|	z
+  	)
+  |	b(?>cm|f|g|kp?|lt?|n|p(?:lt?)?|qp?|r|s4?|t|z)
+  |	c(?>
+  		af?
+  	|	b
+  	|	c(?>l|rs)?
+  	|	em?
+  	|	f
+  	|	i
+  	|	k
+  	|	l(?:rs?)?
+  	|	m(?>ap|o|x)?
+  	|	o(?:l|mp?|[or]r)
+  	|	p
+  	|	qt
+  	|	r
+  	|	s[rv]
+  	|	tx?
+  	|	uda
+  	|	vx?
+  	|	y(?:js)?
+  	)?
+  |	d(?>a|b|c(?>c|rf|v)?|d|f|i|p|rv|s(?>a|et)?|t|y)?
+  |	e(?>d|m|ng|s|tl?)?
+  |	f(?>c|ft?|m|n|p|t|u(?:zz)?)?
+  |	g(?>bp|c(?:rs)?|d|e|f|g|l|o|p(?>d|lt)?|t|v)?
+  |	h(?>5|(?:a|)c|f|kl?|l|pt?|q|s|tml|ub|v|yp)?
+  |	i(?>
+  		aa
+  	|	b
+  	|	g
+  	|	m[gps]
+  	|	p(?>a|d|lt|p|v|w|y[dlw])
+  	|	t[rt]?
+  	)
+  |	j(?>np|s(?>on|p))
+  |	k(?>8s|l|s|t)?
+  |	l(?>a|gb|h|i(?>n|te)|m|og|p|sio|tu)
+  |	m(?>
+  		a(?>e|g|ps|t)?
+  	|	b
+  	|	c
+  	|	d[ab]?
+  	|	e(?>ch|t)?
+  	|	f
+  	|	g
+  	|	h
+  	|	i[ot]
+  	|	kv?
+  	|	l(?>md|p)?
+  	|	m
+  	|	p(?>d|e|f|g|l[ct]?|y)?
+  	|	qtt
+  	|	s(?>(?:|m)e|no)?
+  	|	t(?:ri)?
+  	|	v[np]
+  	|	wp
+  	|	x
+  	)?
+  |	n(?>
+  		bf?
+  	|	c4?
+  	|	d[ip]?
+  	|	e
+  	|	ib
+  	|	la?
+  	|	m
+  	|	n
+  	|	p[lrt]?
+  	|	r
+  	|	sl
+  	|	um
+  	|	v
+  	|	x
+  	)?
+  |	o(?>m[mtx]|np|p(?>ap|j|ts?)?|s[ps]|x)
+  |	p(?>
+  		1
+  	|	2
+  	|	3
+  	|	4
+  	|	9
+  	|	an?
+  	|	b
+  	|	cc
+  	|	d[rs]?
+  	|	e
+  	|	f
+  	|	g(?>io|v)?
+  	|	i[lo]
+  	|	j
+  	|	kl?
+  	|	l(?>ot|t1?)?
+  	|	m[3dg]?
+  	|	nd?
+  	|	o(?:ly)?
+  	|	pl?
+  	|	q
+  	|	re
+  	|	s(?>eg|ql)?
+  	|	t
+  	|	u
+  	|	v
+  	|	x
+  	|	y(?>d|k|l|o|sh)?
+  	)?
+  |	q(?>e|i|l|(?:pl|)t)
+  |	r(?>
+  		a(?>f|nd)?
+  	|	dm?
+  	|	eq?
+  	|	fc?
+  	|	io
+  	|	l
+  	|	n[dg]?
+  	|	o
+  	|	p
+  	|	q
+  	|	s
+  	|	t
+  	|	u
+  	)?
+  |	s(?>
+  		a
+  	|	b[np]?
+  	|	c(?>h|io?|l|o|p|s)?
+  	|	d
+  	|	ea
+  	|	f
+  	|	g
+  	|	hpg?
+  	|	i(?>g|o|tk)?
+  	|	k(?>d|e|io?|l|m)?
+  	|	l(?>a|im)?
+  	|	m[fmst]?
+  	|	n[bst]?
+  	|	o(?:pt?)?
+  	|	p(?>a|ec|gh|io?|la|m|o|s|t)?
+  	|	qla?
+  	|	r
+  	|	s(?>im|p)?
+  	|	ts?
+  	|	ub
+  	|	wn?
+  	|	ym?
+  	)?
+  |	t(?>
+  		b
+  	|	ea?
+  	|	f(?>1|a|b|d[fsv]?|e|f|io|l|m[ad]|p|q|rs|t|x)?
+  	|	h(?:no)?
+  	|	i(?>ck|f)?
+  	|	kr?
+  	|	ls?
+  	|	m(?:db)?
+  	|	np
+  	|	oys
+  	|	pr?
+  	|	qdm
+  	|	sa?
+  	|	t[ks]?
+  	|	v
+  	)?
+  |	u(?>e|p|t(?:ils?)?)?
+  |	v(?>a|i[sz]|p|s)?
+  |	w(?>2v|av?|d|eb|g|iki|n)?
+  |	x(?>e|gb?|r(?:ay)?)
+  |	y(?>b|f|sq)
+  |	zf
+  )
   '''
 # ---

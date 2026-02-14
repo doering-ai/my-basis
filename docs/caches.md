@@ -15,8 +15,8 @@ All cache classes are built on Pydantic for validation and use generic typing fo
 ---
 maxdepth: 2
 ---
-my.caches.Cache
-my.caches.FileCache
-my.caches.NestedCache
-my.caches.PickleCache
+caches.Cache
+caches.FileCache
+caches.NestedCache
+caches.PickleCache
 ```

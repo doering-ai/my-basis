@@ -2,11 +2,14 @@
 ### HEAD ###
 ############
 ### STANDARD
+from typing import Literal
+from pathlib import Path
 
 ### EXTERNAL
 import pytest as pyt
 
 ### INTERNAL
+from my import typist
 from my.utils import SemanticUtils
 
 cls = SemanticUtils
@@ -16,6 +19,18 @@ cls = SemanticUtils
 ### BODY ###
 ############
 class TestSemanticUtils:
+    @staticmethod
+    def plural_test_data() -> list[tuple[str, str, str]]:
+        """Loads pluralization test data from a YAML file and returns it as a list of tuples.
+
+        Returns:
+            A list of `(category, plural, singular)` tuples.
+        """
+        file = Path(__file__).parent / 'plural_tests.yaml'
+        assert file.exists(), f'Test data file not found: {file}'
+        data: dict[str, list[list[str]]] = typist.from_file(file)
+        return [(category, item[0], item[1]) for category, items in data.items() for item in items]
+
     # ------------------
     # `0` ROMAN NUMERALS
     # ------------------
@@ -95,50 +110,17 @@ class TestSemanticUtils:
             (1000000, 'mem', 6, '1.000MB'),
         ],
     )
-    def test_format_amount(self, amount: int, unit: str, width: int, expected: str):
+    def test_format_amount(
+        self, amount: int, unit: Literal['num', 'mem'], width: int, expected: str
+    ):
         assert unit in {'num', 'mem'}
         assert cls.format_amount(amount, unit, width) == expected
 
     # -----------------
     # `2` PLURALIZATION
     # -----------------
-    @pyt.mark.parametrize(
-        'plural, expected',
-        [
-            # Singletons
-            ('un', 'un'),
-            ('sub', 'sub'),
-            ('network', 'network'),
-            ('knowledge', 'knowledge'),
-            # Irregulars
-            ('media', 'media'),
-            ('species', 'species'),
-            ('people', 'person'),
-            ('synopses', 'synopsis'),
-            ('genera', 'genus'),
-            ('busses', 'bus'),
-            ('gasses', 'gas'),
-            # Archaics
-            ('indices', 'index'),
-            ('vertices', 'vertex'),
-            ('phenomena', 'phenomenon'),
-            ('data', 'datum'),
-            ('anima', 'animum'),  # Latin 'a' to 'um' pattern
-            # Regulars
-            ('cities', 'city'),
-            ('berries', 'berry'),
-            ('boxes', 'box'),
-            ('classes', 'class'),
-            ('leaves', 'leaf'),
-            ('lives', 'lif'),  # Regex gives 'lif', not 'life'
-            ('elves', 'elf'),
-            ('dogs', 'dog'),
-            ('cats', 'cat'),
-            # Edge cases
-            ('CITIES', 'city'),  # Case-insensitive
-        ],
-    )
-    def test_to_singular(self, plural: str, expected: str):
+    @pyt.mark.parametrize('category, plural, expected', plural_test_data())
+    def test_to_singular(self, category: str, plural: str, expected: str):
         assert cls.to_singular(plural) == expected
 
     def test_to_singular_invalid(self):

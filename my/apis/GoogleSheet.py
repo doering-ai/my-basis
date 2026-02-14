@@ -3,29 +3,32 @@
 ############
 ### STANDARD
 from typing import Any, ClassVar
+from types import FunctionType
 import functools as ft
 import itertools as it
+import logging
+from pathlib import Path
 
 ### EXTERNAL
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials as OAuthCredentials
-from google_auth_oauthlib.flow import InstalledAppFlow
-from googleapiclient.discovery import build
-from google.auth.external_account_authorized_user import Credentials as TokenCredentials
-import logfire as fire
-import pandas as pd
 
 ### INTERNAL
 from ..utils import ut
 from .Environment import env
 
-DataFrame = pd.DataFrame
+try:
+    from google.auth.transport.requests import Request
+    from google.oauth2.credentials import Credentials as OAuthCredentials
+    from google_auth_oauthlib.flow import InstalledAppFlow
+    from googleapiclient.discovery import build
+    from google.auth.external_account_authorized_user import Credentials as TokenCredentials
+    import pandas as pd
 
-############
-### DATA ###
-############
-MY_CREDS = env.path('MY_CREDS', '~/my/.creds', mkdir=True)
-MY_CACHE = env.path('MY_CACHE', '~/my/.cache', mkdir=True)
+    INSTALLED = True
+except ImportError:
+    INSTALLED = False
+
+DataFrame = pd.DataFrame
+logger = logging.getLogger()
 
 
 ############
@@ -36,7 +39,7 @@ class GoogleSheet:
 
     Authentication is handled automatically via Google's [OAuth2.0 for Web Server Applications](https://developers.google.com/identity/protocols/oauth2/web-server)
     flow, which works by prompting the user to log in via an auto-launched browser window.
-    From there, this class handles token caching and refresh, storing credentials in the `$MY_CREDS`
+    From there, this class handles token caching and refresh, storing credentials in the `creds_dir`
     directory.
 
     ```{caution}
@@ -57,6 +60,10 @@ class GoogleSheet:
 
     INST: ClassVar['GoogleSheet|None'] = None
     SCOPES: ClassVar[list[str]] = ['https://www.googleapis.com/auth/spreadsheets']
+    LOGGER: ClassVar[logging.Logger] = logger
+
+    _CREDS_DIR: ClassVar[str] = ''
+    _CACHE_DIR: ClassVar[str] = ''
 
     # Metadata
     uid: str = ''
@@ -79,6 +86,18 @@ class GoogleSheet:
         """Initialize the GoogleSheet singleton."""
         self.worksheets = []
 
+    @staticmethod
+    def _import_guard[F: FunctionType](fn: F) -> F:
+        @ft.wraps(fn)
+        def _wfn(*args, **kwargs):
+            if not INSTALLED:
+                name = fn.__name__
+                raise ImportError(f'`utils.{name}()` requires the optional `[metrics]` dependency.')
+            return fn(*args, **kwargs)
+
+        return _wfn  # ty: ignore
+
+    @_import_guard
     def connect(self, uid: str) -> None:
         """Connect to a Google Sheet via its sheet ID, loading its conents into local memory.
 
@@ -96,6 +115,7 @@ class GoogleSheet:
         _worksheets = [ws['properties'] for ws in info['sheets']]
         self.worksheets = [ws['title'] for ws in sorted(_worksheets, key=lambda ws: ws['index'])]
 
+    @_import_guard
     def disconnect(self) -> None:
         """Disconnect from the current Google Sheet, clearing all cached data and freeing memory."""
         # I. Disconnect on their end
@@ -111,12 +131,13 @@ class GoogleSheet:
         self.name = ''
         self.worksheets = []
 
-        fire.info('Closed Google Sheets connection.')
+        self.LOGGER.info('Closed Google Sheets connection.')
 
     # -------------------
     # `-` Private Methods
     # -------------------
     @staticmethod
+    @_import_guard
     def serialize_data(
         data: DataFrame,
         header: bool = True,
@@ -132,7 +153,7 @@ class GoogleSheet:
             A list of lists representing the DataFrame.
         """
         df = data.copy().reset_index()
-        values = df.fillna('').astype(str).values.tolist()
+        values = df.fillna('').astype(str).to_numpy().tolist()
         if header:
             values = [df.columns.tolist(), *values]
         if not index:
@@ -140,6 +161,7 @@ class GoogleSheet:
         return values
 
     @staticmethod
+    @_import_guard
     def deserialize_data(values: list[list], header: bool = True, index: str = '') -> DataFrame:
         """Deserialize a list of lists from the Google Sheets API into a pandas DataFrame.
 
@@ -161,10 +183,11 @@ class GoogleSheet:
             df = DataFrame(values)
 
         if index:
-            df.set_index(index, inplace=True)
+            df = df.set_index(index)
         return df.fillna('').ffill()
 
     @staticmethod
+    @_import_guard
     def shape_to_range(shape: tuple[int, int], start: str = 'A1') -> str:
         """Convert a shape (width, height) into an A1-style range string.
 
@@ -208,6 +231,7 @@ class GoogleSheet:
     # -------------------
     # `+` Primary Methods
     # -------------------
+    @_import_guard
     def genexec(self, endpoint: str, **kwargs: Any) -> dict[str, Any]:
         """Generic executor for Google Sheets API endpoints (relatively rare).
 
@@ -220,6 +244,7 @@ class GoogleSheet:
         fn = getattr(self.sheets, endpoint)
         return fn(spreadsheetId=self.uid, **kwargs).execute()
 
+    @_import_guard
     def exec(self, endpoint: str, **kwargs: Any) -> dict[str, Any]:
         """Generic executor for Google Sheets API `values` endpoints (most data operations).
 
@@ -232,8 +257,9 @@ class GoogleSheet:
         fn = getattr(self.values, endpoint)
         return fn(spreadsheetId=self.uid, **kwargs).execute()
 
+    @_import_guard
     def auth(self) -> None:
-        """Authenticate with Google APIs, caching tokens locally in the `$MY_CREDS` dir.
+        """Authenticate with Google APIs, caching tokens locally in `creds_dir`.
 
         If the user already has credentials stored on disk, those are read by this method and no
         unnecessary work is performed. The credentials are automatically refreshed if necessary &
@@ -243,7 +269,7 @@ class GoogleSheet:
         """
         assert self.SCOPES, 'Must provide at least one scope to authenticate with Google APIs.'
         did_change = False
-        gcreds_dir = MY_CREDS / 'google'
+        gcreds_dir = self.creds_dir / 'google'
         gcreds_dir.mkdir(parents=True, exist_ok=True)
         creds_file = gcreds_dir / 'google_credentials.json'
         token_file = gcreds_dir / 'google_token.json'
@@ -258,7 +284,7 @@ class GoogleSheet:
                     creds.refresh(Request())
                     did_change = True
                 except Exception:
-                    fire.info('Failed to refresh credentials!')
+                    self.LOGGER.info('Failed to refresh credentials!')
                     creds = None
         else:
             creds = None
@@ -287,6 +313,16 @@ class GoogleSheet:
         return bool(self.uid)
 
     @ft.cached_property
+    def creds_dir(self) -> Path:
+        """Get the directory where credentials are stored, creating it if it doesn't exist."""
+        return env.path('MY_CREDS', self._CREDS_DIR or '~/my/.creds', mkdir=True)
+
+    @ft.cached_property
+    def cache_dir(self) -> Path:
+        """Get the directory where cache files are stored, creating it if it doesn't exist."""
+        return env.path('MY_CACHE', self._CACHE_DIR or '~/my/.cache', mkdir=True)
+
+    @ft.cached_property
     def sheets(self) -> Any:
         """Build and return the Google Sheets API client."""
         if self.gcreds is None:
@@ -301,6 +337,7 @@ class GoogleSheet:
         """Return the Google Sheets API `values` resource."""
         return self.sheets.values()
 
+    @_import_guard
     def read(
         self,
         worksheet: str,
@@ -321,6 +358,7 @@ class GoogleSheet:
         response = self.exec('get', range=f'{worksheet}!{cells}')
         return self.deserialize_data(response['values'], header=header, index=index)
 
+    @_import_guard
     def batch_read(self, *args: str, **kwargs: dict[str, Any]) -> dict[str, DataFrame]:
         """Load multiple worksheets/ranges from the given google sheet via the Google Sheets API.
 
@@ -350,6 +388,7 @@ class GoogleSheet:
 
         return ret
 
+    @_import_guard
     def clear(self, worksheet: list[str] | str, cells: list[str] | str = '') -> None:
         """Clear the given range(s) from the Google Sheet.
 
@@ -363,7 +402,7 @@ class GoogleSheet:
         if isinstance(worksheet, str):
             assert isinstance(cells, str)
             self.exec('clear', range=f'{worksheet}!{cells}')
-            fire.info(f'Successfully cleared range {worksheet}!{cells}')
+            self.LOGGER.info(f'Successfully cleared range {worksheet}!{cells}')
         else:
             if cells:
                 assert isinstance(cells, list)
@@ -373,8 +412,9 @@ class GoogleSheet:
             else:
                 ranges = worksheet
             response = self.exec('batchClear', body=dict(ranges=ranges))
-            fire.info(f'Successfully cleared ranges {response["clearedRanges"]}.')
+            self.LOGGER.info(f'Successfully cleared ranges {response["clearedRanges"]}.')
 
+    @_import_guard
     def write(self, worksheet: str, data: DataFrame, cells: str = 'A1:Z', **kwargs) -> None:
         """Write data to a single worksheet in the Google Sheet.
 
@@ -390,8 +430,9 @@ class GoogleSheet:
             valueInputOption='RAW',
             body={'values': self.serialize_data(data, **kwargs)},
         )
-        fire.info(f'Successfully updated range {response["updatedRange"]}')
+        self.LOGGER.info(f'Successfully updated range {response["updatedRange"]}')
 
+    @_import_guard
     def batch_write(self, **kwargs: DataFrame) -> None:
         """Write multiple DataFrames to the Google Sheet in a single batch operation.
 
@@ -399,32 +440,32 @@ class GoogleSheet:
             **kwargs: A maping from cell ranges to `DataFrame` objects.
         """
         requests = []
-        with fire.span(f'Writing {len(kwargs)} ranges to {self.name}...'):
-            # I. Build the requests, adding on cell info where needed
-            for target, df in kwargs.items():
-                header = False
-                index = False
-                if not ut.has_any(target, '!', ':'):
-                    h, w = df.shape
-                    target += f'!{self.shape_to_range((w + 1, h + 1))}'
-                    header = True
-                    index = True
-                elif 'A1' in target:
-                    header = True
-                    index = True
+        # I. Build the requests, adding on cell info where needed
+        for target, df in kwargs.items():
+            header = False
+            index = False
+            if not ut.has_any(target, '!', ':'):
+                h, w = df.shape
+                target += f'!{self.shape_to_range((w + 1, h + 1))}'
+                header = True
+                index = True
+            elif 'A1' in target:
+                header = True
+                index = True
 
-                requests.append(
-                    dict(
-                        range=target,
-                        values=self.serialize_data(df, header=header, index=index),
-                    )
+            requests.append(
+                dict(
+                    range=target,
+                    values=self.serialize_data(df, header=header, index=index),
                 )
+            )
 
-            # II. Issue the batch request
-            response = self.exec('batchUpdate', body=dict(valueInputOption='RAW', data=requests))
-            for resp in response['responses']:
-                fire.info(f'Successfully updated range {resp["updatedRange"]}')
+        # II. Issue the batch request
+        response = self.exec('batchUpdate', body=dict(valueInputOption='RAW', data=requests))
+        for resp in response['responses']:
+            self.LOGGER.info(f'Successfully updated range {resp["updatedRange"]}')
 
+    @_import_guard
     def add_worksheets(self, *args: str, **kwargs: Any) -> None:
         """Add new worksheets to the Google Sheet.
 
@@ -448,7 +489,7 @@ class GoogleSheet:
             if name not in self.worksheets:
                 self.worksheets.append(name)
 
-        fire.info(f'Created {len(worksheets)} new worksheets in {self.name}')
+        self.LOGGER.info(f'Created {len(worksheets)} new worksheets in {self.name}')
 
 
 gsheet = GoogleSheet()

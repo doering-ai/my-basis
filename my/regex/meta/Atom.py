@@ -2,7 +2,7 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import Self, Any
+from typing import Self, Any, ClassVar
 from collections.abc import Generator
 import functools as ft
 
@@ -26,6 +26,9 @@ class Atom(pyd.BaseModel):
     context of the original expression that contains them.
     """
 
+    GroupAtom: ClassVar[type['Atom']]
+    SetAtom: ClassVar[type['Atom']]
+
     data: str = r''
 
     # -------------------
@@ -38,6 +41,14 @@ class Atom(pyd.BaseModel):
         else:
             kwargs['data'] = str(data)
         super().__init__(*args, **kwargs)
+
+    @classmethod
+    def __init_subclass__(cls) -> None:
+        name = cls.__name__
+        if name == 'GroupAtom':
+            Atom.GroupAtom = cls
+        elif name == 'SetAtom':
+            Atom.SetAtom = cls
 
     @classmethod
     def plain_atomize(cls, expr: str) -> Generator[Self]:
@@ -89,7 +100,21 @@ class Atom(pyd.BaseModel):
         return self.data == str(other)
 
     def __lt__(self, other: object) -> bool:
-        return self.data < str(other)
+        if isinstance(other, Atom):
+            _o = other.base
+        elif other is None:
+            _o = ''
+        else:
+            _o = str(other)
+
+        if self.base == _o:
+            if self != other:
+                if isinstance(other, Atom):
+                    return self.quantifier < other.quantifier
+                else:
+                    return True
+            return False
+        return self.base < _o
 
     def __contains__(self, item: object) -> bool:
         return str(item) in self.data
@@ -155,7 +180,7 @@ class Atom(pyd.BaseModel):
     # ------------
     # `*2` Methods
     # ------------
-    def quantify(self, quantifier: str | Quantifier, overwrite: bool = True) -> Self | None:
+    def quantify(self, quantifier: str | Quantifier, overwrite: bool = True) -> 'Atom':
         """Create a copy of this atom with the given quantifier applied.
 
         Args:
@@ -168,19 +193,19 @@ class Atom(pyd.BaseModel):
         new = Quantifier(quantifier)
         if overwrite:
             return cls(f'{self.base}{new}')
-        elif self.quantifier == new and new in ('?', '*', '+', ''):
+        elif self.quantifier == new and (not new or new[0] in '?*+'):
             return self
-        elif (joined := self.quantifier | new) is not None:
+        elif (joined := self.quantifier.join(new)) is not None:
             return cls(f'{self.base}{joined}')
         else:
-            return None
+            return Atom.GroupAtom(rf'(?:{self.data}){new}')
 
-    def as_optional(self) -> Self | None:
+    def as_optional(self) -> 'Atom':
         """Generate a copy of this atom with its quantifier made optional (default `r'?'`)."""
         return self.quantify(r'?', overwrite=False)
 
     def as_required(self) -> Self:
         """Generate a copy of this atom with its quantifier made non-optional (default `r''`)."""
         ret = self.quantify(self.quantifier.as_required(), overwrite=True)
-        assert ret is not None
+        assert ret is not None and isinstance(ret, self.__class__)
         return ret

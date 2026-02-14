@@ -17,6 +17,9 @@ cls = Atom
 ### BODY ###
 ############
 class TestAtom:
+    def __repr__(self):
+        return 'TestAtom'
+
     # -------------------
     # `.` Initial Methods
     # -------------------
@@ -110,8 +113,8 @@ class TestAtom:
     @pyt.mark.parametrize(
         'expr, expected',
         boolmap(
-            true=[r'a?', r'a*', r'a{0,5}'],
-            false=[r'a', r'a+', r'a{1,5}'],
+            true=[r'a?', r'a*', r'a{0,5}', r'a??', r'a*+', r'a*?'],
+            false=[r'a', r'a+', r'a{1,5}', r'a+?', r'a+?'],
         ),
     )
     def test_is_optional(self, expr: str, expected: bool):
@@ -121,27 +124,101 @@ class TestAtom:
     # `*2` Methods
     # ------------
     @pyt.mark.parametrize(
-        'expr, quantifier, overwrite, expected',
+        'q0, q1, expected',
         [
-            (r'a', r'+', True, r'a+'),
-            (r'a', r'*', True, r'a*'),
-            (r'a', r'?', True, r'a?'),
-            (r'a+', r'*', True, r'a*'),
-            (r'a+', r'?', True, r'a?'),
-            (r'a+', r'+', True, r'a+'),
-            (r'a', r'{2,5}', True, r'a{2,5}'),
-            (r'a{2,5}', r'?', True, r'a?'),
-            (r'a{1,5}', r'?', False, r'a{0,5}'),
-            (r'a{2,5}', r'?', False, None),
+            # ---- Simple + Simple ----
+            (r'', r'', r''),
+            (r'?', r'', r'?'),
+            (r'', r'?', r'?'),
+            (r'?', r'?', r'?'),
+            # ---- Simple + Basic ----
+            (r'', r'+', r'+'),
+            (r'', r'*', r'*'),
+            (r'?', r'+', r'*'),
+            (r'?', r'*', r'*'),
+            # ---- Simple + Ranged ----
+            (r'', r'{0,1}', r'{0,1}'),
+            (r'', r'{,1}', r'{,1}'),
+            (r'', r'{2,5}', r'{2,5}'),
+            (r'', r'{2,}', r'{2,}'),
+            (r'?', r'{0,1}', r'{0,1}'),
+            (r'?', r'{,1}', r'{,1}'),
+            (r'?', r'{2,5}', r'{2,5}'),
+            (r'?', r'{1,}', r'*'),
+            # ---- Basic + Simple ----
+            (r'*', r'', r'*'),
+            (r'*', r'?', r'*'),
+            (r'+', r'', r'+'),
+            (r'+', r'?', r'*'),
+            # ---- Basic + Basic ----
+            (r'*', r'*', r'*'),
+            (r'*', r'+', r'*'),
+            (r'+', r'*', r'*'),
+            (r'+', r'+', r'+'),
+            # ---- Basic + Ranged ----
+            (r'*', r'{5,6}', r'*'),
+            (r'*', r'{0,6}', r'*'),
+            (r'+', r'{5,6}', r'+'),
+            (r'+', r'{0,6}', r'*'),
+            # ---- Ranged + Simple ----
+            (r'{1}', r'', r''),
+            (r'{1}+', r'', r'{1}+'),
+            (r'{1}', r'?', r'?'),
+            (r'{1}+', r'?+', r'?+'),
+            (r'{1,}', r'?', r'*'),
+            (r'{1,5}', r'?', r'{,5}'),
+            (r'{2,5}', r'?', None),
+            (r'{11,5}', r'?', None),
+            (r'{,5}', r'?', r'{,5}'),
+            # ---- Ranged + Basic ----
+            (r'{1}?', r'*?', r'*?'),
+            (r'{1,}', r'*', r'*'),
+            (r'{,1}', r'*', r'*'),
+            (r'{1,5}', r'*', r'*'),
+            (r'{2,5}', r'*', None),
+            (r'{1}+', r'++', r'++'),
+            (r'{1,}', r'+', r'+'),
+            (r'{,1}', r'+', r'*'),
+            (r'{1,5}', r'+', r'+'),
+            (r'{2,5}', r'+', r'{2,}'),
+            # ---- Ranged + Ranged ----
+            (r'{1}+', r'{0,1}', r'?+'),
+            (r'{1}+', r'{,1}', r'?+'),
+            (r'{1}+', r'{2,5}', r'{2,5}+'),
+            (r'{2,5}', r'{2,5}', r'{4,25}'),
+            (r'{1,5}', r'{2,5}', r'{2,25}'),
+            (r'{1,}', r'{2,10}', r'{2,}'),
+            (r'{1,10}', r'{2,}', r'{2,}'),
+            # ---- Possessive / Lazy ----
+            (r'*+', r'*', r'*+'),
+            (r'{1}?', r'+?', r'+?'),
+            (r'{1,}+', r'*+', r'*+'),
+            (r'??', r'', r'??'),
+            (r'?+', r'', r'?+'),
+            (r'', r'??', r'??'),
+            (r'', r'?+', r'?+'),
+            (r'', r'{2,}+', r'{2,}+'),
+            (r'?', r'{0,1}?', r'{0,1}?'),
+            (r'*?', r'+?', r'*?'),
+            (r'*+', r'*+', r'*+'),
+            (r'++', r'*+', r'*+'),
+            (r'+?', r'+?', r'+?'),
+            (r'++', r'+?', None),
         ],
     )
-    def test_quantify(self, expr: str, quantifier: str, overwrite: bool, expected: str | None):
-        old = cls(expr)
-        new = old.quantify(quantifier, overwrite)
+    def test_quantify(self, q0: str, q1: str, expected: str | None):
+        old = cls(rf'a{q0}')
+        new = old.quantify(q1, overwrite=False)
         if expected is None:
-            assert new is None
+            assert new.quantifier == q1
+            assert new.is_group and new.base[:-1].endswith(q0)
         else:
-            assert new == expected
+            assert new.quantifier == expected
+
+    def test_quantify__overwrite(self):
+        old = cls(r'a{1,5}')
+        new = old.quantify(r'?', overwrite=True)
+        assert new == r'a?'
 
     @pyt.mark.parametrize(
         'expr, expected',
@@ -149,7 +226,7 @@ class TestAtom:
             (r'a', r'a?'),
             (r'a+', r'a*'),
             (r'a*', r'a*'),
-            (r'a{1,5}', r'a{0,5}'),
+            (r'a{1,5}', r'a{,5}'),
             (r'(?:abc)', r'(?:abc)?'),
             (r'(?:abc)+', r'(?:abc)*'),
         ],
@@ -167,6 +244,7 @@ class TestAtom:
             (r'a{0,5}', r'a{1,5}'),
             (r'(?:abc)?', r'(?:abc)'),
             (r'(?:abc)*', r'(?:abc)+'),
+            (r'a?+', r'a{1}+'),
         ],
     )
     def test_as_required(self, expr: str, expected: str):

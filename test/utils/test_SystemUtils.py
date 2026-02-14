@@ -24,12 +24,6 @@ class TestSystemUtils:
 
         - test_terminal_linewrap        (requires TextUtils)
         - test_confirm                  (requires user input)
-        - test_setup_py_logging         (creates files, complex setup)
-        - test_setup_fire_logging       (requires Logfire token)
-        - test_setup_logging            (requires complex setup)
-        - test_setup_metrics            (requires environment variables, Prometheus setup)
-        - test_measure_context          (requires complex contextmanager setup)
-        - test_monitor                  (wrapper around logfire.instrument)
         - test_print_in_color           (requires zsh subprocess)
     """
 
@@ -138,51 +132,3 @@ class TestSystemUtils:
             assert contains in result
         else:
             assert result == text or result == ''
-
-    # -----------
-    # `3` LOGGING
-    # -----------
-    def test_get_package_name(self):
-        name = cls.get_package_name()
-        assert isinstance(name, str)
-        assert len(name) > 0
-
-    def test_setup_warnings(self):
-        original = cls.WARNINGS_SETUP
-        try:
-            cls.WARNINGS_SETUP = False
-            cls.setup_warnings()
-            assert cls.WARNINGS_SETUP is True
-            # Running again should be idempotent
-            cls.setup_warnings()
-            assert cls.WARNINGS_SETUP is True
-        finally:
-            cls.WARNINGS_SETUP = original
-
-    # -----------
-    # `4` METRICS
-    # -----------
-    def test_instrument_sync(self):
-        counter = {'test_func': 0}
-
-        def test_func():
-            return sum(range(100))
-
-        instrumented = cls._instrument(test_func, counter)
-        result = instrumented()
-
-        assert result == sum(range(100))
-        assert counter['test_func'] >= 0
-
-    @pyt.mark.asyncio
-    async def test_instrument_async(self):
-        counter = {'async_test': 0}
-
-        async def async_test():
-            return 42
-
-        instrumented = cls._instrument(async_test, counter)
-        result = await instrumented()
-
-        assert result == 42
-        assert counter['async_test'] >= 0

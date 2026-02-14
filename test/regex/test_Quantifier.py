@@ -20,13 +20,14 @@ class TestQuantifier:
     @pyt.mark.parametrize(
         'lhs, rhs, expected',
         [
-            (r'{2,3}', r'{3,4}', None),
+            (r'{2,3}', r'{3,4}', r'{6,12}'),
             (r'{2,3}', r'?', None),
-            (r'{1,3}', r'?', r'{0,3}'),
+            (r'{1,3}', r'?', r'{,3}'),
             (r'+', r'+', r'+'),
         ],
     )
     def test_join(self, lhs: str, rhs: str, expected: str | None):
+        """Mostly tested in `TestAtom.test_quantify`."""
         ret = cls(lhs).join(rhs)
         if expected is None:
             assert ret is None
@@ -40,8 +41,8 @@ class TestQuantifier:
             (r'?', r'?'),
             (r'*', r'*'),
             (r'+', r'*'),
-            (r'{1,}', r'{0,}'),
-            (r'{1,5}', r'{0,5}'),
+            (r'{1,}', r'*'),
+            (r'{1,5}', r'{,5}'),
             (r'{2,}', None),
             (r'{2,5}', None),
         ],
@@ -90,9 +91,9 @@ class TestQuantifier:
     @pyt.mark.parametrize(
         'data, expected',
         boolmap(
-            true=[r'*', r'?', r'{0,}', r'{4,5}'],
-            false=[r'*?', r'{0,}?', r'{2,3}?'],
+            true=[r'*?', r'{0,}?', r'{2,3}?'],
+            false=[r'*', r'?', r'{0,}', r'{4,5}'],
         ),
     )
-    def test_is_greedy(self, data: str, expected: bool):
-        assert cls(data).is_greedy == expected
+    def test_is_lazy(self, data: str, expected: bool):
+        assert cls(data).is_lazy == expected

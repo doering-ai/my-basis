@@ -21,6 +21,8 @@ from ..typing import Typist, MyType
 # Create a local typist with the most permissive possible configuration.
 typist = Typist(firsts=True, atomics=True, splits=True, wraps=True)
 
+re.DEFAULT_VERSION = re.VERSION1
+
 
 ############
 ### BODY ###

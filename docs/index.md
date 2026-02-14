@@ -22,11 +22,11 @@ The package is organized into seven subpackages, which are (in rough order from 
 ---
 maxdepth: 2
 ---
-1. My Utilities <my.utils>
-2. Type Casting <my.typing>
-3. Useful Types <my.types>
-4. Regex Stores <my.regex>
-5. Local Caches <my.caches>
-6. API Wrappers <my.apis>
-7. File Formats <my.files>
+1. My Utilities <utils>
+2. Type Casting <typing>
+3. Useful Types <types>
+4. Regex Stores <regex>
+5. Local Caches <caches>
+6. API Wrappers <apis>
+7. File Formats <files>
 ```

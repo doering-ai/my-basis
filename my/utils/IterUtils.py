@@ -14,13 +14,13 @@ from collections.abc import (
     Sequence,
     MutableSequence,
 )
-from collections import Counter, defaultdict, deque
+from collections import Counter, defaultdict
 import functools as ft
 
 ### EXTERNAL
 import more_itertools as mi
 
-### INTERNAL
+### INTERNAL (NOTE: If adding new internal imports, update the comments in `__init__.py`)
 from ..infra import Series
 
 
@@ -60,11 +60,11 @@ class IterUtils:
         if not value:
             pass
         elif (fn := getattr(value, 'items', None)) and callable(fn):
-            return list(fn())
+            return list(fn())  # type: ignore
         elif isinstance(value, Iterable):
             series = list(value)
             if all(isinstance(v, tuple) and len(v) == 2 for v in series):
-                return series
+                return series  # type: ignore
         return []
 
     @classmethod
@@ -147,7 +147,14 @@ class IterUtils:
         cls, container: Iterable[T0 | T1], t0: type[T0], t1: type[T1]
     ) -> tuple[list[T0], list[T1]]:
         """Partition a container into two lists based on type."""
-        return tuple(map(list, mi.partition(lambda x: isinstance(x, type), container)))
+        ret = cls.multi_partition(
+            container,
+            t0=lambda x: isinstance(x, t0),
+            t1=lambda x: isinstance(x, t1),
+        )
+        r0: list[T0] = ret.get('t0', [])  # type: ignore
+        r1: list[T1] = ret.get('t1', [])  # type: ignore
+        return r0, r1
 
     @classmethod
     def bucket[K: Hashable, T](cls, items: Iterable[T], pred: Callable[[T], K]) -> dict[K, list[T]]:
@@ -314,7 +321,7 @@ class IterUtils:
         func: Callable[[T0], T1] | Callable[[K], T1],
         data: Mapping[K, T0] | Iterable[tuple[K, T0]] | Iterable[K],
         drop=False,
-    ) -> dict[K, T1]:
+    ) -> dict:
         """Map a function over values in a mapping or iterable, returning new dictionary.
 
         Args:
@@ -327,7 +334,7 @@ class IterUtils:
         if not data:
             return {}
         elif cls.is_map(data):
-            ret = {key: func(val) for key, val in cls.map_items(data)}
+            ret = {key: func(val) for key, val in cls.map_items(data)}  # type: ignore
         else:
             ret = {key: func(key) for key in data}  # type:ignore
 
@@ -559,7 +566,7 @@ class IterUtils:
             return ret
 
     @classmethod
-    def exclusive_elements[H: Hashable, S: type[Sequence] = list](
+    def exclusive_elements[H: Hashable, S: Sequence = list](
         cls,
         lhs: S,
         rhs: Iterable[H],
@@ -585,7 +592,7 @@ class IterUtils:
             if counter[value] <= 0:
                 ret.append(value)
                 counter[value] -= 1
-        return tvar(ret)
+        return tvar(ret)  # type: ignore
 
     # ----------------
     # `6` MODIFICATION
@@ -600,6 +607,8 @@ class IterUtils:
         Returns:
             List with elements at masked indices removed.
         """
+        if not mask:
+            return list(data)
         return [item for i, item in enumerate(data) if i not in mask]
 
     @classmethod

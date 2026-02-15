@@ -5,6 +5,8 @@
             "sublime_lib",
             "pydantic",
             "pydantic-core",
+            "annotated-types",
+            "eval_type_backport",
             "more-itertools",
             "typing-extensions",
             "regex"

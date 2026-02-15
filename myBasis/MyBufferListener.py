@@ -5,27 +5,31 @@
 # Standard
 # --------
 from __future__ import annotations
-# from typing import TYPE_CHECKING
-# if TYPE_CHECKING:
-# from collections.abc import Iterator
+from typing import ClassVar, TypeVar, Generic, TYPE_CHECKING
 
 # --------
 # External
 # --------
-import sublime as sb
+if TYPE_CHECKING:
+    import sublime as sb
 import sublime_plugin as sbp
 
 # --------
 # Internal
 # --------
+from .CommandArguments import CommandArguments
 from ._MyBase import MyBase
+
+_I = TypeVar('_I', bound=CommandArguments)
+
+# ruff: noqa: UP046
 
 
 ############
 ### BODY ###
 ############
-class MyTextListener(sbp.EventListener, MyBase, autobind=False):
-    """A base class for any commands that trigger automatically (rather than being called direcly).
+class MyBufferListener(Generic[_I], MyBase[_I], sbp.TextChangeListener):  # pyright: ignore
+    """A base class for any commands that trigger automatically (rather than being called directly).
 
     For a list of available events you can attach to with `on_EVENT` methods, see
     `constants.EVENTS`.
@@ -34,6 +38,8 @@ class MyTextListener(sbp.EventListener, MyBase, autobind=False):
     though it is only async 'behind the scenes', so-to-speak. To run `asyncio` code, choose one of
     those functions and wrap your logic in `asyncio.run()`.
     """
+
+    _ALLOW_OVERRIDES: ClassVar[bool] = True
 
     # -------------------
     # `.` Initial Methods

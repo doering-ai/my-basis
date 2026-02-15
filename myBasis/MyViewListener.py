@@ -1,0 +1,61 @@
+############
+### HEAD ###
+############
+# --------
+# Standard
+# --------
+from __future__ import annotations
+from typing import ClassVar, TypeVar, Generic, TYPE_CHECKING
+
+# --------
+# External
+# --------
+if TYPE_CHECKING:
+    import sublime as sb
+import sublime_plugin as sbp
+
+# --------
+# Internal
+# --------
+from .CommandArguments import CommandArguments
+from ._MyBase import MyBase
+
+_I = TypeVar('_I', bound=CommandArguments)
+
+# ruff: noqa: UP046
+
+
+############
+### BODY ###
+############
+class MyViewListener(Generic[_I], MyBase[_I], sbp.ViewEventListener):
+    """A base class for any commands that trigger automatically (rather than being called directly).
+
+    For a list of available events you can attach to with `on_EVENT` methods, see
+    `constants.EVENTS`.
+
+    All the events mentioned in `constants.ASYNCABLE_EVENTS` have an `on_EVENT_async` variant,
+    though it is only async 'behind the scenes', so-to-speak. To run `asyncio` code, choose one of
+    those functions and wrap your logic in `asyncio.run()`.
+    """
+
+    _ALLOW_OVERRIDES: ClassVar[bool] = True
+
+    # -------------------
+    # `.` Initial Methods
+    # -------------------
+    def __init__(self, view: sb.View) -> None:
+        """Initialize this class."""
+        self.view = view
+
+    # -------------------
+    # `-` Private Methods
+    # -------------------
+
+    # -------------------
+    # `+` Primary Methods
+    # -------------------
+
+    # ------------------
+    # `x` Public Methods
+    # ------------------

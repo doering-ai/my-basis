@@ -13,18 +13,18 @@ urls = { Homepage = "https://gitlab.com/doering-thinking-machines/libs/sublime/b
 ### II. DEPENDENCIES ###
 ########################
 dependencies = [
-    "more-itertools>=10.5.0",
-    "pydantic>=2.10.6",
-    "regex>=2024.11.6",
+  "more-itertools>=10.5.0",
+  "pydantic>=2.10.6",
+  "regex>=2024.11.6",
 ]
 
 [dependency-groups]
 dev = [
-    "ruff>=0.14.14",
-    "ty>=0.0.14",
-    "sublime-stubs",
-    "types-regex>=2024.11.6.20241221",
-    "typing-extensions>=4.13.2",
+  "ruff>=0.14.14",
+  "ty>=0.0.14",
+  "sublime-stubs",
+  "types-regex>=2024.11.6.20241221",
+  "typing-extensions>=4.13.2",
 ]
 
 
@@ -36,12 +36,26 @@ requires = ["uv_build>=0.8.13,<0.9.0"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]
-module-name = "mySublimeBasis"
+module-name = "myBasis"
 module-root = ""
 namespace = true
 
 [tool.uv.sources]
 sublime-stubs = { path = "../_stubs", editable = true }
 
+#############################
+### IV. DEVELOPMENT TOOLS ###
+#############################
 [tool.ruff]
 target-version = "py38"
+
+[tool.pyright]
+strictListInference = true
+strictDictInference = true
+strictSetInference = true
+enableReachabilityAnalysis = false
+reportImportCycles = "warning"
+reportDeprecated = "warning"
+reportUnusedVariable = false
+reportUnreachable = false
+reportMissingModuleSource = false

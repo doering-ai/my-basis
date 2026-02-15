@@ -2,15 +2,25 @@
 ### HEAD ###
 ############
 ### STANDARD
+from __future__ import annotations
+from typing import TYPE_CHECKING
 
 ### EXTERNAL
+if TYPE_CHECKING:
+    import regex as re
 
 ### INTERNAL
-
+from .utils import Utils
 
 ############
 ### DATA ###
-############
+############k
+NO_ESC = r'(?<![^\\]\\)(?<!\\{3})'
+
+RGXS: dict[str, re.Pattern] = Utils.rgx_dict(
+    snake_separators=r'(?<=[[:alnum:]])_(?=[[:alnum:]])',
+)
+
 EVENTS = dict(
     views=['init'],
     none=['exit'],

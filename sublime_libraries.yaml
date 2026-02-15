@@ -1,0 +1,261 @@
+annotated-types: Reusable constraint types to use with typing.Annotated.
+
+anytree: Python Anytree module
+
+arrow: Arrow is a Python library that offers a sensible and human-friendly approach
+    to creating, manipulating, formatting and converting dates, times and timestamps.
+
+backrefs: Backrefs regular expression wrapper.
+
+bashlex: Python parser for bash
+
+beautifulsoup4: Beautiful Soup is a Python library for pulling data out of HTML and
+    XML files - https://www.crummy.com/software/BeautifulSoup
+
+better_settings: Easily implement OS, Host and OS/Host-level settings aside the normal
+    user-level settings for any plugin.
+
+boto3: Python boto3 module for Amazon Web Services
+
+bracex: Bracex creates arbitrary strings via brace expansion much like Bash's.
+
+bson: Independent BSON codec for Python that doesn’t depend on MongoDB - https://github.com/py-bson/bson
+
+bz2: Python bz2 module
+
+cffi: Foreign Function Interface for Python calling C code.
+
+channelmanager: Manages packages installed as git submodules
+
+chardet: The Universal Character Encoding Detector
+
+charset-normalizer: The Real First Universal Charset Detector. Open, modern and actively
+    maintained alternative to Chardet.
+
+ckdl: KDL reading and writing using a C backend
+
+codemp: codemp - collaborative editing library
+
+coloraide: A color library.
+
+concurrentloghandler: An additional concurrent file log handler for Python's standard
+    logging package
+
+coverage: Code coverage testing for Python
+
+crypt: Python crypt module
+
+cson: A Coffescript Object Notation (CSON) parser for Python - https://github.com/avakar/pycson
+
+debugtools: Alternate simplified logging support and general utilities functions
+
+dicttoxml: Converts a Python dictionary or other native data type into a valid XML
+    string - https://github.com/idleberg/sublime-dicttoxml
+
+diffmatchpatch: Autored by Neil Fraser and others, Diff Match Patch is a high-performance
+    library in multiple languages that manipulates plain text
+
+enum: Python enum module
+
+eval-type-backport: Like `typing._eval_type`, but lets older Python versions use newer
+    typing features.
+
+gateone-terminal: GateOne terminal
+
+gntp: Growl Notification Transport Protocol library.
+
+golangconfig: A library for Go environment configuration
+
+idna: Internationalized Domain Names in Applications (IDNA)
+
+jedi: Jedi is a static analysis tool for Python that is typically used in IDEs/editors
+    plugins
+
+jieba: A Chinese text segementation lib.
+
+Jinja2: Python Jinja2 module
+
+jmespath: JSON Matching Expressions
+
+jsonschema: An(other) implementation of JSON Schema for Python
+
+llm_runner: Sublime LLM Communication Core
+
+lsp_utils: Module with LSP-related utilities"
+
+lxml: lxml
+
+Markdown: Python Markdown module
+
+MarkupSafe: MarkupSafe implements a text object that escapes characters so it is safe
+    to use in HTML and XML.
+
+mdpopups: Markdown Popups for Sublime
+
+more-itertools: More routines for operating on iterables, beyond itertools
+
+natsort: Simple yet flexible natural sorting in Python.
+
+newterm: Open a terminal to a specific folder and optionally set environment variables
+
+numpy: NumPy is the fundamental package for scientific computing with Python.
+
+oauthlib: Python oauthlib module
+
+orjson: orjson is a fast, correct JSON library for Python.
+
+package_events: Allows Sublime Text packages to emit and listen for events
+
+package_setting_context: Allow final user to disable key bindings with very few changes
+    needed from the dev
+
+paramiko: Python implementation of the SSHv2 protocol - http://paramiko-www.readthedocs.org/en/latest/index.html
+
+parso: Parso is a Python parser that supports error recovery and round-trip parsing
+    for different Python versions (in multiple Python versions).
+
+pathlib: Python pathlib module
+
+pathtools: Path utilities for Python https://pypi.python.org/pypi/pathtools
+
+pexpect: Python pexpect module
+
+pillow: Pillow is the friendly PIL fork by Jeffrey A. Clark and contributors. PIL
+    is the Python Imaging Library by Fredrik Lundh and contributors.
+
+plantumlconnection: Python interface to a plantuml web service instead of having to
+    run Java locally
+
+portalockerfile: An extended version of portalocker to lock files in Python using
+    the with statement
+
+psutil: Python psutil module
+
+ptyprocess: Launch a subprocess in a pseudo terminal (pty), and interact with both
+    the process and its pty.
+
+pycparser: Complete C99 parser in pure Python
+
+PyCrypto: Python Cryptography Toolkit - https://www.dlitz.net/software/pycrypto
+
+pycryptodome: PyCryptodome is a self-contained Python package of low-level cryptographic
+    primitives.
+
+pydantic: Data validation using Python type hints.
+
+pydantic-core: Core functionality for Pydantic validation and serialization.
+
+pyfispip: Python FIS MTM/PIP SQL/RPC Interface
+
+pygments: Python pygments module
+
+pymdown-extensions: PyMdown Extensions for Python Markdown
+
+pymdownx: PyMdown Extensions for Python Markdown
+
+pyserial: Python serial port access library
+
+pysimdjson: Python bindings for the simdjson project, a SIMD-accelerated JSON parser.
+
+pyte: An in memory VTXXX-compatible terminal emulator
+
+python-dateutil: The dateutil module provides powerful extensions to the datetime
+    module available in the Python standard library
+
+python-docx: Create, read, and update Microsoft Word .docx files.
+
+pytz: Python pytz module
+
+pywin32: Pywin32 module
+
+pywinpty: Python winpty module
+
+pyyaml: Python PyYAML module
+
+pyzmq: Python ZMQ module
+
+regex: Alternative regular expression module, to replace re.
+
+requests: Python HTTP for Humans.
+
+requests-oauthlib: OAuthlib authentication support for Requests.
+
+resumeback: Python resumeback module
+
+ruamel.yaml: Python ruamel.yaml module
+
+ruamel.yaml.clib: C version of reader, parser and emitter for ruamel.yaml derived
+    from libyaml
+
+rx: Reactive extensions for Python
+
+sassc: Sassc binaries
+
+screeninfo: Fetch location and size of physical screens - https://github.com/rr-/screeninfo
+
+select-windows: Python select module for Sublime Text 2 on Windows
+
+shellenv: Access a user's environmental variables as defined in their shell
+
+six: Six is a Python 2 and 3 compatibility library.
+
+soupsieve: A modern CSS selector implementation for Beautiful Soup. - https://github.com/facelessuser/soupsieve
+
+speg: A PEG-based parser interpreter with memoization - https://github.com/avakar/speg
+
+sqlite3: Python _sqlite3 module
+
+StyledPopup: Pyton module for Sublime Text to automatically style popups based on
+    active color scheme.
+
+sublime_aio: AsyncIO for Sublime Text
+
+sublime_lib: Utility library for frequently used functionality in Sublime Text library
+    and convenience functions or classes
+
+SublimeP4Python: Python module for the Perforce API, extracted from https://pypi.python.org/pypi/P4Python.
+
+tabulate: Python tabulate module
+
+tiktoken: tiktoken is a fast BPE tokeniser for use with OpenAI's models.
+
+TM1py: Python module for interfacing with IBM TM1 Planning Analytics
+
+toml: Python lib for TOML
+
+toolz: A functional standard library for Python.
+
+tornado: Tornado is a Python web framework and asynchronous networking library.
+
+tree-sitter: Python bindings to the Tree-sitter parsing library
+
+tree-sitter-languages: Binary Python wheels for all tree sitter languages.
+
+typing: Python typing module
+
+typing-extensions: Backported and Experimental Type Hints for Python 3.8+
+
+typing-inspection: Provides tools to inspect type annotations at runtime.
+
+urllib3: HTTP library with thread-safe connection pooling, file post, and more.
+
+vision: Vision is a minihtml generation library for Sublime Text that enforces minihtml
+    restrictions for tags, styles and attrivutes
+
+watchdog: Python library and shell utilities to monitor filesystem events.
+
+wcmatch: Python wcmatch module which provides enhanced file globbing and matching
+
+wcwidth: Python wcwidth module
+
+websocket-client: WebSocket client for Python with low level API options
+
+websockets: websockets is a library for building WebSocket servers and clients in
+    Python with a focus on correctness, simplicity, robustness, and performance.
+
+xdotool: Automation tool on Linux
+
+xmltodict: Makes working with XML feel like you are working with JSON - https://github.com/martinblech/xmltodict
+
+yaml_macros_engine: Engine for YAML Macros
+

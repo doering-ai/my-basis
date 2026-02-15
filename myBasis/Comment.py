@@ -3,7 +3,8 @@
 ############
 # STANDARD
 from __future__ import annotations
-from typing import Union
+from typing import Union, TYPE_CHECKING
+from typing_extensions import Self
 import functools as ft
 
 # EXTERNAL
@@ -11,6 +12,8 @@ import sublime as sb
 import pydantic as pyd
 
 # INTERNAL
+if TYPE_CHECKING:
+    from .utils import Utils
 
 
 ############
@@ -20,18 +23,37 @@ import pydantic as pyd
 class Comment(pyd.BaseModel):
     """Represents source code comment consisting of one or more lines of text."""
 
-    # Dependent
-    lines: list[sb.Region] = []
-    texts: list[str] = []
+    # ---- Dependent ----
+    #: The raw positions of each line included in this comment (when it was created, at least).
+    #: Callers are responsible for shifting these values whenever the file changes.
+    lines: list[Utils.RegionField] = []
+
+    #: The row and column where the first line of the comment starts.
+    #: Callers are responsible for shifting these values whenever the file changes.
     row: int = 1
+
+    #: The column where the first line of the comment starts.
+    #: Callers are responsible for shifting this value whenever the file changes.
     col: int = 1
 
-    # Independent
-    mark: str = '#'
+    # ---- Independent ----
+    #: The content of each line of content without initial whitespace & punctuation
+    texts: list[str] = []
+
+    #: The character(s) recognized by the containing syntax as line comment markers
+    punct: str = '#'
 
     # -------------------
     # `.` Initial Methods
     # -------------------
+    @pyd.model_validator(mode='after')
+    def validate_comment(self) -> Self:
+        """Ensures that the comment data is consistent and valid."""
+        if (h := self.height) != len(self.texts):
+            raise ValueError(
+                f'Number of lines ({h}) must match number of texts ({len(self.texts)}).'
+            )
+        return self
 
     # -------------------
     # `-` Private Methods
@@ -67,7 +89,7 @@ class Comment(pyd.BaseModel):
     def __str__(self) -> str:
         indent = ' ' * (self.col - 1)
         return '\n'.join(
-            indent + (text if text.startswith(self.mark) else f'{self.mark} {text}')
+            indent + (text if text.startswith(self.punct) else f'{self.punct} {text}')
             for text in self.texts
         )
 
@@ -75,7 +97,7 @@ class Comment(pyd.BaseModel):
         r0: int
         r1: int
         if isinstance(other, Comment):
-            r0, r1 = other.row, other.row + other.n_lines
+            r0, r1 = other.row, other.row + other.height
         elif isinstance(other, int):
             r0, r1 = other, other + 1
         elif isinstance(other, tuple) and len(other) == 2:
@@ -85,7 +107,7 @@ class Comment(pyd.BaseModel):
             raise NotImplementedError(f'Cannot check containment of Comment with {type(other)}.')
 
         assert r0 < r1, f'Invalid region to check containment ({r0}, {r1}).'
-        return self.row <= r0 and self.row + self.n_lines >= r1
+        return self.row <= r0 and self.row + self.height >= r1
 
     def __add__(self, other: object) -> Comment:
         if not isinstance(other, Comment):
@@ -110,7 +132,7 @@ class Comment(pyd.BaseModel):
                 texts=self.texts[key : key + 1],
                 row=self.row + key,
                 col=self.col,
-                mark=self.mark,
+                punct=self.punct,
             )
         else:
             return cls(
@@ -118,7 +140,7 @@ class Comment(pyd.BaseModel):
                 texts=self.texts[key],
                 row=self.row + (key.start or 0),
                 col=self.col,
-                mark=self.mark,
+                punct=self.punct,
             )
 
     # ---------------
@@ -140,7 +162,7 @@ class Comment(pyd.BaseModel):
         return sb.Region(self.start, self.end) if self else sb.Region(0, 0)
 
     @property
-    def n_lines(self) -> int:
+    def height(self) -> int:
         """The number of lines in the comment."""
         return len(self.lines)
 
@@ -154,4 +176,4 @@ class Comment(pyd.BaseModel):
     # ------------
     def follows(self, other: Comment) -> bool:
         """Returns True if this comment immediately follows the other comment."""
-        return self.row == other.row + other.n_lines and self.col == other.col
+        return self.row == other.row + other.height and self.col == other.col

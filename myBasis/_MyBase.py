@@ -1,14 +1,12 @@
 ############
 ### HEAD ###
 ############
-# --------
-# Standard
-# --------
+### STANDARD
 from __future__ import annotations
 import warnings
-from typing import ClassVar, TypeVar, Any, Union, TYPE_CHECKING
-from typing_extensions import TypeGuard  # noqa: UP035
-from collections.abc import Callable
+from typing import ClassVar, TypeVar, Any, Union, Generic, Type, get_args, get_origin, TYPE_CHECKING
+from typing_extensions import TypeGuard
+from collections.abc import Callable, Sequence
 from pathlib import Path
 import inspect
 import functools as ft
@@ -16,31 +14,27 @@ import itertools as it
 import contextlib as ctx
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator, Sequence
+    from .StaticPrompt import StaticPrompt
+    from collections.abc import Iterator
 
-# --------
-# External
-# --------
+### EXTERNAL
 import sublime_plugin as sbp
 import sublime as sb
 import regex as re
-import pydantic as pyd
 import more_itertools as mi
-from pydantic.main import PydanticDescriptorProxy
 
-# --------
-# Internal
-# --------
+### INTERNAL
 from .Comment import Comment
-from .Header import Header
-from .StaticInterface import StaticInterface
+from .CommandArguments import CommandArguments
+
+if TYPE_CHECKING:
+    from .utils import Utils
 
 ############
 ### META ###
 ############
 Function = TypeVar('Function', bound=Callable)
-Interface = sbp.CommandInputHandler
-PydanticMetaclass = type(pyd.BaseModel)
+InputHandler = sbp.CommandInputHandler
 SublimeBases = (
     sbp.Command,
     sbp.EventListener,
@@ -54,29 +48,27 @@ SublimeBase = Union[
     sbp.TextChangeListener,
 ]
 
+# pyright: reportSelfClsParameterName=false
+# ruff: noqa: UP035, UP006
+
 
 class _CustomNamespace(dict):
     def __setitem__(self, key: str, new: object) -> None:
         if (old := self.get(key, None)) is not None and new is not old:
             # I. Keep whichever one is a property getter/setter (rather than a member variable)
-            if isinstance(old, property):
-                assert not isinstance(new, property), f'Got two properties: {old=}, {new=}'
+            if isinstance(new, property):
+                pass
+            elif isinstance(old, property):
                 return
-            elif isinstance(new, property):
-                self.pop(key)
-            elif isinstance(old, PydanticDescriptorProxy):
-                # II. Manually re-implement Pydantic's _ModelNamespaceDict
-                #     (Not great, but we're stuck in Python 3.8 anyway)
-                _deco = old.decorator_info.decorator_repr
-                warnings.warn(f'`{key}` overrides an existing Pydantic `{_deco}` decorator')  # noqa: B028
 
         return super().__setitem__(key, new)
 
 
-class Meta(PydanticMetaclass):
+class Meta(type):
     """Metaclass that wraps all methods whose argument is a View, Buffer, or Window."""
 
     CACHED_TYPES: ClassVar[set[type]] = {sb.View, sb.Buffer, sb.Window, sb.Edit}
+    ALLOWED_NAMES: ClassVar[re.Pattern] = re.compile(r'^([^_].*|__init__)$')
 
     @classmethod
     def __prepare__(cls, *args: Any, **kwargs: Any) -> dict[str, Any]:
@@ -85,38 +77,42 @@ class Meta(PydanticMetaclass):
 
     @classmethod
     def __new__(
+        metacls,  # noqa: N804
         cls,
         clsname: str,
         bases: tuple[type, ...],
         namespace: dict[str, Any],
         /,
-        explicit_interface: Sequence[str] | set[str] | None = None,
-        autobind: bool = True,
+        autobind: Sequence[str] | set[str] | bool = True,
         **kwargs: Any,
     ) -> type:
         """Wraps methods to store relevant argument(s)."""
-        if autobind and (sublime_bases := [b for b in bases if issubclass(b, SublimeBase)]):
-            for name, value in namespace.items():
-                # I. Wrap methods from base classes
-                if Meta.do_bind_method(value, name, explicit_interface, sublime_bases):
-                    namespace[name] = Meta.bind_method(value)
+        if autobind is not False:
+            if sublime_bases := [
+                b for b in bases if isinstance(b, type) and issubclass(b, SublimeBases)
+            ]:
+                for name, value in namespace.items():
+                    # I. Wrap methods from base classes
+                    if cls.do_bind_method(value, name, autobind, sublime_bases):
+                        namespace[name] = cls.bind_method(value)
 
-        # Pass everything else along to Pydantic
+        # Pass everything else along to type
         return super().__new__(cls, clsname, bases, namespace, **kwargs)
 
-    @staticmethod
+    @classmethod
     def do_bind_method(
+        cls,
         method: Any,
         name: str,
-        interface: Sequence[str] | set[str] | None,
+        autobind: Sequence[str] | set[str] | bool | None,
         sublime_bases: list[type[SublimeBase]],
     ) -> TypeGuard[Callable]:
-        if not name or not method or not callable(method) or name.startswith('_'):
+        if not callable(method) or not cls.ALLOWED_NAMES.match(name):
             # I.i. Filter out obviously invalid attributes, like non-methods
             return False
-        elif interface:
+        elif autobind and isinstance(autobind, (Sequence, set)):
             # I.ii. If the user supplied an override, only use that
-            return name in interface
+            return name in autobind
         elif sublime_bases and not any(name in base.__dict__ for base in sublime_bases):
             # I.iii. If the method is not from a Sublime base class, ignore it
             return False
@@ -132,8 +128,8 @@ class Meta(PydanticMetaclass):
 
             # II.ii. Determine if any parameters are named-like or annotated-as a relevant type
             names, annotations = map(set, mi.unzip(params[1:]))
-            _cnames, _ctypes = Meta.cache_details()
-            return (names & _cnames) or (annotations & _ctypes)
+            _cnames, _ctypes = cls.cache_details()
+            return bool(names & _cnames) or bool(annotations & _ctypes)
 
         except Exception:
             # III. Obviously, any unexpected failures mean 'no'
@@ -142,20 +138,19 @@ class Meta(PydanticMetaclass):
             )
             return False
 
-    @staticmethod
-    def bind_method(method: Function) -> Function:
+    @classmethod
+    def bind_method(cls, method: Function) -> Function:
         """Wraps a method to store its first argument if it's a View, Buffer, or Window."""
 
         @ft.wraps(method)
         def wrapper(self: MyBase, *args: Any, **kwargs: Any) -> Any:
-            # with Metaclass.context(self, *args, *kwargs.values()):
-            Meta.cache_args(self, args, kwargs)
+            cls.cache_args(self, args, kwargs)
             return method(self, *args, **kwargs)
 
-        return wrapper  # ty:ignore[invalid-return-type]
+        return wrapper  # type:ignore[invalid-return-type]
 
     @staticmethod
-    def cache_args(self: MyBase, args: tuple[Any, ...], kwargs: dict[str, Any]) -> None:
+    def cache_args(self: MyBase, args: tuple, kwargs: dict) -> None:
         for name, arg in it.chain((('', a) for a in args), kwargs.items()):
             if isinstance(arg, list) and (name == 'views'):
                 self.views = arg
@@ -184,49 +179,82 @@ class Meta(PydanticMetaclass):
             yield
         finally:
             self.views = None
+            self.view = None
             self.buffer = None
             self.window = None
             self.edit = None
 
 
+_I = TypeVar('_I', bound=CommandArguments)
+
+
 ############
 ### BODY ###
 ############
-class MyBase(sbp.Command, pyd.BaseModel, metaclass=Meta):
+class MyBase(sbp.Command, Generic[_I], metaclass=Meta):  # noqa: UP046
     """A base class for Sublime Text commands with utilities for comment handling."""
 
-    _view: sb.View | None = None
-    _views: list[sb.View] | None = None
-    _buffer: sb.Buffer | None = None
-    _window: sb.Window | None = None
-    _edit: sb.Edit | None = None
+    _view: Utils.ViewField | None = None
+    _views: list[Utils.ViewField] | None = None
+    _buffer: Utils.BufferField | None = None
+    _window: Utils.WindowField | None = None
+    _edit: Utils.EditField | None = None
 
-    _interface: Interface | None = None
-
-    kwargs: dict = {}
+    _ALLOW_OVERRIDES: ClassVar[bool] = False
+    Interface: ClassVar[Type[_I]]  # pyright: ignore
+    prompt: StaticPrompt | None = None
+    _args: _I | None = None
 
     # -------------------
     # `.` Initial Methods
     # -------------------
-    def store_args(
-        self,
-        _interface: Interface | StaticInterface | None = None,
-        **kwargs: Any,
-    ) -> None:
-        """Set up the command with the given keyword arguments."""
-        self.kwargs = kwargs
-        for key in set(kwargs.keys()) & set(self.model_fields.keys()):
-            setattr(self, key, kwargs[key])
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
 
-        if _interface is not None:
-            assert self._interface is None, 'Got multiple interfaces; only one is allowed.'
-            if isinstance(_interface, StaticInterface):
-                _interface = _interface.generate_input_handler()()
-            self._interface = _interface
+    def run(self, *args: Any, **kwargs: Any) -> None:
+        """Run the command with the given keyword arguments."""
+        if args:
+            Meta.cache_args(self, args, kwargs)
+        self.args = self.Interface(**kwargs)
 
-    def input(self, args: dict[str, Any]) -> Interface | None:
-        """Overrides Command.input() to identify an attached input handler (if present)."""
-        return self._interface
+    @classmethod
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        for base in getattr(cls, '__orig_bases__', ()):
+            origin = get_origin(base)
+            if origin is MyBase or (isinstance(origin, type) and issubclass(origin, MyBase)):
+                args = get_args(base)
+                if args and isinstance(args[0], type) and issubclass(args[0], CommandArguments):
+                    cls.Interface = args[0]  # type: ignore
+
+        if not getattr(cls, 'Interface', None):
+            cls.Interface = CommandArguments  # type: ignore
+
+    def input(self, args: dict[str, Any]) -> InputHandler | None:
+        """Prompt the user for input before running this command.
+
+        It's very likely that your command just needs one or more pieces of basic text input, in
+        which case you can set a default value for the `prompt` member variable.
+
+        To add a *dynamic* input handler to your command, just override this command with one that
+        returns a `sbp.TextInputHandler` (for a textarea) or a `sbp.ListInputHandler` (for a
+        dropdown).
+
+        The results of your input (as specified by the `name` property) can be found in
+        `self.kwargs`; just like other command arguments, you can specify a member variable with
+        the same name in your class to have it automatically filled with the input value.
+        """
+        return self.prompt.generate_input_handler()() if self.prompt else None
+
+    @property
+    def args(self) -> _I:
+        """The arguments passed to this command, as an instance of the `Interface` class."""
+        assert self._args is not None, 'Called args-dependent method without setting `args`.'
+        return self._args
+
+    @args.setter
+    def args(self, new_args: _I) -> None:
+        self._args = new_args
 
     # -------------------
     # `-` Private Methods
@@ -265,38 +293,22 @@ class MyBase(sbp.Command, pyd.BaseModel, metaclass=Meta):
 
         return Comment(**data)
 
-    def _raw_comment_iter(self, pos: int = 0) -> Iterator[Comment]:
+    def _raw_comment_iter(self, start: int = 0, end: int = 0) -> Iterator[Comment]:
+        end = end or self.view.size()
         for region in self.view.find_by_selector('comment.line'):
-            if region and (pos <= 0 or region.begin() >= pos):
+            if region and region.begin() <= start < end <= region.end():
                 yield self._parse_comment(region)
 
     def _yield_comment(
-        self, comment: Comment, target: int = 0, window: bool = False
+        self, comment: Comment, target: int = 0, windowed: bool = False
     ) -> Iterator[Comment]:
         n = comment.n_lines
         if target > 0 and n != target:
-            if window and (n_windows := n - target + 1) > 0:
+            if windowed and (n_windows := n - target + 1) > 0:
                 for i in range(n_windows):
                     yield comment[i : i + target]
         else:
             yield comment
-
-    def header_iter(self, level: int = 1, pos: int = 0) -> Iterator[Header]:
-        """Iterate through the header comments found in this file.
-
-        Args:
-            level: The header level to filter by (-1 for any, 0 for BASE, 1 for sections).
-            pos: The position in the file to start searching from.
-        Yields:
-            Objects representing three-line header comments in this file, in order.
-        """
-        assert -1 <= level <= 1, f'Invalid level: {level}'
-
-        for comment in self.comment_iter(pos=pos, target=3, windowed=True):
-            assert comment.n_lines == 3, 'Comment must have exactly 3 lines to be a header.'
-            t0, _, t2 = comment.texts
-            if Header._are_delims(t0, t2, level):
-                yield Header.new(comment, level)
 
     # -------------------
     # `+` Primary Methods
@@ -343,7 +355,9 @@ class MyBase(sbp.Command, pyd.BaseModel, metaclass=Meta):
 
     def comment_iter(
         self,
-        pos: int = 0,
+        /,
+        start: int = 0,
+        end: int = 0,
         target: int = 0,
         windowed: bool = False,
     ) -> Iterator[Comment]:
@@ -360,7 +374,7 @@ class MyBase(sbp.Command, pyd.BaseModel, metaclass=Meta):
         _yield = ft.partial(self._yield_comment, target=target, windowed=windowed)
 
         # Rely on Sublime Text's syntax system to find (non-block) comments
-        for cur in self._raw_comment_iter(pos):
+        for cur in self._raw_comment_iter(start=start, end=end):
             if queued is None:
                 queued = cur
             elif cur.follows(queued):
@@ -393,7 +407,7 @@ class MyBase(sbp.Command, pyd.BaseModel, metaclass=Meta):
 
     @views.setter
     def views(self, new_views: list[sb.View] | None) -> None:
-        if self._views is not None and new_views is not None:
+        if new_views is not None and self._views is not None and not self._ALLOW_OVERRIDES:
             err = f'{self.classname} received a new list of views before the old ones were cleaned.'
             assert len(self._views) == len(new_views), err
             assert all(v0 is v1 for v0, v1 in zip(self._views, new_views)), err  # noqa: B905
@@ -415,25 +429,41 @@ class MyBase(sbp.Command, pyd.BaseModel, metaclass=Meta):
 
     @view.setter
     def view(self, new_view: sb.View | None) -> None:
-        self.views = [new_view] if new_view is not None else None
+        self._view = new_view
+        if self._view is None:
+            pass
+        elif not self._views:
+            self._views = [self._view]
+        else:
+            assert self._view in self._views, (
+                f'{self.classname} received a new view that is not in the current views list.'
+            )
 
     def _infer_views(self) -> None:
         if self._views is not None:
-            pass
+            return
         elif self._buffer is not None:
             self._views = self._buffer.views()
         elif self._window is not None:
             self._views = self._window.views()
+        elif self._view is not None:
+            self._views = [self._view]
 
     def _infer_view(self) -> None:
         if self._view is not None:
-            pass
-        elif self.has_window() and (_v := self.window.active_view()):
-            self._view = _v
-        elif self.has_buffer():
-            self._view = self.buffer.primary_view()
-        elif self.has_views() and len(self.views) > 0:
+            return
+        elif self._views is not None and len(self._views) == 1:
             self._view = self.views[0]
+        elif self._window is not None and (_v := self._window.active_view()):
+            self._view = _v
+        elif self._buffer is not None:
+            self._view = self._buffer.primary_view()
+        elif self._views is not None and len(self._views) > 0:
+            warnings.warn(
+                f'{self.classname} has multiple views but no view set; defaulting to the first.',
+                stacklevel=3,
+            )
+            self._view = self._views[0]
 
     def has_views(self) -> bool:
         """Whether this command currently has a View handle."""
@@ -443,26 +473,33 @@ class MyBase(sbp.Command, pyd.BaseModel, metaclass=Meta):
 
     def has_view(self) -> bool:
         """Whether this command currently has a View handle."""
-        return self.has_views() and len(self.views) >= 1
+        if self._view is None:
+            self._infer_view()
+        return self._view is not None
 
     @property
-    def regions(self) -> Iterator:
+    def regions(self) -> Iterator[sb.Region]:
         """The regions currently selected in the view."""
         yield from self.view.sel()
 
     @property
-    def points(self) -> Iterator:
+    def points(self) -> Iterator[int]:
         """The starting points of the currently selected regions in the view."""
         yield from (region.begin() for region in self.regions)
 
     @property
-    def lines(self) -> Iterator:
+    def lines(self) -> Iterator[sb.Region]:
+        """All lines intersecting with all selections in the the view."""
+        yield from mi.unique_justseen(mi.flatten(map(self.view.lines, self.regions)))
+
+    @property
+    def first_lines(self) -> Iterator[sb.Region]:
         """The first lines of the currently selected regions in the view."""
-        yield from (region.lines()[0] for region in self.regions)
+        yield from map(self.view.full_line, self.points)
 
     @property
     def selection(self) -> sb.Selection:
-        """The current selection object of the view."""
+        """The currently selected text, which is essentially just a collection of regions."""
         return self.view.sel()
 
     @property
@@ -473,14 +510,12 @@ class MyBase(sbp.Command, pyd.BaseModel, metaclass=Meta):
     @property
     def syntax(self) -> str:
         """The simplified syntax of the current view."""
-        syntax = self.local_settings.get('syntax', '').lower()
-        parts = set(syntax.split('.'))
-        if 'python' in parts:
-            return 'py'
-        elif parts & {'typescript', 'javascript'}:
-            return 'ts'
-        else:
-            return syntax
+        return self.view_settings.get('syntax', '').lower()
+
+    def syntax_is(self, *args: str) -> bool:
+        """Whether the current view's syntax matches any of the given ones."""
+        syn = self.syntax
+        return any(arg in syn for arg in args)
 
     # ----------------------
     # `x2` BUFFER PROPERTIES
@@ -493,7 +528,19 @@ class MyBase(sbp.Command, pyd.BaseModel, metaclass=Meta):
 
     @buffer.setter
     def buffer(self, val: sb.Buffer | None) -> None:
-        if self._buffer is not None and val is not None:
+        if val is None:
+            pass
+        elif self._ALLOW_OVERRIDES:
+            self.views = val.views()
+            if self._view not in self.views:
+                warnings.warn(
+                    f"{self.classname} set to a buffer that doesn't relate to its current view.",
+                    stacklevel=3,
+                )
+            self._view = val.primary_view()
+            self._window = None
+
+        elif self._buffer is not None:
             assert self._buffer is val, (
                 f'{self.classname} received a new view object before the old one was cleaned.'
             )
@@ -503,8 +550,15 @@ class MyBase(sbp.Command, pyd.BaseModel, metaclass=Meta):
     def infer_buffer(self) -> None:
         if self._buffer is not None:
             return
-        elif self.has_view():
-            self._buffer = self.view.buffer()
+        elif self._view is None:
+            if self._views is not None and len(self._views) == 1:
+                self._view = self._views[0]
+            elif self._window is not None and len(self._window.views()) == 1:
+                self._views = self._window.views()
+                self._view = self._views[0]
+
+        if self._view is not None:
+            self._buffer = self._view.buffer()
 
     def has_buffer(self) -> bool:
         """Whether this command currently has a Buffer handle."""
@@ -517,7 +571,7 @@ class MyBase(sbp.Command, pyd.BaseModel, metaclass=Meta):
     def window(self) -> sb.Window:
         """The Window associated with this command."""
         if self._window is None:
-            self.infer_window()
+            self._infer_window()
         assert self._window is not None, (
             'Called window-dependent method without setting `window` or `view`.'
         )
@@ -525,23 +579,29 @@ class MyBase(sbp.Command, pyd.BaseModel, metaclass=Meta):
 
     @window.setter
     def window(self, val: sb.Window | None) -> None:
-        if self.has_window() and val is not None:
+        if self.has_window() and val is not None and not self._ALLOW_OVERRIDES:
             assert self._window is val, (
                 f'{self.classname} received a new window object before the old one was cleaned.'
             )
             return
         self._window = val
 
-    def infer_window(self) -> None:
+    def _infer_window(self) -> None:
         if self._window is not None:
             return
-        elif self.has_view():
-            self._window = self.view.window()
+        elif self._view is not None:
+            self._window = self._view.window()
+        elif self._views:
+            if len(self._views) > 1:
+                first = self._views[0].window()
+                if not all(view.window() is first for view in self._views[1:]):
+                    return
+            self._window = self._views[0].window()
 
     def has_window(self) -> bool:
         """Whether this command currently has a Window or View handle."""
         if self._window is None:
-            self.infer_window()
+            self._infer_window()
         return self._window is not None
 
     # --------------------
@@ -555,11 +615,7 @@ class MyBase(sbp.Command, pyd.BaseModel, metaclass=Meta):
 
     @edit.setter
     def edit(self, val: sb.Edit | None) -> None:
-        if self._edit is not None and val is not None:
-            assert self._edit is val, (
-                f'{self.classname} received a new edit object before the old one was cleaned.'
-            )
-            return
+        """Set the new value of edit, possibly overriding an old one."""
         self._edit = val
 
     def has_edit(self) -> bool:
@@ -598,3 +654,11 @@ class MyBase(sbp.Command, pyd.BaseModel, metaclass=Meta):
         settings = sb.load_settings(filename)
         yield settings
         sb.save_settings(filename)
+
+    def main(self) -> Any:
+        """The primary entry point for the command, executed when the command is.
+
+        Not marked abstract so that the abstract classes can be instantiated by
+        `sublime_plugin.load_module()`.
+        Sadly, there's no way to prevent this other than changing their code.
+        """

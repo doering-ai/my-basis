@@ -22,13 +22,11 @@ from ._MyBase import MyBase
 
 _I = TypeVar('_I', bound=CommandArguments)
 
-# ruff: noqa: UP046
-
 
 ############
 ### BODY ###
 ############
-class MyViewListener(Generic[_I], MyBase[_I], sbp.ViewEventListener):
+class _MyViewListener(Generic[_I], MyBase[_I], sbp.ViewEventListener):
     """A base class for any commands that trigger automatically (rather than being called directly).
 
     For a list of available events you can attach to with `on_EVENT` methods, see
@@ -59,3 +57,7 @@ class MyViewListener(Generic[_I], MyBase[_I], sbp.ViewEventListener):
     # ------------------
     # `x` Public Methods
     # ------------------
+    @property
+    def uid(self) -> str:
+        val = self._view.id() if self._view is not None else '-'
+        return f'{self.classname}[{val}]'

@@ -21,13 +21,11 @@ from ._MyBase import MyBase
 
 _I = TypeVar('_I', bound=CommandArguments)
 
-# ruff: noqa: UP046
-
 
 ############
 ### BODY ###
 ############
-class MyAppListener(Generic[_I], MyBase[_I], sbp.EventListener):
+class _MyAppListener(Generic[_I], MyBase[_I], sbp.EventListener):
     """A base class for any commands that trigger automatically (rather than being called directly).
 
     For a list of available events you can attach to with `on_EVENT` methods, see
@@ -55,3 +53,6 @@ class MyAppListener(Generic[_I], MyBase[_I], sbp.EventListener):
     # ------------------
     # `x` Public Methods
     # ------------------
+    @property
+    def uid(self) -> str:
+        return self.classname

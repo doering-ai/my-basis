@@ -23,13 +23,11 @@ from ._MyBase import MyBase
 
 _I = TypeVar('_I', bound=CommandArguments)
 
-# ruff: noqa: UP046
-
 
 ############
 ### BODY ###
 ############
-class MyWindowCommand(Generic[_I], MyBase[_I], sbp.WindowCommand):
+class _MyWindowCommand(Generic[_I], MyBase[_I], sbp.WindowCommand):
     """A Sublime Text 4 command that is instantiated once per Window.
 
     This class excels for tasks that relate to multiple tabs ('views') at once, whether that means
@@ -43,9 +41,10 @@ class MyWindowCommand(Generic[_I], MyBase[_I], sbp.WindowCommand):
     # -------------------
     # `.` Initial Methods
     # -------------------
-    def __init__(self, window: sb.Window) -> None:
+    def __init__(self, window: sb.Window, *args, **kwargs) -> None:
         """Initialize this class."""
         self.window = window
+        super().__init__(window, *args, **kwargs)
 
     # -------------------
     # `-` Private Methods
@@ -58,3 +57,7 @@ class MyWindowCommand(Generic[_I], MyBase[_I], sbp.WindowCommand):
     # ------------------
     # `x` Public Methods
     # ------------------
+    @property
+    def uid(self) -> str:
+        val = self._window.id() if self._window is not None else '-'
+        return f'{self.classname}[{val}]'

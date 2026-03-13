@@ -2,14 +2,18 @@
     "$schema": "sublime://packagecontrol.io/schemas/dependencies",
     "*": {
         ">=4096": [
-            "sublime_lib",
-            "pydantic",
-            "pydantic-core",
             "annotated-types",
             "eval_type_backport",
             "more-itertools",
-            "typing-extensions",
-            "regex"
+            "pydantic",
+            "pydantic-core",
+            "regex",
+            "ruamel.yaml",
+            "ruamel.yaml.clib",
+            "sublime_lib",
+            "toml",
+            "toolz",
+            "typing-extensions"
         ]
     }
 }

@@ -21,13 +21,11 @@ from ._MyBase import MyBase
 
 _I = TypeVar('_I', bound=CommandArguments)
 
-# ruff: noqa: UP046
-
 
 ############
 ### BODY ###
 ############
-class MyAppCommand(Generic[_I], MyBase[_I], sbp.ApplicationCommand):
+class _MyAppCommand(Generic[_I], MyBase[_I], sbp.ApplicationCommand):
     """A Sublime Text 4 command that is instantiated just once per application.
 
     There's literally zero new logic in this base class as opposed to Command, so this can
@@ -56,3 +54,6 @@ class MyAppCommand(Generic[_I], MyBase[_I], sbp.ApplicationCommand):
     # ------------------
     # `x` Public Methods
     # ------------------
+    @property
+    def uid(self) -> str:
+        return self.classname

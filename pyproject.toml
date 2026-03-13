@@ -16,6 +16,9 @@ dependencies = [
   "more-itertools>=10.5.0",
   "pydantic>=2.10.6",
   "regex>=2024.11.6",
+  "ruamel-yaml>=0.18.16",
+  "sublime-lib",
+  "toolz>=1.0.0",
 ]
 
 [dependency-groups]
@@ -25,6 +28,10 @@ dev = [
   "sublime-stubs",
   "types-regex>=2024.11.6.20241221",
   "typing-extensions>=4.13.2",
+  "types-xmltodict>=0.14.0.20241009",
+  "xmltodict>=0.15.0",
+  "annotated-types>=0.7.0",
+  "eval-type-backport>=0.3.1",
 ]
 
 
@@ -42,12 +49,22 @@ namespace = true
 
 [tool.uv.sources]
 sublime-stubs = { path = "../_stubs", editable = true }
+sublime-lib = { path = "../_lib" }
 
 #############################
 ### IV. DEVELOPMENT TOOLS ###
 #############################
 [tool.ruff]
 target-version = "py38"
+extend = '~/.config/ruff/pyproject.toml'
+exclude = ['.venv', 'venv', 'dist', '__pycache__']
+
+[tool.ruff.lint]
+ignore = ['UP', 'TC001', 'TC002', 'TC003', 'PT']
+
+[tool.ruff.lint.per-file-ignores]
+'test/**.py' = ['D']
+'tests/**.py' = ['D']
 
 [tool.pyright]
 strictListInference = true

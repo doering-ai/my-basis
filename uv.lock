@@ -15,6 +15,15 @@ wheels = [
 ]
 
 [[package]]
+name = "eval-type-backport"
+version = "0.3.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/fb/a3/cafafb4558fd638aadfe4121dc6cefb8d743368c085acb2f521df0f3d9d7/eval_type_backport-0.3.1.tar.gz", hash = "sha256:57e993f7b5b69d271e37482e62f74e76a0276c82490cf8e4f0dffeb6b332d5ed", size = 9445, upload-time = "2025-12-02T11:51:42.987Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/cf/22/fdc2e30d43ff853720042fa15baa3e6122722be1a7950a98233ebb55cd71/eval_type_backport-0.3.1-py3-none-any.whl", hash = "sha256:279ab641905e9f11129f56a8a78f493518515b83402b860f6f06dd7c011fdfa8", size = 6063, upload-time = "2025-12-02T11:51:41.665Z" },
+]
+
+[[package]]
 name = "more-itertools"
 version = "10.5.0"
 source = { registry = "https://pypi.org/simple" }
@@ -31,15 +40,22 @@ dependencies = [
     { name = "more-itertools" },
     { name = "pydantic" },
     { name = "regex" },
+    { name = "ruamel-yaml" },
+    { name = "sublime-lib" },
+    { name = "toolz" },
 ]
 
 [package.dev-dependencies]
 dev = [
+    { name = "annotated-types" },
+    { name = "eval-type-backport" },
     { name = "ruff" },
     { name = "sublime-stubs" },
     { name = "ty" },
     { name = "types-regex" },
+    { name = "types-xmltodict" },
     { name = "typing-extensions" },
+    { name = "xmltodict" },
 ]
 
 [package.metadata]
@@ -47,15 +63,22 @@ requires-dist = [
     { name = "more-itertools", specifier = ">=10.5.0" },
     { name = "pydantic", specifier = ">=2.10.6" },
     { name = "regex", specifier = ">=2024.11.6" },
+    { name = "ruamel-yaml", specifier = ">=0.18.16" },
+    { name = "sublime-lib", directory = "../_lib" },
+    { name = "toolz", specifier = ">=1.0.0" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "annotated-types", specifier = ">=0.7.0" },
+    { name = "eval-type-backport", specifier = ">=0.3.1" },
     { name = "ruff", specifier = ">=0.14.14" },
     { name = "sublime-stubs", editable = "../_stubs" },
     { name = "ty", specifier = ">=0.0.14" },
     { name = "types-regex", specifier = ">=2024.11.6.20241221" },
+    { name = "types-xmltodict", specifier = ">=0.14.0.20241009" },
     { name = "typing-extensions", specifier = ">=4.13.2" },
+    { name = "xmltodict", specifier = ">=0.15.0" },
 ]
 
 [[package]]
@@ -121,6 +144,34 @@ wheels = [
 ]
 
 [[package]]
+name = "ruamel-yaml"
+version = "0.18.16"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "ruamel-yaml-clib", marker = "platform_python_implementation == 'CPython'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/9f/c7/ee630b29e04a672ecfc9b63227c87fd7a37eb67c1bf30fe95376437f897c/ruamel.yaml-0.18.16.tar.gz", hash = "sha256:a6e587512f3c998b2225d68aa1f35111c29fad14aed561a26e73fab729ec5e5a", size = 147269, upload-time = "2025-10-22T17:54:02.346Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0f/73/bb1bc2529f852e7bf64a2dec885e89ff9f5cc7bbf6c9340eed30ff2c69c5/ruamel.yaml-0.18.16-py3-none-any.whl", hash = "sha256:048f26d64245bae57a4f9ef6feb5b552a386830ef7a826f235ffb804c59efbba", size = 119858, upload-time = "2025-10-22T17:53:59.012Z" },
+]
+
+[[package]]
+name = "ruamel-yaml-clib"
+version = "0.2.8"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/46/ab/bab9eb1566cd16f060b54055dd39cf6a34bfa0240c53a7218c43e974295b/ruamel.yaml.clib-0.2.8.tar.gz", hash = "sha256:beb2e0404003de9a4cab9753a8805a8fe9320ee6673136ed7f04255fe60bb512", size = 213824, upload-time = "2023-10-03T18:12:42.315Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/18/52/8dc27bbd9ef1d4695975b8dc132c27c431d0186037ad3c731a6dd1c154b9/ruamel.yaml.clib-0.2.8-cp38-cp38-macosx_10_9_x86_64.whl", hash = "sha256:1b617618914cb00bf5c34d4357c37aa15183fa229b24767259657746c9077615", size = 146177, upload-time = "2023-10-03T18:13:27.32Z" },
+    { url = "https://files.pythonhosted.org/packages/08/4c/5770b8f318fe404a455141a7a33a5568c27a1f944724e82354c8f3554db2/ruamel.yaml.clib-0.2.8-cp38-cp38-macosx_12_0_arm64.whl", hash = "sha256:a6a9ffd280b71ad062eae53ac1659ad86a17f59a0fdc7699fd9be40525153337", size = 133289, upload-time = "2023-10-03T18:13:28.463Z" },
+    { url = "https://files.pythonhosted.org/packages/5a/45/644d839c09c0717c2d7f26b705560ad74b3056085b3bc7f9c2ac2081317b/ruamel.yaml.clib-0.2.8-cp38-cp38-manylinux_2_24_aarch64.whl", hash = "sha256:305889baa4043a09e5b76f8e2a51d4ffba44259f6b4c72dec8ca56207d9c6fe1", size = 641518, upload-time = "2023-11-09T07:40:24.638Z" },
+    { url = "https://files.pythonhosted.org/packages/22/fa/b2a8fd49c92693e9b9b6b11eef4c2a8aedaca2b521ab3e020aa4778efc23/ruamel.yaml.clib-0.2.8-cp38-cp38-manylinux_2_5_x86_64.manylinux1_x86_64.whl", hash = "sha256:700e4ebb569e59e16a976857c8798aee258dceac7c7d6b50cab63e080058df91", size = 596029, upload-time = "2023-10-03T18:13:30.125Z" },
+    { url = "https://files.pythonhosted.org/packages/5c/f0/702e56e12497da7960ed8a6972e5edc50545757c40f1a86a41a5217da7e9/ruamel.yaml.clib-0.2.8-cp38-cp38-musllinux_1_1_i686.whl", hash = "sha256:e2b4c44b60eadec492926a7270abb100ef9f72798e18743939bdbf037aab8c28", size = 724558, upload-time = "2023-10-22T15:35:46.022Z" },
+    { url = "https://files.pythonhosted.org/packages/87/a6/efb1add3bac06c25aa4c8ff8c6d3e5e91c539f6600832dd63ff98e2b44cc/ruamel.yaml.clib-0.2.8-cp38-cp38-musllinux_1_1_x86_64.whl", hash = "sha256:e79e5db08739731b0ce4850bed599235d601701d5694c36570a99a0c5ca41a9d", size = 767665, upload-time = "2023-10-22T15:35:48.773Z" },
+    { url = "https://files.pythonhosted.org/packages/1d/fe/a638c3ad6e74f4b15c8c1aa7de61a0cfe58c629d48ea59cf07dce5eaee1e/ruamel.yaml.clib-0.2.8-cp38-cp38-win32.whl", hash = "sha256:955eae71ac26c1ab35924203fda6220f84dce57d6d7884f189743e2abe3a9fbe", size = 100578, upload-time = "2023-10-03T18:13:32.734Z" },
+    { url = "https://files.pythonhosted.org/packages/24/ce/6f587283caaff93d0b9cac2f244fcda686897e83401bb1aa91803db7bf94/ruamel.yaml.clib-0.2.8-cp38-cp38-win_amd64.whl", hash = "sha256:56f4252222c067b4ce51ae12cbac231bce32aee1d33fbfc9d17e5b8d6966c312", size = 118511, upload-time = "2023-10-03T18:13:35.308Z" },
+]
+
+[[package]]
 name = "ruff"
 version = "0.15.0"
 source = { registry = "https://pypi.org/simple" }
@@ -146,9 +197,31 @@ wheels = [
 ]
 
 [[package]]
+name = "sublime-lib"
+source = { directory = "../_lib" }
+
+[package.metadata]
+
+[package.metadata.requires-dev]
+lint = [
+    { name = "flake8", specifier = ">=3.9.2" },
+    { name = "mypy", specifier = ">=0.720" },
+    { name = "pydocstyle", specifier = ">=4.0.0" },
+]
+
+[[package]]
 name = "sublime-stubs"
 version = "0.1.0"
 source = { editable = "../_stubs" }
+
+[[package]]
+name = "toolz"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/8a/0b/d80dfa675bf592f636d1ea0b835eab4ec8df6e9415d8cfd766df54456123/toolz-1.0.0.tar.gz", hash = "sha256:2c86e3d9a04798ac556793bced838816296a2f085017664e4995cb40a1047a02", size = 66790, upload-time = "2024-10-04T16:17:04.001Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/03/98/eb27cc78ad3af8e302c9d8ff4977f5026676e130d28dd7578132a457170c/toolz-1.0.0-py3-none-any.whl", hash = "sha256:292c8f1c4e7516bf9086f8850935c799a874039c8bcf959d47b600e4c44a6236", size = 56383, upload-time = "2024-10-04T16:17:01.533Z" },
+]
 
 [[package]]
 name = "ty"
@@ -184,10 +257,28 @@ wheels = [
 ]
 
 [[package]]
+name = "types-xmltodict"
+version = "0.14.0.20241009"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/05/28/f1c86d869d74342553c74bd88d6f615427b544fd06f30fdaa68cb4369cd1/types-xmltodict-0.14.0.20241009.tar.gz", hash = "sha256:9224c2422c5b6359cf826685b4ee50b14dc2cb9134561ab793ef6b03dd7108e1", size = 3224, upload-time = "2024-10-09T02:43:18.364Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/15/5e/6d81048a06f956ccec74c61fe5c30784e6a865876dc4ab02e99099e4ee0c/types_xmltodict-0.14.0.20241009-py3-none-any.whl", hash = "sha256:92812e17ffa9171416b35806cb5f4ed3f8f52b6724b2c555e4733e902ef4afd0", size = 2859, upload-time = "2024-10-09T02:43:16.966Z" },
+]
+
+[[package]]
 name = "typing-extensions"
 version = "4.13.2"
 source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/f6/37/23083fcd6e35492953e8d2aaaa68b860eb422b34627b13f2ce3eb6106061/typing_extensions-4.13.2.tar.gz", hash = "sha256:e6c81219bd689f51865d9e372991c540bda33a0379d5573cddb9a3a23f7caaef", size = 106967, upload-time = "2025-04-10T14:19:05.416Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/8b/54/b1ae86c0973cc6f0210b53d508ca3641fb6d0c56823f288d108bc7ab3cc8/typing_extensions-4.13.2-py3-none-any.whl", hash = "sha256:a439e7c04b49fec3e5d3e2beaa21755cadbbdc391694e28ccdd36ca4a1408f8c", size = 45806, upload-time = "2025-04-10T14:19:03.967Z" },
+]
+
+[[package]]
+name = "xmltodict"
+version = "0.15.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/51/ee/b30fdb281b39da57053bd7012870989de6f066d6ef1476d78de8fc427324/xmltodict-0.15.0.tar.gz", hash = "sha256:c6d46b4e3413d1e4fc3e5016f0f1c7a5c10f8ce39efaa0cb099af986ecfc9a53", size = 60285, upload-time = "2025-09-05T00:35:45.947Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d6/56/507a207b96e3aa7365c28bb6702011e7c76c899c1737966b25852eaef3e8/xmltodict-0.15.0-py2.py3-none-any.whl", hash = "sha256:8887783bf1faba1754fc45fdf3fe03fbb3629c811ae57f91c018aace4c58d4ed", size = 10965, upload-time = "2025-09-05T00:35:44.583Z" },
 ]

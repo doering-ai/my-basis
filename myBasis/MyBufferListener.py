@@ -5,13 +5,11 @@
 # Standard
 # --------
 from __future__ import annotations
-from typing import ClassVar, TypeVar, Generic, TYPE_CHECKING
+from typing import ClassVar, TypeVar, Generic
 
 # --------
 # External
 # --------
-if TYPE_CHECKING:
-    import sublime as sb
 import sublime_plugin as sbp
 
 # --------
@@ -22,13 +20,11 @@ from ._MyBase import MyBase
 
 _I = TypeVar('_I', bound=CommandArguments)
 
-# ruff: noqa: UP046
-
 
 ############
 ### BODY ###
 ############
-class MyBufferListener(Generic[_I], MyBase[_I], sbp.TextChangeListener):  # pyright: ignore
+class _MyBufferListener(Generic[_I], MyBase[_I], sbp.TextChangeListener):  # pyright: ignore
     """A base class for any commands that trigger automatically (rather than being called directly).
 
     For a list of available events you can attach to with `on_EVENT` methods, see
@@ -56,3 +52,7 @@ class MyBufferListener(Generic[_I], MyBase[_I], sbp.TextChangeListener):  # pyri
     # ------------------
     # `x` Public Methods
     # ------------------
+    @property
+    def uid(self) -> str:
+        val = self._buffer.id() if self._buffer is not None else '-'
+        return f'{self.classname}[{val}]'

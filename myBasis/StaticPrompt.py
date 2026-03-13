@@ -5,43 +5,57 @@
 # Standard
 # --------
 from __future__ import annotations
-from typing import Any, TYPE_CHECKING
-from typing_extensions import TypeAlias  # noqa: UP035
+from typing import Any, Protocol
+from typing_extensions import TypeAlias
+from collections.abc import Callable
 import functools as ft
-
-if TYPE_CHECKING:
-    from collections.abc import Callable
-    import sublime as sb
 
 # --------
 # External
 # --------
+import sublime as sb
 import sublime_plugin as sbp
 import pydantic as pyd
 
 # --------
 # Internal
 # --------
+from .utils import ut
 from .constants import RGXS
 
 InputHandler = sbp.CommandInputHandler
 TextHandler = sbp.TextInputHandler
-Spans: TypeAlias = 'list[tuple[int, int]]'  # noqa: UP040
+ListHandler = sbp.ListInputHandler
+Spans: TypeAlias = 'list[tuple[int, int]]'
+
+_ListItems: TypeAlias = 'list[str] | list[tuple[str, Any]] | list[sb.ListInputItem]'
+ListItems: TypeAlias = '_ListItems | tuple[_ListItems, int]'
 
 
 ############
 ### BODY ###
 ############
-class StaticPrompt(pyd.BaseModel):
+class StaticPrompt(pyd.BaseModel, arbitrary_types_allowed=True):
     """The specification of a relatively simple `TextInputHandler`, for use by commands."""
+
+    class _MyCommand(Protocol):
+        view: sb.Window
+        window: sb.Window
+        buffer: sb.Buffer
+        edit: sb.Edit
+        classname: str
+        _items: list
+        _text: str
 
     # ---- Metadata ----
     #: The argument identifier (i.e. `snake_case`) that this command's output will be found under.
-    keyword: str = pyd.Field(alias='name')
+    keyword: str
     #: A custom name to be show to the left of the cursor in the input box.
-    description: str = pyd.Field('', alias='input_description')
+    prefix: str = ''
     #: The text to show when this input handler is not at the top of the stack.
     history_description: str = ''
+    #: Optional override for the resulting classe's name, if that matters to you for some reason
+    classname: str = ''
 
     # Initial Content
     #: The ephemeral text shown before the user has entered anything.
@@ -53,7 +67,7 @@ class StaticPrompt(pyd.BaseModel):
 
     # ---- Handlers ----
     #: The main callback entry point, if you need one; called after an input has been validated.
-    callback: Callable[[str], None] | None = pyd.Field(None, alias='confirm')
+    callback: Callable[[str], None] | None = None
     #: Called when the user presses enter; return `false` to disallow the current value.
     validator: Callable[[str], bool] | None = None
     #: Called when the input handler is canceled (via backspace or escape).
@@ -62,14 +76,34 @@ class StaticPrompt(pyd.BaseModel):
     preview: Callable[[str], str] | Callable[[str], str | sb.Html] | None = None
 
     #: Identify the next interface to add to the stack after this one has finished.
-    successor: StaticPrompt | InputHandler | Callable[[dict], InputHandler | None] | None = None
+    successor: (
+        StaticPrompt | ut.InputHandlerField | Callable[[dict], ut.InputHandlerField | None] | None
+    ) = None
 
-    #: Optional override for the resulting classe's name, if that matters to you for some reason
-    classname: str = ''
+    raw_args: dict[str, str] = pyd.Field(default_factory=dict, exclude=True)
 
-    def generate_input_handler(self) -> type[TextHandler]:
-        """Programatically define a new subclass of TextInputHandler based on this specification."""
-        namespace: dict[str, Any] = dict()
+    # -------------------
+    # `.` Initial Methods
+    # -------------------
+    @pyd.model_validator(mode='after')
+    def _validate_prompt(self) -> StaticPrompt:
+        self.keyword = self.keyword.strip()
+        if not self.classname:
+            self.classname = (
+                ''.join(map(str.title, RGXS['snake_separators'].split(self.keyword)))
+                + 'InputHandler'
+            )
+        return self
+
+    # -------------------
+    # `-` Private Methods
+    # -------------------
+    @staticmethod
+    def _setup_method(namespace: dict[str, Any], name: str, method: Callable) -> None:
+        namespace[name] = ft.update_wrapper(method, getattr(TextHandler, name))
+
+    def _generate_namespace(self, command: _MyCommand) -> tuple[dict, type[InputHandler]]:
+        namespace: dict = dict(command=command)
         _setup = ft.partial(self._setup_method, namespace)
 
         # I. Setup metadata methods
@@ -103,7 +137,7 @@ class StaticPrompt(pyd.BaseModel):
         # IV. Setup the next input
         if _successor := self.successor:
             if isinstance(_successor, StaticPrompt):
-                fn = lambda *_, **__: _successor.generate_input_handler()()
+                fn = lambda *_, **__: _successor.generate_input_handler(command, self._args)()
             elif isinstance(_successor, InputHandler):
                 fn = lambda *_, **__: _successor
             elif isinstance(_successor, type):
@@ -116,14 +150,19 @@ class StaticPrompt(pyd.BaseModel):
 
             _setup('next_input', fn)
 
-        # V. Create the class using `type`
-        if not self.classname:
-            self.classname = (
-                ''.join(map(str.title, RGXS['snake_separators'].split(self.keyword)))
-                + 'InputHandler'
-            )
-        return type(self.classname, (TextHandler,), namespace)
+        return namespace, TextHandler
 
-    @staticmethod
-    def _setup_method(namespace: dict[str, Any], name: str, method: Callable) -> None:
-        namespace[name] = ft.update_wrapper(method, getattr(TextHandler, name))
+    # -------------------
+    # `+` Primary Methods
+    # -------------------
+
+    # ------------------
+    # `*` Public Methods
+    # ------------------
+    def generate_input_handler(self, command: _MyCommand, raw_args: dict) -> type[InputHandler]:
+        """Programatically define a new subclass of TextInputHandler based on this specification."""
+        self.raw_args = raw_args
+        namespace, base = self._generate_namespace(command)
+
+        # V. Create the class using `type`
+        return type(self.classname, (base,), namespace)

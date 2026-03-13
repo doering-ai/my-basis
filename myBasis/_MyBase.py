@@ -4,35 +4,52 @@
 ### STANDARD
 from __future__ import annotations
 import warnings
-from typing import ClassVar, TypeVar, Any, Union, Generic, Type, get_args, get_origin, TYPE_CHECKING
+from typing import (
+    ClassVar,
+    TypeVar,
+    Any,
+    Union,
+    Generic,
+    Type,
+    NamedTuple,
+    Literal,
+    get_args,
+    get_origin,
+    overload,
+    cast,
+)
 from typing_extensions import TypeGuard
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Sequence, Iterator
 from pathlib import Path
 import inspect
 import functools as ft
 import itertools as it
 import contextlib as ctx
-
-if TYPE_CHECKING:
-    from .StaticPrompt import StaticPrompt
-    from collections.abc import Iterator
+from datetime import datetime
 
 ### EXTERNAL
 import sublime_plugin as sbp
 import sublime as sb
+from sublime import Region, Settings, Selection, View, Buffer, Window, Edit
 import regex as re
 import more_itertools as mi
+import pydantic as pyd
 
 ### INTERNAL
+from .PathRegistry import PathRegistry
 from .Comment import Comment
 from .CommandArguments import CommandArguments
+from .utils import Utils as ut  # noqa: N813
+from .ViewProperties import ViewProperties, view_property
+from .StaticPrompt import StaticPrompt
 
-if TYPE_CHECKING:
-    from .utils import Utils
+# pyright: reportSelfClsParameterName=false
 
 ############
 ### META ###
 ############
+C = TypeVar('C', bound='MyBase')
+R = TypeVar('R', bound=object)
 Function = TypeVar('Function', bound=Callable)
 InputHandler = sbp.CommandInputHandler
 SublimeBases = (
@@ -47,9 +64,6 @@ SublimeBase = Union[
     sbp.ViewEventListener,
     sbp.TextChangeListener,
 ]
-
-# pyright: reportSelfClsParameterName=false
-# ruff: noqa: UP035, UP006
 
 
 class _CustomNamespace(dict):
@@ -67,7 +81,7 @@ class _CustomNamespace(dict):
 class Meta(type):
     """Metaclass that wraps all methods whose argument is a View, Buffer, or Window."""
 
-    CACHED_TYPES: ClassVar[set[type]] = {sb.View, sb.Buffer, sb.Window, sb.Edit}
+    CACHED_TYPES: ClassVar[set[type]] = {View, Buffer, Window, Edit}
     ALLOWED_NAMES: ClassVar[re.Pattern] = re.compile(r'^([^_].*|__init__)$')
 
     @classmethod
@@ -84,6 +98,7 @@ class Meta(type):
         namespace: dict[str, Any],
         /,
         autobind: Sequence[str] | set[str] | bool = True,
+        debug: bool | str = False,
         **kwargs: Any,
     ) -> type:
         """Wraps methods to store relevant argument(s)."""
@@ -95,6 +110,8 @@ class Meta(type):
                     # I. Wrap methods from base classes
                     if cls.do_bind_method(value, name, autobind, sublime_bases):
                         namespace[name] = cls.bind_method(value)
+
+        namespace['DEBUG'] = debug
 
         # Pass everything else along to type
         return super().__new__(cls, clsname, bases, namespace, **kwargs)
@@ -154,13 +171,13 @@ class Meta(type):
         for name, arg in it.chain((('', a) for a in args), kwargs.items()):
             if isinstance(arg, list) and (name == 'views'):
                 self.views = arg
-            elif isinstance(arg, sb.View) or (name == 'view' and arg is None):
+            elif isinstance(arg, View) or (name == 'view' and arg is None):
                 self.view = arg
-            elif isinstance(arg, sb.Buffer) or (name == 'buffer' and arg is None):
+            elif isinstance(arg, Buffer) or (name == 'buffer' and arg is None):
                 self.buffer = arg
-            elif isinstance(arg, sb.Window) or (name == 'window' and arg is None):
+            elif isinstance(arg, Window) or (name == 'window' and arg is None):
                 self.window = arg
-            elif isinstance(arg, sb.Edit) or (name == 'edit' and arg is None):
+            elif isinstance(arg, Edit) or (name == 'edit' and arg is None):
                 self.edit = arg
 
     @staticmethod
@@ -185,50 +202,107 @@ class Meta(type):
             self.edit = None
 
 
+############
+### DATA ###
+############
+class LineComment(NamedTuple):
+    # ['region', 'row', 'col', 'text', 'mark']
+    region: Region
+    row: int
+    col: int
+    text: str
+    punct: str
+
+    def split(self, rhs: LineComment) -> bool:
+        return self.row != rhs.row - 1 or self.col != rhs.col or self.punct != rhs.punct
+
+
+class Indent(NamedTuple):
+    """A list of (row, indent) pairs for each line in the view."""
+
+    row: int
+    val: int
+
+
+RGXS = ut.rgx_dict(
+    comment_punct=r'[[:punct:]]{1,3}',
+    indent=r'(?m)^([ \t]*+)(\S?)',
+)
 _I = TypeVar('_I', bound=CommandArguments)
 
 
 ############
 ### BODY ###
 ############
-class MyBase(sbp.Command, Generic[_I], metaclass=Meta):  # noqa: UP046
+class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
     """A base class for Sublime Text commands with utilities for comment handling."""
 
-    _view: Utils.ViewField | None = None
-    _views: list[Utils.ViewField] | None = None
-    _buffer: Utils.BufferField | None = None
-    _window: Utils.WindowField | None = None
-    _edit: Utils.EditField | None = None
+    _cache: ViewProperties
 
+    _view: ut.ViewField | None = None
+    _views: list[ut.ViewField] | None = None
+    _buffer: ut.BufferField | None = None
+    _window: ut.WindowField | None = None
+    _edit: ut.EditField | None = None
+
+    PATHS: ClassVar[PathRegistry] = ut.PATHS
+    DEBUG: ClassVar[bool] = False
     _ALLOW_OVERRIDES: ClassVar[bool] = False
     Interface: ClassVar[Type[_I]]  # pyright: ignore
-    prompt: StaticPrompt | None = None
     _args: _I | None = None
+    _raw_args: dict[str, Any] | None = None
 
     # -------------------
     # `.` Initial Methods
     # -------------------
     def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
+        # self._log_func(args, kwargs)
+        self._cache = ViewProperties()
 
     def run(self, *args: Any, **kwargs: Any) -> None:
         """Run the command with the given keyword arguments."""
-        if args:
+        # self._log_func(args, kwargs)
+        if args or kwargs:
             Meta.cache_args(self, args, kwargs)
         self.args = self.Interface(**kwargs)
+        self.main()
 
     @classmethod
     def __init_subclass__(cls, **kwargs):
-        super().__init_subclass__(**kwargs)
+        # super().__init_subclass__(**kwargs)
         for base in getattr(cls, '__orig_bases__', ()):
             origin = get_origin(base)
             if origin is MyBase or (isinstance(origin, type) and issubclass(origin, MyBase)):
-                args = get_args(base)
-                if args and isinstance(args[0], type) and issubclass(args[0], CommandArguments):
-                    cls.Interface = args[0]  # type: ignore
+                if (
+                    (type_args := get_args(base))
+                    and isinstance(type_args[0], type)
+                    and issubclass(type_args[0], CommandArguments)
+                ):
+                    cls.Interface = type_args[0]  # type: ignore
 
         if not getattr(cls, 'Interface', None):
             cls.Interface = CommandArguments  # type: ignore
+
+    def name(self) -> str:
+        return getattr(type(self), 'NAME', super().name())
+
+    @property
+    def uid(self) -> str:
+        return f'{self.classname}[{str(id(self))[-4:]}]'
+
+    @property
+    def prompt(self) -> StaticPrompt | None:
+        return self.Interface.PROMPT
+
+    @property
+    def args(self) -> _I:
+        """The arguments passed to this command, as an instance of the `Interface` class."""
+        assert self._args is not None, 'Called args-dependent method without setting `args`.'
+        return self._args
+
+    @args.setter
+    def args(self, new_args: _I) -> None:
+        self._args = new_args
 
     def input(self, args: dict[str, Any]) -> InputHandler | None:
         """Prompt the user for input before running this command.
@@ -244,161 +318,190 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):  # noqa: UP046
         `self.kwargs`; just like other command arguments, you can specify a member variable with
         the same name in your class to have it automatically filled with the input value.
         """
-        return self.prompt.generate_input_handler()() if self.prompt else None
+        if self.prompt is None or args.get(self.prompt.keyword) is not None:
+            return None
+        return self.prompt.generate_input_handler(command=self, raw_args=args)()  # type: ignore
 
-    @property
-    def args(self) -> _I:
-        """The arguments passed to this command, as an instance of the `Interface` class."""
-        assert self._args is not None, 'Called args-dependent method without setting `args`.'
-        return self._args
-
-    @args.setter
-    def args(self, new_args: _I) -> None:
-        self._args = new_args
+    def input_description(self) -> str:
+        if self.prompt and (desc := self.prompt.prefix):
+            return desc
+        return super().input_description()
 
     # -------------------
     # `-` Private Methods
     # -------------------
-    def _syntax_vars(self, pos: int = 0) -> dict[str, str]:
-        shell_vars = self.view.meta_info('shellVariables', pos)
-        assert isinstance(shell_vars, list)
-        return {item['name']: item['value'] for item in shell_vars}
-
-    def _comment_mark(self, pos: int = 0) -> str:
-        syntax_vars = self._syntax_vars(pos)
-        return syntax_vars.get('TM_COMMENT_START', '#').strip(' ')
-
-    def _parse_comment(self, region: sb.Region) -> Comment:
-        """Parse a comment from the given region."""
-        data = {}
-        data['lines'] = self.view.lines(region)
-        assert data['lines'], 'No lines found in comment region.'
-
-        raw_texts = list(map(self.read, data['lines']))
-        data['texts'] = [text.strip(' \t') for text in raw_texts]
-
-        # Read the line number (row) and indentation (column) of the comment's first line
-        data['row'], _ = self.view.rowcol(region.begin())
-        match = re.match(r'^\s*(?=\S)', raw_texts[0])
-        assert match is not None
-        data['col'] = len(match.group(0).replace('\t', '    ')) + 1
-
-        # Remove the comment mark from texts, recording if it has been repeated for depth
-        data['mark'] = mark = self._comment_mark(region.begin())
-        for i, text in enumerate(data['texts']):
-            if not text.startswith(mark):
+    def _raw_line_comment_iter(self) -> Iterator[LineComment]:
+        for comment in self.view.find_by_selector('comment.line - punctuation.definition.comment'):
+            line = self.view.line(comment.begin())
+            line_text = self.read(line)
+            row, col = self.view.rowcol(comment.a)
+            punct = line_text[:col].lstrip()
+            if not RGXS['comment_punct'].fullmatch(punct):
+                # Skip comments at the end of non-empty lines
                 continue
-            elif match := re.fullmatch(rf'({mark}+) (\S.*)', text):
-                data['mark'], data['texts'][i] = match.groups()
 
-        return Comment(**data)
+            yield LineComment(line, row, col, line_text[col:], punct)
 
-    def _raw_comment_iter(self, start: int = 0, end: int = 0) -> Iterator[Comment]:
-        end = end or self.view.size()
-        for region in self.view.find_by_selector('comment.line'):
-            if region and region.begin() <= start < end <= region.end():
-                yield self._parse_comment(region)
+    def _log(
+        self,
+        *args: Any,
+        sep: str = ' ',
+        time: bool = True,
+        indent: pyd.NonNegativeInt = 0,
+        rjust: bool = False,
+        name_just: bool = True,
+        **kwargs: Any,
+    ) -> None:
+        if self.DEBUG:
+            parts = [f'{self.uid}', *filter(bool, map(str, args))]
+            if name_just:
+                parts[0] = parts[0].ljust(32)
 
-    def _yield_comment(
-        self, comment: Comment, target: int = 0, windowed: bool = False
-    ) -> Iterator[Comment]:
-        n = comment.n_lines
-        if target > 0 and n != target:
-            if windowed and (n_windows := n - target + 1) > 0:
-                for i in range(n_windows):
-                    yield comment[i : i + target]
+            if time:
+                parts[0] = datetime.now().strftime('%H:%M:%S.%f')[:-3] + f' {parts[0]}'
+            ret = sep.join(parts)
+            if rjust:
+                lines = ret.splitlines()
+                ret = '\n'.join(line.rjust(128 - indent) for line in lines)
+            elif indent:
+                ret = re.sub(r'(?m)^(?!$)', ' ' * indent, ret)
+
+            print(ret, **kwargs)
+
+    def _log_func(
+        self,
+        args: tuple[Any, ...] | None = None,
+        kwargs: dict[str, Any] | None = None,
+        result: str | None = None,
+        name: str = '',
+        **log_kwargs: Any,
+    ) -> None:
+        if not self.DEBUG:
+            return
+
+        if name:
+            pass
+        elif (frame := inspect.currentframe()) is not None and frame.f_back is not None:
+            name = frame.f_back.f_code.co_name
         else:
-            yield comment
+            name = '<unknown>'
+
+        arg_parts = []
+        if args:
+            arg_parts.extend(map(str, args))
+        if kwargs:
+            arg_parts.extend(f'{k}={v}' for k, v in kwargs.items())
+
+        self._log(
+            f'.{name}({", ".join(arg_parts)})',
+            f'-> {result}' if result else '',
+            sep='',
+            name_just=False,
+            **log_kwargs,
+        )
 
     # -------------------
     # `+` Primary Methods
     # -------------------
-    def read(self, region: sb.Region) -> str:
-        """Read the text in the given region."""
-        return self.view.substr(region)
-
-    def write(self, pos: Union[sb.Region, tuple[int, int], int], text: str) -> None:
-        """Write the given text at the given position or region."""
-        if isinstance(pos, int):
-            self.view.insert(self.edit, pos, text)
-        elif isinstance(pos, tuple):
-            pos = sb.Region(pos[0], pos[1])  # type: ignore
-
-        assert isinstance(pos, sb.Region)
-        self.view.replace(self.edit, pos, text)
-
-    def show(self, region: Union[sb.Region, int]) -> None:
-        """Show the given region or position in the view, selecting it."""
-        if isinstance(region, int):
-            region = sb.Region(region, region)
-
-        self.selection.clear()
-        self.selection.add(region)
-        self.view.show(region)
-
-    def write_comment(self, comment: Comment) -> int:
-        """Write the given Comment back to the view."""
-        old_text = self.read(comment.region)
-        new_text = str(comment)
-        if old_text != new_text:
-            self.write(comment.region, new_text)
-
-            new_region = sb.Region(comment.start, comment.start + len(new_text))
-            _parsed = self._parse_comment(new_region)
-            comment.lines = _parsed.lines
-            comment.texts = _parsed.texts
-            comment.row = _parsed.row
-            comment.col = _parsed.col
-
-            return len(new_text) - len(old_text)
-        return 0
-
-    def comment_iter(
-        self,
-        /,
-        start: int = 0,
-        end: int = 0,
-        target: int = 0,
-        windowed: bool = False,
-    ) -> Iterator[Comment]:
-        """Iterate through the comments found in this file, yielding Comment objects.
-
-        Args:
-            pos: The position in the file to start searching from.
-            target: If set, only yield comments with exactly this many lines.
-            windowed: If true, break up longer comments to fit the filter.
-        Yields:
-            Comment objects. Continuous series are merged & yielded together.
-        """
-        queued: Comment | None = None
-        _yield = ft.partial(self._yield_comment, target=target, windowed=windowed)
-
-        # Rely on Sublime Text's syntax system to find (non-block) comments
-        for cur in self._raw_comment_iter(start=start, end=end):
-            if queued is None:
-                queued = cur
-            elif cur.follows(queued):
-                queued += cur
-            else:
-                yield from _yield(queued)
-                queued = cur
-
-        if queued:
-            yield from _yield(queued)
+    @ctx.contextmanager
+    def update_view_property(self, *names: str) -> Iterator[dict[str, Any]]:
+        missing = [n for n in names if n not in self._cache]
+        assert not missing, f'Tried to update non-existent view_properties ({missing=}).'
+        values = {name: self._cache.values[name] for name in names}
+        yield values
+        count = self.view.change_count()
+        for name, value in values.items():
+            self._cache.counts[name] = count
+            self._cache.values[name] = value
+            if name in self._cache.hash_fns:
+                self._cache.hashes[name] = hash(self._cache.hash_fns[name](self))
 
     # ------------------
     # `x` Public Methods
     # ------------------
+    def main(self) -> Any:
+        """The primary entry point for the command, executed when the command is.
+
+        Not marked abstract so that the abstract classes can be instantiated by
+        `sublime_plugin.load_module()`.
+        Sadly, there's no way to prevent this other than changing their code.
+        """
+
     @ft.cached_property
     def classname(self) -> str:
         """The name of this command's class."""
         return self.name()
 
-    # --------------------
-    # `x0` VIEW PROPERTIES
-    # --------------------
     @property
-    def views(self) -> list[sb.View]:
+    @view_property(hash_by_syntax=True)
+    def _syntax_vars(self) -> dict[str, str]:
+        shell_vars = self.view.meta_info('shellVariables', 0)
+        assert isinstance(shell_vars, list)
+        return {item['name']: item['value'] for item in shell_vars}
+
+    @property
+    @view_property(hash_by_syntax=True)
+    def _comment_mark(self) -> str:
+        return self._syntax_vars.get('TM_COMMENT_START', '#').strip()
+
+    @property
+    @view_property(dependencies=['headers'])
+    def indents(self) -> list[Indent]:
+        matches = [
+            (len(item[0].expandtabs(self.tabsize)), bool(item[1]))
+            for item in RGXS['indent'].findall(self.read())
+        ]
+        match_len = len(matches)
+        assert match_len == self.n_rows, 'Indent count does not match line count.'
+
+        ret = []
+        last = 0
+        _iter = mi.groupby_transform(matches, keyfunc=lambda item: item[0], reducefunc=list)  # type: ignore
+        _iter = cast('Iterator[tuple[int, list[tuple[int, bool]]]]', _iter)
+        for indent, lines in _iter:
+            size = len(lines)
+            has_content = lines[0][1]
+            start, end = last, last + size
+            last = end
+            if has_content and (not ret or indent != ret[-1].val):
+                # Only count lines with one or more non-whitespace characters
+                ret.append(Indent(start, indent))
+
+        return ret
+
+    def indent_at(self, row: int, indents: list[Indent] | None = None) -> Indent:
+        if not (indents := self.indents):
+            return Indent(0, 0)
+        for _cur, _next in mi.pairwise(indents):
+            if _cur.row <= row < _next.row:
+                return _cur
+        return indents[-1]
+
+    def shares_indent(self, r0: int, r1: int, min_indent: int = 0) -> bool:
+        """Whether indents imply the second line to be a child or sibling of the first.
+
+        Args:
+            r0: The row index of the first line (0-indexed).
+            r1: The row index of the second line (0-indexed).
+            min_indent: If set, the minimum indent required for both lines.
+        """
+        indents = self.indents
+        i0, i1 = self.indent_at(r0, indents), self.indent_at(r1, indents)
+        min_indent = min_indent or i0.val
+        if i1.row < i0.row or not min_indent <= i0.val <= i1.val:
+            return False
+        elif i0 == i1:
+            return True
+        else:
+            return all(
+                ix.val >= min_indent for ix in indents[indents.index(i0) + 1 : indents.index(i1)]
+            )
+
+    # ----------------------
+    # `x0` CACHED PROPERTIES
+    # ----------------------
+    @property
+    def views(self) -> list[View]:
         """The particualr view (i.e. tab) associated with this command."""
         if self._views is None:
             self._infer_views()
@@ -406,17 +509,17 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):  # noqa: UP046
         return self._views
 
     @views.setter
-    def views(self, new_views: list[sb.View] | None) -> None:
+    def views(self, new_views: list[View] | None) -> None:
         if new_views is not None and self._views is not None and not self._ALLOW_OVERRIDES:
             err = f'{self.classname} received a new list of views before the old ones were cleaned.'
             assert len(self._views) == len(new_views), err
-            assert all(v0 is v1 for v0, v1 in zip(self._views, new_views)), err  # noqa: B905
+            assert all(v0 is v1 for v0, v1 in zip(self._views, new_views)), err
             return
 
         self._views = new_views
 
     @property
-    def view(self) -> sb.View:
+    def view(self) -> View:
         """The particualr view (i.e. tab) associated with this command."""
         if self._view is None:
             self._infer_view()
@@ -428,7 +531,7 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):  # noqa: UP046
         return self.views[0]
 
     @view.setter
-    def view(self, new_view: sb.View | None) -> None:
+    def view(self, new_view: View | None) -> None:
         self._view = new_view
         if self._view is None:
             pass
@@ -478,56 +581,13 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):  # noqa: UP046
         return self._view is not None
 
     @property
-    def regions(self) -> Iterator[sb.Region]:
-        """The regions currently selected in the view."""
-        yield from self.view.sel()
-
-    @property
-    def points(self) -> Iterator[int]:
-        """The starting points of the currently selected regions in the view."""
-        yield from (region.begin() for region in self.regions)
-
-    @property
-    def lines(self) -> Iterator[sb.Region]:
-        """All lines intersecting with all selections in the the view."""
-        yield from mi.unique_justseen(mi.flatten(map(self.view.lines, self.regions)))
-
-    @property
-    def first_lines(self) -> Iterator[sb.Region]:
-        """The first lines of the currently selected regions in the view."""
-        yield from map(self.view.full_line, self.points)
-
-    @property
-    def selection(self) -> sb.Selection:
-        """The currently selected text, which is essentially just a collection of regions."""
-        return self.view.sel()
-
-    @property
-    def position(self) -> int:
-        """The starting position of the first selected region in the view."""
-        return self.selection[0].begin()
-
-    @property
-    def syntax(self) -> str:
-        """The simplified syntax of the current view."""
-        return self.view_settings.get('syntax', '').lower()
-
-    def syntax_is(self, *args: str) -> bool:
-        """Whether the current view's syntax matches any of the given ones."""
-        syn = self.syntax
-        return any(arg in syn for arg in args)
-
-    # ----------------------
-    # `x2` BUFFER PROPERTIES
-    # ----------------------
-    @property
-    def buffer(self) -> sb.Buffer:
+    def buffer(self) -> Buffer:
         """The Buffer (i.e. list of views) tied to this command."""
         assert self._buffer is not None, 'Called buffer-dependent method without setting `buffer`.'
         return self._buffer
 
     @buffer.setter
-    def buffer(self, val: sb.Buffer | None) -> None:
+    def buffer(self, val: Buffer | None) -> None:
         if val is None:
             pass
         elif self._ALLOW_OVERRIDES:
@@ -564,11 +624,8 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):  # noqa: UP046
         """Whether this command currently has a Buffer handle."""
         return self._buffer is not None
 
-    # ----------------------
-    # `x3` WINDOW PROPERTIES
-    # ----------------------
     @property
-    def window(self) -> sb.Window:
+    def window(self) -> Window:
         """The Window associated with this command."""
         if self._window is None:
             self._infer_window()
@@ -578,7 +635,7 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):  # noqa: UP046
         return self._window
 
     @window.setter
-    def window(self, val: sb.Window | None) -> None:
+    def window(self, val: Window | None) -> None:
         if self.has_window() and val is not None and not self._ALLOW_OVERRIDES:
             assert self._window is val, (
                 f'{self.classname} received a new window object before the old one was cleaned.'
@@ -604,17 +661,14 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):  # noqa: UP046
             self._infer_window()
         return self._window is not None
 
-    # --------------------
-    # `x3` EDIT PROPERTIES
-    # --------------------
     @property
-    def edit(self) -> sb.Edit:
+    def edit(self) -> Edit:
         """The Edit handle associated with this command (usually only for TextCommands)."""
         assert self._edit is not None, 'Called edit-dependent method without setting `edit`.'
         return self._edit
 
     @edit.setter
-    def edit(self, val: sb.Edit | None) -> None:
+    def edit(self, val: Edit | None) -> None:
         """Set the new value of edit, possibly overriding an old one."""
         self._edit = val
 
@@ -623,25 +677,32 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):  # noqa: UP046
         return self._edit is not None
 
     # -------------
-    # `x4` SETTINGS
+    # `x2` SETTINGS
     # -------------
     @property
-    def view_settings(self) -> sb.Settings:
+    def view_settings(self) -> Settings:
         """The settings object for this view."""
         return self.view.settings()
 
     @property
-    def window_settings(self) -> sb.Settings:
+    def window_settings(self) -> Settings:
         """The settings object for this window."""
         return self.window.settings()
 
     @property
-    def local_settings(self) -> sb.Settings:
-        """The settings object for this window OR view, preferring the former."""
-        return self.window_settings if self.has_window() else self.view_settings
+    def settings(self) -> Settings:
+        """The most specific settings object available."""
+        if self.has_view():
+            return self.view_settings
+        elif self.has_window():
+            return self.window_settings
+        elif window := mi.first(sb.windows(), None):
+            return window.settings()
+        else:
+            raise RuntimeError('No windows found to get settings from.')
 
     @ctx.contextmanager
-    def mutable_settings(self, filename: str) -> Iterator[sb.Settings]:
+    def mutable_settings(self, filename: str) -> Iterator[Settings]:
         """A context manager that lets you modify the identified settings file on disk."""
         # I. Clean & pre-verify the given filename
         assert filename, 'Filename must be non-empty.'
@@ -655,10 +716,317 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):  # noqa: UP046
         yield settings
         sb.save_settings(filename)
 
-    def main(self) -> Any:
-        """The primary entry point for the command, executed when the command is.
+    @ft.cached_property
+    def tabsize(self) -> int:
+        return self.settings.get('tab_size', 4)
 
-        Not marked abstract so that the abstract classes can be instantiated by
-        `sublime_plugin.load_module()`.
-        Sadly, there's no way to prevent this other than changing their code.
+    # -----------------
+    # `x3` VIEW METHODS
+    # -----------------
+    @overload
+    def read(self, *args, **kwargs) -> str: ...
+
+    @overload
+    def read(self, region: int) -> str: ...
+
+    @overload
+    def read(self, region: int, end: int) -> str: ...
+
+    @overload
+    def read(self, region: Region) -> str: ...
+
+    def read(self, region: Region | int = 0, end: int = 0) -> str:
+        """Read the text in the given region."""
+        if isinstance(region, int):
+            region = sb.Region(region, end or len(self.view))
+        assert isinstance(region, sb.Region), f'Invalid region argument {region!r}.'
+        return self.view.substr(region)
+
+    def read_all(self, selector: str) -> Iterator[str]:
+        """Iterate through all text in this view that matches the given selector."""
+        for region in self.view.find_by_selector(selector):
+            yield self.read(region)
+
+    def write(self, pos: ut.ViewPosition, text: str) -> None:
+        """Write the given text at the given position or region."""
+        if isinstance(pos, int):
+            pos = Region(pos, pos)
+        elif isinstance(pos, tuple):
+            pos = Region(pos[0], pos[1])
+        assert isinstance(pos, Region)
+
+        if pos.empty():
+            self.view.insert(self.edit, pos.a, text)
+        else:
+            self.view.replace(self.edit, pos, text)
+
+    @ctx.contextmanager
+    def batch_write(self, debug: bool | None = None) -> Iterator[ut.Writer]:
+        # return ut.batch_write(self.write, self.DEBUG if debug is None else debug)
+        with ut.batch_write(self.view, self.edit, self.DEBUG if debug is None else debug) as writer:
+            yield writer
+
+    def show(
+        self,
+        dest: Region | int | None,
+        mode: Literal['normal', 'top', 'center', 'bottom'] = 'normal',
+        select: bool = True,
+        **kwargs,
+    ) -> None:
+        """Show the given region or position in the view, selecting it."""
+        # I. Normalize the arguments
+        if isinstance(dest, int):
+            dest = Region(dest, dest)
+        elif dest is None:
+            dest = self.selection
+
+        # II. Change the selection if asked
+        if select:
+            self.selections.clear()
+            self.selections.add(dest)
+
+        if mode == 'normal':
+            # III.i. Base case: scroll using Sublime's automated features
+            self.view.show(dest, **kwargs)
+        elif mode == 'center':
+            # III.ii. Scroll so that the point is centered, again using premade features
+            self.view.show_at_center(dest, **kwargs)
+        else:
+            # III.iii. Finally, scroll so that the targeted line is either at the top or the bottom
+            #          of the screen using logic borrowed from Vintage.
+            screen = self.view.visible_region()
+            orig_line = self.view.rowcol(screen.begin() if mode == 'top' else screen.end())[0]
+            dest_line = self.view.rowcol(dest.begin())[0]
+            offset = dest_line - orig_line
+            self.view.run_command('scroll_lines', {'amount': -offset})
+
+    def write_comment(self, comment: Comment) -> int:
+        """Write the given Comment back to the view."""
+        old = self.read(comment.region)
+        new = str(comment)
+        if old != new:
+            self.write(comment.region, new)
+            return len(new) - len(old)
+        return 0
+
+    def find_within(self, selector: str, region: Region) -> Iterator[Region]:
+        """Find all regions matching the given selector within the given region."""
+        yield from filter(region.contains, self.view.find_by_selector(selector))
+
+    @property
+    @view_property('comment.line')
+    def line_comments(self) -> dict[int, Comment]:
+        ret = {
+            block[0].row: Comment(
+                lines=[line.region for line in block],
+                texts=[line.text.rstrip('\n') for line in block],
+                row=block[0].row,
+                col=block[0].col,
+                punct=block[0].punct,
+            )
+            for block in mi.split_when(self._raw_line_comment_iter(), LineComment.split)
+        }
+        return ret
+
+    def filter_comments(
+        self,
+        *preds: Callable[[Comment], bool],
+        start: int = 0,
+        end: int = 0,
+        min_height: int = 1,
+    ) -> Iterator[Comment]:
+        """Iterate through a subset of the comments found in this file.
+
+        Args:
+            preds: Predicate functions to filter comments by.
+            start: The starting point of the region to search for comments.
+            end: The ending point of the region to search for comments (if not EOF).
+            min_height: If set, only returns comment blocks with at least this many lines.
+        Yields:
+            Comment objects. Continuous series are merged & yielded together.
         """
+        filters = list(preds)
+        if start or end:
+            assert start >= 0 and (start < end or end == 0), 'Start and end must be non-negative.'
+            bounds = Region(start, end or self.view.size())
+            filters.append(lambda comment: bounds.contains(comment.region))
+
+        if min_height > 1:
+            filters.append(lambda comment: comment.height >= min_height)
+
+        if filters:
+            yield from filter(
+                lambda comment: all(f(comment) for f in filters), self.line_comments.values()
+            )
+        else:
+            yield from self.line_comments
+
+    @overload
+    def first_char_of(self, *, pos: int = -1) -> int: ...
+
+    @overload
+    def first_char_of(self, *, row: int = -1) -> int: ...
+
+    def first_char_of(self, *, pos: int = -1, row: int = -1) -> int:
+        # if row < 0:
+        #     assert pos >= 0, 'Must specify either a non-negative position or row.'
+        #     row = self.view.rowcol(pos)[0]
+        if pos < 0:
+            assert row >= 0, 'Must specify either a non-negative position or row.'
+            pos = self.view.text_point(row, 0)
+
+        bol = self.view.text_point(row, 0)
+        line = self.read(self.view.line(bol))
+        if match := RGXS['indent'].match(line):
+            return pos + len(match[1])
+        return pos
+
+    @property
+    def selections(self) -> Selection:
+        """The regions currently selected in the view."""
+        return self.view.selection
+
+    @property
+    def selection(self) -> Region:
+        """The first group of selected text, ignoring multi-cursor situations."""
+        return mi.first(self.selections, Region(0, 0))
+
+    @property
+    def cursors(self) -> Iterator[int]:
+        """The position of all cursors, which may be the beginning OR end of their selections."""
+        yield from (region.b for region in self.selections)
+
+    @property
+    def cursor(self) -> int:
+        """The position of the first cursor, which may be the beginning OR end of its selection."""
+        return mi.first(self.cursors, 0)
+
+    @property
+    def pos(self) -> int:
+        """The position of the beginning of the first selection."""
+        return self.selection.begin()
+
+    @property
+    def lines(self) -> Iterator[Region]:
+        """A list of unique lines that covers all selections."""
+        yield from mi.unique_justseen(mi.flatten(map(self.view.lines, self.selections)))
+
+    @property
+    def first_lines(self) -> Iterator[Region]:
+        """The first lines of the currently selected regions in the view."""
+        yield from map(self.view.line, self.cursors)
+
+    @property
+    def line(self) -> Region:
+        """The first line of the currently selected region in the view."""
+        return mi.first(self.first_lines, Region(0, 0))
+
+    @property
+    def coords(self) -> Iterator[tuple[int, int]]:
+        yield from map(self.view.rowcol, self.cursors)
+
+    @property
+    def rows(self) -> Iterator[int]:
+        """The row index of each cursor."""
+        yield from (row for row, _ in self.coords)
+
+    @property
+    def n_rows(self) -> int:
+        return self.view.rowcol(self.view.size())[0] + 1
+
+    @property
+    def row(self) -> int:
+        """The row index of the first cursor."""
+        return mi.first(self.rows, 0)
+
+    @property
+    def cols(self) -> Iterator[int]:
+        """The column index of each cursor."""
+        yield from (col for _, col in self.coords)
+
+    @property
+    def col(self) -> int:
+        """The column index of the first cursor."""
+        return mi.first(self.cols, 0)
+
+    @property
+    def syntax(self) -> str:
+        """The simplified syntax of the current view."""
+        return inst.scope if (inst := self.view.syntax()) is not None else ''
+
+    def syntax_is(self, *args: str) -> bool:
+        """Whether the current view's syntax matches any of the given ones."""
+        syn = self.syntax
+        return any(arg in syn for arg in args)
+
+    # ------------------------
+    # `*4` APPLICATION METHODS
+    # ------------------------
+    def invoke(
+        self,
+        command: str,
+        /,
+        _delay: int = 50,
+        _async: bool = False,
+        _level: Literal['view', 'window', 'app'] | None = None,
+        **kwargs: Any,
+    ) -> None:
+        """Invoke another command with the given arguments."""
+        fn: Callable[[str, dict], None]
+        if _level is not None:
+            _inst = sb if _level == 'app' else getattr(self, _level)
+            fn = _inst.run_command
+        elif self._view is not None:
+            fn = self.view.run_command
+        elif self._window is not None:
+            fn = self.window.run_command
+        else:
+            fn = sb.run_command
+
+        wrapper = sb.set_timeout_async if _async else sb.set_timeout
+        wrapper(lambda: fn(command, kwargs), _delay)
+
+    @property
+    def open_projects(self) -> dict[str, tuple[Path, dict]]:
+        return {
+            path.name: (path, data)
+            for window in sb.windows()
+            if (data := window.project_data()) and isinstance(data, dict)
+            for folder in data.get('folders', [])
+            if (
+                (raw_path := folder.get('path'))
+                and (path := Path(raw_path).expanduser().resolve()).exists()
+            )
+        }
+
+    @property
+    def open_packages(self) -> dict[str, tuple[Path, dict]]:
+        """A collection of all SublimeText packages currently referenced by an open window.
+
+        The keys are the canonical names of the packages, and the values are (path, data) tuples.
+        Special care is taken to find and dedupe packages that have local git repositories with
+        different names than their softlink in the `Packages/` dir, e.g. `basis` -> `myBasis`.
+        """
+        projects = self.open_projects
+        return {
+            pkg.name: proj
+            for pkg in self.PATHS.packages.iterdir()
+            if (proj := projects.get(pkg.resolve().name) or projects.get(pkg.name))
+        }
+
+    @property
+    def current_package(self) -> Path | None:
+        window = self._window or sb.active_window()
+        folders = {
+            path.name: path
+            for folder in window.folders()
+            if (path := Path(folder).expanduser().resolve())
+        }
+        return next(
+            (
+                pkg
+                for pkg in self.PATHS.packages.iterdir()
+                if pkg.name in folders or pkg.resolve().name in folders
+            ),
+            None,
+        )

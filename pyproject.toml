@@ -129,7 +129,6 @@ reportDeprecated = "warning"
 reportUnusedVariable = false
 reportUnreachable = false
 reportMissingModuleSource = false
-# reportMissingSuperCall = "warning"
 
 [tool.pytest]
 # addopts = ["--cov=my", "--cov-report=term-missing", "--cov-report=xml"]

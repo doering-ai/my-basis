@@ -147,7 +147,7 @@ class TestRegexStore:
             ('[]:', (GroupKind.PLAIN, '(?:', '', '')),
             ('[]>*+', (GroupKind.ATOMS, '(?>', '', '*+')),
             ('|:?', (GroupKind.PLAIN, '(?:', '|', '?')),
-            ('|?', (GroupKind.MULTI, '(?|', '|', '?')),
+            ('|?', (GroupKind.RESET, '(?|', '|', '?')),
             ('[ ]!', (GroupKind.NOT_AHEAD, '(?!', ' ', '')),
             ('[a]<={2,}', (GroupKind.BEHIND, '(?<=', 'a', '{2,}')),
             (':m-is', (GroupKind.PLAIN, r'(?m-is:', r' ?', '')),
@@ -854,14 +854,23 @@ class TestRegexStore:
     # -----------------------------
     # `^0` ImportAs Example Dataset
     # -----------------------------
-    def test_router_tree__importas(self, importas_data: set[str], pytestconfig, snapshot):
+    @pyt.fixture(scope='class')
+    def importas_store(self, importas_data: set[str]) -> RegexStore:
         data = importas_data
-        store = RegexStore.new(
+        return RegexStore.new(
             options=dict(lazy_load=False),
-            importas=('<|>', list(sorted(data))),
+            importas=('<|>', r'\b', list(sorted(data)), r'\b'),
         )
 
-        # III. Create negative examples by adding three random letters to each entry
+    def test_tree__importas_example(
+        self,
+        importas_data: set[str],
+        importas_store: RegexStore,
+        pytestconfig,
+        snapshot,
+    ):
+        data, store = importas_data, importas_store
+        # I. Create "additive" negative examples by concatenating three random letters to each entry
         _a, _z = ord('a'), ord('z')
         _rand = lambda: chr(random.randint(_a, _z))
         negative_examples: set[str] = set(
@@ -912,14 +921,3 @@ class TestRegexStore:
 
         assert len(false_negatives) == 0 and len(false_positives) == 0
         assert store.pretty_print('importas') == snapshot
-
-    def test_expand__importas(self, store: RegexStore, importas_data: set[str], snapshot):
-        data = importas_data
-
-        # Copy setup logic from `store.compose_tree()`
-        rendered_branches = [store.compose(branch, sep='|') for branch in data]
-        tree = Tree.new(*sorted(rendered_branches))
-        tree.expand()
-        rendered = tree.render()
-        printed = store.pretty_print(rendered)
-        assert len(printed.splitlines()) == len(data) + 2

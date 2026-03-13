@@ -23,12 +23,12 @@ class TestGroupKind:
             ('(?', cls.FLAGS),
             ('(?:', cls.PLAIN),
             ('(?>', cls.ATOMS),
-            ('(?P<', cls.PARAM),
+            ('(?P<', cls.NAMED),
             ('(?&', cls.INVOC),
             ('(?P&', cls.INVOC),
             ('(?P>', cls.INVOC),
             ('(?P=', cls.SUBST),
-            ('(?|', cls.MULTI),
+            ('(?|', cls.RESET),
             ('(?=', cls.AHEAD),
             ('(?!', cls.NOT_AHEAD),
             ('(?<=', cls.BEHIND),
@@ -37,7 +37,7 @@ class TestGroupKind:
             # Test with full groups
             ('(?:abc)', cls.PLAIN),
             ('(?>foo)', cls.ATOMS),
-            ('(?P<name>', cls.PARAM),
+            ('(?P<name>', cls.NAMED),
             # Invalid/empty
             ('', cls(0)),
         ],
@@ -52,10 +52,10 @@ class TestGroupKind:
             (cls.PLAIN, '(?:'),
             (cls.FLAGS, '(?'),
             (cls.ATOMS, '(?>'),
-            (cls.PARAM, '(?P<'),
+            (cls.NAMED, '(?P<'),
             (cls.INVOC, '(?P>'),
             (cls.SUBST, '(?P='),
-            (cls.MULTI, '(?|'),
+            (cls.RESET, '(?|'),
             (cls.AHEAD, '(?='),
             (cls.NOT_AHEAD, '(?!'),
             (cls.BEHIND, '(?<='),
@@ -69,7 +69,7 @@ class TestGroupKind:
     @pyt.mark.parametrize(
         'kind, mask, expected',
         [
-            (cls.PARAM, cls._NAMED, True),
+            (cls.NAMED, cls._NAMED, True),
             (cls.INVOC, cls._NAMED, True),
             (cls.PLAIN, cls._NAMED, False),
             (cls.AHEAD, cls._LOOKAHEADS, True),
@@ -84,10 +84,10 @@ class TestGroupKind:
             (cls.PLAIN, cls._LOOK, False),
             (cls.PLAIN, cls._SPLITTABLE, True),
             (cls.ATOMS, cls._SPLITTABLE, True),
-            (cls.PARAM, cls._SPLITTABLE, False),
+            (cls.NAMED, cls._SPLITTABLE, False),
             (cls.PLAIN, cls._SIMPLE, True),
             (cls.ATOMS, cls._SIMPLE, True),
-            (cls.PARAM, cls._SIMPLE, False),
+            (cls.NAMED, cls._SIMPLE, False),
         ],
     )
     def test_combined_flags(self, kind: cls, mask: cls, expected: bool):

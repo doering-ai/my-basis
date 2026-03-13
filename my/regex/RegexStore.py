@@ -683,7 +683,7 @@ class RegexStore(pyd.BaseModel):
         local_groups: set[str] = set()
 
         for group in Regex.group_iterator(text, mask=GroupKind._NAMED):
-            if group.kind == GroupKind.PARAM:
+            if group.kind == GroupKind.NAMED:
                 # Named subroutine definition
                 local_groups.add(group.name)
             elif group.kind == GroupKind.INVOC and group.name != name:

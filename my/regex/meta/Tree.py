@@ -136,7 +136,8 @@ class Tree(pyd.BaseModel):
         else:
             search_space = (branch.first for branch in self.branches)
 
-        return all(atom.is_simple and not isinstance(atom, SetAtom) for atom in search_space)
+        # return all(atom.is_simple and not isinstance(atom, SetAtom) for atom in search_space)
+        return all(atom.is_simple for atom in search_space)
 
     @staticmethod
     def _is_set_eligible(atom: Atom | Regex) -> bool:
@@ -277,6 +278,18 @@ class Tree(pyd.BaseModel):
             Every possible permutation we can make with the expanded contents of that branch, that
             are still nonetheless isomorphic to the original branch when taken as a set.
         """
+        # 0. Special Case(s)
+        # 0.i. Unneeded plain groups
+        if (
+            len(branch) == 1
+            and isinstance(a := branch.one, GroupAtom)
+            and a.is_simple
+            and a.kind == GroupKind.PLAIN
+            and not a.flags
+        ):
+            yield from self.expand_group(a).expand().export_branches()
+            return
+
         # I. Build a list of positional subtrees, representing the possible values of each atom
         count = 0
         subtrees: list[list[Regex]] = []
@@ -308,13 +321,13 @@ class Tree(pyd.BaseModel):
             return self.new(atom, **kwargs)
 
         # II. Split the group's contents into branches, then recursively expand them
-        block = self.new(atom.body, **kwargs).expand()
+        tree = self.new(atom.body, **kwargs).expand()
 
         # III. Expand out an optional quantifier into a new, empty branch
-        if atom.is_optional and all(block.branches):
-            block.branches.insert(0, Regex.empty())
+        if atom.is_optional and all(tree.branches):
+            tree.branches.insert(0, Regex.empty())
 
-        return block
+        return tree
 
     @classmethod
     def expand_set(cls, atom: Atom) -> Self:

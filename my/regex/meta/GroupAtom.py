@@ -82,7 +82,7 @@ class GroupAtom(Atom):
 
     def infer_name(self) -> None:
         """Infers the name of the group if it is a named capture, invocation, or substitution."""
-        if self.kind == GroupKind.PARAM:
+        if self.kind == GroupKind.NAMED:
             # I. Named capture groups's names are part of 'start', not 'body'
             assert '>' in self.body, f'Invalid named capture self: {self.body}'
             self.name, self.body = self.body.split('>', 1)

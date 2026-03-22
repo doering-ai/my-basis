@@ -4,7 +4,7 @@
 ### STANDARD
 from __future__ import annotations
 from typing import TextIO
-from typing_extensions import Annotated
+from typing_extensions import Annotated, TypeAlias
 import os
 
 ### EXTERNAL
@@ -82,8 +82,20 @@ class TypesMixin:
     This class is subclassed by `Utils`, so you'll likely never have to interact with it directly.
     """
 
+    # -----------
+    # `.` Aliases
+    # -----------
+    WindowId: TypeAlias = int
+    ViewId: TypeAlias = int
+
+    # -------------------
+    # `-` Pydantic Fields
+    # -------------------
     schemify = schemify
 
+    # -------------------
+    # `-0` Sublime Fields
+    # -------------------
     RegionField = Annotated[sb.Region, schemify(sb.Region)]
     SelectionField = Annotated[sb.Selection, schemify(sb.Selection)]
 
@@ -107,9 +119,13 @@ class TypesMixin:
     TextInputHandlerField = Annotated[sbp.TextInputHandler, schemify(sbp.TextInputHandler)]
     ListInputHandlerField = Annotated[sbp.ListInputHandler, schemify(sbp.ListInputHandler)]
 
-    # Non-sublime types
+    # -----------------
+    # `-1` Other Fields
+    # -----------------
     RegexField = Annotated[re.Pattern, schemify(re.Pattern)]
     TextIOField = Annotated[TextIO, schemify(TextIO)]
 
-    # Non-trivial types
+    # --------------------
+    # `+` Validated Fields
+    # --------------------
     SyntaxField = Annotated[str, pyd.BeforeValidator(_validate_syntax)]

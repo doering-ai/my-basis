@@ -14,10 +14,11 @@ if TYPE_CHECKING:
     import sublime as sb
 import sublime_plugin as sbp
 
+
 # --------
 # Internal
 # --------
-from .CommandArguments import CommandArguments
+from ..types.CommandArguments import CommandArguments
 from ._MyBase import MyBase
 
 _I = TypeVar('_I', bound=CommandArguments)
@@ -26,15 +27,13 @@ _I = TypeVar('_I', bound=CommandArguments)
 ############
 ### BODY ###
 ############
-class _MyViewListener(Generic[_I], MyBase[_I], sbp.ViewEventListener):
-    """A base class for any commands that trigger automatically (rather than being called directly).
+class _MyWindowCommand(Generic[_I], MyBase[_I], sbp.WindowCommand):
+    """A Sublime Text 4 command that is instantiated once per Window.
 
-    For a list of available events you can attach to with `on_EVENT` methods, see
-    `constants.EVENTS`.
-
-    All the events mentioned in `constants.ASYNCABLE_EVENTS` have an `on_EVENT_async` variant,
-    though it is only async 'behind the scenes', so-to-speak. To run `asyncio` code, choose one of
-    those functions and wrap your logic in `asyncio.run()`.
+    This class excels for tasks that relate to multiple tabs ('views') at once, whether that means
+    comparing them, modifying them, creating them, or rearranging them.
+    It's recommended you use `MyCommand` instead (based off `sbp.TextCommand`) for a typical usecase
+    involving reading and/or modifying a single tab's contents.
     """
 
     _ALLOW_OVERRIDES: ClassVar[bool] = True
@@ -42,9 +41,10 @@ class _MyViewListener(Generic[_I], MyBase[_I], sbp.ViewEventListener):
     # -------------------
     # `.` Initial Methods
     # -------------------
-    def __init__(self, view: sb.View) -> None:
+    def __init__(self, window: sb.Window, *args, **kwargs) -> None:
         """Initialize this class."""
-        self.view = view
+        self.window = window
+        super().__init__(window, *args, **kwargs)
 
     # -------------------
     # `-` Private Methods
@@ -59,5 +59,5 @@ class _MyViewListener(Generic[_I], MyBase[_I], sbp.ViewEventListener):
     # ------------------
     @property
     def uid(self) -> str:
-        val = self._view.id() if self._view is not None else '-'
+        val = self._window.id() if self._window is not None else '-'
         return f'{self.classname}[{val}]'

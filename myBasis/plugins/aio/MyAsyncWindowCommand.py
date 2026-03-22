@@ -1,33 +1,29 @@
 ############
 ### HEAD ###
 ############
-# --------
-# Standard
-# --------
-from __future__ import annotations
-from typing import ClassVar, TypeVar, Generic, TYPE_CHECKING
+### STANDARD
+from typing import ClassVar, TypeVar, Generic, Any
+# import asyncio as aio
 
-# --------
-# External
-# --------
-if TYPE_CHECKING:
-    import sublime as sb
-import sublime_plugin as sbp
+### EXTERNAL
+import sublime as sb
+import sublime_aio as sbaio
+
+### INTERNAL
+from ...types.CommandArguments import CommandArguments
+from .._MyBase import MyBase
 
 
-# --------
-# Internal
-# --------
-from .CommandArguments import CommandArguments
-from ._MyBase import MyBase
-
+############
+### DATA ###
+############
 _I = TypeVar('_I', bound=CommandArguments)
 
 
 ############
 ### BODY ###
 ############
-class _MyWindowCommand(Generic[_I], MyBase[_I], sbp.WindowCommand):
+class _MyAsyncWindowCommand(Generic[_I], MyBase[_I], sbaio.WindowCommand):
     """A Sublime Text 4 command that is instantiated once per Window.
 
     This class excels for tasks that relate to multiple tabs ('views') at once, whether that means
@@ -43,8 +39,13 @@ class _MyWindowCommand(Generic[_I], MyBase[_I], sbp.WindowCommand):
     # -------------------
     def __init__(self, window: sb.Window, *args, **kwargs) -> None:
         """Initialize this class."""
-        self.window = window
+        self.window = sbaio.Window(window.id())
         super().__init__(window, *args, **kwargs)
+
+    @property
+    def uid(self) -> str:
+        val = self._window.id() if self._window is not None else '-'
+        return f'{self.classname}[{val}]'
 
     # -------------------
     # `-` Private Methods
@@ -57,7 +58,13 @@ class _MyWindowCommand(Generic[_I], MyBase[_I], sbp.WindowCommand):
     # ------------------
     # `x` Public Methods
     # ------------------
-    @property
-    def uid(self) -> str:
-        val = self._window.id() if self._window is not None else '-'
-        return f'{self.classname}[{val}]'
+    async def run(self, *args: Any, **kwargs: Any) -> Any:
+        """Run the command with the given keyword arguments."""
+        if args or kwargs:
+            MyBase.cache_args(self, args, kwargs)
+        self.args = self.Interface(**kwargs)
+        return await self.main()
+
+    async def main(self) -> Any:
+        """The primary entry point for the command."""
+        raise NotImplementedError('You must implement the `main` method to use this class.')

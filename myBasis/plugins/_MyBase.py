@@ -18,14 +18,17 @@ from typing import (
     overload,
     cast,
 )
-from typing_extensions import TypeGuard
-from collections.abc import Callable, Sequence, Iterator
+from typing_extensions import TypeGuard, TypeAlias
+from collections.abc import Callable, Sequence, Iterator, AsyncIterator
 from pathlib import Path
 import inspect
 import functools as ft
 import itertools as it
 import contextlib as ctx
 from datetime import datetime
+import time
+import asyncio as aio
+from urllib.parse import unquote
 
 ### EXTERNAL
 import sublime_plugin as sbp
@@ -36,12 +39,12 @@ import more_itertools as mi
 import pydantic as pyd
 
 ### INTERNAL
-from .PathRegistry import PathRegistry
-from .Comment import Comment
-from .CommandArguments import CommandArguments
-from .utils import Utils as ut  # noqa: N813
-from .ViewProperties import ViewProperties, view_property
-from .StaticPrompt import StaticPrompt
+from ..infra.utils import ut
+from ..infra.PathRegistry import PathRegistry
+from ..infra.ViewProperties import ViewProperties, view_property
+from ..types.Comment import Comment
+from ..types.StaticPrompt import StaticPrompt
+from ..types.CommandArguments import CommandArguments
 
 # pyright: reportSelfClsParameterName=false
 
@@ -53,17 +56,22 @@ R = TypeVar('R', bound=object)
 Function = TypeVar('Function', bound=Callable)
 InputHandler = sbp.CommandInputHandler
 SublimeBases = (
-    sbp.Command,
+    sbp.TextCommand,
+    sbp.WindowCommand,
+    sbp.ApplicationCommand,
     sbp.EventListener,
     sbp.ViewEventListener,
     sbp.TextChangeListener,
 )
 SublimeBase = Union[
-    sbp.Command,
+    sbp.TextCommand,
+    sbp.WindowCommand,
+    sbp.ApplicationCommand,
     sbp.EventListener,
     sbp.ViewEventListener,
     sbp.TextChangeListener,
 ]
+CommandLevel: TypeAlias = Literal['buffer', 'view', 'window', 'app']
 
 
 class _CustomNamespace(dict):
@@ -102,19 +110,32 @@ class Meta(type):
         **kwargs: Any,
     ) -> type:
         """Wraps methods to store relevant argument(s)."""
-        if autobind is not False:
-            if sublime_bases := [
-                b for b in bases if isinstance(b, type) and issubclass(b, SublimeBases)
-            ]:
-                for name, value in namespace.items():
-                    # I. Wrap methods from base classes
-                    if cls.do_bind_method(value, name, autobind, sublime_bases):
-                        namespace[name] = cls.bind_method(value)
+        sb_base = Meta.find_sublime_base(bases)
+        if sb_base and autobind is not False:
+            sb_attrs = {
+                key
+                for key, val in sb_base.__dict__.items()
+                if key and not key.startswith('_') and callable(val)
+            }
+            for name, value in namespace.items():
+                # I. Wrap methods from base classes
+                if cls.do_bind_method(value, name, autobind, sb_attrs):
+                    namespace[name] = cls.bind_method(value)
 
         namespace['DEBUG'] = debug
 
         # Pass everything else along to type
         return super().__new__(cls, clsname, bases, namespace, **kwargs)
+
+    @staticmethod
+    def find_sublime_base(bases: tuple[type, ...]) -> SublimeBase | None:
+        next_bases = list(
+            filter((lambda base: isinstance(base, type) and issubclass(base, SublimeBases)), bases)
+        )
+        if ret := next(filter(lambda b: b in SublimeBases, next_bases), None):
+            return ret  # type: ignore
+        _recur = lambda base: Meta.find_sublime_base(base.__bases__)
+        return next(filter(bool, map(_recur, next_bases)), None)
 
     @classmethod
     def do_bind_method(
@@ -122,7 +143,7 @@ class Meta(type):
         method: Any,
         name: str,
         autobind: Sequence[str] | set[str] | bool | None,
-        sublime_bases: list[type[SublimeBase]],
+        sb_attrs: set[str],
     ) -> TypeGuard[Callable]:
         if not callable(method) or not cls.ALLOWED_NAMES.match(name):
             # I.i. Filter out obviously invalid attributes, like non-methods
@@ -130,7 +151,7 @@ class Meta(type):
         elif autobind and isinstance(autobind, (Sequence, set)):
             # I.ii. If the user supplied an override, only use that
             return name in autobind
-        elif sublime_bases and not any(name in base.__dict__ for base in sublime_bases):
+        elif sb_attrs and name not in sb_attrs:
             # I.iii. If the method is not from a Sublime base class, ignore it
             return False
         elif name.startswith('is_'):
@@ -188,19 +209,6 @@ class Meta(type):
             Meta.CACHED_TYPES,
         )
 
-    @staticmethod
-    @ctx.contextmanager
-    def context(self: MyBase) -> Iterator[None]:
-        """A context manager that sets the given attribute to the given value."""
-        try:
-            yield
-        finally:
-            self.views = None
-            self.view = None
-            self.buffer = None
-            self.window = None
-            self.edit = None
-
 
 ############
 ### DATA ###
@@ -227,6 +235,7 @@ class Indent(NamedTuple):
 RGXS = ut.rgx_dict(
     comment_punct=r'[[:punct:]]{1,3}',
     indent=r'(?m)^([ \t]*+)(\S?)',
+    args=r'^(?P<cmd>[-\w]++) *(?:["\'](?P<key>\w+)["\']: *["\'](?P<val>.+?)["\'])*+$',
 )
 _I = TypeVar('_I', bound=CommandArguments)
 
@@ -259,7 +268,7 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
         # self._log_func(args, kwargs)
         self._cache = ViewProperties()
 
-    def run(self, *args: Any, **kwargs: Any) -> None:
+    def run(self, *args: Any, **kwargs: Any) -> Any:
         """Run the command with the given keyword arguments."""
         # self._log_func(args, kwargs)
         if args or kwargs:
@@ -400,6 +409,31 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
             **log_kwargs,
         )
 
+    @staticmethod
+    def _path_for(filename: sb.View | str | None) -> Path:
+        if isinstance(filename, sb.View):
+            filename = filename.file_name()
+        return Path(filename).expanduser().resolve() if filename is not None else Path()
+
+    def _calc_indent(self, text: str) -> int:
+        match = re.match(r' +', text.expandtabs(self.tabsize))
+        return len(match[0]) if match else 0
+
+    @overload
+    def _line_content(self, *, row: int) -> tuple[Region, str]: ...
+
+    @overload
+    def _line_content(self, *, pos: int) -> tuple[Region, str]: ...
+
+    def _line_content(self, *, row: int = -1, pos: int = -1) -> tuple[Region, str]:
+        if pos < 0:
+            assert row >= 0, 'Must specify either a non-negative row or position.'
+            pos = self.view.text_point(row, 0)
+        region = self.view.line(pos)
+        text = self.read(region)
+        indent = self._calc_indent(text)
+        return Region(region.a + indent, region.b), text[indent:]
+
     # -------------------
     # `+` Primary Methods
     # -------------------
@@ -416,16 +450,106 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
             if name in self._cache.hash_fns:
                 self._cache.hashes[name] = hash(self._cache.hash_fns[name](self))
 
+    @overload
+    @ctx.contextmanager
+    def with_context(self, *, view: View) -> Iterator[None]: ...
+
+    @overload
+    @ctx.contextmanager
+    def with_context(self, *, buffer: Buffer) -> Iterator[None]: ...
+
+    @overload
+    @ctx.contextmanager
+    def with_context(self, *, window: Window) -> Iterator[None]: ...
+
+    @overload
+    @ctx.contextmanager
+    def with_context(self, *, edit: Edit) -> Iterator[None]: ...
+
+    @ctx.contextmanager
+    def with_context(
+        self,
+        *,
+        view: View | None = None,
+        buffer: Buffer | None = None,
+        window: Window | None = None,
+        edit: Edit | None = None,
+    ) -> Iterator[None]:
+        """A context manager that sets the given attribute to the given value."""
+        old = {}
+        if view is not None:
+            old['view'] = self._view
+            old['views'] = self._views
+            self.view = view
+        elif buffer is not None:
+            old['buffer'] = self._buffer
+            self.buffer = buffer
+        elif window is not None:
+            old['window'] = self._window
+            self.window = window
+        elif edit is not None:
+            old['edit'] = self._edit
+            self.edit = edit
+        try:
+            yield
+        finally:
+            if 'view' in old:
+                self.view = old['view']
+                self.views = old['views']
+            if 'buffer' in old:
+                self.buffer = old['buffer']
+            elif 'window' in old:
+                self.window = old['window']
+            elif 'edit' in old:
+                self.edit = old['edit']
+
+    @ctx.asynccontextmanager
+    async def with_view(self, path: Path | str, **kwargs) -> AsyncIterator[None]:
+        """An async context manager that sets the given attribute to the given value."""
+        with self.with_context(view=await self.open_async(path, **kwargs)):
+            if self.has_window():
+                self.window.focus_view(self.view)
+            yield
+
+    def navigate(self, href: str) -> None:
+        """Navigate to a code point from a hyperlink in an annotation popup."""
+        href = unquote(href).strip()
+        if href.startswith('file:'):
+            self.open(href[5:].strip())
+        elif href.startswith('http'):
+            sb.run_command('open_url', {'url': href})
+        elif href.startswith('subl:'):
+            match = RGXS['args'].fullmatch(href[5:].strip())
+            assert match, f'Invalid command href: {href!r}'
+            data, captures = ut.clean_rgx_match(match)
+            args: dict = dict(zip(captures['key'], captures['val']))
+            self.invoke(data['cmd'], **args)
+
+    async def navigate_async(self, href: str) -> None:
+        """Navigate to a code point from a hyperlink in an annotation popup."""
+        href = unquote(href).strip()
+        if href.startswith('file:'):
+            await self.open_async(href[5:].strip())
+        elif href.startswith('http'):
+            sb.run_command('open_url', {'url': href})
+        elif href.startswith('subl:'):
+            match = RGXS['args'].fullmatch(href[5:].strip())
+            assert match, f'Invalid command href: {href!r}'
+            data, captures = ut.clean_rgx_match(match)
+            args: dict = dict(zip(captures['key'], captures['val']))
+            await self.invoke_async(data['cmd'], **args)
+
     # ------------------
     # `x` Public Methods
     # ------------------
     def main(self) -> Any:
-        """The primary entry point for the command, executed when the command is.
+        """The primary entry point for the command.
 
         Not marked abstract so that the abstract classes can be instantiated by
         `sublime_plugin.load_module()`.
         Sadly, there's no way to prevent this other than changing their code.
         """
+        raise NotImplementedError('You must implement the `main` method to use this class.')
 
     @ft.cached_property
     def classname(self) -> str:
@@ -723,6 +847,10 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
     # -----------------
     # `x3` VIEW METHODS
     # -----------------
+    @property
+    def v_id(self) -> ut.ViewId:
+        return self.view.id()
+
     @overload
     def read(self, *args, **kwargs) -> str: ...
 
@@ -861,6 +989,26 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
         else:
             yield from self.line_comments
 
+    @property
+    @view_property()
+    def function_map(self) -> dict[str, sb.Region]:
+        ret = {}
+        for region in self.view.find_by_selector('entity.name.function'):
+            name = self.view.substr(region)
+            if name not in ret:
+                ret[name] = region
+        return ret
+
+    @property
+    @view_property()
+    def class_map(self) -> dict[str, sb.Region]:
+        ret = {}
+        for region in self.view.find_by_selector('entity.name.class'):
+            name = self.view.substr(region)
+            if name not in ret:
+                ret[name] = region
+        return ret
+
     @overload
     def first_char_of(self, *, pos: int = -1) -> int: ...
 
@@ -959,23 +1107,43 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
         syn = self.syntax
         return any(arg in syn for arg in args)
 
+    @property
+    def path(self) -> Path:
+        return self._path_for(self.view.file_name())
+
     # ------------------------
     # `*4` APPLICATION METHODS
     # ------------------------
+    @property
+    def api_level(self) -> CommandLevel:
+        """The *primary* level at which this command lives."""
+        if isinstance(self, (sbp.TextCommand, sbp.ViewEventListener)):
+            return 'view'
+        elif isinstance(self, sbp.WindowCommand):
+            return 'window'
+        elif isinstance(self, sbp.TextChangeListener):
+            return 'buffer'
+        elif isinstance(self, (sbp.ApplicationCommand, sbp.EventListener)):
+            return 'app'
+        raise RuntimeError(f'Unknown bases for {self.classname}: {self.__class__.__bases__}')
+
     def invoke(
         self,
         command: str,
         /,
         _delay: int = 50,
-        _async: bool = False,
-        _level: Literal['view', 'window', 'app'] | None = None,
+        _level: CommandLevel | None = None,
         **kwargs: Any,
     ) -> None:
         """Invoke another command with the given arguments."""
         fn: Callable[[str, dict], None]
         if _level is not None:
-            _inst = sb if _level == 'app' else getattr(self, _level)
-            fn = _inst.run_command
+            if _level == 'buffer':
+                raise NotImplementedError('Invoking commands at the buffer level is not supported.')
+            elif _level == 'app':
+                fn = sb.run_command
+            else:
+                fn = getattr(self, _level).run_command
         elif self._view is not None:
             fn = self.view.run_command
         elif self._window is not None:
@@ -983,8 +1151,20 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
         else:
             fn = sb.run_command
 
-        wrapper = sb.set_timeout_async if _async else sb.set_timeout
-        wrapper(lambda: fn(command, kwargs), _delay)
+        sb.set_timeout(lambda: fn(command, kwargs), _delay)
+
+    async def invoke_async(
+        self,
+        command: str,
+        /,
+        _delay: int = 50,
+        _async: bool = False,
+        _level: CommandLevel | None = None,
+        **kwargs: Any,
+    ) -> None:
+        """Asynchronously invoke another command with the given arguments."""
+        fn = ft.partial(self.invoke, command, _delay=_delay, _async=_async, _level=_level, **kwargs)
+        await aio.get_event_loop().run_in_executor(None, fn)
 
     @property
     def open_projects(self) -> dict[str, tuple[Path, dict]]:
@@ -1010,7 +1190,7 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
         projects = self.open_projects
         return {
             pkg.name: proj
-            for pkg in self.PATHS.packages.iterdir()
+            for pkg in self.PATHS.pkgs.iterdir()
             if (proj := projects.get(pkg.resolve().name) or projects.get(pkg.name))
         }
 
@@ -1025,8 +1205,77 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
         return next(
             (
                 pkg
-                for pkg in self.PATHS.packages.iterdir()
+                for pkg in self.PATHS.pkgs.iterdir()
                 if pkg.name in folders or pkg.resolve().name in folders
             ),
             None,
         )
+
+    # -------------------
+    # `*5` WINDOW METHODS
+    # -------------------
+    @property
+    def w_id(self) -> ut.WindowId:
+        return self.window.id()
+
+    @property
+    def cur_window(self) -> Window:
+        """The Window associated with this command, or the active window if none is set."""
+        return self.window if self.has_window() else sb.active_window()
+
+    @property
+    def folders(self) -> list[Path]:
+        """The list of folders in the current window, resolved to absolute paths."""
+        return list(map(ut.path, self.cur_window.folders()))
+
+    def open(
+        self,
+        path: Path | str,
+        *,
+        row: int = -1,
+        flags: sb.NewFileFlags | None = None,
+        window: sb.Window | None = None,
+        group: int = -1,
+    ) -> View:
+        """Open the given file in a new view.
+
+        Args:
+            path: The path to the file to open.
+            row: If set, the row to scroll to after opening the file.
+            flags: Additional flags to pass to `window.open_file()`.
+            window: If set, the window to open the file in rather than the current one.
+            group: The group to open the file in, or -1 to let Sublime decide.
+        """
+        # I. Normalize arguments
+        if flags is None:
+            flags = sb.NewFileFlags(0)
+        window = window or self.cur_window
+
+        path = ut.normalize_path(path, window)
+        pathstr = str(path)
+        if row > -1:
+            flags |= sb.NewFileFlags.ENCODED_POSITION
+            pathstr += f':{row}'
+
+        # III. Actually open the file and wait up to 3s for it to load
+        view = window.open_file(pathstr, flags, group)
+        count = 0
+        while not view.is_loading() and count < 30:
+            time.sleep(0.1)
+            count += 1
+        if count == 30:
+            warnings.warn(f'File "{pathstr}" took over 3s to load.', stacklevel=3)
+        return view
+
+    async def open_async(
+        self,
+        path: Path | str,
+        *,
+        row: int = -1,
+        flags: sb.NewFileFlags | None = None,
+        window: sb.Window | None = None,
+        group: int = -1,
+    ) -> View:
+        """Asynchronously open the given file in a new view."""
+        fn = ft.partial(self.open, path=path, row=row, flags=flags, window=window, group=group)
+        return await aio.get_event_loop().run_in_executor(None, fn)

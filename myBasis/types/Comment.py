@@ -13,7 +13,7 @@ import pydantic as pyd
 import more_itertools as mi
 
 # INTERNAL
-from .utils import ut
+from ..infra.utils import ut
 
 Region = sb.Region
 

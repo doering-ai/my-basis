@@ -13,12 +13,13 @@ urls = { Homepage = "https://gitlab.com/doering-thinking-machines/libs/sublime/b
 ### II. DEPENDENCIES ###
 ########################
 dependencies = [
+  "jinja2>=3.1.6",
   "more-itertools>=10.5.0",
   "pydantic>=2.10.6",
   "regex>=2024.11.6",
   "ruamel-yaml>=0.18.16",
   "sublime-lib",
-  "toolz>=1.0.0",
+  "sublime-aio",
 ]
 
 [dependency-groups]
@@ -50,6 +51,7 @@ namespace = true
 [tool.uv.sources]
 sublime-stubs = { path = "../_stubs", editable = true }
 sublime-lib = { path = "../_lib" }
+sublime-aio = { path = "../_deps/sublime_aio-0.1.6-py3-none-any.whl" }
 
 #############################
 ### IV. DEVELOPMENT TOOLS ###

@@ -33,6 +33,7 @@ EVENTS = dict(
         'post_move',
         'pre_close',
         'close',
+        'save',
         'pre_save',
         'post_save',
         'modified',

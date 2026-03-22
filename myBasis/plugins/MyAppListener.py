@@ -10,13 +10,13 @@ from typing import ClassVar, TypeVar, Generic
 # --------
 # External
 # --------
-import sublime_plugin as sbp
 # import sublime as sb
+import sublime_plugin as sbp
 
 # --------
 # Internal
 # --------
-from .CommandArguments import CommandArguments
+from ..types.CommandArguments import CommandArguments
 from ._MyBase import MyBase
 
 _I = TypeVar('_I', bound=CommandArguments)
@@ -25,16 +25,15 @@ _I = TypeVar('_I', bound=CommandArguments)
 ############
 ### BODY ###
 ############
-class _MyAppCommand(Generic[_I], MyBase[_I], sbp.ApplicationCommand):
-    """A Sublime Text 4 command that is instantiated just once per application.
+class _MyAppListener(Generic[_I], MyBase[_I], sbp.EventListener):
+    """A base class for any commands that trigger automatically (rather than being called directly).
 
-    There's literally zero new logic in this base class as opposed to Command, so this can
-    rightfully be considered the most basic type of command available.
-    That said, it's recommended you use `MyCommand` (based off `sbp.TextCommand`) for a typical
-    usecase involving reading and/or modifying  a single tab's contents.
+    For a list of available events you can attach to with `on_EVENT` methods, see
+    `constants.EVENTS`.
 
-    Obviously, keep in mind while subclassing that all member variables will live indefinitely;
-    perform your own cleanup as needed.
+    All the events mentioned in `constants.ASYNCABLE_EVENTS` have an `on_EVENT_async` variant,
+    though it is only async 'behind the scenes', so-to-speak. To run `asyncio` code, choose one of
+    those functions and wrap your logic in `asyncio.run()`.
     """
 
     _ALLOW_OVERRIDES: ClassVar[bool] = True

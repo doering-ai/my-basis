@@ -4,16 +4,17 @@
 ### STANDARD
 from __future__ import annotations
 from collections import defaultdict, deque
-from collections.abc import Callable, Iterator, MutableSequence
+from collections.abc import Callable, Iterator, Sequence, MutableSequence, Iterable
 from pathlib import Path
 from types import FunctionType
-from typing import ClassVar, TypeVar, Any, Literal, Union, NamedTuple
+from typing import ClassVar, TypeVar, Any, Literal, Union, NamedTuple, overload
 from typing_extensions import TypeAlias, ParamSpec
 import contextlib as ctx
 import functools as ft
-import time
-import warnings
 import textwrap
+import itertools as it
+from datetime import timedelta, datetime, timezone
+from uuid import uuid4
 
 ### EXTERNAL
 import sublime as sb
@@ -37,11 +38,16 @@ re.DEFAULT_VERSION = re.VERSION1
 
 ViewClass: TypeAlias = Union[sbp.ViewEventListener, sbp.TextCommand]
 T = TypeVar('T')
+K = TypeVar('K')
+S = TypeVar('S', bound=Sequence)
 F = TypeVar('F', bound=FunctionType)
 P = ParamSpec('P')
 R = TypeVar('R')
 V = TypeVar('V', bound=ViewClass)
+MetaDecorator: TypeAlias = 'Callable[[Callable[P, R]], Callable[P, R]]'
 ViewPropertyDecorator: TypeAlias = 'Callable[[Callable[[V], R]], Callable[[V], R]]'
+
+_Resource: TypeAlias = str
 
 NO_ESC = r'(?<![^\\]\\)(?<!\\{3})'
 RGX_REF_RGX = re.compile(NO_ESC + r'\{\{\.(?P<name>[_[:lower:]][_[:lower:]\d]*)\}\}')
@@ -64,7 +70,8 @@ class Utils(TypesMixin):
     ST_VERSION: ClassVar[int] = int(sb.version())
     ST_PLATFORM: ClassVar[Literal['osx', 'linux', 'windows']] = sb.platform()
 
-    DEBOUNCE_TIME: ClassVar[float] = 0.5
+    DEFAULT_DEBOUNCE: ClassVar[int] = 500
+    _DEBOUNCE_REGISTRY: ClassVar[dict[str, int]] = defaultdict(int)
 
     PATHS: ClassVar[PathRegistry] = PATHS
 
@@ -84,7 +91,7 @@ class Utils(TypesMixin):
             )
 
             # II. Setup RGXS
-            cls.RGXS = Utils.rgx_dict(
+            cls.RGXS = cls.rgx_dict(
                 no_esc=NO_ESC,
                 roman=r'(?i:M{1,4}|CM|C?D|D?C{1,3}|XC|X?L|L?X{1,3}|IX|I?V|V?I{1,3})',
                 roman_quad=r'(?i:C{4}|X{4}|I{4})',
@@ -109,7 +116,7 @@ class Utils(TypesMixin):
                 # xml=['snippet'],
             )
             _suffixes = {k: cls.multi_rgx(*v, pre='sublime-') for k, v in sublime_suffixes.items()}
-            cls.FILE_READERS = Utils.rgx_array(
+            cls.FILE_READERS = cls.rgx_array(
                 (rf'ya?ml|{_suffixes["yaml"]}', cls.YAML.load),
                 (rf'json|{_suffixes["json"]}', json.loads),
                 (r'to?ml', toml.loads),
@@ -119,27 +126,62 @@ class Utils(TypesMixin):
 
             cls._IS_SETUP = True
 
-    @staticmethod
-    def path_dict(**kwargs: str | Path) -> dict[str, Path]:
-        """Expand the given dictionary of paths, mapping names to Paths.
+    @classmethod
+    def posix(cls, val: int | float | datetime | None = None) -> datetime:
+        """Convert a timestamp or datetime to UTC datetime.
 
         Args:
-            **kwargs: A mapping of string names to file paths (as strings or Paths).
+            val: Unix timestamp (int/float), datetime object, or None for current time.
         Returns:
-            The paths mapping with all values now expanded to Paths.
+            Timezone-aware datetime in UTC.
         """
-        return {key: Path(val).expanduser().resolve() for key, val in kwargs.items()}
+        if val is None:
+            return datetime.now(timezone.utc)
+        elif isinstance(val, datetime):
+            return val.astimezone(timezone.utc)
+        else:
+            return datetime.fromtimestamp(val, timezone.utc)
 
-    @staticmethod
+    @classmethod
+    def posix_since(cls, val: int | float | datetime | None = None) -> timedelta:
+        """Calculate time elapsed since a given timestamp.
+
+        Args:
+            val: Unix timestamp (int/float), datetime object, or None.
+        Returns:
+            Timedelta representing elapsed time, or zero if val is falsy.
+        """
+        if not val:
+            return timedelta(0)
+        else:
+            return cls.posix() - cls.posix(val)
+
+    @classmethod
+    def milliseconds(cls, val: int | float | datetime | timedelta | None = None) -> int:
+        """Convert a timedelta or datetime to milliseconds."""
+        if val is None:
+            val = cls.posix()
+
+        if isinstance(val, timedelta):
+            return round(val.total_seconds() * 1000)
+        elif isinstance(val, datetime):
+            return round(val.timestamp() * 1000)
+        else:
+            return int((val * 1000) if val < 10 else val)
+
+    @classmethod
     def rgx_dict(
+        cls,
         compile_function: Callable[[str], Pattern[str]] = re.compile,
-        **kwargs: str | Pattern[str],
+        sep=r'',
+        **kwargs: str | Pattern[str] | Iterable[str],
     ) -> dict[str, Pattern[str]]:
         """Compile the expression strings in the given dictionary, mapping names to Patterns.
 
         Args:
             expressions: A mapping of string names to regular expressions (compiled or otherwise).
             compile_function: Function to compile patterns (default: re.compile).
+            sep: If any values in the expressions dict are lists of strings, join them with this.
             **kwargs: Additional named patterns to include.
         Returns:
             The expressions mapping with all values now compiled.
@@ -148,22 +190,25 @@ class Utils(TypesMixin):
         try:
             for key, val in kwargs.items():
                 if isinstance(val, Pattern):
-                    ret[key] = val
-                else:
-                    for match in list(RGX_REF_RGX.finditer(val)):
-                        name = match['name']
-                        assert name in ret, f"Referenced non-existent group {name} in r'{val}'"
-                        val = val.replace(match[0], ret[name].pattern)
-                    ret[key] = compile_function(val)
+                    ret[key] = kwargs[key] = val
+                    continue
+                elif not isinstance(val, str):
+                    val = kwargs[key] = sep.join(val)
+
+                for match in list(RGX_REF_RGX.finditer(val)):
+                    name = match['name']
+                    assert name in ret, f"Referenced non-existent group {name} in r'{val}'"
+                    val = val.replace(match[0], ret[name].pattern)
+                ret[key] = compile_function(val)
         except re.error as e:
             if not (key := next((k for k in kwargs.keys() if k not in ret), None)):
                 raise ValueError(f'Unknown regex compilation error: {e}.') from e
-            Utils._debug_rgx_dict(e, key, kwargs[key])
+            cls._debug_rgx_dict(e, key, str(kwargs[key]))
 
         return ret
 
-    @staticmethod
-    def safe_compile(key: str, expr: str, fn: Callable[[str], Pattern[str]]) -> Pattern[str]:
+    @classmethod
+    def safe_compile(cls, key: str, expr: str, fn: Callable[[str], Pattern[str]]) -> Pattern[str]:
         """Safely compile a regex pattern, returning None if it fails.
 
         Args:
@@ -177,12 +222,12 @@ class Utils(TypesMixin):
             ret = fn(expr)
         except re.error as e:
             print('RGX COMPILATION ERROR')
-            Utils._debug_rgx_dict(e, key, expr)
+            cls._debug_rgx_dict(e, key, expr)
             ret = fn(r'ERROR')
         return ret
 
-    @staticmethod
-    def _debug_rgx_dict(e: re.error, key: str, pattern: str | Pattern[str]) -> None:
+    @classmethod
+    def _debug_rgx_dict(cls, e: re.error, key: str, pattern: str | Pattern[str]) -> None:
         if not isinstance(pattern, str):
             pattern = pattern.pattern
         pos = getattr(e, 'pos', -1)
@@ -210,15 +255,15 @@ class Utils(TypesMixin):
         print(len(out))
         raise ValueError('\n'.join(out).strip()) from e
 
-    @staticmethod
-    def rgx_definitions(groups: dict[str, str]) -> str:
+    @classmethod
+    def rgx_definitions(cls, groups: dict[str, str]) -> str:
         """Format a dictionary of named regex patterns into a `(?(DEFINE)...)` group."""
         if not groups:
             return ''
         return ''.join([r'(?(DEFINE)', *(rf'(?P<{key}>{val})' for key, val in groups.items()), ')'])
 
-    @staticmethod
-    def rgx_array(*args: tuple[str | Pattern, T]) -> list[tuple[Pattern, T]]:
+    @classmethod
+    def rgx_array(cls, *args: tuple[str | Pattern, T]) -> list[tuple[Pattern, T]]:
         """Compile the expressions in a list of two-tuples, effectively mapping Patterns to strings.
 
         Args:
@@ -235,8 +280,9 @@ class Utils(TypesMixin):
             ret.append((key, val))
         return ret
 
-    @staticmethod
+    @classmethod
     def multi_rgx(
+        cls,
         *expressions: str | list[str],
         branching: bool = False,
         sep: str = r' ?',
@@ -259,8 +305,8 @@ class Utils(TypesMixin):
         start = '?|' if branching else '?:'
         return rf'{pre}({start}{contents}){suf}'
 
-    @staticmethod
-    def define_rgx(**kwargs: str) -> str:
+    @classmethod
+    def define_rgx(cls, **kwargs: str) -> str:
         """Define a regex pattern with named capture groups.
 
         Args:
@@ -278,11 +324,11 @@ class Utils(TypesMixin):
             ]
         )
 
-    @staticmethod
-    def clean_rgx_match(match: re.Match | None) -> tuple[dict[str, str], dict[str, list[str]]]:
+    @classmethod
+    def clean_rgx_match(cls, match: re.Match | None) -> tuple[dict[str, str], dict[str, list[str]]]:
         """Normalize the structure and contents of a given match w/ repeated captures."""
         if match is None:
-            return {}, {}
+            return defaultdict(str), defaultdict(list)
 
         captures = defaultdict(
             list,
@@ -292,12 +338,12 @@ class Utils(TypesMixin):
                 if v
             },
         )
-        groups = defaultdict(str, {k: v[-1] for k, v in captures.items() if v})
+        groups = defaultdict(lambda: '', {k: v[-1] for k, v in captures.items() if v})
         return groups, captures
 
-    @staticmethod
+    @classmethod
     def rgx_fullsplit(
-        rgx: re.Pattern, text: str, collapse: bool = False
+        cls, rgx: re.Pattern, text: str, collapse: bool = False
     ) -> tuple[list[str], list[str]]:
         """Split the given text into sections based on the given regex."""
         sections, delims = [], []
@@ -316,7 +362,7 @@ class Utils(TypesMixin):
 
             # If requested, collapse any empty sections into longer delimiters
             if collapse:
-                Utils._collapse_empty_sections(delims, sections)
+                cls._collapse_empty_sections(delims, sections)
         return delims, sections
 
     @staticmethod
@@ -340,15 +386,15 @@ class Utils(TypesMixin):
     ROMAN_ARR: ClassVar[str] = 'MDCLXVI'
     ROMAN_MAP: ClassVar[dict[str, int]] = dict(M=1000, D=500, C=100, L=50, X=10, V=5, I=1)
 
-    @staticmethod
-    def decimal_to_roman(decimal: int) -> str:
+    @classmethod
+    def decimal_to_roman(cls, decimal: int) -> str:
         """Convert a decimal number to its Roman numeral representation.
 
         Only supports numbers up to 3999 (MMMCMXCIX).
         """
         assert decimal <= 3999, f'Decimal {decimal} too large for Roman numeral form (max 3999).'
         ans = ''
-        for char, val in Utils.ROMAN_MAP.items():
+        for char, val in cls.ROMAN_MAP.items():
             while decimal >= val:
                 ans += char
                 decimal -= val
@@ -357,20 +403,20 @@ class Utils(TypesMixin):
                 break
 
         # Fix quads of tens-places (e.g. IIII -> IV, XXXX -> XL, CCCC -> CD)
-        for match in reversed(list(Utils.RGXS['roman_quad'].finditer(ans))):
+        for match in reversed(list(cls.RGXS['roman_quad'].finditer(ans))):
             char = match[0][0]
-            d_idx = Utils.ROMAN_ARR.index(char)
+            d_idx = cls.ROMAN_ARR.index(char)
             x0, x1 = match.span()
-            half = Utils.ROMAN_ARR[d_idx - 1]
+            half = cls.ROMAN_ARR[d_idx - 1]
             if x0 > 0 and ans[x0 - 1] == half:
-                ans = ans[: x0 - 1] + char + Utils.ROMAN_ARR[d_idx - 2] + ans[x1:]
+                ans = ans[: x0 - 1] + char + cls.ROMAN_ARR[d_idx - 2] + ans[x1:]
             else:
                 ans = ans[:x0] + char + half + ans[x1:]
 
         return ans
 
-    @staticmethod
-    def roman_to_decimal(roman: str) -> int:
+    @classmethod
+    def roman_to_decimal(cls, roman: str) -> int:
         """Convert a Roman numeral string to its decimal representation.
 
         Only supports valid Roman numeral strings up to MMMCMXCIX (3999).
@@ -378,13 +424,13 @@ class Utils(TypesMixin):
         """
         ans = 0
         last_index = 0
-        for match in Utils.RGXS['roman'].finditer(roman.upper()):
+        for match in cls.RGXS['roman'].finditer(roman.upper()):
             if match.start() != last_index:
                 return 0
             else:
                 last_index = match.end()
 
-            v = [Utils.ROMAN_MAP[char] for char in match[0]]
+            v = [cls.ROMAN_MAP[char] for char in match[0]]
             n_unique = len(set(v))
             if n_unique == 2:
                 mod = v[0] * (-1 if v[1] > v[0] else 1)
@@ -417,10 +463,12 @@ class Utils(TypesMixin):
         yield
         print(f'{pre}{mark * width}\n')
 
-    @staticmethod
+    @classmethod
     def multiprint(
+        cls,
         *items: Any,
         title: str = '',
+        lines: Iterable[str] | None = None,
         indent: int = 0,
         indent_range: tuple[int, int] = (0, 0),
         quiet: bool = False,
@@ -432,6 +480,7 @@ class Utils(TypesMixin):
         Args:
             *items: Items to print after being converted to strings.
             title: Title line(s) to print before any indented content. Sets indent to 4 if unset.
+            lines: Additional lines to print (in addition to the items), as an iterable of strings.
             indent: Number of spaces to indent each line by.
             indent_range: Optional subset of line indices to apply the indent to.
             quiet: Do not print anything to stdout, just return the formatted string.
@@ -441,7 +490,7 @@ class Utils(TypesMixin):
             The constructed multiline string.
         """
         # I. Preprocess items into lines
-        lines = list(mi.flatten(map(str.splitlines, map(str, items))))
+        lines = list(mi.flatten(map(str.splitlines, it.chain(lines or [], map(str, items)))))
 
         # II. Handle title lines, which are merely shorthand for indented lines at the top
         if title:
@@ -461,40 +510,74 @@ class Utils(TypesMixin):
             print(ret, **kwargs)
         return ret
 
-    @staticmethod
-    def debounced(fn: Callable[P, Any]) -> Callable[P, None]:
-        """A decorator which debounces the calls to a function.
+    @overload
+    @classmethod
+    def debounced(cls, /, fn: Callable[P, Any]) -> Callable[P, None]: ...
 
-        Adapted from LSP.
+    @overload
+    @classmethod
+    def debounced(
+        cls, /, *, delta: int | float | timedelta = DEFAULT_DEBOUNCE
+    ) -> Callable[[Callable[P, Any]], Callable[P, None]]: ...
+
+    @classmethod
+    def debounced(
+        cls,
+        /,
+        fn: Callable[P, Any] | None = None,
+        *,
+        delta: int | float | timedelta = DEFAULT_DEBOUNCE,
+    ) -> Callable[[Callable[P, Any]], Callable[P, None]] | Callable[P, None]:
+        """A decorator which debounces the calls to a function. Adapted from LSP.
 
         Note that the return value of the function will be discarded, so it only makes sense to use
-        this decorator for functions that return None. The function will run on Sublime's main
-        thread.
+        this decorator for functions that return None.
+        The function will run on Sublime's main thread.
+
+        Args:
+            fn: The function to debounce. If not provided, the decorator will return a nested
+                decorator instead.
+            delta: Time to debounce calls for, in milliseconds or as a timedelta.
+        Returns:
+            The wrapped function OR a nested decorator prepared to wrap the function.
         """
+        delta = cls.milliseconds(delta)
+
+        uid = uuid4().hex
+        if fn is not None:
+            return cls._debounce_factory(uid, fn, delta)
+        else:
+            return lambda _fn: cls._debounce_factory(uid, _fn, delta)
+
+    @classmethod
+    def _debounce_factory(cls, uid: str, fn: Callable[P, Any], delta: int) -> Callable[P, None]:
+        """Construct a wrapper for the given function -- see debounce() for details."""
+        reg = cls._DEBOUNCE_REGISTRY
 
         @ft.wraps(fn)
         def _wrapped(*args: P.args, **kwargs: P.kwargs) -> None:
-            def _check() -> None:
-                target_time = getattr(_wrapped, '_target_time', None)
-                if isinstance(target_time, float):
-                    if (delay := target_time - time.monotonic()) > 0:
-                        _wrapped._target_time = None  # type: ignore
-                        sb.set_timeout(_check, int(delay * 1000))
-                        return
-                delattr(_wrapped, '_target_time')
-                fn(*args, **kwargs)
+            """Runs every time the class is called."""
 
-            if hasattr(_wrapped, '_target_time'):
-                _wrapped._target_time = time.monotonic() + Utils.DEBOUNCE_TIME  # type: ignore
-                return
-            _wrapped._target_time = None  # type: ignore
-            sb.set_timeout(_check, int(Utils.DEBOUNCE_TIME * 1000))
+            def _check() -> None:
+                """Utility callback that can be delayed."""
+                _now = cls.milliseconds()
+                _tt = reg[uid]
+                if _tt > _now:
+                    sb.set_timeout(_check, _tt - _now)
+                else:
+                    reg[uid] = 0
+                    fn(*args, **kwargs)
+
+            now = cls.milliseconds()
+            if reg[uid] == 0:
+                sb.set_timeout(_check, delta)
+            reg[uid] = now + delta
 
         return _wrapped
 
-    @staticmethod
+    @classmethod
     def sorted_insert(
-        array: MutableSequence[T], item: T, key: Callable[[T], Any] = lambda x: x
+        cls, array: MutableSequence[T], item: T, key: Callable[[T], Any] = lambda x: x
     ) -> int:
         """Insert an item into a list, keeping it sorted according to the given key function."""
         new_key = key(item)
@@ -502,6 +585,65 @@ class Utils(TypesMixin):
         array.insert(index, item)
         return index
 
+    @classmethod
+    def groupby(
+        cls,
+        iterable: Iterable[T],
+        key: int | str | Callable[[T], K],
+        drop: bool = False,
+        key_type: type[K] | None = None,
+    ) -> Iterable[tuple[K, list[T]]]:
+        """Group the items in the given iterable by the given key function."""
+        if isinstance(key, int):
+            pred = lambda item: item[key]  # type: ignore
+        elif isinstance(key, str):
+            pred = lambda item: getattr(item, key)
+        else:
+            pred = key
+
+        _iter = iter(iterable)
+        if drop:
+            _iter = filter(lambda item: bool(pred(item)), _iter)
+        _iter = sorted(iterable, key=pred)  # type: ignore
+
+        yield from ((key, list(items)) for key, items in it.groupby(_iter, key=pred))
+
+    @classmethod
+    def indexof(cls, iterable: Sequence[T], *preds: Callable[[T], bool] | T) -> int:
+        """Return the first index in the given iterable that satisfies the predicate."""
+        preds = tuple((pred if callable(pred) else pred.__eq__) for pred in preds)
+        uni_pred = lambda item: any(fn(item) for fn in preds)
+        return mi.first(mi.locate(iterable, uni_pred), default=-1)
+
+    @classmethod
+    def locate(
+        cls,
+        seq: Sequence[T],
+        pred: Callable[[T], bool],
+        default: int = -1,
+    ) -> tuple[int, T]:
+        """Return the first index in the given seq that satisfies the predicate.
+
+        Args:
+            seq: seq to search through.
+            pred: Predicate function to apply to each item.
+            default: Default index to return if no item satisfies the predicate (default: -1).
+        """
+        index = cls.indexof(seq, pred)
+        assert index != -1, 'No item found matching predicate.'
+        return index, seq[index]
+
+    @classmethod
+    def pop_index(cls, sequence: list[T], index: int) -> list[T]:
+        """Pop the item at the given index from the sequence, returning a new sequence."""
+        assert 0 <= index < len(sequence), (
+            f'Index {index} out of bounds for sequence of length {len(sequence)}.'
+        )
+        return sequence[:index] + sequence[index + 1 :]
+
+    # -------
+    # WRITING
+    # -------
     ViewPosition: TypeAlias = 'sb.Region | int | tuple[int, ...]'
 
     class Write(NamedTuple):
@@ -594,81 +736,115 @@ class Utils(TypesMixin):
     def package_list() -> set[str]:
         """Collect a list of all available packages, installed or otherwise."""
         paths = {
-            *filter(Path.is_dir, PATHS.packages.iterdir()),
+            *filter(Path.is_dir, PATHS.pkgs.iterdir()),
             *filter(
                 lambda c: c.suffix in {'.sublime-package', '.zip'},
-                PATHS.installed_packages.iterdir(),
+                PATHS.inst.iterdir(),
             ),
         }
         return {path.stem for path in paths}
 
+    @staticmethod
+    def path(path: str | Path) -> Path:
+        """Coerce a string path to a Path object, normalizing separators and redundant parts."""
+        return PathRegistry.normalize(path)
+
     @classmethod
-    def qualify_resource_names(cls, *targets: str) -> list[str]:
+    def qualify_resource_names(cls, *targets: str) -> list[_Resource]:
         """Expand out the given resource paths into fully qualified versions."""
         instances = mi.flatten(map(sbl.ResourcePath.glob_resources, targets))
         return list(mi.unique_everseen(map(str, instances)))
 
     @classmethod
-    def load_resources(cls, *targets: str | Path) -> dict[str, str]:
+    def load_resources(cls, *targets: str | Path) -> dict[_Resource, str]:
         """Load the text of a resource from disk or from a SublimeText package."""
         return {
             fqrn: sb.load_resource(fqrn) for fqrn in cls.qualify_resource_names(*map(str, targets))
         }
 
     @classmethod
-    def try_to_relativize(cls, file: Path) -> str:
-        """Try to turn this file path into a resource str."""
-        if (
-            pkgroot := next(
-                (
-                    i
-                    for i, part in enumerate(file.parts)
-                    if part in {'Packages', 'Installed Packages'}
-                ),
-                None,
-            )
-            is not None
-        ):
-            return str('Packages' / Path(*file.parts[pkgroot + 1 :]))
-        elif (
-            cacheroot := next((i for i, part in enumerate(file.parts) if part == 'Caches'), None)
-        ) is not None:
-            return str(Path(*file.parts[cacheroot:]))
+    def window_folders(cls, window: sb.Window | None = None) -> list[Path]:
+        """Return the folders of the given window as Paths."""
+        window = window or sb.active_window()
+        return [cls.path(folder) for folder in window.folders()]
 
-        if file.is_relative_to(PATHS.packages):
-            return str('Pacakges' / file.relative_to(PATHS.packages))
-        elif file.is_relative_to(PATHS.packages):
-            return str('Pacakges' / file.relative_to(PATHS.packages))
-        elif file.is_relative_to(PATHS.cache):
-            return str('Caches' / file.relative_to(sb.cache_path()))
+    @classmethod
+    def normalize_path(cls, path: str | Path, window: sb.Window | None = None) -> Path:
+        """Normalize non-absolute paths by searching Sublime & project directories."""
+        path = cls.path(path)
+        parts = path.parts
+        # I. Handle absolute & empty paths
+        if path.is_absolute() or not path:
+            return path
 
-        return ''
+        # II. Handle mainline resources
+        elif (i := cls.indexof(parts, 'Packages')) != -1:
+            return Path(PATHS.pkgs, *parts[i + 1 :])
+        elif (i := cls.indexof(parts, 'Installed Packages')) != -1:
+            return Path(PATHS.inst, *parts[i + 1 :])
+        elif (i := cls.indexof(parts, 'Package Storage')) != -1:
+            return Path(PATHS.data, *parts[i + 1 :])
+        elif (i := cls.indexof(parts, 'Cache')) != -1:
+            return Path(PATHS.cache, *parts[i + 1 :])
+
+        # III. Handle packages lacking the proper prefix
+        elif (i := cls.indexof(parts, *cls.package_list())) != -1:
+            return Path(PATHS.pkgs, *parts[i:])
+
+        # IV. Handle paths relative to open folders in the current window
+        folders = cls.window_folders(window)
+        if (i := cls.indexof(parts, *folders)) != -1:
+            return Path(folders[i], *parts[i + 1 :])
+        else:
+            return path
+
+    @classmethod
+    def relativize(cls, path: Path, *parents: Path | str) -> Path | None:
+        """Relativize the given path to the first matching parent, if possible."""
+        return next(
+            (
+                path.relative_to(parent)
+                for parent in map(cls.path, parents)
+                if str(path).startswith(str(parent))
+            ),
+            None,
+        )
+
+    @classmethod
+    def path_to_resource(cls, path: str | Path) -> _Resource | None:
+        """Convert a filesystem path to a Sublime resource path, if possible."""
+        path = cls.normalize_path(path)
+        if _p := cls.relativize(path, PATHS.pkgs, PATHS.inst):
+            return str('Packages' / _p)
+        elif _p := cls.relativize(path, PATHS.cache):
+            return str('Cache' / _p)
+        return None
 
     @classmethod
     def read_file(cls, file: str | Path, expect_one: bool = False) -> tuple[str, str]:
         """Read the text of a file from disk or from a SublimeText package."""
+        # I. Check if we've been given raw text and handle that immediately
         if isinstance(file, str):
-            if '\n' in file:
+            if '\n' in file or len(file) > 256:
                 return '', file
-            file = Path(file)
-        file = file.expanduser()
+        file = cls.path(file)
 
+        if file.is_absolute() and file.exists():
+            return '', file.read_text()
+
+        # II. Load SublimeText resources, whose paths aren't necessarily literal
+        if (res := cls.path_to_resource(file)) and (texts := cls.load_resources(res)):
+            if len(texts) > 1 and expect_one:
+                raise ValueError(f'Found more than one valid {res}: {texts}.')
+            return mi.first(texts.items())
+
+        # III. Otherwise, try to read from disk
         if file.is_absolute():
-            if _rel := cls.try_to_relativize(file):
-                file = _rel
-            else:
-                assert file.exists(), f'File {file} does not exist on disk.'
-                assert file.is_file(), f'File {file} is not a valid file on disk.'
-                return '', file.read_text()
+            assert file.exists(), f'File {file} does not exist on disk.'
+            assert file.is_file(), f'File {file} is not a valid file on disk.'
+            return '', file.read_text()
 
-        results = cls.load_resources(file)
-        if len(results) == 0:
-            raise FileNotFoundError(f'Could not find file {file} on disk or in packages.')
-        elif len(results) > 1 and expect_one:
-            warnings.warn(
-                f'Found multiple resources matching {file} -- using first match.', stacklevel=3
-            )
-        return mi.first(results.items())
+        raise ValueError(f'Could not resolve `{file}` as a path nor resource.')
 
     @classmethod
     def from_file(
@@ -715,6 +891,5 @@ class Utils(TypesMixin):
         return data
 
 
-Utils.setup()
-
 ut = utils = Utils
+Utils.setup()

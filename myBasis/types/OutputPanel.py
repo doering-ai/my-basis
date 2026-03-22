@@ -24,7 +24,7 @@ import regex as re
 import more_itertools as mi
 
 ### INTERNAL
-from .utils import ut
+from ..infra.utils import ut
 
 Format: TypeAlias = Literal['plain', 'html', 'shell']
 
@@ -109,8 +109,14 @@ class OutputPanel(pyd.BaseModel):
     #: Syntax highlighting to apply to the output panel view. Does not apply to html.
     syntax: ut.SyntaxField | None = None
 
+    #: Which container to write plain content to (HTML content is implied to be a sheet).
+    container: Literal['panel', 'sheet'] = 'panel'
+
     #: Optional middleware functions to apply to the text before writing it to the panel.
     middleware: tuple[Callable[[str], str], ...] = tuple()
+
+    #: The title to use for the output panel sheet, if using a sheet instead of a panel.
+    sheet_title: str = 'Output Panel'
 
     # ---- View Settings ----
     file_regex: str = ''
@@ -121,15 +127,14 @@ class OutputPanel(pyd.BaseModel):
     gutter: bool = False
     scroll_past_end: bool = False
 
-    # ---- Sheet settings ----
-    #: Whether to automatically focus the panel when it is opened.
-    focus_on_open: bool = False
-
     # ---- State ----
     #: The output panel view, if using a standard output panel.
     panel: ut.ViewField | None = None
+    #: The output panel sheet, if using a standard sheet instead of a panel.
+    sheet: ut.SheetField | None = None
     #: The output panel sheet, if using an html sheet.
-    sheet: ut.HtmlSheetField | None = None
+    html: ut.HtmlSheetField | None = None
+
     #: The current of the panel; note that closed panels cannot be written to.
     status: Literal['open', 'closed', 'failed'] = 'open'
 
@@ -144,8 +149,6 @@ class OutputPanel(pyd.BaseModel):
     _queue: deque = pyd.PrivateAttr(default_factory=deque)
     #: Original standard output and error streams, to restore when the panel is closed.
     _std_streams: tuple[TextIO, TextIO] | None = None
-    #: History of flushes, for use in debugging only.
-    _history: deque[tuple[float, int]] = deque()
 
     # -------------------
     # `.` Initial Methods
@@ -158,9 +161,11 @@ class OutputPanel(pyd.BaseModel):
 
         self.status = 'open'
         if self.f1 == 'html':
-            self.sheet = self._create_sheet()
-        else:
+            self.html = self._create_html()
+        elif self.container == 'panel':
             self.panel = self._create_panel()
+        else:
+            self.sheet = self._create_sheet()
 
         return self
 
@@ -186,10 +191,12 @@ class OutputPanel(pyd.BaseModel):
             return
         self.status = 'closed'
 
-        if self.sheet is not None:
-            self.sheet.close()
+        if self.html is not None:
+            self.html.close()
         if self.panel is not None:
             self.window.run_command('hide_panel', dict(panel=f'output.{self.name}'))
+        if self.sheet is not None:
+            self.sheet.close()
 
     def reset(self) -> None:
         """Clears the output panel content and resets the text queue."""
@@ -197,50 +204,55 @@ class OutputPanel(pyd.BaseModel):
         self.status = 'open'
         with self._lock:
             self._queue.clear()
-            self._history.clear()
 
         print(f'OutputPanel.reset({self.uid})')
 
-        # I. Clear the sheet
-        if self.sheet is not None:
-            if self.sheet in self.window.sheets():
-                # I.i. The sheet is still open, so erase all content and return
-                if self._reselect_sheet(self.sheet):
-                    self.sheet.set_contents(self.html_content)
-                    if self.focus_on_open:
-                        self.window.focus_sheet(self.sheet)
+        # I. Clear the HTML sheet
+        if self.html is not None:
+            if self.html in self.window.sheets():
+                if self._reselect_sheet(self.html):
+                    self.html.set_contents(self.html_content)
                     return
-            # I.ii. The sheet has been closed, so open a new one
-            self.sheet = self._create_sheet()
+            else:
+                self.html = self._create_html()
 
         # II. Clear the panel
         if self.panel is not None:
             if self.panel.is_valid():
-                # II.i. The panel is still open, so erase all content
                 self.panel.run_command('select_all')
                 self.panel.run_command('right_delete')
                 return
-            # II.ii. The panel has been closed, so open a new one
-            self.panel = self._create_panel()
+            else:
+                self.panel = self._create_panel()
+
+        # II. Clear the panel
+        if self.sheet is not None:
+            if (
+                (v := self.sheet.view())
+                and v.is_valid()
+                and (v.file_name() or '').startswith(self.sheet_title)
+            ):
+                v.run_command('select_all')
+                v.run_command('right_delete')
+                return
+            else:
+                self.sheet = self._create_sheet()
 
     # -------------------
     # `-` Private Methods
     # -------------------
-    def _create_sheet(self) -> sb.HtmlSheet:
+    def _create_html(self) -> sb.HtmlSheet:
         w = self.window
-        if existing := self._existing_sheet():
+        if existing := self._existing_html():
             group, index = w.get_sheet_index(existing)
-            w.select_sheets([*w.selected_sheets(), existing])
             existing.close()
         else:
             group = (w.active_group() + 1) % w.num_groups()
             index = -1
 
-        sheet = self.window.new_html_sheet('PyTest Results', '', group=group)
+        sheet = self.window.new_html_sheet(self.sheet_title, '', group=group)
         if index != -1:
             w.set_sheet_index(sheet, group, index)
-        if self.focus_on_open:
-            w.focus_sheet(sheet)
         return sheet
 
     def _create_panel(self) -> sb.View:
@@ -249,8 +261,25 @@ class OutputPanel(pyd.BaseModel):
         self.window.run_command('show_panel', dict(panel=f'output.{self.name}'))
         return panel
 
-    def _apply_settings(self, panel: sb.View) -> None:
-        settings = panel.settings()
+    def _create_sheet(self) -> sb.Sheet:
+        w = self.window
+        if existing := self._existing_sheet():
+            group, index = w.get_sheet_index(existing)
+            existing.close()
+        else:
+            group = (w.active_group() + 1) % w.num_groups()
+            index = -1
+
+        view = w.new_file(sb.NewFileFlags.TRANSIENT)
+        self._apply_settings(view)
+        sheet = view.sheet()
+        assert sheet is not None, 'Failed to create new sheet for output panel.'
+        if index != -1:
+            w.set_sheet_index(sheet, group, index)
+        return sheet
+
+    def _apply_settings(self, view: sb.View) -> None:
+        settings = view.settings()
         settings.set('result_file_regex', self.file_regex)
         settings.set('result_line_regex', self.line_regex)
         settings.set('result_base_dir', self.base_dir)
@@ -260,10 +289,10 @@ class OutputPanel(pyd.BaseModel):
         settings.set('scroll_past_end', self.scroll_past_end)
 
         if self.syntax:
-            panel.assign_syntax(self.syntax)
-        panel.set_read_only(True)
+            view.assign_syntax(self.syntax)
+        view.set_read_only(True)
 
-    def _existing_sheet(self) -> sb.HtmlSheet | None:
+    def _existing_html(self) -> sb.HtmlSheet | None:
         return next(
             (
                 sheet
@@ -273,7 +302,17 @@ class OutputPanel(pyd.BaseModel):
             None,
         )
 
-    HTML_STYLES: ClassVar[str] = (Path(__file__).parent / 'output_styles.html').read_text()
+    def _existing_sheet(self) -> sb.Sheet | None:
+        return next(
+            (
+                sheet
+                for sheet in self.window.sheets()
+                if sheet.is_transient() and (sheet.file_name() or '').startswith(self.sheet_title)
+            ),
+            None,
+        )
+
+    HTML_STYLES: ClassVar[str] = (Path(__file__).parent / '../infra/output_styles.html').read_text()
     ANSI_CSS_CLASSES: ClassVar[dict[str, str]] = {
         '30': 'class="bg"',
         '31': 'class="red"',
@@ -461,7 +500,7 @@ class OutputPanel(pyd.BaseModel):
     def html_to_plain(cls, text: str) -> str:
         """Strips all html tags from the given text."""
         text = cls.RGXS['html'].sub('', text)
-        return text
+        return html.unescape(text)
 
     @classmethod
     def html_to_shell(cls, text: str) -> str:
@@ -487,14 +526,26 @@ class OutputPanel(pyd.BaseModel):
     @property
     def uid(self) -> str:
         """Returns a unique identifier for the output panel."""
-        if self.sheet:
-            return f's{self.sheet.id()}'
+        if self.html:
+            return f's{self.html.id()}'
         elif self.panel:
             return f'v{self.panel.id()}'
+        elif self.sheet:
+            return f's{self.sheet.id()}'
         elif self.window:
             return f'w{self.window.id()}'
         else:
             return '-1'
+
+    @property
+    def view(self) -> sb.View | None:
+        """Shorthand for the view inside the output's non-html sheet, which is assumed to exist."""
+        view = None
+        if self.panel:
+            view = self.panel
+        elif self.sheet:
+            view = self.sheet.view()
+        return view if view and view.is_valid() else None
 
     @ctx.contextmanager
     def eavesdrop(self, also_log: bool = False) -> Iterator[StringIO]:
@@ -523,18 +574,16 @@ class OutputPanel(pyd.BaseModel):
             raw_text = ''.join(self._queue)
             self._queue.clear()
 
-        raw_text = self.apply_middleware(raw_text)
         text = self.format(raw_text, *self.formats)
+        text = self.apply_middleware(text)
         self._content = (self._content[0] + raw_text, self._content[1] + text)
-        self._history.append((round(datetime.now().timestamp(), 3), len(text)))
 
         # Add the content
-        if self.sheet:
-            self.sheet.set_contents(self.html_content)
-        else:
-            assert self.panel is not None, 'Output panel view is not initialized.'
-            self.panel.run_command('append', {'characters': text, 'force': True})
-            self.panel.show(self.panel.size())
+        if self.html:
+            self.html.set_contents(self.html_content)
+        elif v := self.view:
+            v.run_command('append', {'characters': text, 'force': True})
+            v.show(v.size())
 
     def write(self, text: str) -> int:
         """Writes a string to the output panel, returning the number of characters written."""
@@ -547,6 +596,15 @@ class OutputPanel(pyd.BaseModel):
     def writeln(self, text) -> int:
         """Writes a string followed by a newline to the output panel."""
         return self.write(text + '\n')
+
+    def edit(self, *functions: Callable[[str], str]) -> None:
+        """Applies the given functions to the current content of the output panel in order."""
+        self.flush()
+        content = self.content
+        for func in functions:
+            content = func(content)
+        self._content = (self._content[0], content)
+        self.flush()
 
     def readable(self) -> bool:
         """Returns False since the output panel is write-only."""

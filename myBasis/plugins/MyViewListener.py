@@ -5,8 +5,7 @@
 # Standard
 # --------
 from __future__ import annotations
-
-from typing import TypeVar, Generic, TYPE_CHECKING
+from typing import ClassVar, TypeVar, Generic, TYPE_CHECKING
 
 # --------
 # External
@@ -18,7 +17,7 @@ import sublime_plugin as sbp
 # --------
 # Internal
 # --------
-from .CommandArguments import CommandArguments
+from ..types.CommandArguments import CommandArguments
 from ._MyBase import MyBase
 
 _I = TypeVar('_I', bound=CommandArguments)
@@ -27,20 +26,25 @@ _I = TypeVar('_I', bound=CommandArguments)
 ############
 ### BODY ###
 ############
-class _MyCommand(Generic[_I], MyBase[_I], sbp.TextCommand):
-    """A Sublime Text 4 command that is instantiated once per 'view' (i.e. tab).
+class _MyViewListener(Generic[_I], MyBase[_I], sbp.ViewEventListener):
+    """A base class for any commands that trigger automatically (rather than being called directly).
 
-    You should feel safe using `self.view` and `self.edit` in any method, as they are set when the
-    command is first run.
+    For a list of available events you can attach to with `on_EVENT` methods, see
+    `constants.EVENTS`.
+
+    All the events mentioned in `constants.ASYNCABLE_EVENTS` have an `on_EVENT_async` variant,
+    though it is only async 'behind the scenes', so-to-speak. To run `asyncio` code, choose one of
+    those functions and wrap your logic in `asyncio.run()`.
     """
+
+    _ALLOW_OVERRIDES: ClassVar[bool] = True
 
     # -------------------
     # `.` Initial Methods
     # -------------------
-    def __init__(self, view: sb.View, *args, **kwargs) -> None:
+    def __init__(self, view: sb.View) -> None:
         """Initialize this class."""
         self.view = view
-        super().__init__(view, *args, **kwargs)
 
     # -------------------
     # `-` Private Methods

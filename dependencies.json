@@ -11,6 +11,8 @@
             "ruamel.yaml",
             "ruamel.yaml.clib",
             "sublime_lib",
+            "sublime_aio",
+            "mdpopups",
             "toml",
             "toolz",
             "typing-extensions"

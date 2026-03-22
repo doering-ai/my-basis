@@ -15,7 +15,7 @@ import sublime_plugin as sbp
 # --------
 # Internal
 # --------
-from .CommandArguments import CommandArguments
+from ..types.CommandArguments import CommandArguments
 from ._MyBase import MyBase
 
 _I = TypeVar('_I', bound=CommandArguments)

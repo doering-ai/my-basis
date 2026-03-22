@@ -20,8 +20,8 @@ import pydantic as pyd
 # --------
 # Internal
 # --------
-from .utils import ut
-from .constants import RGXS
+from ..infra.utils import ut
+from ..infra.constants import RGXS
 
 InputHandler = sbp.CommandInputHandler
 TextHandler = sbp.TextInputHandler

@@ -6,7 +6,7 @@ from __future__ import annotations
 from typing import Any, Set, Literal, TypeVar, Protocol, Generic, ClassVar, overload
 from typing_extensions import TypeAlias
 from collections import defaultdict
-from collections.abc import Callable, Hashable, Collection, MutableSequence, MutableMapping
+from collections.abc import Callable, Hashable, MutableSequence, MutableMapping
 import functools as ft
 from datetime import datetime
 

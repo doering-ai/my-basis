@@ -27,7 +27,8 @@ class BaseProtocol(Protocol):
 
 C = TypeVar('C', bound=BaseProtocol)
 R = TypeVar('R', bound=object)
-ViewPropertyDecorator: TypeAlias = 'Callable[[Callable[[C], R]], Callable[[C], R]]'
+Method: TypeAlias = 'Callable[[C], R]'
+Decorator: TypeAlias = 'Callable[[Callable[[C], R]], property]'
 
 
 ############
@@ -36,7 +37,9 @@ ViewPropertyDecorator: TypeAlias = 'Callable[[Callable[[C], R]], Callable[[C], R
 class ViewProperties(pyd.BaseModel, Generic[C]):
     """Stores metadata for invalidating cached properties."""
 
-    DEBUG: ClassVar[bool] = True
+    DEBUG: ClassVar[bool] = False
+
+    view_id: int = 0
 
     #: The change count at which the property was last calculated (if it has been).
     counts: dict[str, int] = defaultdict(lambda: -1)
@@ -70,6 +73,7 @@ class ViewProperties(pyd.BaseModel, Generic[C]):
 
     def register(
         self,
+        view_id: int,
         name: str,
         method: Callable[[C], Any],
         hash_fn: Callable[[C], Hashable] | None = None,
@@ -77,6 +81,13 @@ class ViewProperties(pyd.BaseModel, Generic[C]):
         eager: bool = False,
     ) -> None:
         """Register a hash function to be used for a given property."""
+        if self.view_id != view_id:
+            if self.view_id > 0:
+                self.counts.clear()
+                self.hashes.clear()
+                self.values.clear()
+            self.view_id = view_id
+
         if name not in self.methods:
             self.methods[name] = method
             if hash_fn:
@@ -193,10 +204,15 @@ class ViewProperties(pyd.BaseModel, Generic[C]):
 
 
 @overload
+def view_property(method: Method) -> property: ...
+
+
+@overload
 def view_property(
-    *hash_scopes: str,
+    *,
+    scopes: tuple[str] | None = None,
     dependencies: list[str] | tuple[str] | set[str] | None = None,
-) -> ViewPropertyDecorator: ...
+) -> Decorator: ...
 
 
 @overload
@@ -204,32 +220,38 @@ def view_property(
     *,
     hash_fn: Callable[[C], Hashable],
     dependencies: list[str] | tuple[str] | set[str] | None = None,
-) -> ViewPropertyDecorator: ...
+) -> Decorator: ...
 
 
 @overload
-def view_property(*, hash_by_syntax: Literal[True]) -> ViewPropertyDecorator: ...
+def view_property(*, hash_by_syntax: Literal[True]) -> Decorator: ...
 
 
 @overload
-def view_property(*, hash_by_cursor: Literal[True]) -> ViewPropertyDecorator: ...
+def view_property(*, hash_by_cursor: Literal[True]) -> Decorator: ...
 
 
 def view_property(
-    *hash_scopes: str,
+    method: Method | None = None,
+    *,
+    scopes: tuple[str] | None = None,
     hash_fn: Callable[[C], Hashable] | None = None,
     hash_by_syntax: bool = False,
     hash_by_cursor: bool = False,
     dependencies: list[str] | tuple[str] | set[str] | None = None,
-) -> ViewPropertyDecorator:
+) -> property | Decorator:
     """Wrap a method with one or more simple caching mechanisms."""
-    assert sum(map(bool, (hash_scopes, hash_fn, hash_by_syntax))) <= 1, (
+    if method is not None:
+        return _decorator_factory(method)
+
+    assert sum(map(bool, (scopes, hash_fn, hash_by_syntax))) <= 1, (
         'Cannot specify more than one hash method at once.'
     )
+
     # I. Setup the cache property once during class creation, normalizing arguments
     eager = False
-    if hash_scopes:
-        hash_fn = lambda self: ViewProperties._hash_scope_executor(self.view, *hash_scopes)
+    if scopes:
+        hash_fn = lambda self: ViewProperties._hash_scope_executor(self.view, *scopes)
     elif hash_by_syntax:
         hash_fn = lambda self: self.view.syntax()
     elif hash_by_cursor:
@@ -239,26 +261,33 @@ def view_property(
     if dependencies is not None:
         dependencies = list(dependencies)
 
-    # II. Return the actual decorator, which will have access to the actual cache instance
-    def _decorator(method: Callable[[C], R]) -> Callable[[C], R]:
-        """The decorator itself, similar to `@property` or `@classmethod`."""
-        name = method.__name__
-        assert name, 'Cannot cache unnamed function -- tried to pass a lambda, perhaps?'
+    # II. Return the decorator, which will have access to the actual cache instance
+    return ft.partial(_decorator_factory, hash_fn=hash_fn, dependencies=dependencies, eager=eager)
 
-        @ft.wraps(method)
-        def _wrapper(self: C) -> R:
-            """The new version of the passed method."""
-            # III.i. Register the method and its hash function with the cache on first access
-            cache = self._cache
-            cache.register(name, method, hash_fn, dependencies, eager)
 
-            # III.ii. Check if the method needs to be rerun; if so, do it and update the cache
-            if cache.should_rerun(self, name, now := self.view.change_count()):
-                cache.counts[name] = now
-                cache.set_value(name, method(self))
+def _decorator_factory(
+    method: Method,
+    hash_fn: Callable[[C], Hashable] | None = None,
+    dependencies: list[str] | None = None,
+    eager: bool = False,
+) -> property:
+    name = method.__name__
+    assert name, 'Cannot cache unnamed function -- tried to pass a lambda, perhaps?'
 
-            return cache.values[name]
+    @ft.wraps(method)
+    def _wrapper(self: C) -> R:  # pyright: ignore[reportInvalidTypeVarUse]
+        """The new version of the passed method."""
+        # III.i. Register the method and its hash function with the cache on first access
+        if not hasattr(self, '_cache'):
+            self._cache = ViewProperties()
+        cache = self._cache
+        cache.register(self.view.id(), name, method, hash_fn, dependencies, eager)
 
-        return _wrapper
+        # III.ii. Check if the method needs to be rerun; if so, do it and update the cache
+        if cache.should_rerun(self, name, now := self.view.change_count()):
+            cache.counts[name] = now
+            cache.set_value(name, method(self))
 
-    return _decorator
+        return cache.values[name]
+
+    return property(_wrapper)

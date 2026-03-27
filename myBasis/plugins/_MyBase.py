@@ -29,6 +29,7 @@ from datetime import datetime
 import time
 import asyncio as aio
 from urllib.parse import unquote
+import logging
 
 ### EXTERNAL
 import sublime_plugin as sbp
@@ -265,7 +266,6 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
     # `.` Initial Methods
     # -------------------
     def __init__(self, *args: Any, **kwargs: Any) -> None:
-        # self._log_func(args, kwargs)
         self._cache = ViewProperties()
 
     def run(self, *args: Any, **kwargs: Any) -> Any:
@@ -351,64 +351,6 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
 
             yield LineComment(line, row, col, line_text[col:], punct)
 
-    def _log(
-        self,
-        *args: Any,
-        sep: str = ' ',
-        time: bool = True,
-        indent: pyd.NonNegativeInt = 0,
-        rjust: bool = False,
-        name_just: bool = True,
-        **kwargs: Any,
-    ) -> None:
-        if self.DEBUG:
-            parts = [f'{self.uid}', *filter(bool, map(str, args))]
-            if name_just:
-                parts[0] = parts[0].ljust(32)
-
-            if time:
-                parts[0] = datetime.now().strftime('%H:%M:%S.%f')[:-3] + f' {parts[0]}'
-            ret = sep.join(parts)
-            if rjust:
-                lines = ret.splitlines()
-                ret = '\n'.join(line.rjust(128 - indent) for line in lines)
-            elif indent:
-                ret = re.sub(r'(?m)^(?!$)', ' ' * indent, ret)
-
-            print(ret, **kwargs)
-
-    def _log_func(
-        self,
-        args: tuple[Any, ...] | None = None,
-        kwargs: dict[str, Any] | None = None,
-        result: str | None = None,
-        name: str = '',
-        **log_kwargs: Any,
-    ) -> None:
-        if not self.DEBUG:
-            return
-
-        if name:
-            pass
-        elif (frame := inspect.currentframe()) is not None and frame.f_back is not None:
-            name = frame.f_back.f_code.co_name
-        else:
-            name = '<unknown>'
-
-        arg_parts = []
-        if args:
-            arg_parts.extend(map(str, args))
-        if kwargs:
-            arg_parts.extend(f'{k}={v}' for k, v in kwargs.items())
-
-        self._log(
-            f'.{name}({", ".join(arg_parts)})',
-            f'-> {result}' if result else '',
-            sep='',
-            name_just=False,
-            **log_kwargs,
-        )
-
     @staticmethod
     def _path_for(filename: sb.View | str | None) -> Path:
         if isinstance(filename, sb.View):
@@ -437,6 +379,106 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
     # -------------------
     # `+` Primary Methods
     # -------------------
+    @classmethod
+    def _log(
+        cls,
+        *args: Any,
+        data: dict | pyd.BaseModel | set | Sequence | None = None,
+        sep: str = ' ',
+        time: bool = True,
+        indent: pyd.NonNegativeInt = 0,
+        rjust: int = 0,
+        ljust: int = 32,
+        name: str | None = None,
+        log_level: str | int = logging.INFO,
+        **kwargs: Any,
+    ) -> None:
+        if log_level == logging.DEBUG and cls.DEBUG:
+            return
+
+        # I. Normalize a name identifying the caller.
+        if name is None:
+            name = f'[{cls.__name__}]'
+        elif name := name.strip():
+            if not name.startswith('['):
+                name = f'[{name}]'
+            if ljust:
+                name = name.ljust(ljust)
+
+        # II. Join the name and arguments into a single line
+        parts = list(filter(bool, (name, *map(str, args))))
+        if time:
+            parts.insert(0, ut.posix().strftime('%H:%M:%S.%f')[:-3])
+        ret = sep.join(parts)
+
+        # III. Print multiline data
+        if data:
+            ret = ut.multiprint(title=ret.rstrip(' :') + ':', data=data)
+
+        # IV. Transform spacing
+        if rjust:
+            ret = '\n'.join(line.rjust(rjust - indent) for line in ret.splitlines())
+        elif indent:
+            ret = re.sub(r'(?m)^(?!$)', ' ' * indent, ret)
+
+        print(ret, **kwargs)
+
+    def log(
+        self,
+        *args: Any,
+        data: dict | pyd.BaseModel | set | Sequence | None = None,
+        sep: str = ' ',
+        time: bool = True,
+        indent: pyd.NonNegativeInt = 0,
+        rjust: int = 0,
+        ljust: int = 32,
+        name: str | None = None,
+        log_level: str | int = logging.INFO,
+        **kwargs: Any,
+    ) -> None:
+        kwargs.setdefault('name', name or self.uid)
+        self._log(
+            *args,
+            data=data,
+            sep=sep,
+            time=time,
+            indent=indent,
+            rjust=rjust,
+            ljust=ljust,
+            log_level=log_level,
+            **kwargs,
+        )
+
+    def log_method(
+        self,
+        args: tuple[Any, ...] | None = None,
+        kwargs: dict[str, Any] | None = None,
+        result: str | None = None,
+        name: str = '',
+        log_level: str | int = logging.INFO,
+        **log_kwargs: Any,
+    ) -> None:
+        if log_level == logging.DEBUG and not self.DEBUG:
+            return
+
+        if name:
+            pass
+        elif (frame := inspect.currentframe()) is not None and frame.f_back is not None:
+            name = frame.f_back.f_code.co_name
+        else:
+            name = '<anon>'
+
+        arg_parts = []
+        if args:
+            arg_parts.extend(map(str, args))
+        if kwargs:
+            arg_parts.extend(f'{k}={v}' for k, v in kwargs.items())
+
+        log_kwargs['sep'] = ''
+        log_kwargs['ljust'] = 0
+        _text = f'.{name}({", ".join(arg_parts)})' + (f' -> {result}' if result else '')
+        self._log(_text, log_level=log_level, **log_kwargs)
+
     @ctx.contextmanager
     def update_view_property(self, *names: str) -> Iterator[dict[str, Any]]:
         missing = [n for n in names if n not in self._cache]
@@ -556,20 +598,17 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
         """The name of this command's class."""
         return self.name()
 
-    @property
     @view_property(hash_by_syntax=True)
     def _syntax_vars(self) -> dict[str, str]:
         shell_vars = self.view.meta_info('shellVariables', 0)
         assert isinstance(shell_vars, list)
         return {item['name']: item['value'] for item in shell_vars}
 
-    @property
     @view_property(hash_by_syntax=True)
     def _comment_mark(self) -> str:
         return self._syntax_vars.get('TM_COMMENT_START', '#').strip()
 
-    @property
-    @view_property(dependencies=['headers'])
+    @view_property
     def indents(self) -> list[Indent]:
         matches = [
             (len(item[0].expandtabs(self.tabsize)), bool(item[1]))
@@ -941,8 +980,14 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
         """Find all regions matching the given selector within the given region."""
         yield from filter(region.contains, self.view.find_by_selector(selector))
 
-    @property
-    @view_property('comment.line')
+    def find_iter(self, selector: str, region: Region | None = None) -> Iterator[Region]:
+        """Simple wrapper for `find_by_selector` that returns a view instead of a list."""
+        if region is not None:
+            yield from self.find_within(selector, region)
+        else:
+            yield from iter(self.view.find_by_selector(selector))
+
+    @view_property(scopes=('comment.line',))
     def line_comments(self) -> dict[int, Comment]:
         ret = {
             block[0].row: Comment(
@@ -989,8 +1034,7 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
         else:
             yield from self.line_comments
 
-    @property
-    @view_property()
+    @view_property
     def function_map(self) -> dict[str, sb.Region]:
         ret = {}
         for region in self.view.find_by_selector('entity.name.function'):
@@ -999,8 +1043,7 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
                 ret[name] = region
         return ret
 
-    @property
-    @view_property()
+    @view_property
     def class_map(self) -> dict[str, sb.Region]:
         ret = {}
         for region in self.view.find_by_selector('entity.name.class'):
@@ -1028,6 +1071,18 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
         if match := RGXS['indent'].match(line):
             return pos + len(match[1])
         return pos
+
+    def row_of(self, pos: Region | int) -> int:
+        """The row index of the given position."""
+        if isinstance(pos, sb.Region):
+            pos = pos.begin()
+        return self.view.rowcol(pos)[0]
+
+    def col_of(self, pos: Region | int) -> int:
+        """The column index of the given position."""
+        if isinstance(pos, sb.Region):
+            pos = pos.begin()
+        return self.view.rowcol(pos)[1]
 
     @property
     def selections(self) -> Selection:
@@ -1197,11 +1252,13 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
     @property
     def current_package(self) -> Path | None:
         window = self._window or sb.active_window()
-        folders = {
-            path.name: path
-            for folder in window.folders()
-            if (path := Path(folder).expanduser().resolve())
-        }
+        folders = set(
+            mi.flatten(
+                (path.name, path.resolve().name)
+                for folder in window.folders()
+                if (path := Path(folder).expanduser())
+            )
+        )
         return next(
             (
                 pkg

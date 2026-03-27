@@ -9,7 +9,6 @@ from collections import deque
 from collections.abc import Iterator, Callable
 from threading import Lock
 from pathlib import Path
-from datetime import datetime
 from io import StringIO
 from traceback import format_exc
 import sys
@@ -99,10 +98,8 @@ class OutputPanel(pyd.BaseModel):
     window: ut.WindowField = pyd.Field(default_factory=sb.active_window)
 
     #: The name of the output panel to create. Defaults to a unique name based on the current time.
-    name: str = pyd.Field(
-        default_factory=lambda: f'my_output_{datetime.now().timestamp()}',
-        pattern=r'^[-\w]+$',
-    )
+    name: str = 'Output Panel'
+
     #: The input and output formats for the panel content.
     formats: tuple[Format, Format] = ('html', 'html')
 
@@ -115,8 +112,8 @@ class OutputPanel(pyd.BaseModel):
     #: Optional middleware functions to apply to the text before writing it to the panel.
     middleware: tuple[Callable[[str], str], ...] = tuple()
 
-    #: The title to use for the output panel sheet, if using a sheet instead of a panel.
-    sheet_title: str = 'Output Panel'
+    #: The path to the file that is filled with the contents of this panel/sheet
+    hardcopy: Path | tuple[Path | None, Path | None] | None = None
 
     # ---- View Settings ----
     file_regex: str = ''
@@ -157,7 +154,15 @@ class OutputPanel(pyd.BaseModel):
     def _open_panel(self) -> Self:
         # Default to the current file directory
         if not self.base_dir and (_v := self.window.active_view()) and (_f := _v.file_name()):
-            self.base_dir = Path(_f).name
+            self.base_dir = str(Path(_f).parent)
+
+        if self.hardcopy:
+            print(f'{self.hardcopies=}')
+            for _hardcopy in self.hardcopies:
+                if _hardcopy is not None:
+                    assert _hardcopy.parent.is_dir(), f'{_hardcopy.parent} does not exist.'
+                    assert not _hardcopy.is_dir(), f'{_hardcopy} already exists and is not a file.'
+                    _hardcopy.write_text('')
 
         self.status = 'open'
         if self.f1 == 'html':
@@ -194,7 +199,7 @@ class OutputPanel(pyd.BaseModel):
         if self.html is not None:
             self.html.close()
         if self.panel is not None:
-            self.window.run_command('hide_panel', dict(panel=f'output.{self.name}'))
+            self.window.run_command('hide_panel', dict(panel=f'output.{self.panel_name}'))
         if self.sheet is not None:
             self.sheet.close()
 
@@ -204,8 +209,6 @@ class OutputPanel(pyd.BaseModel):
         self.status = 'open'
         with self._lock:
             self._queue.clear()
-
-        print(f'OutputPanel.reset({self.uid})')
 
         # I. Clear the HTML sheet
         if self.html is not None:
@@ -221,6 +224,7 @@ class OutputPanel(pyd.BaseModel):
             if self.panel.is_valid():
                 self.panel.run_command('select_all')
                 self.panel.run_command('right_delete')
+                self.window.run_command('show_panel', dict(panel=f'output.{self.panel_name}'))
                 return
             else:
                 self.panel = self._create_panel()
@@ -230,7 +234,7 @@ class OutputPanel(pyd.BaseModel):
             if (
                 (v := self.sheet.view())
                 and v.is_valid()
-                and (v.file_name() or '').startswith(self.sheet_title)
+                and (v.file_name() or '').startswith(self.name)
             ):
                 v.run_command('select_all')
                 v.run_command('right_delete')
@@ -250,35 +254,55 @@ class OutputPanel(pyd.BaseModel):
             group = (w.active_group() + 1) % w.num_groups()
             index = -1
 
-        sheet = self.window.new_html_sheet(self.sheet_title, '', group=group)
+        sheet = self.window.new_html_sheet(self.name, '', group=group)
         if index != -1:
             w.set_sheet_index(sheet, group, index)
         return sheet
 
     def _create_panel(self) -> sb.View:
-        panel = self.window.create_output_panel(self.name)
+        panel = self.window.create_output_panel(self.panel_name)
         self._apply_settings(panel)
-        self.window.run_command('show_panel', dict(panel=f'output.{self.name}'))
+        self.window.run_command('show_panel', dict(panel=f'output.{self.panel_name}'))
         return panel
 
     def _create_sheet(self) -> sb.Sheet:
         w = self.window
         if existing := self._existing_sheet():
             group, index = w.get_sheet_index(existing)
-            existing.close()
         else:
             group = (w.active_group() + 1) % w.num_groups()
             index = -1
 
-        view = w.new_file(sb.NewFileFlags.TRANSIENT)
+        # if path := self.hardcopies[1]:
+        #     # I. If pointed to a real file, rely on Sublime to find an existing version.
+        #     assert path.exists(), f'Hardcopy file {path} does not exist.'
+        #     print('opening...')
+        #     view = w.open_file(str(path), group=group)
+        #     print('open!')
+        #     assert view is not None, f'Failed to open hardcopy file {path} in sheet mode.'
+        #     sheet = view.sheet()
+        if existing and (v := existing.view()) and v.is_valid():
+            sheet, view = existing, v
+        else:
+            if existing:
+                existing.close()
+            view = w.new_file(syntax=self.syntax or '')
+            sheet = view.sheet()
+
+        assert isinstance(sheet, sb.TextSheet), 'Output panel sheets must be text sheets.'
+        sheet.set_name(self.name)
         self._apply_settings(view)
-        sheet = view.sheet()
-        assert sheet is not None, 'Failed to create new sheet for output panel.'
-        if index != -1:
-            w.set_sheet_index(sheet, group, index)
+        w.set_sheet_index(sheet, group, index)
+        if window := view.window():
+            window.focus_view(view)
         return sheet
 
     def _apply_settings(self, view: sb.View) -> None:
+        view.set_read_only(True)
+        view.set_scratch(True)
+        if self.syntax:
+            view.assign_syntax(self.syntax)
+
         settings = view.settings()
         settings.set('result_file_regex', self.file_regex)
         settings.set('result_line_regex', self.line_regex)
@@ -287,10 +311,6 @@ class OutputPanel(pyd.BaseModel):
         settings.set('line_numbers', self.line_numbers)
         settings.set('gutter', self.gutter)
         settings.set('scroll_past_end', self.scroll_past_end)
-
-        if self.syntax:
-            view.assign_syntax(self.syntax)
-        view.set_read_only(True)
 
     def _existing_html(self) -> sb.HtmlSheet | None:
         return next(
@@ -303,14 +323,31 @@ class OutputPanel(pyd.BaseModel):
         )
 
     def _existing_sheet(self) -> sb.Sheet | None:
-        return next(
-            (
-                sheet
+        ut.multiprint(
+            title='Existing sheets:',
+            lines=(
+                f'{sheet.file_name()}: '
+                + ', '.join(
+                    [
+                        f'(group, index)={self.window.get_sheet_index(sheet)}',
+                        f'trans={sheet.is_transient()}',
+                        f'semitrans={sheet.is_semi_transient()}',
+                    ]
+                )
                 for sheet in self.window.sheets()
-                if sheet.is_transient() and (sheet.file_name() or '').startswith(self.sheet_title)
             ),
-            None,
         )
+
+        def _test(sheet: sb.Sheet) -> bool:
+            return (
+                not isinstance(sheet, sb.HtmlSheet)
+                and sheet.file_name() is None
+                and (v := sheet.view()) is not None
+                and v.size() > 0
+                and '.pytest' in v.scope_name(0)
+            )
+
+        return next(filter(_test, self.window.sheets()), None)
 
     HTML_STYLES: ClassVar[str] = (Path(__file__).parent / '../infra/output_styles.html').read_text()
     ANSI_CSS_CLASSES: ClassVar[dict[str, str]] = {
@@ -538,6 +575,11 @@ class OutputPanel(pyd.BaseModel):
             return '-1'
 
     @property
+    def panel_name(self) -> str:
+        """A normalized, lowercase version of the original, human-readable name."""
+        return re.sub(r'\s+', '_', self.name.lower().strip())
+
+    @property
     def view(self) -> sb.View | None:
         """Shorthand for the view inside the output's non-html sheet, which is assumed to exist."""
         view = None
@@ -582,8 +624,24 @@ class OutputPanel(pyd.BaseModel):
         if self.html:
             self.html.set_contents(self.html_content)
         elif v := self.view:
+            size0 = v.size()
             v.run_command('append', {'characters': text, 'force': True})
-            v.show(v.size())
+            if (
+                len(v.selection) == 1
+                and (cursor := v.selection[0]).empty()
+                and (size0 - cursor.a) < 128
+            ):
+                v.selection.clear()
+                v.selection.add(_new := size0 + len(text))
+                v.show(_new)
+        self.write_to_disk()
+
+    @ut.debounced(delta=1000)
+    def write_to_disk(self) -> None:
+        """Writes current content to disk at the specified hardcopy path, if any."""
+        for path, content in zip(self.hardcopies, self._content):
+            if path:
+                path.write_text(content)
 
     def write(self, text: str) -> int:
         """Writes a string to the output panel, returning the number of characters written."""
@@ -600,11 +658,17 @@ class OutputPanel(pyd.BaseModel):
     def edit(self, *functions: Callable[[str], str]) -> None:
         """Applies the given functions to the current content of the output panel in order."""
         self.flush()
-        content = self.content
         for func in functions:
-            content = func(content)
-        self._content = (self._content[0], content)
-        self.flush()
+            self.content = func(self.content)
+
+        if self.html:
+            self.html.set_contents(self.html_content)
+        elif v := self.view:
+            v.run_command('select_all')
+            v.run_command('right_delete')
+            v.run_command('append', {'characters': self.content, 'force': True})
+            v.show(0)
+        self.write_to_disk()
 
     def readable(self) -> bool:
         """Returns False since the output panel is write-only."""
@@ -637,6 +701,11 @@ class OutputPanel(pyd.BaseModel):
     def content(self) -> str:
         """The current content of the output panel in its final format."""
         return self._content[1]
+
+    @content.setter
+    def content(self, value: str) -> None:
+        """Sets the content of the output panel, applying the necessary formatting."""
+        self._content = (self._content[0], value)
 
     @property
     def shell_content(self) -> str:
@@ -680,3 +749,13 @@ class OutputPanel(pyd.BaseModel):
         elif self.f1 == 'plain':
             return self._content[1]
         return self.format(self.content, self.f1, 'plain')
+
+    @property
+    def hardcopies(self) -> tuple[Path | None, Path | None]:
+        """Convient form of passed hardcopy paths for each of the two formats."""
+        if not self.hardcopy:
+            return None, None
+        elif isinstance(self.hardcopy, Path):
+            return None, self.hardcopy
+        else:
+            return self.hardcopy

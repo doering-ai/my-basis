@@ -28,13 +28,11 @@ Directory = pyd.DirectoryPath
 ############
 def _normalize(path: str | Path) -> Path:
     """Expand a string path into a resolved Path object."""
-    path = Path(path)
-    if not path:
+    path = Path(path).expanduser()
+    if not path or path.is_absolute():
         pass
-    elif path.parts[0] == '~' or path.is_absolute():
-        return path.expanduser().resolve()
     elif (_p := Path.cwd() / path).exists():
-        return _p.resolve()
+        return _p
     return path
 
 
@@ -107,7 +105,7 @@ class PathRegistry(pyd.BaseModel):
     def compile_rgx(path: Path | str) -> re.Pattern[str]:
         """Compile a regex pattern matching the given path, allowing for relative leading parts."""
         pathstr = re.escape(str(path).strip('/'))
-        return re.compile(rf'(?<![-\w\/.])(?:\.{{0,2}}\/)*({pathstr})(?![-.\w])(\/?)')
+        return re.compile(rf'(?<![-\w\/.])(?:\.{{0,2}}\/)+({pathstr})(?![-.\w])(\/?)')
 
     @ft.cached_property
     def rgxs(self) -> dict[str, re.Pattern[str]]:

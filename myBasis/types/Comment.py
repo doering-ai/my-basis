@@ -100,7 +100,7 @@ class Comment(pyd.BaseModel):
                 f'Expected a 2-tuple of (start, end) positions, got {len(other)}-tuple.'
             )
             assert isinstance(other[0], int) and isinstance(other[1], int)
-            other = sb.Region(other[0], other[1])
+            other = Region(other[0], other[1])
         elif not isinstance(other, int):
             raise NotImplementedError(f'Cannot check if Comment contains {type(other)}.')
         return other in self.region

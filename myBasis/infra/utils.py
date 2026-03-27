@@ -4,15 +4,17 @@
 ### STANDARD
 from __future__ import annotations
 from collections import defaultdict, deque
-from collections.abc import Callable, Iterator, Sequence, MutableSequence, Iterable
+from collections.abc import Callable, Iterator, Sequence, MutableSequence, Iterable, Collection
 from pathlib import Path
 from types import FunctionType
 from typing import ClassVar, TypeVar, Any, Literal, Union, NamedTuple, overload
-from typing_extensions import TypeAlias, ParamSpec
+from typing_extensions import TypeAlias, ParamSpec, TypeVarTuple
 import contextlib as ctx
 import functools as ft
 import textwrap
 import itertools as it
+import os
+from enum import Enum, auto
 from datetime import timedelta, datetime, timezone
 from uuid import uuid4
 
@@ -48,6 +50,7 @@ MetaDecorator: TypeAlias = 'Callable[[Callable[P, R]], Callable[P, R]]'
 ViewPropertyDecorator: TypeAlias = 'Callable[[Callable[[V], R]], Callable[[V], R]]'
 
 _Resource: TypeAlias = str
+Rest = TypeVarTuple('Rest')
 
 NO_ESC = r'(?<![^\\]\\)(?<!\\{3})'
 RGX_REF_RGX = re.compile(NO_ESC + r'\{\{\.(?P<name>[_[:lower:]][_[:lower:]\d]*)\}\}')
@@ -70,7 +73,7 @@ class Utils(TypesMixin):
     ST_VERSION: ClassVar[int] = int(sb.version())
     ST_PLATFORM: ClassVar[Literal['osx', 'linux', 'windows']] = sb.platform()
 
-    DEFAULT_DEBOUNCE: ClassVar[int] = 500
+    DEFAULT_DEBOUNCE: ClassVar[int] = 250
     _DEBOUNCE_REGISTRY: ClassVar[dict[str, int]] = defaultdict(int)
 
     PATHS: ClassVar[PathRegistry] = PATHS
@@ -96,6 +99,12 @@ class Utils(TypesMixin):
                 roman=r'(?i:M{1,4}|CM|C?D|D?C{1,3}|XC|X?L|L?X{1,3}|IX|I?V|V?I{1,3})',
                 roman_quad=r'(?i:C{4}|X{4}|I{4})',
                 glob_wildcard=NO_ESC + r'\*{1,}',
+                case_split=r'\s+|(?<=\w)_(?=\w)|(?<=\p{Ll})(?=\p{Lu})|(?<=\p{Lu})(?=\p{Lu}\p{Ll})',
+                newlines=r'\n+',
+                punctuation=r'[\'".]+|(?<=\d),+(?=\d)',
+                nonwords=r' *[^-\w\s]+ *',  # All non-whitespace breaks are underlines
+                spaces=r' +',  # Spaces are just hyphens
+                multihyphens=r'-{2,}',
             )
 
             # III. Setup file readers
@@ -463,14 +472,65 @@ class Utils(TypesMixin):
         yield
         print(f'{pre}{mark * width}\n')
 
+    @staticmethod
+    def _multiprint_data(
+        data: Collection[tuple | pyd.BaseModel | dict] | pyd.BaseModel | dict | Any | None,
+        shorten: bool = False,
+        depth: int = 0,
+    ) -> Iterable[str]:
+        _in = '\t' * depth
+        if data is None:
+            return
+
+        # I. Series
+        elif isinstance(data, str):
+            yield f'{_in}{textwrap.shorten(data, 64, placeholder="...")}'
+            return
+        elif isinstance(data, (set, Sequence)):
+            if len(str(data)) < 32:
+                yield f'{_in}{data}'
+                return
+
+            for item in data:
+                for child_line in Utils._multiprint_data(item, shorten, depth + 1):
+                    if mi.ilen(it.takewhile(lambda s: s == '\t', child_line)) == depth + 1:
+                        yield f'{_in}- {child_line.strip()}'
+                    else:
+                        yield f'  {child_line}'
+
+        # II. Mappings
+        elif isinstance(data, (dict, pyd.BaseModel)):
+            if isinstance(data, pyd.BaseModel):
+                data = data.model_dump(exclude_defaults=True)
+
+            if len(str(data)) < 32:
+                yield f'{_in}{data}'
+                return
+
+            for key, val in data.items():
+                children = list(Utils._multiprint_data(val, shorten, depth + 1))
+                if len(children) == 1:
+                    yield f'{_in}{key}: {children[0].strip()}'
+                else:
+                    yield f'{_in}{key}:'
+                    yield from children
+
+        # III. All Others
+        elif isinstance(data, type):
+            yield f'{_in}{data.__name__}'
+        else:
+            yield f'{_in}{data}'
+
     @classmethod
     def multiprint(
         cls,
         *items: Any,
         title: str = '',
         lines: Iterable[str] | None = None,
+        data: dict | pyd.BaseModel | set | Sequence | None = None,
         indent: int = 0,
         indent_range: tuple[int, int] = (0, 0),
+        shorten: bool = False,
         quiet: bool = False,
         margins: tuple[int, int] = (0, 1),
         **kwargs: Any,
@@ -481,8 +541,10 @@ class Utils(TypesMixin):
             *items: Items to print after being converted to strings.
             title: Title line(s) to print before any indented content. Sets indent to 4 if unset.
             lines: Additional lines to print (in addition to the items), as an iterable of strings.
+            data: Additional key-value pairs to print as "key: value" lines after the items.
             indent: Number of spaces to indent each line by.
             indent_range: Optional subset of line indices to apply the indent to.
+            shorten: If true, apply some basic shortening techniques to the output.
             quiet: Do not print anything to stdout, just return the formatted string.
             margins: Number of newlines to print before and after the content.
             **kwargs: Additional keyword arguments to pass to `print()`.
@@ -490,7 +552,18 @@ class Utils(TypesMixin):
             The constructed multiline string.
         """
         # I. Preprocess items into lines
-        lines = list(mi.flatten(map(str.splitlines, it.chain(lines or [], map(str, items)))))
+        lines = list(
+            mi.flatten(
+                map(
+                    str.splitlines,
+                    it.chain(
+                        lines or [],
+                        map(str, items),
+                        cls._multiprint_data(data, shorten),
+                    ),
+                )
+            )
+        )
 
         # II. Handle title lines, which are merely shorthand for indented lines at the top
         if title:
@@ -611,18 +684,16 @@ class Utils(TypesMixin):
     @classmethod
     def indexof(cls, iterable: Sequence[T], *preds: Callable[[T], bool] | T) -> int:
         """Return the first index in the given iterable that satisfies the predicate."""
-        preds = tuple((pred if callable(pred) else pred.__eq__) for pred in preds)
+        preds = tuple(
+            (pred if (callable(pred) and isinstance(pred, FunctionType)) else pred.__eq__)
+            for pred in preds
+        )
         uni_pred = lambda item: any(fn(item) for fn in preds)
         return mi.first(mi.locate(iterable, uni_pred), default=-1)
 
     @classmethod
-    def locate(
-        cls,
-        seq: Sequence[T],
-        pred: Callable[[T], bool],
-        default: int = -1,
-    ) -> tuple[int, T]:
-        """Return the first index in the given seq that satisfies the predicate.
+    def locate(cls, seq: Sequence[T], pred: Callable[[T], bool]) -> tuple[int, T]:
+        """Return the object+index in the given seq that satisfies the predicate.
 
         Args:
             seq: seq to search through.
@@ -640,6 +711,24 @@ class Utils(TypesMixin):
             f'Index {index} out of bounds for sequence of length {len(sequence)}.'
         )
         return sequence[:index] + sequence[index + 1 :]
+
+    @staticmethod
+    def clear_cached_properties(inst: object, *properties: str) -> None:
+        """Clear cached properties from an object instance.
+
+        If no properties specified, clears all properties listed in instance's
+        CACHED_PROPERTIES attribute.
+
+        Args:
+            inst: Object instance to clear cached properties from.
+            *properties: Property names to clear. If empty, uses inst.CACHED_PROPERTIES.
+        """
+        if not properties and hasattr(inst, 'CACHED_PROPERTIES'):
+            properties = tuple(getattr(inst, 'CACHED_PROPERTIES'))
+
+        for prop in properties:
+            if prop in inst.__dict__:
+                del inst.__dict__[prop]
 
     # -------
     # WRITING
@@ -732,6 +821,128 @@ class Utils(TypesMixin):
                 view.replace(edit, old_region, new_text)
 
     @staticmethod
+    def replace(
+        string: str,
+        *args: tuple[str | Pattern, str | Callable[[re.Match[str]], str]],
+    ) -> str:
+        """Apply multiple regex replacements sequentially to a string.
+
+        Args:
+            string: Input string to transform.
+            *args: Tuples of (pattern, replacement) for sequential application.
+        Returns:
+            String with all replacements applied in order.
+        """
+        for pattern, repl in args:
+            string = re.sub(pattern, repl, string)
+        return string
+
+    @classmethod
+    def _clean_nonwords(cls, string: str) -> str:
+        """Clean non-word characters from string using standard replacements.
+
+        Internal method that normalizes newlines, punctuation, spaces, and hyphens.
+
+        Args:
+            string: String to clean.
+        Returns:
+            Cleaned string with normalized spacing and punctuation.
+        """
+        return cls.replace(
+            string,
+            (cls.RGXS['newlines'], ' '),
+            (cls.RGXS['punctuation'], ''),
+            (cls.RGXS['nonwords'], '_'),
+            (cls.RGXS['spaces'], '-'),
+            (cls.RGXS['multihyphens'], '-'),
+        ).strip('_-')
+
+    class TextCase(Enum):
+        """Enumeration of common text case styles."""
+
+        LOWER = auto()  #: text case
+        UPPER = auto()  #: TEXT CASE
+        TITLE = auto()  #: Text Case
+        CAPITAL = auto()  #: Text case
+        KEBAB = auto()  #: text-case
+        SNAKE = auto()  #: text_case
+        PASCAL = auto()  #: TextCase
+        CAMEL = auto()  #: textCase
+
+        @staticmethod
+        @ft.lru_cache(maxsize=1)
+        def _formatters() -> dict[str, Callable[[str], str]]:
+            return dict(LOWER=str.lower, UPPER=str.upper, TITLE=str.title, CAPITAL=str.capitalize)
+
+        def apply(self, text: str, _from: Utils.TextCase | None = None) -> str:
+            """Apply the formatting style to the given text."""
+            if not (text := text.strip()):
+                return ''
+            cls = type(self)
+
+            if _from == cls.KEBAB:
+                words = text.split('-')
+            elif _from == cls.SNAKE:
+                words = text.split('_')
+            elif _from in {cls.PASCAL, cls.CAMEL}:
+                words = Utils.RGXS['case_split'].split(text)
+            else:
+                words = text.split()
+
+            if words := list(filter(bool, words)):
+                if _fn := self._formatters().get(self.name):
+                    return _fn(' '.join(words))
+                elif self in {cls.PASCAL, cls.CAMEL}:
+                    words = list(map(str.capitalize, words))
+                    if self == cls.CAMEL:
+                        words[0] = words[0].lower()
+                    return ''.join(words)
+                elif self in {cls.KEBAB, cls.SNAKE}:
+                    sep = '-' if self == cls.KEBAB else '_'
+                    return sep.join(map(str.lower, words))
+                else:
+                    raise ValueError(f'Unknown formatter: {self}')
+            return ''
+
+    @classmethod
+    def recase(
+        cls,
+        string: str,
+        to: TextCase | str = TextCase.SNAKE,
+        _from: TextCase | str | None = None,
+        clean: bool = True,
+    ) -> str:
+        """Fully clean and normalize a string for use as identifier or slug.
+
+        Strips whitespace, cleans non-words, and applies case conversion.
+
+        Args:
+            string: String to clean.
+            to: The new case for this string.
+            _from: The current case -- specify especially if transforming from non-whitespace cases.
+            clean: Whether to apply non-word cleaning to the result (default: True).
+        Returns:
+            Cleaned and normalized string suitable for identifiers.
+        """
+        if isinstance(to, str):
+            to = cls.TextCase[to.upper().strip()]
+        if isinstance(_from, str):
+            _from = cls.TextCase[_from.upper().strip()]
+
+        string = to.apply(string, _from=_from)
+        return cls._clean_nonwords(string) if clean else string
+
+    @classmethod
+    def from_pascal(cls, string: str) -> str:
+        """Convert a PascalCase string to snake_case."""
+        return cls.recase(string, to=cls.TextCase.SNAKE, _from=cls.TextCase.PASCAL)
+
+    @classmethod
+    def to_pascal(cls, string: str) -> str:
+        """Convert a snake_case string to PascalCase."""
+        return cls.recase(string, to=cls.TextCase.PASCAL, _from=cls.TextCase.SNAKE)
+
+    @staticmethod
     @ft.lru_cache(maxsize=1)
     def package_list() -> set[str]:
         """Collect a list of all available packages, installed or otherwise."""
@@ -747,7 +958,7 @@ class Utils(TypesMixin):
     @staticmethod
     def path(path: str | Path) -> Path:
         """Coerce a string path to a Path object, normalizing separators and redundant parts."""
-        return PathRegistry.normalize(path)
+        return Path(path).expanduser()
 
     @classmethod
     def qualify_resource_names(cls, *targets: str) -> list[_Resource]:
@@ -772,13 +983,25 @@ class Utils(TypesMixin):
     def normalize_path(cls, path: str | Path, window: sb.Window | None = None) -> Path:
         """Normalize non-absolute paths by searching Sublime & project directories."""
         path = cls.path(path)
-        parts = path.parts
+        # I. Handle environment variables in the first position
+        count = 0
+        while path.parts[0].startswith('$'):
+            env_val = os.getenv(path.parts[0].lstrip('$'), '')
+            assert env_val, f'Environment variable {path.parts[0]} not found for path {path}.'
+            path = Path(env_val, *path.parts[1:]).expanduser()
+            count += 1
+            if count > 10:
+                raise ValueError(
+                    f'Possible infinite loop while resolving environment variables in path {path}.'
+                )
+
         # I. Handle absolute & empty paths
-        if path.is_absolute() or not path:
+        if path.is_absolute() or not path or path.parts == ['.']:
             return path
 
         # II. Handle mainline resources
-        elif (i := cls.indexof(parts, 'Packages')) != -1:
+        parts = path.parts
+        if (i := cls.indexof(parts, 'Packages')) != -1:
             return Path(PATHS.pkgs, *parts[i + 1 :])
         elif (i := cls.indexof(parts, 'Installed Packages')) != -1:
             return Path(PATHS.inst, *parts[i + 1 :])
@@ -788,15 +1011,20 @@ class Utils(TypesMixin):
             return Path(PATHS.cache, *parts[i + 1 :])
 
         # III. Handle packages lacking the proper prefix
-        elif (i := cls.indexof(parts, *cls.package_list())) != -1:
+        if (i := cls.indexof(parts, *cls.package_list())) != -1:
             return Path(PATHS.pkgs, *parts[i:])
 
         # IV. Handle paths relative to open folders in the current window
         folders = cls.window_folders(window)
-        if (i := cls.indexof(parts, *folders)) != -1:
+        if (i := cls.indexof(parts, *(f.name for f in folders))) != -1:
             return Path(folders[i], *parts[i + 1 :])
         else:
             return path
+
+    @classmethod
+    def is_relative_to(cls, child: Path | str, parent: Path | str) -> bool:
+        """Naively check if the child is relative to the proposed parent."""
+        return str(child).startswith(str(parent))
 
     @classmethod
     def relativize(cls, path: Path, *parents: Path | str) -> Path | None:
@@ -805,7 +1033,7 @@ class Utils(TypesMixin):
             (
                 path.relative_to(parent)
                 for parent in map(cls.path, parents)
-                if str(path).startswith(str(parent))
+                if cls.is_relative_to(path, parent)
             ),
             None,
         )

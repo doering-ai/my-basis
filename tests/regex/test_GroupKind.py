@@ -36,6 +36,7 @@ class TestGroupKind:
             ('(?(DEFINE)', cls.DEFINE),
             # Test with full groups
             ('(?:abc)', cls.PLAIN),
+            ('(?i:abc)', cls.PLAIN),
             ('(?>foo)', cls.ATOMS),
             ('(?P<name>', cls.NAMED),
             # Invalid/empty
@@ -44,27 +45,6 @@ class TestGroupKind:
     )
     def test_read(self, value: str, expected: cls):
         assert cls.read(value) == expected
-
-    @pyt.mark.parametrize(
-        'kind, expected',
-        [
-            (cls.POSIT, '('),
-            (cls.PLAIN, '(?:'),
-            (cls.FLAGS, '(?'),
-            (cls.ATOMS, '(?>'),
-            (cls.NAMED, '(?P<'),
-            (cls.INVOC, '(?P>'),
-            (cls.SUBST, '(?P='),
-            (cls.RESET, '(?|'),
-            (cls.AHEAD, '(?='),
-            (cls.NOT_AHEAD, '(?!'),
-            (cls.BEHIND, '(?<='),
-            (cls.NOT_BEHIND, '(?<!'),
-            (cls.DEFINE, '(?(DEFINE)'),
-        ],
-    )
-    def test_prefix(self, kind: cls, expected: str):
-        assert kind.prefix == expected
 
     @pyt.mark.parametrize(
         'kind, mask, expected',

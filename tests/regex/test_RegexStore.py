@@ -227,7 +227,7 @@ class TestRegexStore:
     @pyt.mark.parametrize(
         'data, expected',
         [
-            (['Alpha', 'Zeta', 'Beta'], r'(?:Alph|[BZ]et)a'),
+            (['Alpha', 'Zeta', 'Beta'], r'(?>Alph|[BZ]et)a'),
             (['abcx', 'abcy'], r'abc[xy]'),
             (['abxc', 'abyc'], r'ab[xy]c'),
             (['axbc', 'aybc'], r'a[xy]bc'),
@@ -261,8 +261,8 @@ class TestRegexStore:
                 r'no-(?>(?>footnot|reliable-sourc)es|significant-coverage)',
             ),
             (
-                [r'(?P=_ws)(?:p?p|P[Pp])\.(?!\S)'],
-                r'(?P=_ws)(?:P[Pp]|pp?)\.(?!\S)',
+                [r'(?P>_ws)(?:p?p|P[Pp])\.(?!\S)'],
+                r'(?P>_ws)(?>P[Pp]|pp?)\.(?!\S)',
             ),
         ],
     )

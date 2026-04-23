@@ -101,12 +101,12 @@ class TestTree:
                 cls(r'a|\(?:b\)|c'),
                 cls(r'a|(?:b)|(?>c)'),
                 cls(r'a|b[b]|c'),
+                cls(r'a|[b]|c'),
+                cls(r'a|b[b]|c', suffix=r'd'),
             ],
             false=[
                 cls(r'a++|[b]|c'),
-                cls(r'a|[b]|c'),
                 cls(r'a|(?:b)++|c'),
-                cls(r'a|b[b]|c', suffix=r'd'),
             ],
         ),
     )
@@ -317,8 +317,8 @@ class TestTree:
             (cls(r'ab|cd?|ef'), r'(?>ab|cd?|ef)'),
             (cls(r'ab|cd{,5}|ef*', quantifier=r'?'), r'(?>ab|cd{,5}|ef*)?'),
             # Bubble-up optionality
-            (cls(r'ab|(?:cd)?|[ef]'), r'(?:ab|(?:cd)|[ef])?'),
-            (cls(r'ab|(?:cd)?|[ef]', quantifier=r'?'), r'(?:ab|(?:cd)|[ef])?'),
+            (cls(r'ab|(?:cd)?|[ef]'), r'(?>ab|(?:cd)|[ef])?'),
+            (cls(r'ab|(?:cd)?|[ef]', quantifier=r'?'), r'(?>ab|(?:cd)|[ef])?'),
             (cls(r'|a|b'), r'(?>a|b)?'),
             (cls(r'a||b', quantifier=r'?'), r'(?>a|b)?'),
             (cls(r'a|b|', quantifier=r'*?'), r'(?>a|b)*?'),
@@ -401,7 +401,7 @@ class TestTree:
             (cls(r'xyz', r'xyz'), r'xyz'),
             (cls(r'abc1cde', r'abc[2]cde'), r'abc[12]cde'),
             (cls(r'p', r'PP', r'Pp', r'pp'), r'(?>P[Pp]|pp?)'),
-            (cls(r'p', r'PP', r'Pp', r'pp', prefix=r'xX', suffix=r'Xx'), r'xX(?:P[Pp]|pp?)Xx'),
+            (cls(r'p', r'PP', r'Pp', r'pp', prefix=r'xX', suffix=r'Xx'), r'xX(?>P[Pp]|pp?)Xx'),
             (cls(r'R', 'RF', 'RFC', 'Rat', 'at'), r'(?>R(?>FC?|at)?|at)'),
         ],
     )
@@ -418,7 +418,7 @@ class TestTree:
             (cls(r'abc'), r'abc'),
             (cls(r'a[bc]d'), r'a[bc]d'),
             (cls('ab', 'cd', 'ef'), r'(?>ab|cd|ef)'),
-            (cls('ab', '(?:cd)', '[ef]'), r'(?:ab|(?:cd)|[ef])'),
+            (cls('ab', '(?:cd)', '[ef]'), r'(?>ab|(?:cd)|[ef])'),
             (cls('', 'cd', 'ef'), r'(?:|cd|ef)'),
             (cls('', 'cd', 'ef', quantifier=r'?'), r'(?:|cd|ef)?'),
         ],

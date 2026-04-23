@@ -12,9 +12,12 @@ import functools as ft
 
 ### EXTERNAL
 import jinja2 as jn
+import regex as re
 
 ### INTERNAL
 # NOTE: do not import anything from this package (to avoid circular imports)
+
+re.DEFAULT_VERSION = re.VERSION1
 
 ############
 ### DATA ###
@@ -36,14 +39,9 @@ DELIM = ' // '
 # -----
 # TYPES
 # -----
-T = TypeVar('T')
-C = TypeVar('C')
 Key = TypeVar('Key', bound=Hashable)
 Keys = TypeVar('Keys', bound=tuple)
 Value = TypeVar('Value')
-
-_K = TypeVar('_K', bound=Hashable)
-_V = TypeVar('_V')
 
 Series = list | tuple | set | deque
 type _Series[V] = list[V] | tuple[V, ...] | set[V] | deque[V]

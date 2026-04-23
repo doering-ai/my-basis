@@ -203,6 +203,7 @@ class RegexStore(pyd.BaseModel):
         # I. Import the requested patterns from other stores
         if imports:
             for source, names in imports:
+                _ = source.load
                 for name in source.find_all_invocations(set(names)):
                     self.definitions[name] = source.definitions[name]
                     self.patterns[name] = source.patterns[name]
@@ -262,7 +263,7 @@ class RegexStore(pyd.BaseModel):
         if isinstance(value, Pattern):
             pass
         elif isinstance(value, tuple) and len(value) == 2:
-            val, parser = value  # type: ignore
+            val, parser = value
             if isinstance(val, str) and callable(parser):
                 with ctx.suppress(Exception):
                     return (fn(val), parser)
@@ -271,7 +272,7 @@ class RegexStore(pyd.BaseModel):
                 return fn(value)
         return value
 
-    def _read_match(self, match: Match) -> tuple[dict[str, str], dict[str, list[str]]]:
+    def _read_match(self, match: Match | None) -> tuple[dict[str, str], dict[str, list[str]]]:
         """Extract and autostrip all captured groups from a match object.
 
         Args:
@@ -363,7 +364,7 @@ class RegexStore(pyd.BaseModel):
             group = '|'
         elif sep == '<|>' and not group:
             group = '>'
-        elif len(sep) >= 2 and sep[0] == '[' and sep[-1] == ']':  # type: ignore
+        elif len(sep) >= 2 and sep[0] == '[' and sep[-1] == ']':
             sep = sep[1:-1]
         elif not sep:
             sep = self.options.separator
@@ -481,6 +482,7 @@ class RegexStore(pyd.BaseModel):
         """
         buffer = RegexBuffer()
         new_groups: set[str] = set()
+
         for existing_group in groups_used:
             buffer.set(self.definitions[existing_group])
             groups_invoked = {g.name for g in Regex.group_iterator(buffer, mask=GroupKind.INVOC)}
@@ -579,7 +581,7 @@ class RegexStore(pyd.BaseModel):
                 if isinstance(parser, str):
                     _pd.interleave(_pd.field, parser, list(zip(_pd.start, _pd.value, strict=True)))
                 elif isinstance(parser, dict):
-                    _pd.apply_dict_parser(parser, self.patterns[field])  # type: ignore
+                    _pd.apply_dict_parser(parser, self.patterns[field])
                 elif callable(parser):
                     _pd.apply_func_parser(parser)
                 else:
@@ -746,13 +748,14 @@ class RegexStore(pyd.BaseModel):
 
         except Exception as e:
             print(f'Error compiling rgx `{name.upper()}`: {e}')
+            ns = locals()
             if DEBUG:
-                if 'rgx' in locals():
-                    print(f'\nRENDERED:\n{rgx}\nfrom {groups_used=}')  # type: ignore
-                elif 'text' in locals():
-                    print(f'\nCLEANED:\n{text}\n')  # type: ignore
-                elif 'raw_text' in locals():
-                    print(f'\nCOMPOSED:\n{raw_text}\n')  # type: ignore
+                if rgx := ns.get('rgx'):
+                    print(f'\nRENDERED:\n{rgx}\nfrom groups {ns.get("groups_used")}')
+                elif text := ns.get('text'):
+                    print(f'\nCLEANED:\n{text}\n')
+                elif raw_text := ns.get('raw_text'):
+                    print(f'\nCOMPOSED:\n{raw_text}\n')
             raise
 
         # III. Store the parser function & regex flags for this group, if present
@@ -912,7 +915,7 @@ class RegexStore(pyd.BaseModel):
         return self._autoparse('fullmatch', names, text)
 
     #: Alias for `fullmatch()`
-    full: ClassVar = fullmatch
+    full = fullmatch  # type: ignore
 
     def search(self, names: str | Iterable[str], text: str | Buffer) -> MatchData:
         """Search for one of the named patterns anywhere in text.
@@ -926,7 +929,7 @@ class RegexStore(pyd.BaseModel):
         names, text = self._validate_automatch_params(names, text)
         return self._autoparse('search', names, text)
 
-    def finditer(self, name: str, text: str | Buffer, **kwargs) -> Iterator[MatchData]:
+    def finditer(self, name: str, text: str | Buffer, **kwargs: Any) -> Iterator[MatchData]:
         """Find all non-overlapping matches of the pattern in text.
 
         Args:
@@ -945,7 +948,7 @@ class RegexStore(pyd.BaseModel):
             assert not kwargs, f'Unexpected kwargs {kwargs} for plain-string "{text[:25]}..."'
             yield from map(parse, rgx.finditer(text))
 
-    def findall(self, name: str, text: str | Buffer, **kwargs) -> list[MatchData]:
+    def findall(self, name: str, text: str | Buffer, **kwargs: Any) -> list[MatchData]:
         """Find all non-overlapping matches of the pattern in text.
 
         Args:
@@ -995,7 +998,7 @@ class RegexStore(pyd.BaseModel):
         return delims, sections
 
     #: Alias for `fullsplit()`
-    split: ClassVar = fullsplit
+    split: ClassVar = fullsplit  # type: ignore
 
     def polymatch(self, name: str, text: str | Buffer) -> MatchData:
         """Find all matches and merge their captures into a single MatchData.
@@ -1028,7 +1031,7 @@ class RegexStore(pyd.BaseModel):
         return MatchData(data=pd.captures)
 
     #: Alias for `polymatch()`
-    poly: ClassVar = polymatch
+    poly: ClassVar = polymatch  # type: ignore
 
     # -------------------------
     # `*2` Functional Utilities

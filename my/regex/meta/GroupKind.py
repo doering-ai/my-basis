@@ -10,7 +10,7 @@ import regex as re
 
 ### INTERNAL
 from ...types import MyEnum
-from .meta_rgxs import NO_ESC
+from .meta_rgxs import NO_ESC, FLAGS as _FLAGS
 
 
 ############
@@ -43,8 +43,8 @@ class GroupKind(MyEnum, Flag):
     DEFINE = auto()  #: Group for defining subpatterns without capturing -- `r'(?(DEFINE)...)'`.
 
     # OTHER
-    CONDN = auto() #: Named conditional -- `(?(1)...|...)`.
-    CONDL = auto() #: Lookaround conditional -- `(?(?=...)...|...)`.
+    CONDN = auto()  #: Named conditional -- `(?(1)...|...)`.
+    CONDL = auto()  #: Lookaround conditional -- `(?(?=...)...|...)`.
 
     _NAMED = NAMED | INVOC | SUBST  #: Combined flag for all named groups
     _LOOKAHEADS = AHEAD | NOT_AHEAD  #: Union of lookahead groups
@@ -61,22 +61,27 @@ class GroupKind(MyEnum, Flag):
         elif isinstance(value, MyEnum):
             return cls(value.value)
         elif isinstance(value, str):
+            if (_v := value.upper().strip()) in cls.__members__:
+                return cls.__members__[_v]
             if not value.startswith('('):
                 raise ValueError(f'GroupKind prefix must start with "(", got {value!r}.')
             elif not value.startswith('(?'):
                 return GroupKind.POSIT
-            elif kind := next((kind for kind, rgx in _PREFIXES if rgx.match(value)), None):
+            elif kind := next((kind for kind, rgx in _PREFIXES if rgx.match(value[2:])), None):
                 return kind
+            else:
+                raise ValueError(f'Unrecognized GroupKind prefix: {value!r}.')
 
         # Fallback to plain read, though it is likely to fail
         ret = super().read(value)
         assert isinstance(ret, GroupKind), f'GroupKind.read() returned obj of type {type(ret)}.'
         return ret
 
+
 _PREFIXES: list[tuple[GroupKind, re.Pattern]] = [
-    (GroupKind.POSIT, re.compile(r'$')),
-    (GroupKind.FLAGS, re.compile(r'$')),
-    (GroupKind.PLAIN, re.compile(r':')),
+    # (GroupKind.POSIT, re.compile(r'$')),
+    (GroupKind.FLAGS, re.compile(rf'(?:{_FLAGS}:?)?$')),
+    (GroupKind.PLAIN, re.compile(rf'{_FLAGS}?:')),
     (GroupKind.ATOMS, re.compile(r'>')),
     (GroupKind.NAMED, re.compile(r'P<')),
     (GroupKind.INVOC, re.compile(r'P[>&]|&')),

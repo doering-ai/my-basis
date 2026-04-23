@@ -16,7 +16,7 @@ import pydantic as pyd
 import regex as re
 
 ### INTERNAL (NOTE: If adding new internal imports, update the comments in `__init__.py`)
-from ..infra import T, C, Series
+from ..infra import Series
 from .IterUtils import iter_utils
 
 
@@ -33,7 +33,7 @@ class SyntaxUtils:
     # `0` NORMALIZATION
     # -----------------
     @classmethod
-    def fill_tree(cls, tree: dict[T, C]) -> None:
+    def fill_tree[T, C](cls, tree: dict[T, C]) -> None:
         """Recursively replace None values with empty dicts in a nested tree structure.
 
         Modifies tree in-place.
@@ -80,7 +80,7 @@ class SyntaxUtils:
     # `2` REFLECTION
     # --------------
     @staticmethod
-    def instance_fields(cls: type) -> dict[str, Any]:
+    def instance_fields(cls: type) -> dict[str, Any]:  # type: ignore
         """Extract instance field names and annotations from a Pydantic model or typeddict.
 
         Args:

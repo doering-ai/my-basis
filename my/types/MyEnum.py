@@ -65,23 +65,19 @@ class MyEnum(Enum):
             elif uval in members:
                 # I.ii. Find by name
                 return members[uval]
-            elif key := ut.find_key(
-                cls._aliases(), lambda rgx: bool(rgx.fullmatch(uval))
-            ):
+            elif key := ut.find_key(cls._aliases(), lambda rgx: bool(rgx.fullmatch(uval))):
                 # I.iii. Find by alias
                 return members[key.upper()]
-            elif issubclass(cls, Flag) and "|" in uval:
+            elif issubclass(cls, Flag) and '|' in uval:
                 # I.iv. Break down flags into a list
-                value = uval.split("|")
+                value = uval.split('|')
 
         # II. Handle int flags
         if isinstance(value, int) and issubclass(cls, Flag):
             return cls(value)
 
         # III. Immediate check against values (instead of keys)
-        if type(value) is cls.vtype() and (
-            key := ut.find_key(members, lambda v: v.value == value)
-        ):
+        if type(value) is cls.vtype() and (key := ut.find_key(members, lambda v: v.value == value)):
             return members[key]
 
         # IV. Handle lists of values
@@ -89,7 +85,7 @@ class MyEnum(Enum):
             assert issubclass(cls, Flag)
             return cls(sum(val.value for val in map(cls.read, value)))
 
-        raise ValueError(f"Invalid {cls.__name__} value: {value}")
+        raise ValueError(f'Invalid {cls.__name__} value: {value}')
 
     def write(self) -> str:
         """Convert enum member to string representation.
@@ -102,18 +98,17 @@ class MyEnum(Enum):
         elif self.name:
             return self.name.lower()
         elif isinstance(self, Flag):
-            return "|".join(
-                [
-                    flag.name
-                    for flag in type(self)
-                    if flag.name and self.value & flag.value
-                ]
+            return '|'.join(
+                [flag.name for flag in type(self) if flag.name and self.value & flag.value]
             )
         else:
             return str(self)
 
     def __str__(self) -> str:
         return self.write()
+
+    def __repr__(self) -> str:
+        return f'{self.__class__.__name__}.{self.name}' if self.name else super().__repr__()
 
     def __sub__(self, other: Self | str | int | list) -> Self:
         cls = self.__class__

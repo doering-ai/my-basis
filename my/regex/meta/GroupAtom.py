@@ -69,8 +69,8 @@ class GroupAtom(Atom):
         # I.i. Separate out the opening syntax (e.g. `(?:`)
         match = META_RGXS['group'].match(self.data)
         assert match is not None, f'Invalid group: {self.data}'
-        self.start = match.group('start')
-        assert self.start, f'Invalid group start: {self.start}'
+        self.start = match['start']
+        assert self.start and isinstance(self.start, str), f'Invalid group start: {self.start}'
 
         # I.ii. Infer the kind
         self.kind = GroupKind.read(self.start)

@@ -28,10 +28,10 @@ import pickle
 import regex as re
 import textwrap
 import tomllib
+import logging
 
 ### EXTERNAL ###
 import dateutil.parser
-import logfire as fire
 import pydantic as pyd
 import srsly
 from srsly._yaml_api import CustomYaml
@@ -42,8 +42,6 @@ from ..infra import Atomic, Time, Series, _Series
 from ..utils import ut
 from ..caches import NestedCache
 from .MyType import MyType
-
-re.DEFAULT_VERSION = re.VERSION1
 
 ############
 ### DATA ###
@@ -71,6 +69,8 @@ ABSTRACT_SEQS = [
     abc.Collection,
     abc.Iterable,
 ]
+
+logger = logging.getLogger(__name__)
 
 
 ############
@@ -212,6 +212,7 @@ class Typist(pyd.BaseModel):
 
     # Dynamic Global Members
     MATCH_CACHE: ClassVar[NestedCache[tuple[str, str], bool]] = NestedCache(signature=(str, str))
+    LOGGER: ClassVar[logging.Logger] = logger
 
     # Instance Members (for changing CASTING behavior only)
     atomics: bool = False
@@ -405,7 +406,7 @@ class Typist(pyd.BaseModel):
         elif inspect.isclass(main):
             return self._to_class(data, main)
         else:
-            fire.warning(f'Unknown main type for casting: {main}')
+            self.LOGGER.warning(f'Unknown main type for casting: {main}')
         return None
 
     def _to_literal(self, data: object, target: MyType) -> object | None:
@@ -704,7 +705,7 @@ class Typist(pyd.BaseModel):
                         tzinfo=UTC,
                     )
         except ValueError as e:
-            fire.error(f'Cannot cast from {type(data)} to time; {e}')
+            self.LOGGER.error(f'Cannot cast from {type(data)} to time; {e}')
         return None
 
     def _str_to_time[T: Time](self, data: str, target: type[T]) -> T | None:
@@ -1014,6 +1015,11 @@ class Typist(pyd.BaseModel):
     def __repr__(self) -> str:
         return 'Typist'
 
+    @staticmethod
+    def specify(tvar: type[F]) -> type[F]:
+        """Convert a type variable to its generic form if it's a generic alias."""
+        return getattr(tvar, '__origin__', tvar)
+
     # ------------------
     # `*` Public Methods
     # ------------------
@@ -1281,7 +1287,9 @@ class Typist(pyd.BaseModel):
             if (cast_value := self.cast(value, target)) is not None:
                 value = cast_value
             else:
-                fire.error(f'Cannot setattr {type(obj).__name__}.{key} by casting to {tvar}.')
+                self.LOGGER.error(
+                    f'Cannot setattr {type(obj).__name__}.{key} by casting to {tvar}.'
+                )
                 return False
 
         # III. Directly set the value attribute on the object
@@ -1536,7 +1544,7 @@ class Typist(pyd.BaseModel):
             Loaded and cast data from the file.
         """
         if not file:
-            fire.error('No file provided.')
+            self.LOGGER.error('No file provided.')
             return tvar()  # type: ignore
         elif not isinstance(file, Path):
             file = Path(str(file)).expanduser()
@@ -1632,7 +1640,8 @@ class Typist(pyd.BaseModel):
             ret = srsly.yaml_loads(file)
 
         # II. Verify & format the response
-        if isinstance(ret, tvar):
+        # if isinstance(ret, tvar):
+        if self.check(ret, tvar):
             return ret
         elif not ret:
             return tvar()  # type: ignore
@@ -1663,6 +1672,7 @@ class Typist(pyd.BaseModel):
         Returns:
             Loaded and cast data from the file/string.
         """
+        tvar = self.specify(tvar)
         if not file:
             return tvar()  # type: ignore
         elif isinstance(file, Path):
@@ -1739,7 +1749,7 @@ class Typist(pyd.BaseModel):
         elif file.suffix in ['.pkl']:
             file.write_bytes(self.to_pickle(data))
         else:
-            fire.error(f'Unsupported file type: {file}')
+            self.LOGGER.error(f'Unsupported file type: {file}')
 
     def to_yaml(self, data: FileData, wrap: bool = False, **kwargs) -> str:
         """Serialize data to a YAML string. See `to_file()` for general details.
@@ -1981,7 +1991,7 @@ class Typist(pyd.BaseModel):
                 return func(*bound.args, **bound.kwargs)
             except Exception as e:
                 name = getattr(func, '__name__', '[ANONYMOUS_FUNCTION]')
-                fire.error(
+                cls.LOGGER.error(
                     f'Failed to invoke {name} with args={bound.args}, kwargs={bound.kwargs}: {e}'
                 )
         if _strict:

@@ -2,7 +2,7 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import Any, Literal, overload, TypeIs
+from typing import Any, Literal, overload, TypeIs, Self, ClassVar
 from collections.abc import (
     Callable,
     Collection,
@@ -16,12 +16,21 @@ from collections.abc import (
 )
 from collections import Counter, defaultdict
 import functools as ft
+import contextlib as ctx
 
 ### EXTERNAL
+import pydantic as pyd
 import more_itertools as mi
 
 ### INTERNAL (NOTE: If adding new internal imports, update the comments in `__init__.py`)
-from ..infra import Series
+from ..infra import Series, _Map
+
+
+############
+### DATA ###
+############
+type MapItems[K: Hashable, V] = Iterable[tuple[K, V]]
+type Map[K: Hashable, V] = Mapping[K, V] | MapItems[K, V]
 
 
 ############
@@ -73,8 +82,8 @@ class IterUtils:
         value: Mapping[K, V] | Iterable[tuple[K, V]] | object,
         ktype: type[K] | None = None,
         vtype: type[V] | None = None,
-    ) -> TypeIs[Mapping[K, V] | Iterable[tuple[K, V]]]:
-        """Check if value is mapping-like or sequence of key-value tuples, optionally type-checked.
+    ) -> TypeIs[Map[K, V]]:
+        """Check if value is a map, or coercable to one. Can apply type checking.
 
         Args:
             value: Object to check.
@@ -293,6 +302,30 @@ class IterUtils:
             raise ValueError(f'Multiple keys found in dictionary: {ret.keys()}')
         else:
             return next(iter(ret.values()))
+
+    @classmethod
+    def safe[K: Hashable = str, V = str](
+        cls, container: _Map[K, V | Map | None], *keys: K
+    ) -> V | None:
+        """Safely access nested map values with multiple keys.
+
+        Args:
+            container: Map to access.
+            *keys: Sequence of keys to traverse.
+        Returns:
+            Value at nested location if all keys exist, else None.
+        """
+        cur: V | dict[K, Any] | None = dict(container)
+
+        for key in keys:
+            if isinstance(cur, dict):
+                if key in cur:
+                    cur = cur[key]
+                else:
+                    return None
+            else:
+                return cur
+        return cur  # type: ignore
 
     # ---------------
     # `2` APPLICATION
@@ -632,4 +665,3 @@ class IterUtils:
 
 
 iter_utils = IterUtils
-"""An alias of `IterUtils`, cased so as to imply static usage."""

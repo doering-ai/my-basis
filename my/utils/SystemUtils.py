@@ -2,10 +2,13 @@
 ### HEAD ###
 ############
 ### STANDARD
+from types import ModuleType
 from datetime import datetime, timedelta, UTC
 from pathlib import Path
 from shutil import get_terminal_size
 from typing import ClassVar
+import sys
+from unittest.mock import MagicMock
 import subprocess as sbp
 import textwrap
 
@@ -205,6 +208,24 @@ class SystemUtils:
             return not input(f'{prompt} [y/N] ').lower().strip().startswith('y')
         else:
             return not input(f'{prompt} [Y/n] ').lower().strip().startswith('n')
+
+    @staticmethod
+    def is_installed(*modules: str) -> bool:
+        """Check if specified Python modules are installed."""
+        try:
+            for module in modules:
+                __import__(module)
+        except ImportError:
+            return False
+        return True
+
+    @staticmethod
+    def mock_if_uninstalled(target: str, *dependencies: str) -> bool:
+        """Mock the target module if any of the specified dependencies are not installed."""
+        if not SystemUtils.is_installed(*dependencies):
+            sys.modules[target] = MagicMock()
+            return False
+        return True
 
 
 system_utils = SystemUtils

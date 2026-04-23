@@ -1,5 +1,5 @@
 # See docs/contributing.md for inter-package dependency tree
-from .infra import T, C, Key, Keys, Value, Atomic, Series, _Series, Map, _Map
+from .infra import Key, Keys, Value, Atomic, Series, _Series, Map, _Map
 from .utils import (
     Utils,
     ut,
@@ -17,17 +17,7 @@ from .utils import (
 )
 from .caches import Cache, NestedCache, PickleCache, FileCache
 from .typing import MyType, Typist, typist, TypeArg, AutocastModel
-from .types import (
-    MyEnum,
-    UniqueId,
-    Uid,
-    Span,
-    Buffer,
-    Predicate,
-    MyEnumRow,
-    MyEnumSetRow,
-    Command,
-)
+from .types import MyEnum, UniqueId, Uid, Span, Buffer, Predicate, MyEnumRow, MyEnumSetRow, Command
 from .apis import GoogleSheet, Environment, env
 from .regex import (
     RegexStore,
@@ -51,10 +41,9 @@ from .regex import (
 )
 from .files import Markdown
 
+
 __all__ = [
     # infra.py
-    'T',
-    'C',
     'Key',
     'Keys',
     'Value',

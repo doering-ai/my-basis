@@ -2,6 +2,7 @@
 ### HEAD ###
 ############
 ### STANDARD
+from typing import Any, cast
 from collections.abc import Hashable, Iterator
 import functools as ft
 import more_itertools as mi
@@ -27,7 +28,7 @@ class NestedCache[Keys: tuple, Value](pyd.BaseModel):
     signature: tuple[type, ...]
 
     children: dict[Hashable, 'NestedCache'] = {}
-    data: dict = {}
+    data: dict[Any, Value] = {}
     size: int = 0
 
     max_size: int = pyd.Field(default=2**12, gt=0)  # 4096
@@ -136,11 +137,11 @@ class NestedCache[Keys: tuple, Value](pyd.BaseModel):
         """Iterator over all key-value pairs in the cache."""
         if self.depth == 1:
             for key, val in self.data.items():
-                yield (key,), val
+                yield cast('Keys', (key,)), val
         else:
             for key, child in self.children.items():
                 for keys, val in child.items():
-                    yield (key, *keys), val
+                    yield cast('Keys', (key, *keys)), val
 
     def keys(self) -> Iterator[Keys]:
         """Iterator over all keys in the cache."""

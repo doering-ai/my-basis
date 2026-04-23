@@ -2,7 +2,7 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import ClassVar, Self, override
+from typing import ClassVar, Self, Any, override
 import functools as ft
 
 ### EXTERNAL
@@ -36,9 +36,9 @@ class MatchData(Predicate):
     @classmethod
     def new(
         cls,
-        *args,
+        *args: Any,
         match: Match | None = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> Self:
         ret = cls(duplicates=True, overwrite=False, match=match)
         for arg in (*args, kwargs):
@@ -50,7 +50,7 @@ class MatchData(Predicate):
     def _validate_matchdata(self) -> Self:
         """Ensure that all captured group values are lists when duplicates are allowed."""
         if not self.data and self.match is not None:
-            self.data = self.match.capturesdict()
+            self.data: dict[str, list[str]] = self.match.capturesdict()
         return self
 
     # -------------------

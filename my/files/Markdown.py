@@ -2,15 +2,15 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import Annotated, ClassVar, Any, Self
+from typing import Annotated, ClassVar, Any, Self, cast
 from collections.abc import Iterator, Collection, Callable
 from collections import deque
+import logging
 
 ### EXTERNAL
 import pydantic as pyd
 from regex import Pattern
 import mdformat
-import logfire
 
 ### INTERNAL
 from ..infra import get_template
@@ -30,6 +30,7 @@ class Markdown(pyd.BaseModel):
     extraction, and rendering back to markdown with optional formatting.
     """
 
+    LOGGER: ClassVar[logging.Logger] = logging.getLogger('Markdown')
     TEMPLATE: ClassVar[str] = 'Markdown.md.jinja'
     BUFFER_FACTORY: ClassVar[Callable[..., Buffer]] = Buffer.new
     RGXS: ClassVar[RegexStore] = RegexStore.new(
@@ -240,7 +241,7 @@ class Markdown(pyd.BaseModel):
             if origin == target:
                 return []
             elif not target.startswith(origin):
-                logfire.error(f'{origin} is not an ancestor of {target}')
+                cls.LOGGER.error(f'{origin} is not an ancestor of {target}')
                 return []
             digits = list(map(cls._digit_to_num, target[len(origin) :]))
         else:
@@ -250,7 +251,7 @@ class Markdown(pyd.BaseModel):
         ret: list[Markdown] = [ancestor]
         for digit in digits:
             if digit >= (n := len(ret[-1].nodes)):
-                logfire.error(f'Index {digit} OOB of {ret[-1].title} (n={n})')
+                cls.LOGGER.error(f'Index {digit} OOB of {ret[-1].title} (n={n})')
                 return []
             ret.append(ret[-1].nodes[digit])
         return ret
@@ -291,7 +292,7 @@ class Markdown(pyd.BaseModel):
                 if note_idx != -1 and (note_data := descendants[note_idx].from_yaml()):
                     descendants.pop(note_idx)
                     child.notes = note_data
-                child.nodes = descendants
+                child.nodes = cast('list[Markdown]', descendants)
             ret.append(child)
 
         return ret
@@ -367,7 +368,7 @@ class Markdown(pyd.BaseModel):
 
         return self
 
-    def get(self, **kwargs) -> 'Markdown | None':
+    def get(self, **kwargs: Any) -> 'Markdown | None':
         """Get a descendant node by one of various criteria.
 
         Args:
@@ -461,7 +462,7 @@ class Markdown(pyd.BaseModel):
         elif not path:
             return self
         elif len(path) > max_d > 0:
-            logfire.warn(f'Exceeded max depth {max_d} w/ {len(path)} digits')
+            self.LOGGER.warning(f'Exceeded max depth {max_d} w/ {len(path)} digits')
             return None
         return trace[-1] if (trace := self.trace_path(path)) else None
 
@@ -605,7 +606,7 @@ class Markdown(pyd.BaseModel):
     def __bool__(self) -> bool:
         return bool(self.title or self.prose)
 
-    def pop(self, **kwargs) -> 'Markdown | None':
+    def pop(self, **kwargs: Any) -> 'Markdown | None':
         """Remove and return a descendant node.
 
         Args:
@@ -646,7 +647,7 @@ class Markdown(pyd.BaseModel):
         """Removes nodes with the given indices from this markdown object."""
         for title in nodes:
             if node := self.pop(title=title):
-                logfire.info(f'Removed node: {node.title} ({node.idx})')
+                self.LOGGER.info(f'Removed node: {node.title} ({node.idx})')
             else:
-                logfire.warn(f'Node not found: {title}')
+                self.LOGGER.warning(f'Node not found: {title}')
         return self

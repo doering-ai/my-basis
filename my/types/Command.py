@@ -3,7 +3,7 @@
 ############
 ### STANDARD
 import asyncio as aio
-from typing import Any, Self
+from typing import Any, Self, NamedTuple, overload
 import subprocess as sbp
 
 ### EXTERNAL
@@ -41,6 +41,7 @@ class Command(pyd.BaseModel):
         flag_assignment: bool = False  #: Use "=" to connect flags to their values.
         always_quote: bool = False  #: Always quote argument values, even if not strictly necessary.
 
+        cwd: str | None = None  #: Working directory for command execution.
         out: str | None = None  #: Redirect command output to a file. Not compatible w/ `pipe`.
         pipe: 'Command | None' = None  #: Pipe command output to another command.
 
@@ -70,9 +71,10 @@ class Command(pyd.BaseModel):
         """Create a new command instance.
 
         Args:
-            command: Base command name.
-            args: Positional arguments.
-            **kwargs: Keyword arguments -- both flags and options.
+            command: Base command string -- ostensibly but NOT necessarily a name.
+            args: Positional arguments ot the command.
+            options: Assembly option flags.
+            **kwargs: Keyword arguments to the command.
         Returns:
             Configured Command instance.
         """
@@ -174,21 +176,26 @@ class Command(pyd.BaseModel):
         """A command is truthy if it has any content."""
         return bool(self.command or self.args)
 
-    def execute(self) -> tuple[int, str, str]:
+    class _Result(NamedTuple):
+        return_code: int
+        stdout: str
+        stderr: str
+
+    def execute(self) -> _Result:
         """Execute a shell command synchronously.
 
         Returns:
             (return_code, stdout, stderr).
         """
         cmd = self.assemble()
-        ret = sbp.run(cmd, capture_output=True, text=True, shell=True)
-        return (
+        ret = sbp.run(cmd, capture_output=True, text=True, shell=True, cwd=self.options.cwd)
+        return Command._Result(
             ret.returncode or 0,
             (ret.stdout or '').strip(),
             (ret.stderr or '').strip(),
         )
 
-    async def execute_async(self) -> tuple[int, str, str]:
+    async def execute_async(self) -> _Result:
         """Execute a shell command asynchronously.
 
         Returns:
@@ -200,10 +207,11 @@ class Command(pyd.BaseModel):
             stdout=aio.subprocess.PIPE,
             stderr=aio.subprocess.PIPE,
             shell=True,
+            cwd=self.options.cwd,
         )
         stdout, stderr = await subprocess.communicate()
 
-        return (
+        return Command._Result(
             subprocess.returncode or 0,
             (stdout or b'').decode().strip(),
             (stderr or b'').decode().strip(),

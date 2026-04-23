@@ -66,7 +66,7 @@ class MetricUtils:
                 raise ImportError(f'`utils.{name}()` requires the optional `[metrics]` dependency.')
             return fn(*args, **kwargs)
 
-        return _wfn  # ty: ignore
+        return _wfn  # type: ignore
 
     # -----------
     # `1` LOGGING

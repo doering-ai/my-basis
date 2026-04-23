@@ -3,36 +3,72 @@
 version: '3'
 
 vars:
-    SRC_DIR: ./my
-    DOC_DIR: ./docs
+    DOC_DIR: '{{.ROOT_DIR}}/docs'
     API_DIR: '{{.DOC_DIR}}/_source'
     OUT_DIR: '{{.DOC_DIR}}/_build'
 
 tasks:
-    # ---------
-    # Packaging
-    # ---------
+    # --
+    # uv
+    # --
     sync:
-        cmd: uv sync --all-extras
+        cmd: uv --project {{.ROOT_DIR}} sync --all-extras {{.CLI_ARGS}}
         aliases: [install, setup]
+        desc: Install & verify dependencies through `uv sync`, including all optional
+            and dev dependencies.
+    build:
+        cmd: uv --project {{.ROOT_DIR}} build --format wheel {{.CLI_ARGS}}
+        desc: Build a distributable wheel of this package through `uv build`.
+
+    # --------
+    # DevTools
+    # --------
+    lint:
+        cmd: uv --project {{.ROOT_DIR}} run ruff check . {{.CLI_ARGS}}
+        desc: List statically-detected potential issues with `ruff check`.
+
+    format:
+        cmd: uv --project {{.ROOT_DIR}} run ruff format . {{.CLI_ARGS}}
+        desc: Reformat source code files with `ruff format`.
+
+    typecheck:
+        cmd: uv --project {{.ROOT_DIR}} run pyrefly check {{.CLI_ARGS}}
+        desc: List Type warnings & errors in the program with `pyrefly check`.
 
     # -------
     # Testing
     # -------
-    test: uv run pytest {{.CLI_ARGS}}
+    test:
+        cmd: uv --project {{.ROOT_DIR}} run pytest {{.CLI_ARGS}}
+        desc: Execute `pytest`"
+        aliases: [tests, pytest]
 
-    test:dev: uv run pytest --sw -vv --no-cov {{.CLI_ARGS}}
+    test:dev:
+        cmd: uv --project {{.ROOT_DIR}} run pytest --sw -vv --no-cov {{.CLI_ARGS}}
+        aliases: [dev-test]
+        desc: Run iterative developer tests that stop upon first failure, showing
+            extra output and skipping code coverage.
 
-    test:pdb: uv run pytest -s --pdb --sw -vv --no-cov {{.CLI_ARGS}}
+    test:pdb:
+        cmd: uv --project {{.ROOT_DIR}} run pytest -s --pdb --sw -vv --no-cov {{.CLI_ARGS}}
+        aliases: [pdb-test, debug-test]
+        desc: The same as dev-test, but also drop into the interactive debugger upon
+            exception or failure.
 
-    test:ssu: uv run pytest --snapshot-update {{.CLI_ARGS}}
+    test:ssu:
+        cmd: uv --project {{.ROOT_DIR}} run pytest --snapshot-update {{.CLI_ARGS}}
+        aliases: [snapshot-test, ssu-test, snap-test]
+        desc: Update regression test "snapshot" files to reflect the new truth.
 
-    test:cov: uv run pytest --cov=my --cov-report=term-missing --cov-report=markdown:docs/coverage.md
-        {{.CLI_ARGS}}
+    test:cov:
+        cmd: uv --project {{.ROOT_DIR}} run pytest --cov-report=term-missing --cov-report=markdown:tests/coverage.md
+            {{.CLI_ARGS}}
+        desc: Report code coverage of our unit tests to stdout and `tests/coverage.md`.
+        aliases: [cov-test, coverage-test, coverage]
 
-    # ------
-    # Sphinx
-    # ------
+    # -------------
+    # Documentation
+    # -------------
     docs:
         desc: Extract python docstrings into MyST files, then (re)build the finalized
             HTML files.
@@ -50,3 +86,4 @@ tasks:
         desc: Remove all generated documentation files.
         cmd: rm -rf {{.OUT_DIR}}/*
         generates: ['{{.OUT_DIR}}/*.html']
+

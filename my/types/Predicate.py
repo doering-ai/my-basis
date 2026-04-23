@@ -14,7 +14,7 @@ import pydantic as pyd
 import json
 
 ### INTERNAL
-from ..infra import T, Series, Map, _Series
+from ..infra import Series, Map, _Series
 from ..utils import ut
 from ..typing import Typist, MyType
 
@@ -76,7 +76,7 @@ class Predicate(pyd.BaseModel):
         return ret
 
     @pyd.model_serializer
-    def serialize(
+    def serialize[T](
         self,
         fields: Iterable[str] | None = None,
         tvar: type[T] | None = None,
@@ -413,10 +413,13 @@ class Predicate(pyd.BaseModel):
             for key in self.keyset - set(other):
                 del self.data[key]
         else:
-            if not isinstance(other, Predicate):
+            if isinstance(other, Predicate):
+                pred = other
+            else:
                 pred = Predicate.new(other, duplicates=self.duplicates)
+
             shared_keys = self.keyset & pred.keyset
-            self.data = {key: ut.common_elements(self[key], other[key]) for key in shared_keys}
+            self.data = {key: ut.common_elements(self[key], pred[key]) for key in shared_keys}
         return self
 
     def __isub__(self, other: Map | _Series[str] | Self) -> Self:

@@ -1,6 +1,6 @@
-###################
-### `I` GENERAL ###
-###################
+##################
+### I. GENERAL ###
+##################
 # Environment Variables & Secrets
 
 .env
@@ -29,9 +29,9 @@ local_cache/
 dist/
 sdist/
 
-###################
-### `II` PYTHON ###
-###################
+##################
+### II. PYTHON ###
+##################
 # Compilation
 *.py.class
 *.pyc
@@ -86,9 +86,9 @@ parts/
 var/
 
 
-########################
-### `III` TYPESCRIPT ###
-########################
+#######################
+### III. TYPESCRIPT ###
+#######################
 # Packaging
 *.pem
 .next/
@@ -120,22 +120,22 @@ yarn.lock
 .svelte-kit/
 .temp
 
-#########################
-### `IV` ENVIRONMENTS ###
-#########################
+########################
+### IV. ENVIRONMENTS ###
+########################
 # IDEs
 *.code-workspace
 .idea/
 .spyderproject
 .spyproject
 .vscode/
+*.sublime-project
+*.sublime-workspace
 
 # Operating Systems 
 .DS_Store
 
-#################
-### `V` OTHER ###
-#################
+# Test Artifacts
 *.cover
 .coverage
 coverage.md
@@ -144,6 +144,9 @@ coverage.xml
 coverage/
 lib-cov
 
+#################
+### V. AD-HOC ###
+#################
 .task
 .hypothesis/
 .nox/
@@ -152,6 +155,5 @@ lib-cov
 htmlcov/
 nosetests.xml
 
-# SublimeText
-Preferences.sublime-settings
+# Sublime Text
 formatter.assets/

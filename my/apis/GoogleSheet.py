@@ -15,20 +15,16 @@ from pathlib import Path
 from ..utils import ut
 from .Environment import env
 
-try:
-    from google.auth.transport.requests import Request
-    from google.oauth2.credentials import Credentials as OAuthCredentials
-    from google_auth_oauthlib.flow import InstalledAppFlow
-    from googleapiclient.discovery import build
-    from google.auth.external_account_authorized_user import Credentials as TokenCredentials
-    import pandas as pd
-
-    INSTALLED = True
-except ImportError:
-    INSTALLED = False
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials as OAuthCredentials
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
+from google.auth.external_account_authorized_user import Credentials as TokenCredentials
+import pandas as pd
 
 DataFrame = pd.DataFrame
 logger = logging.getLogger()
+INSTALLED = True
 
 
 ############
@@ -89,13 +85,13 @@ class GoogleSheet:
     @staticmethod
     def _import_guard[F: FunctionType](fn: F) -> F:
         @ft.wraps(fn)
-        def _wfn(*args, **kwargs):
+        def _wfn(*args: Any, **kwargs: Any):
             if not INSTALLED:
                 name = fn.__name__
                 raise ImportError(f'`utils.{name}()` requires the optional `[metrics]` dependency.')
             return fn(*args, **kwargs)
 
-        return _wfn  # ty: ignore
+        return _wfn  # type: ignore
 
     @_import_guard
     def connect(self, uid: str) -> None:
@@ -291,6 +287,9 @@ class GoogleSheet:
 
         # III. Log in
         if creds is None:
+            if not creds_file.exists():
+                creds_file.parent.mkdir(parents=True, exist_ok=True)
+                creds_file.touch(exist_ok=True)
             flow = InstalledAppFlow.from_client_secrets_file(creds_file.as_posix(), self.SCOPES)
             creds = flow.run_local_server(port=0)
             did_change = True
@@ -415,7 +414,7 @@ class GoogleSheet:
             self.LOGGER.info(f'Successfully cleared ranges {response["clearedRanges"]}.')
 
     @_import_guard
-    def write(self, worksheet: str, data: DataFrame, cells: str = 'A1:Z', **kwargs) -> None:
+    def write(self, worksheet: str, data: DataFrame, cells: str = 'A1:Z', **kwargs: Any) -> None:
         """Write data to a single worksheet in the Google Sheet.
 
         Args:

@@ -11,7 +11,6 @@ import regex as re
 
 ### EXTERNAL
 import pydantic as pyd
-import logfire
 import srsly
 
 ### INTERNAL
@@ -390,7 +389,7 @@ class FileCache[T]:
         self.items.clear()
         self.fsize += self.isize
         self.isize = 0
-        logfire.info(f'Flushed {self.fsize} items to disk')
+        print(f'Flushed {self.fsize} items to disk')
 
     def search(
         self,

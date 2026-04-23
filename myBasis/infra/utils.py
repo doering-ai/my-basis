@@ -17,6 +17,11 @@ import os
 from enum import Enum, auto
 from datetime import timedelta, datetime, timezone
 from uuid import uuid4
+from io import TextIOWrapper
+import subprocess
+import asyncio as aio
+import inspect
+import shlex
 
 ### EXTERNAL
 import sublime as sb
@@ -35,6 +40,7 @@ from ruamel.yaml import YAML
 ### INTERNAL
 from .PathRegistry import PathRegistry, PATHS
 from .types import TypesMixin
+from .Multiplex import Multiplex
 
 re.DEFAULT_VERSION = re.VERSION1
 
@@ -49,8 +55,10 @@ V = TypeVar('V', bound=ViewClass)
 MetaDecorator: TypeAlias = 'Callable[[Callable[P, R]], Callable[P, R]]'
 ViewPropertyDecorator: TypeAlias = 'Callable[[Callable[[V], R]], Callable[[V], R]]'
 
-_Resource: TypeAlias = str
 Rest = TypeVarTuple('Rest')
+
+WindowId: TypeAlias = TypesMixin.WindowId
+ViewId: TypeAlias = TypesMixin.ViewId
 
 NO_ESC = r'(?<![^\\]\\)(?<!\\{3})'
 RGX_REF_RGX = re.compile(NO_ESC + r'\{\{\.(?P<name>[_[:lower:]][_[:lower:]\d]*)\}\}')
@@ -62,7 +70,7 @@ RGX_REF_RGX = re.compile(NO_ESC + r'\{\{\.(?P<name>[_[:lower:]][_[:lower:]\d]*)\
 class Utils(TypesMixin):
     """Simple static class for exporting typed utilities en-masse.
 
-    Almost entirely copied from the `my-basis` PyPi plugin (by the same original developer 🙂).
+    Originally entirely copied from the `my-basis` PyPi plugin (by the same original developer 🙂).
     """
 
     RGXS: ClassVar[dict[str, Pattern]] = dict()
@@ -177,6 +185,39 @@ class Utils(TypesMixin):
             return round(val.timestamp() * 1000)
         else:
             return int((val * 1000) if val < 10 else val)
+
+    @classmethod
+    def _clean_shell_args(cls, args: tuple[str | list[str], ...]) -> list[str]:
+        """Clean and flatten the given shell arguments."""
+        return [
+            atom
+            for arg in mi.collapse(args, str, 1)
+            for atom in shlex.split(str(arg).strip())
+            if atom
+        ]
+
+    @staticmethod
+    @ft.wraps(subprocess.run, assigned=['__annotations__'])
+    def ex(*args: str | list[str], **kwargs: Any) -> str | None:
+        """Executes a command in the virtual environment asynchronously."""
+        kwargs.update(dict(capture_output=True, text=True))
+        with ctx.suppress(Exception):
+            result = subprocess.run(Utils._clean_shell_args(args), **kwargs)
+            if result.returncode == 0:
+                return (result.stdout or result.stderr).strip('\n').rstrip(' ')
+        return None
+
+    @staticmethod
+    @ft.wraps(aio.create_subprocess_exec, assigned=['__annotations__'])
+    async def exa(*args: str, **kwargs: Any) -> str | None:
+        """Executes a command in the virtual environment asynchronously."""
+        kwargs.update(dict(stdout=aio.subprocess.PIPE, stderr=aio.subprocess.PIPE))
+        with ctx.suppress(Exception):
+            proc = await aio.create_subprocess_exec(*Utils._clean_shell_args(args), **kwargs)
+            stdout, stderr = await proc.communicate()
+            if proc.returncode == 0:
+                return (stdout.decode() or stderr.decode()).strip('\n').rstrip(' ')
+        return None
 
     @classmethod
     def rgx_dict(
@@ -956,18 +997,143 @@ class Utils(TypesMixin):
         return {path.stem for path in paths}
 
     @staticmethod
+    @ft.lru_cache(maxsize=10 * 4)
+    def infer_package(context_path: Path | None = None) -> str | None:
+        """Infer the package of the caller by checking the file paths of recent stack frames."""
+        cls = Utils
+        if context_path is not None:
+            paths = {cls.normalize_path(context_path)}
+        else:
+            paths = {Path(frame.filename) for frame in it.islice(inspect.stack(), 1, 4)}
+
+        packages = [
+            package
+            for path in paths
+            if (str(path).strip('/. ') and path.exists())
+            and (package := cls.infer_package_of(path))
+        ]
+        return packages[-1] if packages else None
+
+    @classmethod
+    def get_window(cls, window_id: WindowId) -> sb.Window | None:
+        """Get a window by its ID, returning None if not found."""
+        return next((w for w in sb.windows() if w.id() == window_id), None)
+
+    @classmethod
+    def open_folders(cls) -> dict[WindowId, set[Path]]:
+        """A collection of all folders currently referenced by open windows."""
+        ret = {}
+        for window in sb.windows():
+            _acc = set()
+            for folder in filter(bool, window.folders()):
+                path = Path(folder).expanduser()
+                if path.exists():
+                    _acc.add(path)
+                    if path.is_symlink() and (resolved := path.resolve()).exists():
+                        _acc.add(resolved)
+                else:
+                    print(f'Warning: Folder path {path} does not exist for window {window.id()}.')
+
+            if _acc:
+                ret[window.id()] = _acc
+
+        return ret
+
+    @classmethod
+    def open_projects(cls) -> dict[str, set[Path]]:
+        """A collection of all SublimeText projects referenced by one or more open windows."""
+        ret = defaultdict(set)
+        for window in sb.windows():
+            data = window.project_data()
+            file = window.project_file_name()
+            if file is not None and isinstance(data, dict):
+                proj_file = Path(file).expanduser()
+                proj_name = proj_file.stem
+                for raw_path in filter(bool, (f.get('path') for f in data.get('folders', []))):
+                    path = Path(raw_path).expanduser()
+
+                    if path.exists():
+                        ret[proj_name].add(path)
+                    elif (rel_path := (proj_file.parent / path).resolve()).exists():
+                        ret[proj_name].add(rel_path)
+
+        return ret
+
+    @classmethod
+    def expand_symlinks(cls, *paths: Path) -> Iterator[Path]:
+        """Iterate through the given paths AND their symlink origins (if any)."""
+        yield from mi.flatten(
+            (path, path.resolve()) if path.is_symlink() else (path,) for path in paths
+        )
+
+    @staticmethod
+    @ft.lru_cache(maxsize=1)
+    def package_dirs() -> list[tuple[str, Path]]:
+        """Collect the directory paths of all used packages, including symlink origins.
+
+        The order is guaranteed to put symlink targets before their origins in the list.
+
+        Returns:
+            A list of (package_name, package_path) tuples for all packages, where each package
+            name may appear twice.
+        """
+        base_paths = [
+            *filter(Path.is_dir, PATHS.pkgs.iterdir()),
+            *filter(lambda c: c.suffix in {'.sublime-package', '.zip'}, PATHS.inst.iterdir()),
+        ]
+        ret = []
+        for path in base_paths:
+            ret.append((path.stem, path))
+            if path.is_symlink():
+                ret.append((path.stem, path.resolve()))
+        return ret
+
+    @classmethod
+    def open_packages(cls) -> dict[WindowId, str]:
+        """A collection of all SublimeText packages currently referenced by an open window."""
+        package_dirs = cls.package_dirs()
+        return {
+            w_id: pkg
+            for w_id, paths in cls.open_folders().items()
+            if (pkg := next((name for name, path in package_dirs if path in paths), None))
+        }
+
+    @classmethod
+    def open_package_dirs(cls) -> list[Path]:
+        """The paths to all SublimeText packages currently referenced by an open window."""
+        package_dirs = cls.package_dirs()
+        return [
+            path
+            for package in set(cls.open_packages().values())
+            if (path := next((_pth for _pkg, _pth in package_dirs if _pkg == package), None))
+        ]
+
+    @staticmethod
+    @ft.lru_cache(2**8)
+    def infer_package_of(path: Path) -> str | None:
+        """Infer the package of a given path by checking which directory it falls under.
+
+        Accounts for softlinked package directories.
+        """
+        cls = Utils
+        package_dirs = cls.package_dirs()
+        return next(
+            (name for name, pkg_path in package_dirs if cls.is_relative_to(path, pkg_path)), None
+        )
+
+    @staticmethod
     def path(path: str | Path) -> Path:
         """Coerce a string path to a Path object, normalizing separators and redundant parts."""
         return Path(path).expanduser()
 
     @classmethod
-    def qualify_resource_names(cls, *targets: str) -> list[_Resource]:
+    def qualify_resource_names(cls, *targets: str) -> list[str]:
         """Expand out the given resource paths into fully qualified versions."""
         instances = mi.flatten(map(sbl.ResourcePath.glob_resources, targets))
         return list(mi.unique_everseen(map(str, instances)))
 
     @classmethod
-    def load_resources(cls, *targets: str | Path) -> dict[_Resource, str]:
+    def load_resources(cls, *targets: str | Path) -> dict[str, str]:
         """Load the text of a resource from disk or from a SublimeText package."""
         return {
             fqrn: sb.load_resource(fqrn) for fqrn in cls.qualify_resource_names(*map(str, targets))
@@ -996,7 +1162,7 @@ class Utils(TypesMixin):
                 )
 
         # I. Handle absolute & empty paths
-        if path.is_absolute() or not path or path.parts == ['.']:
+        if path.is_absolute() or path.parts in (tuple(), ('.',)):
             return path
 
         # II. Handle mainline resources
@@ -1039,7 +1205,7 @@ class Utils(TypesMixin):
         )
 
     @classmethod
-    def path_to_resource(cls, path: str | Path) -> _Resource | None:
+    def path_to_resource(cls, path: str | Path) -> str | None:
         """Convert a filesystem path to a Sublime resource path, if possible."""
         path = cls.normalize_path(path)
         if _p := cls.relativize(path, PATHS.pkgs, PATHS.inst):
@@ -1047,6 +1213,14 @@ class Utils(TypesMixin):
         elif _p := cls.relativize(path, PATHS.cache):
             return str('Cache' / _p)
         return None
+
+    @classmethod
+    def is_valid_path(cls, path: str | Path | None) -> bool:
+        """Check if the given path exists and is not just whitespace or dots."""
+        if not path:
+            return False
+        path = Path(path)
+        return bool(path.exists() and str(path).strip('./ '))
 
     @classmethod
     def read_file(cls, file: str | Path, expect_one: bool = False) -> tuple[str, str]:
@@ -1117,6 +1291,47 @@ class Utils(TypesMixin):
         elif not isinstance(data, (dict, list)):
             data = dict(data=data)
         return data
+
+    @classmethod
+    def log_to_disk(cls, target: bool | Path = True) -> pyd.FilePath | None:
+        """Control whether all Sublime Text logging is also routed to a local file.
+
+        Args:
+            target: If True, logs will be written to a default file in the current directory.
+                    If a string or Path is provided, logs will be written to that file.
+                    If False, disk logging will be disabled.
+                    If None, logging behavior is toggled.
+            fmt: Format string for log messages.
+            clear: If True, clears the log file if it already exists.
+            level: Logging level to set for the logger.
+        Returns:
+            The path to the log file if logging is enabled, or None if disabled.
+        """
+        name = 'log_to_disk'
+
+        # I. Exit early if we're disabling logging or it's already enabled
+        if not target:
+            Multiplex.remove(name)
+            return
+        elif existing := Multiplex.get(name):
+            assert isinstance(existing, TextIOWrapper), (
+                f'Expected existing log stream to be a file-like object, got {type(existing)}.'
+            )
+            return Path(str(existing.name))
+
+        # II. Normalize target path
+        if target is True:
+            target = PATHS.console
+        elif isinstance(target, str):
+            target = Path(target).expanduser().resolve()
+
+        # III. Prepare target file by making sure it's empty
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text('')
+
+        # IV. Register new stream, automatically wrapping STDOUT if it isn't already
+        Multiplex.add(name, target.open('a'), mode='WRAPPER')
+        return target
 
 
 ut = utils = Utils

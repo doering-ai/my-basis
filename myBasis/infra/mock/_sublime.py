@@ -9,7 +9,7 @@ Implements:
     installed_packages_path, load_settings, set_timeout, set_timeout_async,
     load_resource, encode_value, decode_value, active_window
 
-Everything else (Sheet, Buffer, syntax queries, …) is left as a MagicMock so
+Everything else (e.g. syntax queries) is left as a MagicMock so
 that imports succeed and attribute access doesn't crash; only call-sites that
 actually assert on the return value will need explicit stub additions.
 """
@@ -22,6 +22,7 @@ from __future__ import annotations
 from typing import Any, Callable, Iterator, Literal, ClassVar
 from pathlib import Path
 from unittest.mock import MagicMock
+from dataclasses import dataclass
 import functools as ft
 import itertools as it
 import json
@@ -33,6 +34,9 @@ import pydantic as pyd
 
 ### INTERNAL
 from .Buffer import Buffer
+from ._sublime_enums import *  # noqa: F403
+
+# ruff: noqa: F405, A002
 
 
 ############
@@ -47,8 +51,11 @@ Directory = pyd.DirectoryPath
 
 class MockedPathCache(pyd.BaseModel):
     @ft.cached_property
-    def main(self) -> Directory:
-        path = Path(os.getenv('ST_MAIN', '')).expanduser().resolve()
+    def home(self) -> Directory:
+        path = None
+        if envvar := os.getenv('ST_HOME'):
+            path = Path(envvar).expanduser().resolve()
+
         if not (path and path.exists()):
             xdg = Path(os.getenv('XDG_CONFIG_HOME', '~/.config')).expanduser().resolve()
             path = xdg / 'sublime-text'
@@ -59,10 +66,13 @@ class MockedPathCache(pyd.BaseModel):
 
     @ft.cached_property
     def cache(self) -> Directory:
-        path = Path(os.getenv('ST_CACHE', '')).expanduser().resolve()
+        path = None
+        if envvar := os.getenv('ST_CACHE'):
+            path = Path(envvar).expanduser().resolve()
+
         if not (path and path.exists()):
             xdg = Path(os.getenv('XDG_CACHE_HOME', '~/.cache')).expanduser().resolve()
-            path = xdg / 'sublime_text'
+            path = xdg / 'sublime-text' / 'Cache'
 
         if not (path and path.exists() and path.is_dir()):
             raise ValueError('Could not infer $ST_CACHE -- please set manually.')
@@ -163,12 +173,62 @@ class Region:
         return f'Region({self.a}, {self.b})'
 
 
+@dataclass
+class HistoricPosition:
+    """Provides a snapshot of the row and column info for a `Point`, before `View` changes.
+
+    This is primarily useful for replaying changes to a document.
+    """
+
+    pt: int
+    """The offset from the beginning of the `View`."""
+    row: int
+    """The row the `pt` was in when the `HistoricPosition` was recorded."""
+    col: int
+    """The column the `py` was in when the `HistoricPosition` was recorded in Unicode characters."""
+    col_utf16: int
+    """The value of `col`, but in UTF-16 code units."""
+    col_utf8: int
+    """The value of `col`, but in UTF-8 code units."""
+
+
+@dataclass
+class TextChange:
+    """Represents a change that occurred to the text of a `View`.
+
+    This is primarily useful for replaying changes to a document.
+    """
+
+    a: HistoricPosition
+    """The beginning `HistoricPosition` of the region that was modified."""
+    b: HistoricPosition
+    """The ending `HistoricPosition` of the region that was modified."""
+    len_utf16: int
+    """The length of the old contents, in UTF-16 code units."""
+    len_utf8: int
+    """The length of the old contents, in UTF-8 code units."""
+    str: str
+    """A string of the new contents of the region specified by `a` and `b`."""
+
+    def __init__(
+        self, pa: HistoricPosition, pb: HistoricPosition, len_utf16: int, len_utf8: int, s: str
+    ) -> None:
+        self.a = pa
+        self.b = pb
+        self.len_utf16 = len_utf16
+        self.len_utf8 = len_utf8
+        self.str = s
+
+
 class Selection:
     """Ordered, non-overlapping list of Regions (simplified — no merging)."""
 
+    view_id: int
+    _regions: list[Region]
+
     def __init__(self, view_id: int = 0) -> None:
         self.view_id = view_id
-        self._regions: list = []
+        self._regions = []
 
     def is_valid(self) -> bool:
         return True
@@ -186,7 +246,8 @@ class Selection:
             self.add(r)
 
     def subtract(self, region: 'Region') -> None:
-        self._regions = [r for r in self._regions if r != region]
+        if region in self._regions:
+            self._regions.remove(region)
 
     def contains(self, region: 'Region') -> bool:
         return any(r.contains(region) for r in self._regions)
@@ -228,39 +289,50 @@ class Settings:
 
     settings_id: int
     _data: dict
+    _callbacks: dict[str, Callable[[], None]]
 
     def __init__(self, id: int | None = None) -> None:  # noqa
         self.settings_id = id if id is not None else next(self._ID_COUNTER)
         self._data = {}
+        self._callbacks = {}
 
     def get(self, key: str, default: Any = None) -> Any:
         return self._data.get(key, default)
 
     def set(self, key: str, value: Any) -> None:
         self._data[key] = value
+        self._notify()
 
     def has(self, key: str) -> bool:
         return key in self._data
 
     def erase(self, key: str) -> None:
         self._data.pop(key, None)
+        self._notify()
 
     def setdefault(self, key: str, value: Any) -> Any:
-        return self._data.setdefault(key, value)
+        ret = self._data.setdefault(key, value)
+        self._notify()
+        return ret
 
     def update(self, other: Any = None, /, **kwargs: Any) -> None:
         if other:
             self._data.update(other)
         self._data.update(kwargs)
+        self._notify()
 
     def to_dict(self) -> dict:
         return dict(self._data)
 
-    def add_on_change(self, tag: str, callback: 'Callable[[], None]') -> None:
-        pass
+    def add_on_change(self, tag: str, callback: Callable[[], None]) -> None:
+        self._callbacks[tag] = callback
 
     def clear_on_change(self, tag: str) -> None:
-        pass
+        self._callbacks.pop(tag, None)
+
+    def _notify(self) -> None:
+        for callback in self._callbacks.values():
+            callback()
 
     # -------------
     # Magic Methods
@@ -270,9 +342,11 @@ class Settings:
 
     def __setitem__(self, key: str, value: Any) -> None:
         self._data[key] = value
+        self._notify()
 
     def __delitem__(self, key: str) -> None:
         del self._data[key]
+        self._notify()
 
     def __contains__(self, key: str) -> bool:
         return key in self._data
@@ -303,7 +377,7 @@ class View:
 
     _ID_COUNTER: ClassVar[Iterator[int]] = it.count(1)
 
-    def __init__(self, id: int | None = None, window: 'Window | None' = None) -> None:  # noqa: A002
+    def __init__(self, id: int | None = None, window: 'Window | None' = None) -> None:
         self.view_id = id if id is not None else next(self._ID_COUNTER)
         self._buf = Buffer()
         self.selection = Selection(self.view_id)
@@ -531,6 +605,263 @@ class Window:
         return f'Window({self.window_id})'
 
 
+@dataclass
+class Html:
+    """Used to indicate that a string is formatted as HTML."""
+
+    data: str = ''
+
+
+class Sheet:
+    """Represents a content container, i.e. a tab, within a window.
+
+    Sheets may contain a `View`, or an image preview.
+    """
+
+    sheet_id: int
+    _view: View | None
+
+    def __init__(self, id: int) -> None:
+        self.sheet_id = id
+        self._view = None
+
+    def __hash__(self) -> int:
+        return self.sheet_id
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Sheet):
+            return False
+        else:
+            return self.sheet_id == other.sheet_id
+
+    def __repr__(self) -> str:
+        return f'Sheet({self.sheet_id})'
+
+    def id(self) -> int:
+        """A number that uniquely identifies this sheet."""
+        return self.sheet_id
+
+    def window(self) -> Window | None:
+        """The `Window` containing this sheet. May be `None` if the sheet has been closed."""
+        return _GLOBAL_WINDOW
+
+    def view(self) -> View | None:
+        """The `View` contained within the sheet if any."""
+        return self._view
+
+    def file_name(self) -> str | None:
+        """The full name of the file associated with the sheet, or `None` if it doesn't exist."""
+        return None
+
+    def is_semi_transient(self) -> bool:
+        """Whether this sheet is semi-transient."""
+        return False
+
+    def is_transient(self) -> bool:
+        """Whether this sheet is exclusively transient.
+
+        Note that a sheet may be both open as a regular file and be transient.
+        In this case `is_transient` will still return `False`.
+        """
+        return False
+
+    def is_selected(self) -> bool:
+        """Whether this sheet is currently selected."""
+        return True
+
+    def group(self) -> int | None:
+        """The (layout) group that the sheet is contained within."""
+
+    def close(self, on_close: Callable[[bool], None] | None = None) -> None:
+        """Closes the sheet."""
+        if on_close:
+            on_close(True)
+
+
+class TextSheet(Sheet):
+    """Specialization for sheets containing editable text, ie. a `View`."""
+
+    _name: str
+
+    def __repr__(self) -> str:
+        return f'TextSheet({self.sheet_id})'
+
+    def set_name(self, name: str) -> None:
+        """Set the name displayed in the tab. Only affects unsaved files."""
+        self._name = name
+
+
+class ImageSheet(Sheet):
+    """Specialization for sheets containing an image."""
+
+    def __repr__(self) -> str:
+        return f'ImageSheet({self.sheet_id})'
+
+
+class HtmlSheet(Sheet):
+    """Specialization for sheets containing HTML."""
+
+    _name: str = ''
+    _text: str = ''
+
+    def __repr__(self) -> str:
+        return f'HtmlSheet({self.sheet_id})'
+
+    def set_name(self, name: str) -> None:
+        """Set the name displayed in the tab."""
+        self._name = name
+
+    def set_contents(self, contents: str) -> None:
+        """Set the HTML content of the sheet."""
+        self._text = contents
+
+
+class CompletionList:
+    """Represents a list of completions, some of which may be in the process of being fetched."""
+
+    target: Any | None = None
+    completions: list[str] | list[tuple[str, str]] | list[CompletionItem] | None = None
+    flags: AutoCompleteFlags = AutoCompleteFlags.NONE
+
+    def __init__(
+        self,
+        completions: list[str] | list[tuple[str, str]] | list[CompletionItem] | None = None,
+        flags: AutoCompleteFlags = AutoCompleteFlags.NONE,
+    ) -> None:
+        """Initialize the list.
+
+        - `completions` - If `None` is passed, the method `set_completions()` must be called before
+          the completions will be displayed to the user.
+        - `flags` - Flags controlling auto-complete behavior.
+        """
+        self.target = None
+        self.completions = completions
+        self.flags = flags
+
+    def __repr__(self) -> str:
+        return f'CompletionList(completions={self.completions!r}, flags={self.flags!r})'
+
+    def set_completions(
+        self,
+        completions: list[str] | list[tuple[str, str]] | list[CompletionItem],
+        flags: AutoCompleteFlags = AutoCompleteFlags.NONE,
+    ) -> None:
+        """Sets the list of completions, allowing the list to be displayed to the user."""
+        self.completions = completions
+        if flags.value:
+            self.flags = flags
+
+
+@dataclass
+class CompletionItem:
+    """Represents an available auto-completion item."""
+
+    trigger: str = ''
+    """Text to match against the user's input."""
+    annotation: str = ''
+    """A hint to draw to the right-hand side of the trigger."""
+    completion: str = ''
+    """Text to insert if the completion is specified. If empty the `trigger` will be inserted."""
+    completion_format: int = 0
+    """The format of the completion."""
+    kind: tuple[int, str, str] = (0, '', '')
+    """The kind of the completion."""
+    details: str = ''
+    """
+    An optional minihtml description of the completion, shown in the detail pane at the bottom of
+    the auto complete window.
+    """
+    flags: CompletionItemFlags = CompletionItemFlags.NONE
+
+
+@dataclass
+class Syntax:
+    """Contains information about a syntax."""
+
+    path: str = ''
+    """The packages path to the syntax file."""
+    name: str = ''
+    """The name of the syntax."""
+    hidden: bool = False
+    """If the syntax is hidden from the user."""
+    scope: str = ''
+    """The base scope name of the syntax."""
+
+    def __hash__(self) -> int:
+        return hash((self.path, self.name, self.hidden, self.scope))
+
+
+@dataclass
+class QuickPanelItem:
+    """Represents a row in the quick panel, shown via `Window.show_quick_panel()`."""
+
+    trigger: str = ''
+    """Text to match against user's input."""
+    details: str | list[str] | tuple[str] = ''
+    """A minihtml string or list of strings displayed below the trigger."""
+    annotation: str = ''
+    """Hint to draw to the right-hand side of the row."""
+    kind: tuple[int, str, str] = (0, '', '')
+    """The kind of the item."""
+
+
+@dataclass
+class ListInputItem:
+    text: str = ''
+    """Text to match against the user's input."""
+    value: Any = ''
+    """A `Value` passed to the command if the row is selected."""
+    details: str | list[str] | tuple[str] = ''
+    """A minihtml string or list of strings displayed below the trigger."""
+    annotation: str = ''
+    """Hint to draw to the right-hand side of the row."""
+    kind: tuple[int, str, str] = (0, '', '')
+    """The kind of the item."""
+
+
+NULL_REGION = Region(0, 0)
+
+
+@dataclass
+class SymbolRegion:
+    """Contains information about a `Region` of a `View` that contains a symbol."""
+
+    name: str = ''
+    """The name of the symbol."""
+    region: Region = NULL_REGION
+    """The location of the symbol within the `View`."""
+    syntax: str = ''
+    """The name of the syntax for the symbol."""
+    type: int = 0
+    """The type of the symbol"""
+    kind: tuple[int, str, str] = (0, '', '')
+    """The kind of the symbol."""
+
+
+@dataclass
+class SymbolLocation:
+    """Contains information about a file that contains a symbol."""
+
+    path: str = ''
+    """The filesystem path to the file containing the symbol."""
+    display_name: str = ''
+    """The project-relative path to the file containing the symbol."""
+    row: int = 0
+    """The row of the file the symbol is contained on."""
+    col: int = 0
+    """The column of the row that the symbol is contained on."""
+    syntax: str = ''
+    """The name of the syntax for the symbol."""
+    type: int = 0
+    """The type of the symbol."""
+    kind: tuple[int, str, str] = (0, '', '')
+    """The kind of the symbol."""
+
+    def path_encoded_position(self) -> str:
+        """Return the path with the position encoded as a fragment."""
+        return f'{self.path}:{self.row}:{self.col}'
+
+
 _GLOBAL_WINDOW = Window()
 
 
@@ -554,11 +885,11 @@ def platform() -> Literal['osx', 'linux', 'windows']:
 
 
 def packages_path() -> str:
-    return str(PATHS.main / 'Packages')
+    return str(PATHS.home / 'Packages')
 
 
 def installed_packages_path() -> str:
-    return str(PATHS.main / 'Installed Packages')
+    return str(PATHS.home / 'Installed Packages')
 
 
 def cache_path() -> str:

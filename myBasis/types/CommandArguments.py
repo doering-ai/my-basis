@@ -26,6 +26,8 @@ from .StaticPrompt import StaticPrompt
 class CommandArguments(pyd.BaseModel):
     """A typed container for specifying command interfaces, meant to be subclassed."""
 
+    #: A static description of a keyword arguments that can or must be supplied by the user once
+    #: prompted via the Sublime Text command pallete.
     PROMPT: ClassVar[StaticPrompt | None] = None
 
     @classmethod

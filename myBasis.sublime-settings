@@ -1,0 +1,5 @@
+{
+    // One or more venv search strategies that you would like to be tried before all others.
+    // Valid options are: [POETRY, HATCH, PDM, RYE, UV, PYENV, PIPENV, VENV, CONDA, SUBLIME]
+    "my.venv_priorities": []
+}

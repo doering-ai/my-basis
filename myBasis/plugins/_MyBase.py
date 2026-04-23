@@ -274,7 +274,10 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
         if args or kwargs:
             Meta.cache_args(self, args, kwargs)
         self.args = self.Interface(**kwargs)
-        self.main()
+        try:
+            self.main()
+        except Exception as error:
+            self.catch(error)
 
     @classmethod
     def __init_subclass__(cls, **kwargs):
@@ -388,7 +391,6 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
         time: bool = True,
         indent: pyd.NonNegativeInt = 0,
         rjust: int = 0,
-        ljust: int = 32,
         name: str | None = None,
         log_level: str | int = logging.INFO,
         **kwargs: Any,
@@ -402,14 +404,12 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
         elif name := name.strip():
             if not name.startswith('['):
                 name = f'[{name}]'
-            if ljust:
-                name = name.ljust(ljust)
 
         # II. Join the name and arguments into a single line
         parts = list(filter(bool, (name, *map(str, args))))
-        if time:
-            parts.insert(0, ut.posix().strftime('%H:%M:%S.%f')[:-3])
         ret = sep.join(parts)
+        if time:
+            ret = ut.posix().strftime('%H:%M:%S.%f')[:-3] + f' {ret}'
 
         # III. Print multiline data
         if data:
@@ -431,7 +431,6 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
         time: bool = True,
         indent: pyd.NonNegativeInt = 0,
         rjust: int = 0,
-        ljust: int = 32,
         name: str | None = None,
         log_level: str | int = logging.INFO,
         **kwargs: Any,
@@ -444,7 +443,6 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
             time=time,
             indent=indent,
             rjust=rjust,
-            ljust=ljust,
             log_level=log_level,
             **kwargs,
         )
@@ -474,9 +472,7 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
         if kwargs:
             arg_parts.extend(f'{k}={v}' for k, v in kwargs.items())
 
-        log_kwargs['sep'] = ''
-        log_kwargs['ljust'] = 0
-        _text = f'.{name}({", ".join(arg_parts)})' + (f' -> {result}' if result else '')
+        _text = f'{name}({", ".join(arg_parts)})' + (f' -> {result}' if result else '')
         self._log(_text, log_level=log_level, **log_kwargs)
 
     @ctx.contextmanager
@@ -592,6 +588,10 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
         Sadly, there's no way to prevent this other than changing their code.
         """
         raise NotImplementedError('You must implement the `main` method to use this class.')
+
+    def catch(self, error: Exception) -> None:
+        """A standardized point to handle any errors that arise during the exection of `main()`."""
+        raise error
 
     @ft.cached_property
     def classname(self) -> str:
@@ -1220,34 +1220,6 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
         """Asynchronously invoke another command with the given arguments."""
         fn = ft.partial(self.invoke, command, _delay=_delay, _async=_async, _level=_level, **kwargs)
         await aio.get_event_loop().run_in_executor(None, fn)
-
-    @property
-    def open_projects(self) -> dict[str, tuple[Path, dict]]:
-        return {
-            path.name: (path, data)
-            for window in sb.windows()
-            if (data := window.project_data()) and isinstance(data, dict)
-            for folder in data.get('folders', [])
-            if (
-                (raw_path := folder.get('path'))
-                and (path := Path(raw_path).expanduser().resolve()).exists()
-            )
-        }
-
-    @property
-    def open_packages(self) -> dict[str, tuple[Path, dict]]:
-        """A collection of all SublimeText packages currently referenced by an open window.
-
-        The keys are the canonical names of the packages, and the values are (path, data) tuples.
-        Special care is taken to find and dedupe packages that have local git repositories with
-        different names than their softlink in the `Packages/` dir, e.g. `basis` -> `myBasis`.
-        """
-        projects = self.open_projects
-        return {
-            pkg.name: proj
-            for pkg in self.PATHS.pkgs.iterdir()
-            if (proj := projects.get(pkg.resolve().name) or projects.get(pkg.name))
-        }
 
     @property
     def current_package(self) -> Path | None:

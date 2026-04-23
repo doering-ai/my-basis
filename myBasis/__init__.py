@@ -4,6 +4,7 @@ from .infra.constants import EVENTS, ASYNCABLE_EVENTS
 from .infra.utils import ut, utils, Utils
 from .infra.ViewProperties import ViewProperties, view_property
 from .infra.PathRegistry import PathRegistry, PATHS
+from .infra.Multiplex import Multiplex
 
 # Instance Types
 from .types.OutputPanel import OutputPanel
@@ -11,6 +12,8 @@ from .types.CommandArguments import CommandArguments
 from .types.StaticPrompt import StaticPrompt
 from .types.DynamicPrompt import DynamicPrompt
 from .types.Comment import Comment
+from .types.Venv import Venv
+# from .types.Template import Template
 
 # Plugins
 from .plugins._MyBase import MyBase
@@ -30,9 +33,6 @@ from .plugins.aio.MyAsyncWindowCommand import _MyAsyncWindowCommand
 
 
 __all__ = [
-    'IS_LIVE',
-    'ASYNCABLE_EVENTS',
-    'EVENTS',
     '_MyAppCommand',
     '_MyAppListener',
     '_MyAsyncAppCommand',
@@ -44,14 +44,20 @@ __all__ = [
     '_MyCommand',
     '_MyViewListener',
     '_MyWindowCommand',
+    'ASYNCABLE_EVENTS',
     'CommandArguments',
     'Comment',
+    'Venv',
     'DynamicPrompt',
+    'EVENTS',
+    'IS_LIVE',
+    'Multiplex',
     'MyBase',
     'OutputPanel',
     'PathRegistry',
     'PATHS',
     'StaticPrompt',
+    # 'Template',
     'ut',
     'utils',
     'Utils',

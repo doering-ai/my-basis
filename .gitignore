@@ -153,5 +153,6 @@ htmlcov/
 nosetests.xml
 
 # SublimeText
-Preferences.sublime-settings
+*.sublime-project
+*.sublime-workspace
 formatter.assets/

@@ -25,12 +25,13 @@ def install() -> None:
     global IS_LIVE
     if IS_LIVE:
         return
-    from . import _sublime, _sublime_plugin, _unittesting
+    from . import _sublime, _sublime_plugin, _unittesting, _sublime_api
 
     # Import the mock modules *before* touching sys.modules so that any import-time errors surface
     # with a clear traceback.
     sys.modules.setdefault('sublime', _sublime)
     sys.modules.setdefault('sublime_plugin', _sublime_plugin)
+    sys.modules.setdefault('sublime_api', _sublime_api)
 
     # Mock the whole unittesting package tree so sub-imports also resolve.
     sys.modules.setdefault('unittesting', _unittesting)

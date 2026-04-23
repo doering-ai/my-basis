@@ -2,11 +2,11 @@
 ### I. METADATA ###
 ###################
 [project]
-name = "mysublime-basis"
+name = "sublime-basis"
 version = "0.1.0"
 description = "A basis for using, extending, and designing SublimeText plugins."
 requires-python = "==3.8.*"
-urls = { Homepage = "https://gitlab.com/doering-thinking-machines/libs/sublime/basis" }
+urls = { Homepage = "https://gitlab.com/doering-ai/libs/sublime/basis" }
 
 
 ########################
@@ -21,22 +21,28 @@ dependencies = [
   "sublime-lib",
   "sublime-aio",
   "toml>=0.10.2",
-  "eval-type-backport>=0.3.1",
+  "anyio>=4.5.2",
 ]
 
 [dependency-groups]
 dev = [
-  "ruff>=0.14.14",
-  "ty>=0.0.14",
+  "better-exceptions>=0.3.3",
+  { include-group = "lint" },
+  { include-group = "test" },
+  { include-group = "typing" },
+]
+
+typing = [
   "sublime-stubs",
   "types-regex>=2024.11.6.20241221",
   "typing-extensions>=4.13.2",
-  "types-xmltodict>=0.14.0.20241009",
-  "xmltodict>=0.15.0",
   "annotated-types>=0.7.0",
   "eval-type-backport>=0.3.1",
-  "better-exceptions>=0.3.3",
 ]
+
+lint = ["ruff>=0.14.14"]
+
+test = ["pytest>=8.3.5", "coverage>=7.6.1"]
 
 
 #########################
@@ -45,42 +51,74 @@ dev = [
 [build-system]
 requires = ["uv_build>=0.8.13,<0.9.0"]
 build-backend = "uv_build"
-
 [tool.uv.build-backend]
 module-name = "myBasis"
 module-root = ""
 namespace = true
 
 [tool.uv.sources]
-sublime-stubs = { path = "../_stubs", editable = true }
-sublime-lib = { path = "../_lib" }
-sublime-aio = { path = "../_deps/sublime_aio-0.1.6-py3-none-any.whl" }
+sublime-stubs = { path = "../.pkgs/sublime-stubs" }
+sublime-lib = { path = "../.pkgs/sublime_lib-2.1.0-py3-none-any.whl" }
+sublime-aio = { path = "../.pkgs/sublime_aio-0.1.6-py3-none-any.whl" }
 
 #############################
 ### IV. DEVELOPMENT TOOLS ###
 #############################
-[tool.ruff]
-target-version = "py38"
-extend = '~/.config/ruff/pyproject.toml'
-exclude = ['.venv', 'venv', 'dist', '__pycache__', 'python38']
-
-[tool.ruff.lint]
-ignore = ['UP', 'TC001', 'TC002', 'TC003', 'PT']
-
-[tool.ruff.lint.per-file-ignores]
-'test/**.py' = ['D']
-'tests/**.py' = ['D']
-
-[tool.pyright]
-strictListInference = true
-strictDictInference = true
-strictSetInference = true
-enableReachabilityAnalysis = false
-reportImportCycles = "warning"
-reportDeprecated = "warning"
-reportUnusedVariable = false
-reportUnreachable = false
-reportMissingModuleSource = false
-
+# -------
+# Testing
+# -------
 [tool.pytest]
-filterwarnings = ['ignore::PytestConfigWarning']
+testpaths = ["test"]
+filterwarnings = ['ignore:assertions not in:PytestConfigWarning']
+
+[tool.coverage.report]
+# Regexes for lines to exclude from consideration
+exclude_also = [
+  # Debug-only code
+  'def __repr__',
+  'if +(\w+\.)?(?i:debug):',
+  # Defensive assertion code
+  'assert ',
+  'raise (Assertion|NotImplemented)Error',
+  # Non-runnable code
+  'if 0:',
+  'if __name__ == .__main__.:',
+  # Abstract methods
+  '@(abc\.)?abstractmethod',
+  # One-line global constants
+  '^([a-z]\w+?\.)?[A-Z][_A-Z]+(:[^=\n]+)? *=[^\n]+(?=\n\S)',
+]
+omit = ["__init__.py", "my/templates/*", "scratch.py", "*/.venv/*"]
+ignore_errors = true
+
+# ------
+# Typing
+# ------
+[tool.pyrefly]
+project-includes = ["myBasis/**/*.py*", "test*/**/*.py"]
+project-excludes = [
+  "**/node_modules",
+  "**/__pycache__",
+  "**/.[!/.]*",
+  "**/*venv",
+]
+# Type-check bodies of functions without annotations
+check-unannotated-defs = true
+# Recognize more than just `# type: ignore` and `# pyrefly: ignore`
+permissive-ignores = true
+[tool.pyrefly.errors]
+missing-source = false
+implicit-any = false
+untyped-import = false
+no-access = false
+unannotated-parameter = false
+bad-override = false
+
+# -------
+# Linting
+# -------
+[tool.ruff]
+extend = '~/.config/ruff/pyproject.toml'
+[tool.ruff.lint]
+ignore = ['UP', 'PT']
+

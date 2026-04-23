@@ -40,19 +40,19 @@ class PathRegistry(pyd.BaseModel):
     """A registry of file paths, mapping string names to Path objects."""
 
     # ---- System ----
-    home: Directory = _normalize(os.getenv('HOME', '~'))
+    host: Directory = _normalize(os.getenv('HOME', '~'))
 
     # ---- Main ----
     #: The main directory, usually in `$XDG_CONFIG`/`~/.config`.
-    main: Directory = _normalize(sb.packages_path()).parent
+    home: Directory = _normalize(sb.packages_path()).parent
     #: Unzipped packages.
-    pkgs: Directory = main / 'Packages'
+    pkgs: Directory = home / 'Packages'
     #: Installed (zipped) packages.
-    inst: Directory = main / 'Installed Packages'
+    inst: Directory = home / 'Installed Packages'
     #: Package logs.
-    logs: Directory = main / 'Logs'
+    logs: Directory = home / 'Logs'
     #: The location of importable libraries for plugins.
-    venv: Directory = main / 'Lib' / VER_STR
+    venv: Directory = home / 'Lib' / VER_STR
 
     # ---- Packages ----
     #: The user package, which contains top-level settings and other overrides.
@@ -64,7 +64,7 @@ class PathRegistry(pyd.BaseModel):
     #: Root of caches for packages and sublime itself, usually in `$XDG_CACHE`/`~/.cache`.
     cache: Directory = _normalize(sb.cache_path())
     #: Package caches in particular.
-    data: Directory = cache / 'Package Storage'
+    data: Directory = cache.parent / 'Package Storage'
 
     # ---- Root ----
     #: The root of the installed application, usually in `/opt/sublime_text`.
@@ -73,6 +73,9 @@ class PathRegistry(pyd.BaseModel):
     stub: Directory = root / 'Lib' / VER_STR
     #: Distributed packages.
     dist: Directory = root / 'Packages'
+
+    # ---- Misc ----
+    console: Path = data / 'myBasis/console.log'
 
     @staticmethod
     def new(**kwargs: str | Path) -> dict[str, Path]:

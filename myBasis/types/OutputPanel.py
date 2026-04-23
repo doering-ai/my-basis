@@ -3,7 +3,7 @@
 ############
 ### STANDARD
 from __future__ import annotations
-from typing import ClassVar, TextIO, Literal, Protocol
+from typing import ClassVar, TextIO, Literal
 from typing_extensions import Self, TypeAlias
 from collections import deque
 from collections.abc import Iterator, Callable
@@ -24,6 +24,7 @@ import more_itertools as mi
 
 ### INTERNAL
 from ..infra.utils import ut
+from ..infra.Multiplex import Multiplex
 
 Format: TypeAlias = Literal['plain', 'html', 'shell']
 
@@ -31,46 +32,6 @@ Format: TypeAlias = Literal['plain', 'html', 'shell']
 ############
 ### DATA ###
 ############
-class _IOProtocol(Protocol):
-    """Protocol for file-like IO objects."""
-
-    def write(self, text: str) -> int: ...
-    def flush(self) -> None: ...
-    def close(self) -> None: ...
-    def isatty(self) -> bool: ...
-    def readable(self) -> bool: ...
-    def writable(self) -> bool: ...
-    @property
-    def closed(self) -> bool: ...
-
-
-class _StreamWrapper(StringIO):
-    """A simple wrapper around StringIO that allows us to intercept writes and flushes."""
-
-    parent: _IOProtocol
-    stdout: TextIO
-    also_log: bool = False
-
-    def __init__(self, parent: _IOProtocol, stdout: TextIO, also_log: bool, *args, **kwargs):
-        """Initialize the wrapper."""
-        super().__init__(*args, **kwargs)
-        self.parent = parent
-        self.stdout = stdout
-        self.also_log = also_log
-
-    def write(self, text: str) -> int:
-        """Write text to the stream."""
-        super().write(text)
-        if self.also_log:
-            self.stdout.write(text)
-        return self.parent.write(text)
-
-    def flush(self) -> None:
-        """Flush the stream."""
-        super().flush()
-        if self.also_log:
-            self.stdout.flush()
-        self.parent.flush()
 
 
 ############
@@ -116,6 +77,7 @@ class OutputPanel(pyd.BaseModel):
     hardcopy: Path | tuple[Path | None, Path | None] | None = None
 
     # ---- View Settings ----
+    read_only: bool = True
     file_regex: str = ''
     line_regex: str = ''
     base_dir: str | None = None
@@ -138,8 +100,6 @@ class OutputPanel(pyd.BaseModel):
     # ---- Private ----
     #: The current content of the output panel, including any unflushed text in the queue.
     _content: tuple[str, str] = ('', '')
-    #: Internal wrapper around the standard output streams to intercept writes and flushes.
-    _wrapper: StringIO | None = None
     #: Lock to synchronize access to the text queue.
     _lock: Lock = pyd.PrivateAttr(default_factory=Lock)
     #: Queue to buffer text before flushing it to the panel.
@@ -157,7 +117,6 @@ class OutputPanel(pyd.BaseModel):
             self.base_dir = str(Path(_f).parent)
 
         if self.hardcopy:
-            print(f'{self.hardcopies=}')
             for _hardcopy in self.hardcopies:
                 if _hardcopy is not None:
                     assert _hardcopy.parent.is_dir(), f'{_hardcopy.parent} does not exist.'
@@ -219,28 +178,27 @@ class OutputPanel(pyd.BaseModel):
             else:
                 self.html = self._create_html()
 
-        # II. Clear the panel
-        if self.panel is not None:
-            if self.panel.is_valid():
-                self.panel.run_command('select_all')
-                self.panel.run_command('right_delete')
+        # II. Clear the panel or text sheet
+        elif self.panel is not None:
+            if (view := self.panel).is_valid():
+                self._clear_view(view)
                 self.window.run_command('show_panel', dict(panel=f'output.{self.panel_name}'))
-                return
             else:
                 self.panel = self._create_panel()
-
-        # II. Clear the panel
-        if self.sheet is not None:
-            if (
-                (v := self.sheet.view())
-                and v.is_valid()
-                and (v.file_name() or '').startswith(self.name)
-            ):
-                v.run_command('select_all')
-                v.run_command('right_delete')
-                return
+        elif self.sheet is not None:
+            if (view := self.sheet.view()) is not None and view.is_valid():
+                self._clear_view(view)
+                self.window.focus_view(view)
             else:
                 self.sheet = self._create_sheet()
+
+        else:
+            raise RuntimeError('Failed to reset output panel: no sheet or panel found.')
+
+    def _clear_view(self, view: sb.View) -> None:
+        with self._writable(view):
+            view.run_command('select_all')
+            view.run_command('right_delete')
 
     # -------------------
     # `-` Private Methods
@@ -298,7 +256,8 @@ class OutputPanel(pyd.BaseModel):
         return sheet
 
     def _apply_settings(self, view: sb.View) -> None:
-        view.set_read_only(True)
+        if self.read_only:
+            view.set_read_only(True)
         view.set_scratch(True)
         if self.syntax:
             view.assign_syntax(self.syntax)
@@ -323,21 +282,6 @@ class OutputPanel(pyd.BaseModel):
         )
 
     def _existing_sheet(self) -> sb.Sheet | None:
-        ut.multiprint(
-            title='Existing sheets:',
-            lines=(
-                f'{sheet.file_name()}: '
-                + ', '.join(
-                    [
-                        f'(group, index)={self.window.get_sheet_index(sheet)}',
-                        f'trans={sheet.is_transient()}',
-                        f'semitrans={sheet.is_semi_transient()}',
-                    ]
-                )
-                for sheet in self.window.sheets()
-            ),
-        )
-
         def _test(sheet: sb.Sheet) -> bool:
             return (
                 not isinstance(sheet, sb.HtmlSheet)
@@ -520,6 +464,19 @@ class OutputPanel(pyd.BaseModel):
             text = func(text)
         return text
 
+    @staticmethod
+    @ctx.contextmanager
+    def _writable(view: sb.View) -> Iterator[None]:
+        """Context manager to temporarily set a view to writable if it is read-only."""
+        readonly = view.is_read_only()
+        if readonly:
+            view.set_read_only(False)
+        try:
+            yield
+        finally:
+            if readonly:
+                view.set_read_only(True)
+
     # -------------------
     # `+` Primary Methods
     # -------------------
@@ -582,28 +539,26 @@ class OutputPanel(pyd.BaseModel):
     @property
     def view(self) -> sb.View | None:
         """Shorthand for the view inside the output's non-html sheet, which is assumed to exist."""
-        view = None
         if self.panel:
-            view = self.panel
+            return self.panel
         elif self.sheet:
-            view = self.sheet.view()
-        return view if view and view.is_valid() else None
+            return self.sheet.view()
+        return None
 
     @ctx.contextmanager
-    def eavesdrop(self, also_log: bool = False) -> Iterator[StringIO]:
+    def eavesdrop(self, also_log: bool = False) -> Iterator[None]:
         """Context manager that redirects standard output and error to the output panel."""
-        self._wrapper = _StreamWrapper(self, sys.stdout, also_log)
-        sys.stdout = self._wrapper
+        mode = 'WRAPPER' if also_log else 'CONSUME'
+        stream = Multiplex.add('OutputPanel', self, mode)
 
         try:
-            yield self._wrapper
+            yield
         except Exception:
-            self._wrapper.write(f'INTERNAL ERROR: {format_exc()}')
-            self._wrapper.flush()
+            stream._stdout.write(f'INTERNAL ERROR: {format_exc()}')
+            stream._stdout.flush()
             self.status = 'failed'
         finally:
-            sys.stdout = self._wrapper.stdout
-            self._wrapper = None
+            Multiplex.remove('OutputPanel')
 
         self.flush()
 
@@ -634,9 +589,7 @@ class OutputPanel(pyd.BaseModel):
                 v.selection.clear()
                 v.selection.add(_new := size0 + len(text))
                 v.show(_new)
-        self.write_to_disk()
 
-    @ut.debounced(delta=1000)
     def write_to_disk(self) -> None:
         """Writes current content to disk at the specified hardcopy path, if any."""
         for path, content in zip(self.hardcopies, self._content):
@@ -663,11 +616,12 @@ class OutputPanel(pyd.BaseModel):
 
         if self.html:
             self.html.set_contents(self.html_content)
-        elif v := self.view:
-            v.run_command('select_all')
-            v.run_command('right_delete')
-            v.run_command('append', {'characters': self.content, 'force': True})
-            v.show(0)
+        elif self.view:
+            with self._writable(self.view):
+                self.view.run_command('select_all')
+                self.view.run_command('right_delete')
+                self.view.run_command('append', {'characters': self.content, 'force': True})
+                self.view.show(0)
         self.write_to_disk()
 
     def readable(self) -> bool:

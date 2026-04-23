@@ -44,6 +44,10 @@ NO_RESULTS = [sb.ListInputItem('No Results', '')]
 class DynamicPrompt(StaticPrompt):
     """A ListInputHandler which can update its items while typing in the input field.
 
+    ```{caution}
+    ## DO NOT USE -- OUT OF DATE
+    ```
+
     Subclasses of DynamicPrompt must not implement the `list_items` method, but can
     override `get_list_items` for the initial list items. The `on_modified` method will be called
     after a small delay (debounced) whenever changes were made to the input text. You can use this

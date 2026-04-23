@@ -2,8 +2,6 @@
     "$schema": "sublime://packagecontrol.io/schemas/dependencies",
     "*": {
         ">=4096": [
-            "annotated-types",
-            "eval_type_backport",
             "more-itertools",
             "pydantic",
             "pydantic-core",
@@ -14,7 +12,8 @@
             "sublime_aio",
             "mdpopups",
             "toml",
-            "toolz",
+            "annotated-types",
+            "eval_type_backport",
             "typing-extensions"
         ]
     }

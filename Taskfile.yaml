@@ -44,13 +44,13 @@ tasks:
         aliases: [tests, pytest]
 
     test:dev:
-        cmd: uv --project {{.ROOT_DIR}} run pytest --sw -vv --no-cov {{.CLI_ARGS}}
+        cmd: uv --project {{.ROOT_DIR}} run pytest --sw -vv {{.CLI_ARGS}}
         aliases: [dev-test]
         desc: Run iterative developer tests that stop upon first failure, showing
             extra output and skipping code coverage.
 
     test:pdb:
-        cmd: uv --project {{.ROOT_DIR}} run pytest -s --pdb --sw -vv --no-cov {{.CLI_ARGS}}
+        cmd: uv --project {{.ROOT_DIR}} run pytest -s --pdb --sw -vv {{.CLI_ARGS}}
         aliases: [pdb-test, debug-test]
         desc: The same as dev-test, but also drop into the interactive debugger upon
             exception or failure.

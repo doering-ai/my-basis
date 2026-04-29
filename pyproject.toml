@@ -6,7 +6,7 @@ name = "sublime-basis"
 version = "0.1.0"
 description = "A basis for using, extending, and designing SublimeText plugins."
 requires-python = "==3.8.*"
-urls = { Homepage = "https://gitlab.com/doering-ai/sublime/basis" }
+urls = { Homepage = "https://gitlab.com/doering-ai/libs/sublime/basis" }
 authors = [{ name = "Robb Doering", email = "robb@doering.ai" }]
 classifiers = [
   "Development Status :: 3 - Alpha",
@@ -81,7 +81,8 @@ setup-sublime = "myBasis.setup_sublime:main"
 # Testing
 # -------
 [tool.pytest]
-testpaths = ["tests"]
+testpaths = ['tests']
+filterwarnings = ['ignore:assertions not in:PytestConfigWarning']
 
 [tool.coverage.report]
 # Regexes for lines to exclude from consideration
@@ -102,7 +103,15 @@ ignore_errors = true
 # Typing
 # ------
 [tool.pyrefly]
-project-excludes = ['**/node_modules', '**/__pycache__', '**/venv', '**/.venv']
+min-severity = 'warn'
+project-includes = ["myBasis/**/*.py*", "tests/**/*.py"]
+project-excludes = [
+  "**/node_modules",
+  "**/__pycache__",
+  "**/.[!/.]*",
+  "**/*venv",
+]
+# Type-check bodies of functions without annotations
 check-unannotated-defs = true
 permissive-ignores = true
 search-path = ["."]
@@ -153,7 +162,6 @@ select = [
   "PD",    # pandas
   "RUF",   # ruff
   "SIM",   # simplification
-  "UP",    # upgrade 2.7 idioms
 ]
 
 ignore = [
@@ -183,9 +191,6 @@ ignore = [
   "SIM102", # combine nested ifs
   "SIM114", # combine if branches
   "SIM118",
-
-  # Upgrade
-  "UP007",
 
   # PyDocStyle
   "D100", # docstrings for modules

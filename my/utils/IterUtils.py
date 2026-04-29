@@ -178,6 +178,9 @@ class IterUtils:
         buckets = mi.bucket(items, pred)
         return defaultdict(list, {key: list(buckets[key]) for key in buckets})
 
+    # @classmethod
+    # def ()
+
     # -------------
     # `1` SELECTION
     # -------------

@@ -2,9 +2,11 @@
 ### HEAD ###
 ############
 ### STANDARD
+from __future__ import annotations
 from typing import Annotated, ClassVar, Any, Self, cast
-from collections.abc import Iterator, Collection, Callable
+from collections.abc import Iterator, Collection, Callable, Iterable
 from collections import deque
+from pathlib import Path
 import logging
 
 ### EXTERNAL
@@ -55,39 +57,55 @@ class Markdown(pyd.BaseModel):
     )
 
     # Metadata
-    level: Annotated[int, pyd.Field(ge=1, le=6)] = 1
+    #: The index string for this markdown node, determined by its position among siblings.
     idx: str = ''
+
+    #: Optional tags associated with this markdown node, stored as a list of strings.
+    #: Rendered as a bactic-wrapped, space-separated string immediately following the header hashes.
     tags: list[str] = []
+
+    #: Arbitrary YAML data attached to this markdown node. This is rendered as YAML frontmatter for
+    #: root-level nodes, and as fenced yaml blocks immediately following the header for any
+    #: others.
     notes: dict[str, Any] = {}
 
-    # Data
-    title: str = ''
-    prose: Buffer = pyd.Field(default_factory=BUFFER_FACTORY)
-    nodes: list['Markdown'] = []
+    #: The header level of this markdown node (1-6). Root-level nodes should have level 1.
+    level: Annotated[int, pyd.Field(ge=1, le=6)] = 1
 
+    #: The header title of this markdown node, excluding tags and indices.
+    title: str = ''
+
+    #: The raw text content of this markdown node, excluding child nodes.
+    #: Stored as a Buffer, but it can be initialized from a string or Buffer.
+    prose: Buffer = pyd.Field(default_factory=BUFFER_FACTORY)
+
+    #: Child nodes, ordered as they appear in the document.
+    #: Each node's `idx` is determined by its position among siblings.
+    nodes: list[Markdown] = []
+
+    #: A factory for the Buffer subtype that this (sub)class uses.
     buffer_factory: Callable[..., Buffer] = pyd.Field(default=BUFFER_FACTORY, exclude=True)
 
     # -------------------
     # `.` Initial Methods
     # -------------------
+    @pyd.model_validator(mode='before')
     @classmethod
-    def new(cls, **kwargs: Any) -> Self:
-        """Create a new Markdown node with proper type conversions and tree building.
+    def _new(cls, kwargs: dict) -> dict:
+        """Validates and coerces incoming data upon instantiation.
 
         Handles conversion of prose strings to Buffers, tags to lists, and recursive
         construction of child nodes with automatic index assignment.
 
         Args:
-            **kwargs: Node properties (level, idx, tags, title, prose, nodes, etc.).
-        Returns:
-            New Markdown instance with properly initialized tree structure.
+            kwargs: Node properties (level, idx, tags, title, prose, nodes, etc.).
         """
         if 'buffer_factory' not in kwargs:
             kwargs['buffer_factory'] = cls.BUFFER_FACTORY
 
         # I. Cast simple fields to the right data types
         if 'prose' in kwargs and isinstance(kwargs['prose'], str):
-            kwargs['prose'] = kwargs['buffer_factory'](kwargs['prose'])
+            kwargs['prose'] = kwargs['buffer_factory'](kwargs['prose']).strip()
         if 'tags' in kwargs and not isinstance(kwargs['tags'], list):
             kwargs['tags'] = typist.cast(kwargs['tags'], list[str]) or [str(kwargs['tags'])]
 
@@ -99,7 +117,28 @@ class Markdown(pyd.BaseModel):
                 kwargs.get('idx', ''),
                 kwargs['buffer_factory'],
             )
-        return cls(**kwargs)
+
+        return kwargs
+
+    @classmethod
+    def new(cls, source: str | Path | Iterable[str] | None = None, **kwargs: Any) -> Self:
+        """Create a new Markdown node with proper type conversions and tree building.
+
+        Handles conversion of prose strings to Buffers, tags to lists, and recursive
+        construction of child nodes with automatic index assignment.
+
+        Args:
+            source: Markdown text or iterable of lines to initialize the prose buffer.
+            **kwargs: Node properties (level, idx, tags, title, prose, nodes, etc.).
+        Returns:
+            New Markdown instance with properly initialized tree structure.
+        """
+        if source is None:
+            return cls(**kwargs)
+        elif isinstance(source, (str, bytes, Path, Buffer)):
+            text = str(source)
+            if '\n' in text or len(text) > 256:
+                kwargs['prose'] = cls.BUFFER_FACTORY(text)
 
     @classmethod
     def _build_tree(
@@ -108,7 +147,7 @@ class Markdown(pyd.BaseModel):
         level: int,
         idx: str,
         buffer_factory: Callable[..., Buffer],
-    ) -> list['Markdown']:
+    ) -> list[Markdown]:
         """Recursively build a tree of Markdown nodes from raw data.
 
         Args:
@@ -138,22 +177,8 @@ class Markdown(pyd.BaseModel):
                 node.set_idx(idx, i)
             else:
                 raise TypeError(f'Invalid node type: {type(node)}')
-
-        assert typist.all_are(nodes, Markdown) and isinstance(nodes, list)
-        return list(nodes)
-
-    @pyd.field_validator('level', mode='after')
-    @classmethod
-    def _validate_level(cls, level: int) -> int:
-        """Ensure the header level is between 1 and 6."""
-        assert 1 <= level <= 6
-        return level
-
-    @pyd.field_validator('prose', mode='after')
-    @classmethod
-    def _validate_prose(cls, prose: Buffer) -> Buffer:
-        """Ensure prose is a Buffer with stripped content."""
-        return prose.strip()
+        assert typist.check(nodes, list[Markdown]), f'Invalid node type: {list(map(type, nodes))}'
+        return nodes
 
     @pyd.model_serializer
     def _serialize_md(self) -> dict[str, Any]:
@@ -227,7 +252,7 @@ class Markdown(pyd.BaseModel):
         return self
 
     @classmethod
-    def _trace_path(cls, ancestor: 'Markdown', target: str | list[int]) -> list['Markdown']:
+    def _trace_path(cls, ancestor: Markdown, target: str | list[int]) -> list[Markdown]:
         """Returns all nodes between the ancestor and descendant (inclusive).
 
         Args:
@@ -305,7 +330,7 @@ class Markdown(pyd.BaseModel):
         skip_self: bool = False,
         asc: bool = False,
         max_d: int = -1,
-    ) -> Iterator['Markdown']:
+    ) -> Iterator[Markdown]:
         """Perform depth-first traversal of the document tree.
 
         Handles dynamic tree modifications during iteration by tracking size changes.
@@ -343,7 +368,7 @@ class Markdown(pyd.BaseModel):
             n += delta
             i += -1 if asc else 1
 
-    def add_node(self, new_nodes: 'Markdown|list[Markdown]', left: bool = False) -> 'Markdown':
+    def add_node(self, new_nodes: Markdown | list[Markdown], left: bool = False) -> Markdown:
         """Add child nodes to this markdown node.
 
         Args:
@@ -368,7 +393,7 @@ class Markdown(pyd.BaseModel):
 
         return self
 
-    def get(self, **kwargs: Any) -> 'Markdown | None':
+    def get(self, **kwargs: Any) -> Markdown | None:
         """Get a descendant node by one of various criteria.
 
         Args:
@@ -389,7 +414,7 @@ class Markdown(pyd.BaseModel):
         else:
             raise ValueError(f'Invalid Markdown.get() parameters: {list(kwargs.keys())}')
 
-    def get_idx(self, *, idx: str = '', asc: bool = False, max_d: int = -1) -> 'Markdown | None':
+    def get_idx(self, *, idx: str = '', asc: bool = False, max_d: int = -1) -> Markdown | None:
         """Get a descendant node by its index string.
 
         Args:
@@ -407,9 +432,7 @@ class Markdown(pyd.BaseModel):
             return path[-1]
         return None
 
-    def get_child(
-        self, *, child: int = -1, asc: bool = False, max_d: int = -1
-    ) -> 'Markdown | None':
+    def get_child(self, *, child: int = -1, asc: bool = False, max_d: int = -1) -> Markdown | None:
         """Get a direct child node by its index.
 
         Args:
@@ -424,9 +447,7 @@ class Markdown(pyd.BaseModel):
         else:
             return None
 
-    def get_title(
-        self, *, title: str = '', asc: bool = False, max_d: int = -1
-    ) -> 'Markdown | None':
+    def get_title(self, *, title: str = '', asc: bool = False, max_d: int = -1) -> Markdown | None:
         """Get a descendant node by its title.
 
         Args:
@@ -447,7 +468,7 @@ class Markdown(pyd.BaseModel):
 
     def get_path(
         self, *, path: list[int] | None = None, asc: bool = False, max_d: int = -1
-    ) -> 'Markdown | None':
+    ) -> Markdown | None:
         """Get a descendant node by a path of child indices (each relative to its parent).
 
         Args:
@@ -466,7 +487,7 @@ class Markdown(pyd.BaseModel):
             return None
         return trace[-1] if (trace := self.trace_path(path)) else None
 
-    def trace_path(self, target: str | list[int]) -> list['Markdown']:
+    def trace_path(self, target: str | list[int]) -> list[Markdown]:
         """Get all nodes along the path from this node to a target.
 
         Args:
@@ -495,13 +516,21 @@ class Markdown(pyd.BaseModel):
     # ------------------
     # `*` Public Methods
     # ------------------
+    # ---------------
+    # `*0` Properties
+    # ---------------
     @property
-    def tree(self) -> Iterator['Markdown']:
+    def frontmatter(self) -> dict[str, Any]:
+        """The YAML data attached to this markdown node."""
+        return self.notes
+
+    @property
+    def tree(self) -> Iterator[Markdown]:
         """Iterates depth-first over all nodes in this markdown object. See walk()."""
         return self.walk()
 
     @property
-    def prose_tree(self) -> Iterator['Buffer']:
+    def prose_tree(self) -> Iterator[Buffer]:
         """Iterates depth-first over all text content in this markdown object."""
         return (node.prose for node in self.tree)
 
@@ -523,6 +552,64 @@ class Markdown(pyd.BaseModel):
         parts = [self.header, str(self.prose), *(node.fulltext for node in self.nodes)]
         return '\n\n'.join(parts).strip()
 
+    # -------------
+    # `*1` Standard
+    # -------------
+    def __str__(self) -> str:
+        return self.to_string()
+
+    def __bool__(self) -> bool:
+        return bool(self.title or self.prose)
+
+    def pop(self, **kwargs: Any) -> Markdown | None:
+        """Remove and return a descendant node.
+
+        Args:
+            **kwargs: Node search criteria (passed to get()).
+        Returns:
+            Removed node, or None if not found.
+        """
+        # I. Find the target node
+        if not (target := self.get(**kwargs)):
+            return None
+
+        # II. Identify the parent of the target node
+        path = self.trace_path(target.idx)
+        assert len(path) >= 2, 'Path trace failed'
+        parent = path[-2]
+
+        # III. Remove the node and update its siblings' matrices
+        child_index = self._digit_to_num(target.idx[-1])
+        parent.nodes.pop(child_index)
+        parent.refresh_indices(start=child_index)
+        return target
+
+    def replace(self, orig: str | Pattern, new: str) -> None:
+        """Replace text in all prose buffers throughout the tree.
+
+        Args:
+            orig: String or regex pattern to replace.
+            new: Replacement string.
+        """
+        for node in self.tree:
+            node.prose.replace(orig, new)
+
+    def __len__(self) -> int:
+        """Returns the number of nodes in this markdown object."""
+        return len(self.nodes)
+
+    def __isub__(self, nodes: Collection[str]) -> Self:
+        """Removes nodes with the given indices from this markdown object."""
+        for title in nodes:
+            if node := self.pop(title=title):
+                self.LOGGER.info(f'Removed node: {node.title} ({node.idx})')
+            else:
+                self.LOGGER.warning(f'Node not found: {title}')
+        return self
+
+    # -------------
+    # `*1` Standard
+    # -------------
     @classmethod
     def parse(cls, text: str | Buffer, base_level: int = 0) -> list[Self]:
         """Parse markdown text into a hierarchical tree structure.
@@ -599,55 +686,3 @@ class Markdown(pyd.BaseModel):
         if fix:
             body = mdformat.text(body)
         return body
-
-    def __str__(self) -> str:
-        return self.to_string()
-
-    def __bool__(self) -> bool:
-        return bool(self.title or self.prose)
-
-    def pop(self, **kwargs: Any) -> 'Markdown | None':
-        """Remove and return a descendant node.
-
-        Args:
-            **kwargs: Node search criteria (passed to get()).
-        Returns:
-            Removed node, or None if not found.
-        """
-        # I. Find the target node
-        if not (target := self.get(**kwargs)):
-            return None
-
-        # II. Identify the parent of the target node
-        path = self.trace_path(target.idx)
-        assert len(path) >= 2, 'Path trace failed'
-        parent = path[-2]
-
-        # III. Remove the node and update its siblings' matrices
-        child_index = self._digit_to_num(target.idx[-1])
-        parent.nodes.pop(child_index)
-        parent.refresh_indices(start=child_index)
-        return target
-
-    def replace(self, orig: str | Pattern, new: str) -> None:
-        """Replace text in all prose buffers throughout the tree.
-
-        Args:
-            orig: String or regex pattern to replace.
-            new: Replacement string.
-        """
-        for node in self.tree:
-            node.prose.replace(orig, new)
-
-    def __len__(self) -> int:
-        """Returns the number of nodes in this markdown object."""
-        return len(self.nodes)
-
-    def __isub__(self, nodes: Collection[str]) -> Self:
-        """Removes nodes with the given indices from this markdown object."""
-        for title in nodes:
-            if node := self.pop(title=title):
-                self.LOGGER.info(f'Removed node: {node.title} ({node.idx})')
-            else:
-                self.LOGGER.warning(f'Node not found: {title}')
-        return self

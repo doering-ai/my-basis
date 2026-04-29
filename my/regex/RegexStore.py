@@ -2,8 +2,9 @@
 ### HEAD ###
 ############
 ### STANDARD
+from __future__ import annotations
 from typing import Literal, ClassVar, Any, Self, Annotated
-from collections.abc import Iterable, Iterator, Callable, Mapping
+from collections.abc import Iterable, Iterator, Callable, Mapping, Sequence
 from collections import deque
 import functools as ft
 import contextlib as ctx
@@ -13,7 +14,6 @@ from threading import Lock
 import more_itertools as mi
 import pydantic as pyd
 import regex as re
-from regex import Match, Pattern, RegexFlag
 
 ### INTERNAL
 from ..utils import ut
@@ -22,7 +22,10 @@ from ..typing import typist
 from .meta import ParseData, Atom, GroupAtom, Regex, Tree, GroupKind, META_RGXS
 from .MatchData import MatchData
 
-re.DEFAULT_VERSION = re.VERSION1
+re.DEFAULT_VERSION = re.VERSION1  # type: ignore
+RegexFlag = re.RegexFlag
+Match = re.Match[str]
+Pattern = re.Pattern[str]
 
 ############
 ### DATA ###
@@ -30,17 +33,17 @@ re.DEFAULT_VERSION = re.VERSION1
 # --------------
 # Public Aliases
 # --------------
-RegexParser = (
+type RegexParser = (
     str  # base case: Simply renames the output
     | Callable[[str], str]  # 1st case: returns some subset to the same name
     | Callable[[str], dict[str, str]]  # 2nd case: returns to any number of other names
     | Callable[[str], dict[str, str] | str]  # 3rd case: combo of above two
 )
 
-RegexTup = tuple[str, 'RegexList'] | tuple[str, str, 'RegexList', str]
-RegexList = list['RegexVal']
-RegexVal = str | RegexList | RegexTup | Pattern | dict
-RegexDef = (
+type RegexTup = tuple[str, "RegexList"] | tuple[str, str, "RegexList", str]
+type RegexList = Sequence["str | RegexVal"]
+type RegexVal = str | RegexList | RegexTup | Pattern | dict
+type RegexDef = (
     # Raw/simple content
     str
     | tuple[str, RegexParser]
@@ -56,18 +59,20 @@ RegexDef = (
 )
 
 # A buffer built to hold Regex patterns
-RegexBuffer = ft.partial(Buffer.new, fence_rgxs=['arrays'])
+RegexBuffer = ft.partial(Buffer.new, fence_rgxs=["arrays"])
 
 # Allowed regex search functions
-MatchFunction = Literal['match', 'fullmatch', 'full', 'search', 'polymatch', 'poly']
+type MatchFunction = Literal[
+    "match", "fullmatch", "full", "search", "polymatch", "poly"
+]
 
 # ---------
 # Constants
 # ---------
-DEBUG = False
+DEBUG = True
 NO_FLAG = RegexFlag(0)
 
-LockField = Annotated[Lock, ut.pyd_schemify(Lock)]
+type LockField = Annotated[Lock, ut.pyd_schemify(Lock)]
 
 
 ############
@@ -100,6 +105,7 @@ class RegexStore(pyd.BaseModel):
     # ----------------
     #: A dictionary of useful patterns for decomposing expressions
     META_RGXS: ClassVar[dict[str, re.Pattern]] = META_RGXS
+    LOAD_LOCK: ClassVar[Lock] = Lock()
 
     # -------
     # Members
@@ -115,10 +121,9 @@ class RegexStore(pyd.BaseModel):
     routers: dict[str, list[str]] = {}
 
     #: Function used to clean matched strings
-    strip: Callable[[str], str] = pyd.Field(default=lambda x: x, exclude=True)
-    lazy_queue: deque[Callable[[], None]] = pyd.Field(default_factory=deque, exclude=True)
-    is_loaded: bool = pyd.Field(default=True, exclude=True)
-    load_lock: LockField = pyd.Field(default_factory=Lock, exclude=True)
+    _strip: tuple[Callable[[str], str]] = pyd.PrivateAttr(default=(str,))
+    _lazy_queue: deque[Callable[[], None]] = pyd.PrivateAttr(default_factory=deque)
+    _is_loaded: bool = pyd.PrivateAttr(default=True)
 
     # -------------
     # Store Options
@@ -134,7 +139,7 @@ class RegexStore(pyd.BaseModel):
         #: Function to format definitions always, whenever they're created.
         formatter: Callable[..., str] | None = None
         #: The default expression inserted between elements of a list when processing definitions.
-        separator: str = r' *'
+        separator: str = r" *"
         #: Whether to convert `(...)` groups to `(?:...)`, allowing for cleaner definitions.
         force_named_groups: bool = False
         #: Whether to convert `(?P=name)` group *substitutions* to `(?P>name)` group *invocations*,
@@ -185,10 +190,12 @@ class RegexStore(pyd.BaseModel):
             options = cls.Options(**options)
         store = cls(options=options)
 
-        _init_load = ft.partial(store.initial_load, imports=imports, definitions=definitions)
+        _init_load = ft.partial(
+            store.initial_load, imports=imports, definitions=definitions
+        )
         if store.options.lazy_load:
-            store.lazy_queue.append(_init_load)
-            store.is_loaded = False
+            store._lazy_queue.append(_init_load)
+            store._is_loaded = False
         else:
             _init_load()
 
@@ -212,7 +219,9 @@ class RegexStore(pyd.BaseModel):
 
         # II. Preformat the given definitions with the user-defined formatter function
         if (fn := self.options.init_formatter) is not None:
-            definitions = ut.val_map(lambda v: self.format_definition(fn, v), definitions)
+            definitions = ut.val_map(
+                lambda v: self.format_definition(fn, v), definitions
+            )
 
         # III. Set the values of the store
         for name, val in definitions.items():
@@ -221,35 +230,37 @@ class RegexStore(pyd.BaseModel):
     @ft.cached_property
     def load(self) -> bool:
         """Load all lazy definitions into the store now."""
-        if not self.is_loaded:
-            with self.load_lock:
-                self.is_loaded = True
-                while self.lazy_queue:
-                    fn = self.lazy_queue.popleft()
+        if not self._is_loaded:
+            with RegexStore.LOAD_LOCK:
+                self._is_loaded = True
+                while self._lazy_queue:
+                    fn = self._lazy_queue.popleft()
                     fn()
         return True
 
-    @pyd.model_validator(mode='after')
+    @pyd.model_validator(mode="after")
     def _process_options(self) -> Self:
         """Finalize the store by setting up the autostrip function based on member variables."""
         # I. Setup the "autostrip" handler
-        strip_string = ''
+        strip_string = ""
         if self.options.autostrip_spaces:
-            strip_string += ' '
+            strip_string += " "
         if self.options.autostrip_brackets:
-            strip_string += '()[]'
+            strip_string += "()[]"
         if self.options.autostrip_commas:
-            strip_string += ','
+            strip_string += ","
 
         if strip_string:
-            self.strip = lambda text: text.strip(strip_string) or text
+            fn = lambda text: text.strip(strip_string) or text  # noqa: E731
         else:
-            self.strip = lambda text: text
+            fn = lambda text: text  # noqa: E731
+        self._strip = (fn,)
 
         # II. Modify all expressions to use invocations if requested
         if self.options.force_reinvocations:
             self.definitions = {
-                key: val.replace('(?P=', '(?P>') for key, val in self.definitions.items()
+                key: val.replace("(?P=", "(?P>")
+                for key, val in self.definitions.items()
             }
 
         return self
@@ -260,7 +271,7 @@ class RegexStore(pyd.BaseModel):
     @classmethod
     def format_definition(cls, fn: Callable[..., str], value: RegexDef) -> RegexDef:
         """Apply a formatting function to a regex definition value, if possible."""
-        if isinstance(value, Pattern):
+        if isinstance(value, re.Pattern):
             pass
         elif isinstance(value, tuple) and len(value) == 2:
             val, parser = value
@@ -272,7 +283,9 @@ class RegexStore(pyd.BaseModel):
                 return fn(value)
         return value
 
-    def _read_match(self, match: Match | None) -> tuple[dict[str, str], dict[str, list[str]]]:
+    def _read_match(
+        self, match: Match | None
+    ) -> tuple[dict[str, str], dict[str, list[str]]]:
         """Extract and autostrip all captured groups from a match object.
 
         Args:
@@ -282,7 +295,11 @@ class RegexStore(pyd.BaseModel):
         """
         data, captures = {}, {}
         if match is not None and (src := match.capturesdict().items()):
-            items = [(key, stripped) for key, vals in src if (stripped := self.autostrip(vals))]
+            items = [
+                (key, stripped)
+                for key, vals in src
+                if (stripped := self.autostrip(vals))
+            ]
             for key, values in items:
                 data[key] = values[-1]
                 captures[key] = values
@@ -308,14 +325,16 @@ class RegexStore(pyd.BaseModel):
             Multi-line string representation with indentation showing nesting.
         """
         if maxdepth > 0 and depth >= maxdepth:
-            return [f'\t{expr}']
+            return [f"\t{expr}"]
 
         sections: list[str] = []
         tree = Tree.new(expr)
         for branch in tree.branches:
             lines: list[str] = []
             for atom in branch:
-                if isinstance(atom, GroupAtom) and (Regex.is_split(atom) and len(atom) > threshold):
+                if isinstance(atom, GroupAtom) and (
+                    Regex.is_split(atom) and len(atom) > threshold
+                ):
                     if lines:
                         lines[-1] += atom.start
                     else:
@@ -324,7 +343,7 @@ class RegexStore(pyd.BaseModel):
                     lines.extend(
                         [
                             *cls._tree_print(atom.body, depth + 1, maxdepth, threshold),
-                            f'){atom.quantifier}',
+                            f"){atom.quantifier}",
                         ]
                     )
                 elif lines:
@@ -333,11 +352,11 @@ class RegexStore(pyd.BaseModel):
                     lines.append(str(atom))
             if lines:
                 if depth > 0:
-                    lines = [f'\t{line}' for line in lines]
-                sections.append('\n'.join(lines))
+                    lines = [f"\t{line}" for line in lines]
+                sections.append("\n".join(lines))
 
         for i in range(1, len(sections)):
-            sections[i] = '|' + sections[i]
+            sections[i] = "|" + sections[i]
         return sections
 
     def _parse_mark(self, mark: str) -> tuple[GroupKind, str, str, str]:
@@ -352,30 +371,30 @@ class RegexStore(pyd.BaseModel):
             4. Quantifier string (e.g., `?`, `+`, `*`)
         """
         mark = mark.strip()
-        match = META_RGXS['struct_mark'].fullmatch(mark)
-        assert match, f'Invalid mark: {mark}, {META_RGXS["struct_mark"].pattern}'
+        match = META_RGXS["struct_mark"].fullmatch(mark)
+        assert match, f"Invalid mark: {mark}, {META_RGXS['struct_mark'].pattern}"
         data, _ = self._read_match(match)
 
-        sep = match['divis'] or ''
-        group = data.pop('group', '')
-        quant = data.pop('quant', '')
+        sep = match["divis"] or ""
+        group = data.pop("group", "")
+        quant = data.pop("quant", "")
 
-        if sep == '|' and not group:
-            group = '|'
-        elif sep == '<|>' and not group:
-            group = '>'
-        elif len(sep) >= 2 and sep[0] == '[' and sep[-1] == ']':
+        if sep == "|" and not group:
+            group = "|"
+        elif sep == "<|>" and not group:
+            group = ">"
+        elif len(sep) >= 2 and sep[0] == "[" and sep[-1] == "]":
             sep = sep[1:-1]
         elif not sep:
             sep = self.options.separator
 
         # Override this group, which is used by the caller to wrap children
-        if group == '&':
-            group = ':'
-        start = f'(?{group}' if group else '('
+        if group == "&":
+            group = ":"
+        start = f"(?{group}" if group else "("
         kind = GroupKind.read(start)
-        if flags := data.pop('flags', ''):
-            start = f'(?{flags}:' if kind == GroupKind.PLAIN else f'{start}(?{flags})'
+        if flags := data.pop("flags", ""):
+            start = f"(?{flags}:" if kind == GroupKind.PLAIN else f"{start}(?{flags})"
 
         return kind, start, sep, quant
 
@@ -395,17 +414,27 @@ class RegexStore(pyd.BaseModel):
         _ = self.load
         if isinstance(patterns, str):
             patterns = [patterns]
-        assert ut.has_all(self.patterns, *patterns), f'Unknown pattern(s): {patterns}'
+        assert ut.has_all(self.patterns, *patterns), f"Unknown pattern(s): {patterns}"
         return patterns, str(text) if isinstance(text, Buffer) else text
 
     def _parse_tuple(self, data: RegexTup) -> tuple[str, RegexList, str, str]:
+        """Normalize the given tuple, initializing empty/null values for missing fields.
+
+        Args:
+            data: Tuple in one of the accepted formats (see RegexTup).
+        Returns:
+            - mark: Custom mark syntax defining group type and separator.
+            - children: List of child regex values to compose.
+            - prefix: An expression that comes before the group's content
+            - suffix: An expression that comes after the group's content
+        """
         if (n := len(data)) == 2:
-            assert typist.check(data, tuple[str, list]), f'Invalid group spec: {data}'
+            assert typist.check(data, tuple[str, list]), f"Invalid group spec: {data}"
             mark, children = data
-            return mark, children, '', ''
+            return mark, children, "", ""
         elif n == 4:
             assert typist.check(data, tuple[str, str, list, str]), (
-                f'Invalid group spec (w/ prefix & suffix): {data}'
+                f"Invalid group spec (w/ prefix & suffix): {data}"
             )
 
             mark, prefix, children, suffix = data
@@ -414,7 +443,9 @@ class RegexStore(pyd.BaseModel):
                 prefix, suffix = map(self.options.formatter, (prefix, suffix))
             return mark, children, prefix, suffix
         else:
-            raise ValueError(f'Invalid group spec (bad length of {n=}, should be 2 or 4): {data}')
+            raise ValueError(
+                f"Invalid group spec (bad length of {n=}, should be 2 or 4): {data}"
+            )
 
     @staticmethod
     def _collapse_empty_sections(delims: list[str], sections: list[str]) -> None:
@@ -448,14 +479,18 @@ class RegexStore(pyd.BaseModel):
             AssertionError: If any definition name is not found in the store.
         """
         if not definitions:
-            return ''
+            return ""
         assert all(name in self.definitions for name in definitions), (
-            f'Unknown definitions passed: {definitions}'
+            f"Unknown definitions passed: {definitions}"
         )
 
         # Render in the order of definition above, not in the order passed in
-        data = [(name, rgx) for name, rgx in self.definitions.items() if name in definitions]
-        return '\n'.join([r'(?(DEFINE)', *[f'(?P<{name}>{rgx})' for name, rgx in data], ')'])
+        data = [
+            (name, rgx) for name, rgx in self.definitions.items() if name in definitions
+        ]
+        return "\n".join(
+            [r"(?(DEFINE)", *[f"(?P<{name}>{rgx})" for name, rgx in data], ")"]
+        )
 
     def _autoparse(self, func: str, names: Iterable[str], text: str) -> MatchData:
         """Helper function for parsing the outputs from a typical regex call.
@@ -485,7 +520,9 @@ class RegexStore(pyd.BaseModel):
 
         for existing_group in groups_used:
             buffer.set(self.definitions[existing_group])
-            groups_invoked = {g.name for g in Regex.group_iterator(buffer, mask=GroupKind.INVOC)}
+            groups_invoked = {
+                g.name for g in Regex.group_iterator(buffer, mask=GroupKind.INVOC)
+            }
             new_groups |= groups_invoked - groups_used
 
         if new_groups:
@@ -493,7 +530,9 @@ class RegexStore(pyd.BaseModel):
         else:
             return groups_used
 
-    def compose_group(self, mark: str, children: RegexList, pre: str = '', suf: str = '') -> str:
+    def compose_group(
+        self, mark: str, children: RegexList, pre: str = "", suf: str = ""
+    ) -> str:
         """Compose a regex group from a mark, children, and optional prefix/suffix.
 
         Args:
@@ -505,30 +544,35 @@ class RegexStore(pyd.BaseModel):
             Complete regex group string with composed children.
         """
         # 0. For subroutine marks, wrap all children
-        if '&' in mark:
+        if "&" in mark:
             assert all(isinstance(child, str) for child in children)
-            children = [f'(?&{child})' for child in children]
+            children = [f"(?&{child})" for child in children]
 
         # I. Parse the custom "mark" language into final regex syntax
         kind, start, sep, quant = self._parse_mark(mark)
-        end = ')'
+        end = ")"
 
         # II. Recursively compose the list component into a single string
         body = self.compose(children, sep)
 
         # III. Add wrappers to handle surrounding context
-        has_context = pre or suf or start[-1] == ')'
+        has_context = pre or suf or start[-1] == ")"
         if Regex.is_split(body):
             if has_context:
                 # III.i. Split groups with context must be wrapped in a non-capturing group
-                c = '>' if start == '(?>' else ':'
-                body = f'(?{c}{body})'
-        elif kind in GroupKind._SIMPLE and len(start) == 3 and not quant and not has_context:
+                c = ">" if start == "(?>" else ":"
+                body = f"(?{c}{body})"
+        elif (
+            kind in GroupKind._SIMPLE
+            and len(start) == 3
+            and not quant
+            and not has_context
+        ):
             # III.ii. Non-split, simple, unquantified groups can drop the wrapping entirely
-            start = end = ''
+            start = end = ""
 
         # e.g.          (?:    \(?  ...   \)?  )    ?
-        return ''.join([start, pre, body, suf, end, quant])
+        return "".join([start, pre, body, suf, end, quant])
 
     def compose_tree(self, data: RegexList) -> str:
         """Compose an optimized/"condensed" version of the give regex branches.
@@ -539,7 +583,7 @@ class RegexStore(pyd.BaseModel):
             The corresponding optimized branching tree regex expression.
         """
         # 0. Finish composing definitions below this one into valid expressions
-        rendered_branches = [self.compose(branch, sep='|') for branch in data]
+        rendered_branches = [self.compose(branch, sep="|") for branch in data]
 
         # I. Initialize a "tree" object containing these branches
         tree = Tree.new(*sorted(rendered_branches))
@@ -556,7 +600,7 @@ class RegexStore(pyd.BaseModel):
     # -------------------
     # `+` Primary Methods
     # -------------------
-    def parse(self, match: Match | None, pattern_name: str = '') -> MatchData:
+    def parse(self, match: Match | None, pattern_name: str = "") -> MatchData:
         """Parse a match object, applying registered parsers and cleaning results.
 
         Reads the match, applies any parsers registered for captured groups, removes
@@ -574,22 +618,28 @@ class RegexStore(pyd.BaseModel):
 
         _, captures = self._read_match(match)
         if parseable := list(filter(self.parsers.__contains__, captures.keys())):
-            _pd = ParseData(captures=captures, starts={f: match.starts(f) for f in captures.keys()})
+            _pd = ParseData(
+                captures=captures, starts={f: match.starts(f) for f in captures.keys()}
+            )
             for field, parser in [(f, self.parsers[f]) for f in parseable]:
                 _pd.set_field(field)
 
                 if isinstance(parser, str):
-                    _pd.interleave(_pd.field, parser, list(zip(_pd.start, _pd.value, strict=True)))
+                    _pd.interleave(
+                        _pd.field, parser, list(zip(_pd.start, _pd.value, strict=True))
+                    )
                 elif isinstance(parser, dict):
                     _pd.apply_dict_parser(parser, self.patterns[field])
                 elif callable(parser):
                     _pd.apply_func_parser(parser)
                 else:
-                    raise ValueError(f'Unsupported parser type: {type(parser)}')
+                    raise ValueError(f"Unsupported parser type: {type(parser)}")
             captures = _pd.captures
 
         # IV. Removed unnecessary "hidden" values
-        hidden_fields = [key for key in captures.keys() if key[0] == '_' and key != pattern_name]
+        hidden_fields = [
+            key for key in captures.keys() if key[0] == "_" and key != pattern_name
+        ]
         if 0 < len(hidden_fields) < len(captures):
             for field in hidden_fields:
                 del captures[field]
@@ -597,7 +647,11 @@ class RegexStore(pyd.BaseModel):
         for field in [k for k, v in captures.items() if not v or not any(v)]:
             del captures[field]
 
-        if pattern_name in captures and len(captures) > 1 and pattern_name not in self.parsers:
+        if (
+            pattern_name in captures
+            and len(captures) > 1
+            and pattern_name not in self.parsers
+        ):
             del captures[pattern_name]
 
         # V. Clean and return a datadict and a capturedict
@@ -615,16 +669,16 @@ class RegexStore(pyd.BaseModel):
             The composed expression.
         """
         if not data:
-            return ''
-        raise NotImplementedError(f'Unsupported data type: {type(data)}')
+            return ""
+        raise NotImplementedError(f"Unsupported data type: {type(data)}")
 
     @compose.register
     def _compose_string(self, data: str, sep: str | None = None) -> str:
         # I.i. Change all positional capture groups to non-capturing
-        if self.options.force_named_groups and '(' in data:
+        if self.options.force_named_groups and "(" in data:
             buf = RegexBuffer(data)
             for group in Regex.group_iterator(buf, mask=GroupKind.POSIT):
-                buf.insert(group.span[0] + 1, '?:')
+                buf.insert(group.span[0] + 1, "?:")
             data = str(buf)
 
         # I.ii. Format the final string if requested
@@ -633,7 +687,7 @@ class RegexStore(pyd.BaseModel):
         return data
 
     @compose.register
-    def _compose_pattern(self, data: Pattern, sep: str | None = None) -> str:
+    def _compose_pattern(self, data: re.Pattern, sep: str | None = None) -> str:
         # I.ii. Extract the (raw) expressions behind (compiled) patterns
         return data.pattern
 
@@ -641,7 +695,7 @@ class RegexStore(pyd.BaseModel):
     def _compose_list(self, data: list, sep: str | None = None) -> str:
         if sep is None:
             sep = self.options.separator
-        elif sep == '<|>':
+        elif sep == "<|>":
             return self.compose_tree(data)
 
         return sep.join(map(self.compose, data))
@@ -655,10 +709,10 @@ class RegexStore(pyd.BaseModel):
     def _compose_dict(self, data: dict, sep: str | None = None) -> str:
         # III. Special case: an explicitly-specified tuple (likely by a .yaml file)
         tup = (
-            data.get('mark', ''),
-            data.get('pre', ''),
-            data.get('body', []),
-            data.get('suf', ''),
+            data.get("mark", ""),
+            data.get("pre", ""),
+            data.get("body", []),
+            data.get("suf", ""),
         )
         return self.compose_group(*self._parse_tuple(tup))
 
@@ -678,7 +732,7 @@ class RegexStore(pyd.BaseModel):
         """
         # I. Modify all expressions to use invocations if requested
         if self.options.force_reinvocations:
-            text.replace('(?P=', '(?P>')
+            text.replace("(?P=", "(?P>")
 
         # II. Go through all the subroutine calls in the pattern, replacing as we go
         groups_used: set[str] = set()
@@ -695,14 +749,14 @@ class RegexStore(pyd.BaseModel):
                 elif group.name in local_groups:
                     pass
                 else:
-                    raise ValueError(f'Undefined group invoked: {group.name}')
+                    raise ValueError(f"Undefined group invoked: {group.name}")
 
         # III. Recursively fetch dependencies for the used groups
         groups_used = self.find_all_invocations(groups_used)
 
         # IV. Ensure that any local groups don't conflict with predefined ones
         ambiguous = set.intersection(groups_used, local_groups)
-        assert len(ambiguous) == 0, f'Ambiguous groups found: {ambiguous}'
+        assert len(ambiguous) == 0, f"Ambiguous groups found: {ambiguous}"
         return groups_used
 
     def define(
@@ -726,7 +780,7 @@ class RegexStore(pyd.BaseModel):
             AssertionError: If name is already defined.
             Exception: If pattern composition or compilation fails.
         """
-        assert name not in self.definitions, f'Duplicate definition: {name}'
+        assert name not in self.definitions, f"Duplicate definition: {name}"
 
         try:
             # I. Compose complex data structures into a string, and apply universal formatting
@@ -739,23 +793,23 @@ class RegexStore(pyd.BaseModel):
 
             # III. Compile a finalized version with subroutines attached as 'definitions'
             definitions = self._render_definitions(*groups_used)
-            rgx = rf'{definitions}(?P<{name}>{text})'
+            rgx = rf"{definitions}(?P<{name}>{text})"
             try:
                 self.patterns[name] = re.compile(rgx, flags)
             except Exception:
-                print(f'Failed to compile rgx `{name.upper()}`:\n{rgx}\n')
+                print(f"Failed to compile rgx `{name.upper()}`:\n{rgx}\n")
                 raise
 
         except Exception as e:
-            print(f'Error compiling rgx `{name.upper()}`: {e}')
+            print(f"Error compiling rgx `{name.upper()}`: {e}")
             ns = locals()
             if DEBUG:
-                if rgx := ns.get('rgx'):
-                    print(f'\nRENDERED:\n{rgx}\nfrom groups {ns.get("groups_used")}')
-                elif text := ns.get('text'):
-                    print(f'\nCLEANED:\n{text}\n')
-                elif raw_text := ns.get('raw_text'):
-                    print(f'\nCOMPOSED:\n{raw_text}\n')
+                if rgx := ns.get("rgx"):
+                    print(f"\nRENDERED:\n{rgx}\nfrom groups {ns.get('groups_used')}")
+                elif text := ns.get("text"):
+                    print(f"\nCLEANED:\n{text}\n")
+                elif raw_text := ns.get("raw_text"):
+                    print(f"\nCOMPOSED:\n{raw_text}\n")
             raise
 
         # III. Store the parser function & regex flags for this group, if present
@@ -772,19 +826,18 @@ class RegexStore(pyd.BaseModel):
         """
         if not isinstance(values, list):
             values = [values]
-        values = list(filter(bool, map(self.strip, values)))
-
+        values = [v for _v in values if (v := self._strip[0](_v))]
         # Check if we removed an actually useful bracket above, and add it back in if so
         if values and self.options.autostrip_brackets:
             steps = [
                 (i, val, brs[0], brs[1])
                 for i, val in enumerate(values)
-                for brs in [('(', ')'), ('[', ']')]
+                for brs in [("(", ")"), ("[", "]")]
                 if any(map(val.__contains__, brs))
             ]
             for i, value, lb, rb in steps:
                 if (ln := value.count(lb)) != (rn := value.count(rb)):
-                    values[i] = f'{value}{rb}' if ln > rn else f'{lb}{value}'
+                    values[i] = f"{value}{rb}" if ln > rn else f"{lb}{value}"
         return values
 
     def parse_invocations(self, text: str) -> set[str]:
@@ -795,7 +848,9 @@ class RegexStore(pyd.BaseModel):
         Returns:
             Set of all group names invoked directly or indirectly.
         """
-        invocations = {group.name for group in Regex.group_iterator(text, mask=GroupKind.INVOC)}
+        invocations = {
+            group.name for group in Regex.group_iterator(text, mask=GroupKind.INVOC)
+        }
         return self.find_all_invocations(invocations)
 
     # ------------------
@@ -806,12 +861,16 @@ class RegexStore(pyd.BaseModel):
     # --------------
     def __repr__(self) -> str:
         options = [
-            key for key in self.Options.model_fields.keys() if getattr(self.options, key, False)
+            key
+            for key in self.Options.model_fields.keys()
+            if getattr(self.options, key, False)
         ]
-        body = ', '.join(f'{k}' for k, _ in mi.take(2, reversed(self.definitions.items())))
+        body = ", ".join(
+            f"{k}" for k, _ in mi.take(2, reversed(self.definitions.items()))
+        )
         if len(self) > 2:
-            body += f', and {len(self) - 2} more...'
-        return f'<RegexStore w/ {body} (options={options})>'
+            body += f", and {len(self) - 2} more..."
+        return f"<RegexStore w/ {body} (options={options})>"
 
     def __len__(self) -> int:
         _ = self.load
@@ -822,15 +881,19 @@ class RegexStore(pyd.BaseModel):
         return key in self.patterns
 
     def __setitem__(self, name: str, param: RegexDef) -> None:
-        if not self.is_loaded:
-            self.lazy_queue.append(ft.partial(self.__setitem__, name, param))
+        if not self._is_loaded:
+            self._lazy_queue.append(ft.partial(self.__setitem__, name, param))
             return
-        assert name not in self.patterns, f'Duplicate pattern name: {name}'
+        assert name not in self.patterns, f"Duplicate pattern name: {name}"
 
         # Pull out the parser, if present
         val: RegexVal
         parser: RegexParser | None
-        if isinstance(param, tuple) and len(param) == 2 and not isinstance(param[1], (list, tuple)):
+        if (
+            isinstance(param, tuple)
+            and len(param) == 2
+            and not isinstance(param[1], (list, tuple))
+        ):
             val, parser = param  # type: ignore
         else:
             val = param  # type: ignore
@@ -840,7 +903,7 @@ class RegexStore(pyd.BaseModel):
 
     def __getitem__(self, name: str) -> Pattern:
         _ = self.load
-        assert name in self.patterns, f'Pattern not found: {name}'
+        assert name in self.patterns, f"Pattern not found: {name}"
         return self.patterns[name]
 
     def __ior__(self, other: Mapping[str, RegexDef] | Self) -> Self:
@@ -900,7 +963,7 @@ class RegexStore(pyd.BaseModel):
             MatchData from first successful match, or empty MatchData if none match.
         """
         names, text = self._validate_automatch_params(names, text)
-        return self._autoparse('match', names, text)
+        return self._autoparse("match", names, text)
 
     def fullmatch(self, names: str | Iterable[str], text: str | Buffer) -> MatchData:
         """Match one of the named patterns against the entire text.
@@ -912,7 +975,7 @@ class RegexStore(pyd.BaseModel):
             MatchData from first successful fullmatch, or empty MatchData if none match.
         """
         names, text = self._validate_automatch_params(names, text)
-        return self._autoparse('fullmatch', names, text)
+        return self._autoparse("fullmatch", names, text)
 
     #: Alias for `fullmatch()`
     full = fullmatch  # type: ignore
@@ -927,9 +990,11 @@ class RegexStore(pyd.BaseModel):
             MatchData from first successful search, or empty MatchData if none found.
         """
         names, text = self._validate_automatch_params(names, text)
-        return self._autoparse('search', names, text)
+        return self._autoparse("search", names, text)
 
-    def finditer(self, name: str, text: str | Buffer, **kwargs: Any) -> Iterator[MatchData]:
+    def finditer(
+        self, name: str, text: str | Buffer, **kwargs: Any
+    ) -> Iterator[MatchData]:
         """Find all non-overlapping matches of the pattern in text.
 
         Args:
@@ -945,7 +1010,9 @@ class RegexStore(pyd.BaseModel):
         if isinstance(text, Buffer):
             yield from map(parse, text.rgx_iterator(rgx, **kwargs))
         else:
-            assert not kwargs, f'Unexpected kwargs {kwargs} for plain-string "{text[:25]}..."'
+            assert not kwargs, (
+                f'Unexpected kwargs {kwargs} for plain-string "{text[:25]}..."'
+            )
             yield from map(parse, rgx.finditer(text))
 
     def findall(self, name: str, text: str | Buffer, **kwargs: Any) -> list[MatchData]:
@@ -989,7 +1056,7 @@ class RegexStore(pyd.BaseModel):
             sections = [text]
 
         if sections:
-            delims.insert(0, '')
+            delims.insert(0, "")
 
             # If requested, collapse any empty sections into longer delimiters
             if collapse:
@@ -1026,7 +1093,7 @@ class RegexStore(pyd.BaseModel):
                     pd.captures[field] = values
                     pd.starts[field] = starts
                 else:
-                    pd.interleave('', field, list(zip(starts, values, strict=True)))
+                    pd.interleave("", field, list(zip(starts, values, strict=True)))
 
         return MatchData(data=pd.captures)
 
@@ -1039,7 +1106,7 @@ class RegexStore(pyd.BaseModel):
     def partial(
         self,
         name: str,
-        func: MatchFunction = 'match',
+        func: MatchFunction = "match",
     ) -> Callable[[str | Buffer], MatchData]:
         """Create a partially applied matching function for a pattern.
 
@@ -1056,7 +1123,7 @@ class RegexStore(pyd.BaseModel):
         self,
         name: str,
         texts: Iterable[str],
-        func: MatchFunction = 'match',
+        func: MatchFunction = "match",
     ) -> Iterable[MatchData]:
         """Apply a pattern to multiple texts.
 
@@ -1074,7 +1141,7 @@ class RegexStore(pyd.BaseModel):
         self,
         name: str,
         texts: Iterable[str],
-        func: MatchFunction = 'match',
+        func: MatchFunction = "match",
     ) -> Iterable[str]:
         """Filter texts by whether they match a pattern.
 
@@ -1092,7 +1159,9 @@ class RegexStore(pyd.BaseModel):
     # ---------------------------
     # `*3` Optimization Functions
     # ---------------------------
-    def define_router_tree(self, router: str, items: Mapping[str, RegexVal], **kwargs: str) -> None:
+    def define_router_tree(
+        self, router: str, items: Mapping[str, RegexVal], **kwargs: str
+    ) -> None:
         """Define a router pattern that classifies text into named categories.
 
         Creates two patterns: one optimized router (`<router>`) and one with route tracking
@@ -1105,33 +1174,36 @@ class RegexStore(pyd.BaseModel):
         Raises:
             AssertionError: If router name is already defined.
         """
-        if not self.is_loaded:
-            self.lazy_queue.append(ft.partial(self.define_router_tree, router, items, **kwargs))
+        if not self._is_loaded:
+            self._lazy_queue.append(
+                ft.partial(self.define_router_tree, router, items, **kwargs)
+            )
             return
 
-        assert router not in self.routers, f'Duplicate router name: {router}'
+        assert router not in self.routers, f"Duplicate router name: {router}"
         items = {k: v for k, v in items.items() if v}
         self.routers[router] = list(items.keys())
 
-        if prefix := kwargs.pop('prefix', ''):
+        if prefix := kwargs.pop("prefix", ""):
             p0 = p1 = prefix
         else:
-            p0 = kwargs.get('p0', '')
-            p1 = kwargs.get('p1', '')
+            p0 = kwargs.get("p0", "")
+            p1 = kwargs.get("p1", "")
 
-        if suffix := kwargs.pop('suffix', ''):
+        if suffix := kwargs.pop("suffix", ""):
             s0 = s1 = suffix
         else:
-            s0 = kwargs.get('s0', '')
-            s1 = kwargs.get('s1', '')
+            s0 = kwargs.get("s0", "")
+            s1 = kwargs.get("s1", "")
 
-        self[router] = ('<|>', p0, list(items.values()), s0)
+        self[router] = ("<|>", p0, list(items.values()), s0)
 
         routes: list[tuple[int, RegexList]] = [
-            (i, rgx if isinstance(rgx, list) else [rgx]) for i, rgx in enumerate(items.values())
+            (i, rgx if isinstance(rgx, list) else [rgx])
+            for i, rgx in enumerate(items.values())
         ]
-        _list: RegexList = [(f'<|>P<rt_{i}>', rgx) for i, rgx in routes]
-        self[f'{router}_router'] = ('|:', p1, _list, s1)
+        _list: RegexList = [(f"<|>P<rt_{i}>", rgx) for i, rgx in routes]
+        self[f"{router}_router"] = ("|:", p1, _list, s1)
 
     def route_match(self, router: str, text: str | MatchData) -> str:
         """Determine which category a text matches in a router tree.
@@ -1145,15 +1217,17 @@ class RegexStore(pyd.BaseModel):
             AssertionError: If router name is not found.
         """
         _ = self.load
-        assert router in self.routers, f'Unknown router: {router}'
+        assert router in self.routers, f"Unknown router: {router}"
         if isinstance(text, MatchData):
             text = text.text
 
-        data = self.fullmatch(f'{router}_router', text)
-        if raw_idx := next((name[3:] for name in data.keys() if name.startswith('rt_')), ''):
-            assert raw_idx.isdigit(), f'Invalid router index: {raw_idx}'
+        data = self.fullmatch(f"{router}_router", text)
+        if raw_idx := next(
+            (name[3:] for name in data.keys() if name.startswith("rt_")), ""
+        ):
+            assert raw_idx.isdigit(), f"Invalid router index: {raw_idx}"
             return self.routers[router][int(raw_idx)]
-        return ''
+        return ""
 
     def expand_match(self, router: str, text: str | MatchData) -> str:
         """Match text against a router and expand using the matched category's format.
@@ -1167,19 +1241,21 @@ class RegexStore(pyd.BaseModel):
             AssertionError: If router name is not found or match object is invalid.
         """
         _ = self.load
-        assert router in self.routers, f'Unknown router: {router}'
+        assert router in self.routers, f"Unknown router: {router}"
         if isinstance(text, MatchData):
             text = text.text
 
-        data = self.fullmatch(f'{router}_router', text)
-        if raw_idx := next((name[3:] for name in data.keys() if name.startswith('rt_')), ''):
-            assert raw_idx.isdigit(), f'Invalid router index: {raw_idx}'
+        data = self.fullmatch(f"{router}_router", text)
+        if raw_idx := next(
+            (name[3:] for name in data.keys() if name.startswith("rt_")), ""
+        ):
+            assert raw_idx.isdigit(), f"Invalid router index: {raw_idx}"
             fmt = self.routers[router][int(raw_idx)]
 
-            assert data.match is not None, 'Invalid match object'
+            assert data.match is not None, "Invalid match object"
             return data.match.expandf(fmt)
 
-        return ''
+        return ""
 
     # ----------------------------
     # `*4` Expression Construction
@@ -1193,7 +1269,7 @@ class RegexStore(pyd.BaseModel):
         Returns:
             The cleaned URL string with detritus removed and trimmed.
         """
-        return META_RGXS['url_detritus'].sub('', target).strip('/. ')
+        return META_RGXS["url_detritus"].sub("", target).strip("/. ")
 
     @staticmethod
     def atom(*contents: RegexVal) -> RegexVal:
@@ -1215,37 +1291,38 @@ class RegexStore(pyd.BaseModel):
             ValueError: If no content provided or tuple has invalid length.
         """
         if not contents:
-            raise ValueError('No content provided')
+            raise ValueError("No content provided")
         elif len(contents) > 1:
-            return ('[]:', r'(?P>_ws)', list(contents), r'(?P>_we)')
+            return ("[]:", r"(?P>_ws)", list(contents), r"(?P>_we)")
         assert len(contents) == 1
         content = contents[0]
 
         if isinstance(content, str):
             # I. Simple string case
-            return rf'(?P>_ws){content}(?P>_we)'
+            return rf"(?P>_ws){content}(?P>_we)"
         elif isinstance(content, list):
             # II. List case
-            return [r'(?P>_ws)', *content, r'(?P>_we)']
+            return [r"(?P>_ws)", *content, r"(?P>_we)"]
         elif isinstance(content, tuple):
             # III. Tuple case
-            mark, body = '', ''
-            prefix, suffix = '', ''
+            mark: str = ""
+            body: str = ""
+            prefix, suffix = "", ""
             if len(content) == 2:
-                mark, body = content  # ty:ignore[invalid-assignment]
-                prefix, suffix = '', ''
+                mark, body = content  # type:ignore
+                prefix, suffix = "", ""
             elif len(content) == 4:
-                mark, prefix, body, suffix = content  # ty:ignore[invalid-assignment]
+                mark, prefix, body, suffix = content  # type:ignore
             else:
-                raise ValueError(f'Invalid content tuple: {content}')
+                raise ValueError(f"Invalid content tuple: {content}")
 
-            if mark[-1] in '*+' or '>' in mark:
-                return ('[]:', [r'(?P>_ws)', content, r'(?P>_we)'])
+            if mark[-1] in "*+" or ">" in mark:
+                return ("[]:", [r"(?P>_ws)", content, r"(?P>_we)"])
             else:
-                return (mark, rf'(?P>_ws){prefix}', body, rf'{suffix}(?P>_we)')
+                return (mark, rf"(?P>_ws){prefix}", body, rf"{suffix}(?P>_we)")
         else:
             # IV. Error case
-            raise ValueError(f'Invalid content: {content}')
+            raise ValueError(f"Invalid content: {content}")
 
     # --------------------------
     # `*5` Development Utilities
@@ -1259,14 +1336,14 @@ class RegexStore(pyd.BaseModel):
             Sanitized pattern string with normalized flag syntax.
         """
         _ = self.load
-        if isinstance(pattern, Pattern):
+        if isinstance(pattern, re.Pattern):
             pattern = pattern.pattern
         elif isinstance(pattern, str) and pattern in self.patterns:
             pattern = self.patterns[pattern].pattern
 
         return ut.replace(
             str(pattern),
-            (META_RGXS['inline_flags'], r'(?:(?\1)'),
+            (META_RGXS["inline_flags"], r"(?:(?\1)"),
         )
 
     def pretty_print(
@@ -1296,7 +1373,7 @@ class RegexStore(pyd.BaseModel):
         elif isinstance(pattern, Atom):
             body = Regex(pattern)
         else:
-            if isinstance(pattern, Pattern):
+            if isinstance(pattern, re.Pattern):
                 expr = pattern.pattern
             elif isinstance(pattern, str) and pattern in self:
                 expr = self.definitions[pattern]
@@ -1305,7 +1382,7 @@ class RegexStore(pyd.BaseModel):
             body = Regex(expr)
 
         if not body:
-            return ''
+            return ""
 
         # I. Identify and separate out the definition section, if present
         head = Atom()
@@ -1328,4 +1405,4 @@ class RegexStore(pyd.BaseModel):
         if print_head and head:
             ret = self._tree_print(head, **kwargs) + ret
 
-        return '\n'.join(ret)
+        return "\n".join(ret)

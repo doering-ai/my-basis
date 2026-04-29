@@ -3,6 +3,7 @@
 ############
 ### STANDARD
 import inspect
+from typing import Any
 from pathlib import Path
 import random
 
@@ -13,7 +14,7 @@ import more_itertools as mi
 
 ### INTERNAL
 from my import Buffer, ut, typist
-from my.regex.meta import GroupKind, Tree
+from my.regex.meta import GroupKind
 from my.regex import RegexList, RegexVal, MatchData
 from my.regex.RegexStore import RegexStore, RegexBuffer
 
@@ -64,7 +65,7 @@ class TestRegexStore:
             dict(lazy_load=False),
             test=r'test',
         )
-        assert store.is_loaded
+        assert store._is_loaded
         assert 'test' in store.patterns
 
     def test_new__with_imports(self):
@@ -83,10 +84,8 @@ class TestRegexStore:
         assert 'numeric' not in store2.definitions
 
     def test_new__init_formatter(self):
-        def formatter(val):
-            if isinstance(val, str):
-                return val.upper()
-            return val
+        def formatter(val: Any):
+            return val.upper() if isinstance(val, str) else val
 
         store = RegexStore.new(
             dict(lazy_load=False, init_formatter=formatter),
@@ -119,7 +118,7 @@ class TestRegexStore:
     )
     def test_process_options__autostrip(self, options: dict, match: str, expected: str):
         store = RegexStore.new(dict(lazy_load=False, **options))
-        assert store.strip(match) == expected
+        assert store._strip(match) == expected
 
     def test_process_options__force_reinvocations(self):
         store = RegexStore.new(

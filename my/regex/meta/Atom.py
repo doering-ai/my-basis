@@ -72,7 +72,7 @@ class Atom(pyd.BaseModel):
     # `-` Private Methods
     # -------------------
     @staticmethod
-    def _has_set_operator(data) -> bool:
+    def _has_set_operator(data: str) -> bool:
         return bool(META_RGXS['set_operator'].search(data))
 
     # -------------------

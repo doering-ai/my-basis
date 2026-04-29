@@ -48,32 +48,32 @@ class Tree(pyd.BaseModel):
     def __init__(
         self,
         *args: str | Atom | Regex | Sequence[Regex] | Iterator[Regex] | Self,
-        prefix: str | Atom | Regex = '',
+        prefix: str | Atom | Regex = "",
         branches: list[Regex] | None = None,
-        suffix: str | Atom | Regex = '',
-        quantifier: str | Quantifier = '',
-        inner_quant: str | Quantifier = '',
+        suffix: str | Atom | Regex = "",
+        quantifier: str | Quantifier = "",
+        inner_quant: str | Quantifier = "",
         max_expand: int = 4,
         **kwargs: Any,
     ) -> None:
         """Construct a new instance from the given branches, casting flexibly."""
         data: dict = dict(branches=branches or [])
         if args:
-            data['branches'].extend(mi.flatten(map(self._parse_arg, args)))
-        if prefix != '':
-            data['prefix'] = Regex(prefix)
-        if suffix != '':
-            data['suffix'] = Regex(suffix)
-        if quantifier != '':
-            data['quantifier'] = Quantifier(quantifier)
-        if inner_quant != '':
-            data['inner_quant'] = Quantifier(inner_quant)
+            data["branches"].extend(mi.flatten(map(self._parse_arg, args)))
+        if prefix != "":
+            data["prefix"] = Regex(prefix)
+        if suffix != "":
+            data["suffix"] = Regex(suffix)
+        if quantifier != "":
+            data["quantifier"] = Quantifier(quantifier)
+        if inner_quant != "":
+            data["inner_quant"] = Quantifier(inner_quant)
         if max_expand != 4:
-            data['max_expand'] = max_expand
+            data["max_expand"] = max_expand
 
         super().__init__(**data, **kwargs)
 
-    @pyd.model_validator(mode='after')
+    @pyd.model_validator(mode="after")
     def _validate_branches(self) -> Self:
         self.branches = list(mi.unique_everseen(self.branches))
         return self
@@ -119,7 +119,9 @@ class Tree(pyd.BaseModel):
 
             # yield from Regex(*arg).split()
         else:
-            raise TypeError(f'Unsupported type for Branches initialization: {type(arg)}')
+            raise TypeError(
+                f"Unsupported type for Branches initialization: {type(arg)}"
+            )
 
     def supports_atomic_grouping(self) -> bool:
         """Decides whether the given branches can be safely grouped in an atomic group.
@@ -163,7 +165,7 @@ class Tree(pyd.BaseModel):
         return Regex(mi.longest_common_prefix(args))
 
     @staticmethod
-    def greatest_common_suffix(*args) -> Regex:
+    def greatest_common_suffix(*args: Regex) -> Regex:
         """Identify the longest sub-expression appearing at the end of all the given branches."""
         if not args or not all(map(len, args)):
             return Regex()
@@ -171,7 +173,9 @@ class Tree(pyd.BaseModel):
             return args[0]
 
         # Reverse the contents before and after invoking the `common_prefix` library function
-        common_suffix = tuple(mi.longest_common_prefix(map(reversed, args)))
+        common_suffix = tuple(
+            mi.longest_common_prefix(map(reversed, (a.data for a in args)))
+        )
         return Regex(reversed(common_suffix))
 
     @staticmethod
@@ -209,7 +213,9 @@ class Tree(pyd.BaseModel):
         for branch_group in mi.split_when(serialized_blocks, _split):
             yield cls.new(*mi.flatten(branch_group))
 
-    def set_quantifier(self, quantifier: str | Quantifier, overwrite: bool = False) -> bool:
+    def set_quantifier(
+        self, quantifier: str | Quantifier, overwrite: bool = False
+    ) -> bool:
         """Attempt to set the quantifier for this block to an optional version of itself.
 
         Determines whether to write to the main quantifier (wrapping everything) or the "inner"
@@ -228,7 +234,7 @@ class Tree(pyd.BaseModel):
             True if the quantifier is optional, False if this is not possible (e.g. `{3,5}`)
         """
         has_context = self.prefix or self.suffix
-        field = 'inner_quant' if has_context else 'quantifier'
+        field = "inner_quant" if has_context else "quantifier"
         value = getattr(self, field)
         new = Quantifier(quantifier)
 
@@ -267,7 +273,7 @@ class Tree(pyd.BaseModel):
     # `+` Primary Methods
     # -------------------
     def expand_branch(self, branch: Regex) -> Generator[Regex]:
-        """Expand a branch into an isomorphic alternation of multiple branches, if possible.
+        """Expand a branch into an equivelant alternation of multiple branches, if possible.
 
         If no atoms within are expandable, it will naturally return the same
         branch that was passed in, unchanged.
@@ -309,12 +315,12 @@ class Tree(pyd.BaseModel):
             yield branch
 
     def expand_group(self, atom: Atom) -> Self:
-        """Split a group atom into branches with shared prefixes, if possible."""
+        """Split an alternating group into branches, grouped only by shared prefix."""
         # 0. Validate and normalize arguments
-        assert isinstance(atom, GroupAtom), f'Expected group atom, got: {atom!r}'
+        assert isinstance(atom, GroupAtom), f"Expected group atom, got: {atom!r}"
         kwargs: dict = dict(max_expand=self.max_expand)
         if atom.inline_flags:
-            kwargs['prefix'] = Regex(atom.inline_flags)
+            kwargs["prefix"] = Regex(atom.inline_flags)
 
         # I. Don't try to split complex groups
         if not atom.quantifier.is_simple or atom.kind not in GroupKind._SPLITTABLE:
@@ -333,7 +339,7 @@ class Tree(pyd.BaseModel):
     def expand_set(cls, atom: Atom) -> Self:
         """Split a set atom into individual branches, if possible."""
         # 0. Validate
-        assert isinstance(atom, SetAtom), f'Expected set atom, got: {atom!r}'
+        assert isinstance(atom, SetAtom), f"Expected set atom, got: {atom!r}"
         if not atom.is_simple:
             return cls.new(atom)
         result: list[Regex] = []
@@ -386,13 +392,15 @@ class Tree(pyd.BaseModel):
             return branches
 
         # III. Combine multiple simple branches into a single set
-        plain_atoms, set_atoms = map(set, mi.partition(lambda atom: atom.is_set, eligible))
+        plain_atoms, set_atoms = map(
+            set, mi.partition(lambda atom: atom.is_set, eligible)
+        )
         expanded_sets = list(mi.flatten(cls.expand_set(a).branches for a in set_atoms))
         all_members = plain_atoms | {branch.one for branch in expanded_sets}
-        new_set_body = ''.join(map(str, sorted(all_members)))
+        new_set_body = "".join(map(str, sorted(all_members)))
 
         # IV. Save the results to this object
-        return list(map(Regex, sorted([f'[{new_set_body}]', *rest])))
+        return list(map(Regex, sorted([f"[{new_set_body}]", *rest])))
 
     @classmethod
     def condense_blocks(cls, trees: list[Self]) -> list[Regex]:
@@ -426,8 +434,8 @@ class Tree(pyd.BaseModel):
         return str(self.render())
 
     def __repr__(self) -> str:
-        set_fields = [f'{key}={getattr(self, key)!r}' for key in self.model_fields_set]
-        return f'Block({", ".join(set_fields)})'
+        set_fields = [f"{key}={getattr(self, key)!r}" for key in self.model_fields_set]
+        return f"Tree({', '.join(set_fields)})"
 
     def __hash__(self) -> int:
         return hash(str(self))
@@ -487,9 +495,9 @@ class Tree(pyd.BaseModel):
             n = len(branch)
             if not branch:
                 # I.i. Empty branch -- whole thing is now optional, if that's possible
-                if self.set_quantifier(r'?'):
+                if self.set_quantifier(r"?"):
                     to_drop.add(i)
-            elif n == 1 and branch.one.is_optional and self.set_quantifier(r'?'):
+            elif n == 1 and branch.one.is_optional and self.set_quantifier(r"?"):
                 # I.ii. Single atom -- check for optionality
                 branch[0] = branch.one.as_required()
         if to_drop:
@@ -534,9 +542,11 @@ class Tree(pyd.BaseModel):
         if self.max_length == 1:
             # III.i. Factor out a quantifier shared between all branches
             if not self.quantifier:
-                quantifiers = {branch.one.quantifier for branch in self.branches if branch}
+                quantifiers = {
+                    branch.one.quantifier for branch in self.branches if branch
+                }
                 if len(quantifiers) == 1 and self.set_quantifier(quantifiers.pop()):
-                    self.branches = [branch.quantify('') for branch in self.branches]
+                    self.branches = [branch.quantify("") for branch in self.branches]
 
             # III.ii. Condense simple branches into sets
             if any(map(self._is_set_eligible, self.branches)):
@@ -549,11 +559,6 @@ class Tree(pyd.BaseModel):
 
         This method builds an efficient regex pattern by identifying and extracting common
         prefixes and suffixes from multiple branches, minimizing redundancy in the result.
-
-        Args:
-            block:
-        Returns:
-            Optimized regex string with factored common elements.
         """
         cls = self.__class__
 
@@ -606,8 +611,8 @@ class Tree(pyd.BaseModel):
             body = self.branches[0]
         else:
             # II.ii. Determine whether we can safely use an atomic grouping here
-            start = '(?>' if self.supports_atomic_grouping() else '(?:'
-            body = Regex(f'{start}{r"|".join(map(str, self.branches))})')
+            start = "(?>" if self.supports_atomic_grouping() else "(?:"
+            body = Regex(f"{start}{r'|'.join(map(str, self.branches))})")
 
         # III. Add contextual details (prefix, suffix, quantifier)
         return self.contextualize(body)

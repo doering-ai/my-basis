@@ -1,13 +1,17 @@
 {% extends "document.md.jinja" %}
+{% if notes and level <= 1%}
+---
+{{notes}}
+---
+{% endif %}
 {% block header %}{{ header }}{% endblock %}
-{% block prose %}{{ prose }}{% endblock %}
-{% block child_header %}{{ node.header }}{% endblock %}
-{% block child_content %}{{ node.prose }}{% endblock %}
 
-{% if notes %}
-## Notes
-
+{% if notes and level > 1%}
 ```yaml
 {{notes}}
 ```
+
 {% endif %}
+{% block prose %}{{ prose }}{% endblock %}
+{% block child_header %}{{ node.header }}{% endblock %}
+{% block child_content %}{{ node.prose }}{% endblock %}

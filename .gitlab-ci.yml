@@ -9,9 +9,8 @@ variables:
     SECRET_DETECTION_ENABLED: 'true'
 
 stages:
-    # - build
     - test
-    - secret-detection
+    - eval
 
 ###################
 ### UV TEMPLATE ###
@@ -35,18 +34,17 @@ stages:
     after_script:
         - uv cache prune --ci
 
-#################
-### TEST JOBS ###
-#################
 pytest:
     extends: .uv
     stage: test
     script:
         - mk test
 
-##################
-### OTHER JOBS ###
-##################
 secret_detection:
-    stage: secret-detection
+    stage: eval
 
+coverage:
+    extends: .uv
+    stage: eval
+    script:
+        - mk coverage

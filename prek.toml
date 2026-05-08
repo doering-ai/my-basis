@@ -1,0 +1,19 @@
+[[repos]]
+repo = "https://github.com/pre-commit/pre-commit-hooks"
+rev = "v6.0.0"
+hooks = [
+  { id = "check-yaml" },
+  { id = "check-added-large-files" },
+  { id = "end-of-file-fixer" },
+  { id = "trailing-whitespace" },
+]
+
+[[repos]]
+repo = "local"
+hooks = [
+  { 
+    id = "check-uv-lock",
+    name="Check that uv is synced and locked.",
+    entry="uv lock --check"
+}
+]

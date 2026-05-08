@@ -23,7 +23,7 @@ classifiers = [
   "Topic :: Utilities",
   "Typing :: Typed",
 ]
-urls = { Homepage = "https://gitlab.com/doering-ai/modules/basis" }
+urls = { Homepage = "https://gitlab.com/doering-ai/libs/basis" }
 
 
 ########################
@@ -67,11 +67,12 @@ dev = [
   "better-exceptions>=0.3.3",
   "bpython>=0.26",
   "mk>=3.0.0",
-  { include-group = "lint" },
+  "prek>=0.3.13",
+  { include-group = "eval" },
   { include-group = "test" },
   { include-group = "docs" },
 ]
-lint = [
+eval = [
   "ruff>=0.14.10",
   "types-python-dateutil>=2.9.0.20250822",
   "types-regex>=2025.7.34.20250809",

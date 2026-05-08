@@ -66,6 +66,7 @@ google = [
 dev = [
   "better-exceptions>=0.3.3",
   "bpython>=0.26",
+  "mk>=3.0.0",
   { include-group = "lint" },
   { include-group = "test" },
   { include-group = "docs" },
@@ -108,9 +109,7 @@ module-name = 'my'
 module-root = ''
 
 [project.scripts]
-regex_storefront = "my.scripts.regex_storefront:main"
-regex_store = "my.scripts.regex_storefront:main"
-
+regex-storefront = "my.scripts.regex_storefront:main"
 
 #############################
 ### IV. DEVELOPMENT TOOLS ###

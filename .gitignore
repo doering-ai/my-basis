@@ -147,10 +147,10 @@ lib-cov
 #################
 ### V. AD-HOC ###
 #################
-.task
+.task/
 .hypothesis/
 .nox/
-.ropeproject
+.ropeproject/
 .tox/
 htmlcov/
 nosetests.xml

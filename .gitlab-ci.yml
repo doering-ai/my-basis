@@ -42,7 +42,7 @@ pytest:
     extends: .uv
     stage: test
     script:
-        - uv run pytest
+        - mk test
 
 ##################
 ### OTHER JOBS ###

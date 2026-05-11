@@ -6,11 +6,13 @@
 
 ![Pipeline Status](https://img.shields.io/gitlab/pipeline-status/doering-ai%2Flibs%2Fbasis?branch=main)
 
-<!-- [![GitLab stars](https://img.shields.io/github/stars/AFK-surf/open-agent?style=social)](https://github.com/AFK-surf/open-agent/stargazers) -->
+![Read the Docs](https://img.shields.io/readthedocs/my-basis)
 
-<!-- [![License: MPL](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0) -->
+![PyPI - Python Version](https://img.shields.io/pypi/pyversions/my-basis)
 
-<!-- [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit)](https://github.com/pre-commit/pre-commit) -->
+![PyPI - Wheel](https://img.shields.io/pypi/wheel/my-basis)
+
+![PyPI - Types](https://img.shields.io/pypi/types/my-basis)
 
 # myBasis
 

@@ -22,10 +22,10 @@ ROOT = Path(__file__).parent.resolve()
 DOC_DIR = '.'
 API_DIR = './api'
 OUT_DIR = './_build'
-JNJ_DIR = './_templates'
 STC_DIR = './_static'
 
 SRC_DIR = './../my'
+JNJ_DIR = SRC_DIR + '/data/templates'
 
 
 # -------

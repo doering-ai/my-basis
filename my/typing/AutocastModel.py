@@ -27,7 +27,7 @@ class AutocastModel(pyd.BaseModel):
     is flattened.
     """
 
-    @pyd.model_validator(mode="before")
+    @pyd.model_validator(mode='before')
     @classmethod
     def _auto_validate(cls, data: dict) -> dict:
         """Automatically cast input data to match field types.
@@ -39,7 +39,7 @@ class AutocastModel(pyd.BaseModel):
         """
         return typist._cast_members(data.items(), cls)
 
-    @pyd.model_serializer(mode="wrap")
+    @pyd.model_serializer(mode='wrap')
     def _auto_serialize(self, handler) -> dict[str, Any]:
         """Serialize the model instance with automatic type simplification.
 

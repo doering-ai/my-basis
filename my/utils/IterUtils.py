@@ -2,7 +2,7 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import Any, Literal, overload, TypeIs, Self, ClassVar
+from typing import Any, Literal, overload, TypeIs
 from collections.abc import (
     Callable,
     Collection,
@@ -14,12 +14,11 @@ from collections.abc import (
     Sequence,
     MutableSequence,
 )
+from types import FunctionType
 from collections import Counter, defaultdict
 import functools as ft
-import contextlib as ctx
 
 ### EXTERNAL
-import pydantic as pyd
 import more_itertools as mi
 
 ### INTERNAL (NOTE: If adding new internal imports, update the comments in `__init__.py`)
@@ -122,7 +121,7 @@ class IterUtils:
             items: Iterable to partition.
             pred: Predicate function (True items go to second list).
         Returns:
-            Tuple of (items_failing_predicate, items_passing_predicate).
+            Tuple of (`fails`, `passes`) (NOTE that fails come first!).
         """
         misses, hits = map(list, mi.partition(pred, items))
         return misses, hits
@@ -245,7 +244,9 @@ class IterUtils:
 
     @classmethod
     def map_condense[K: Hashable, V](
-        cls, items: Mapping[K, V] | Iterable[tuple[K, V]], pred: Callable[[V], bool] = bool
+        cls,
+        items: Mapping[K, V] | Iterable[tuple[K, V]],
+        pred: Callable[[V], bool] = bool,
     ) -> Iterator[tuple[K, V]]:
         """Filter a mapping by a predicate function on values.
 
@@ -356,7 +357,7 @@ class IterUtils:
         cls,
         func: Callable[[T0], T1] | Callable[[K], T1],
         data: Mapping[K, T0] | Iterable[tuple[K, T0]] | Iterable[K],
-        drop=False,
+        drop: bool = False,
     ) -> dict:
         """Map a function over values in a mapping or iterable, returning new dictionary.
 
@@ -405,6 +406,16 @@ class IterUtils:
         for func in funcs:
             if ret := func(item):
                 yield ret
+
+    @classmethod
+    def indexof[T](cls, iterable: Sequence[T], *preds: Callable[[T], bool] | T) -> int:
+        """Return the first index in the given iterable that satisfies the predicate."""
+        _preds = tuple(
+            (pred if (callable(pred) and isinstance(pred, FunctionType)) else pred.__eq__)
+            for pred in preds
+        )
+        uni_pred = lambda item: any(fn(item) for fn in _preds)
+        return mi.first(mi.locate(iterable, uni_pred), default=-1)
 
     # -------------
     # `3` EXECUTION
@@ -482,7 +493,8 @@ class IterUtils:
             True if container contains exactly these items.
         """
         if isinstance(container, str):
-            return len(container) == sum(map(len, args)) and cls.has_all(container, *args)  # type:ignore
+            n_args = sum(map(len, args))  # type: ignore[bad-argument-type]
+            return len(container) == n_args and cls.has_all(container, *args)
         return set(container) == set(args)
 
     @classmethod

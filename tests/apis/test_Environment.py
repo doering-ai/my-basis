@@ -10,7 +10,7 @@ import pytest as pyt
 
 ### INTERNAL
 from my.apis import Environment
-from ..conftest import boolmap
+from ..conftest import boolmap, Patch
 
 cls = Environment
 
@@ -23,7 +23,7 @@ class TestEnvironment:
     # `.` Initial Methods
     # -------------------
     @pyt.fixture
-    def env_instance(self, monkeypatch) -> Environment:
+    def env_instance(self, patch: Patch) -> Environment:
         """Create a fresh Environment instance with clean state."""
         # Clear any caches before tests
         cls._get.cache_clear()
@@ -32,11 +32,11 @@ class TestEnvironment:
         return cls()
 
     @pyt.fixture
-    def temp_env_var(self, monkeypatch):
+    def temp_env_var(self, patch: Patch):
         """Fixture to temporarily set environment variables."""
 
         def _set_var(key: str, value: str):
-            monkeypatch.setitem(cls._ENVIRON, key, value)
+            patch.setitem(cls._ENVIRON, key, value)
             cls._get.cache_clear()
             cls._path.cache_clear()
             cls._flag.cache_clear()

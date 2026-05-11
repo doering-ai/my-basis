@@ -1,0 +1,15 @@
+GNU:
+    config: [XDG_CONFIG_HOME, '~/.config']
+    cache: [XDG_CACHE_HOME, '~/.cache']
+    data: [XDG_DATA_HOME, '~/.local/share']
+    tmp: [TMPDIR, '/tmp']
+MAC:
+    config: [XDG_CONFIG_HOME, '~/Library/Application Support']
+    cache: [XDG_CACHE_HOME, '~/Library/Caches']
+    data: [XDG_DATA_HOME, '~/Library/Application Support']
+    tmp: [TMPDIR, '/tmp']
+DOS:
+    config: [APPDATA, '~\\AppData\\Roaming']
+    cache: [LOCALAPPDATA, '~\\AppData\\Local']
+    data: [LOCALAPPDATA, '~\\AppData\\Local']
+    tmp: [TEMP, '~\\AppData\\Local\\Temp']

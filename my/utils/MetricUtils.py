@@ -7,7 +7,6 @@ from pathlib import Path
 from time import perf_counter_ns
 from typing import Any, ClassVar
 from types import FunctionType
-import asyncio as aio
 import contextlib as ctx
 import functools as ft
 import importlib.metadata as impm
@@ -17,6 +16,7 @@ import os
 import subprocess as sbp
 import sys
 import warnings
+import inspect
 
 ### EXTERNAL
 import pydantic as pyd
@@ -342,7 +342,7 @@ class MetricUtils:
         Returns:
             Wrapped function that measures execution time.
         """
-        if aio.iscoroutinefunction(func):
+        if inspect.iscoroutinefunction(func):
 
             @ft.wraps(func)
             async def async_wrapper(*args: Ps.args, **kwargs: Ps.kwargs) -> R:

@@ -1,8 +1,11 @@
+default_language_version.python = "3.13"
+
 [[repos]]
 repo = "https://github.com/pre-commit/pre-commit-hooks"
 rev = "v6.0.0"
 hooks = [
   { id = "check-yaml" },
+  { id = "check-toml" },
   { id = "check-added-large-files" },
   { id = "end-of-file-fixer" },
   { id = "trailing-whitespace" },
@@ -10,10 +13,17 @@ hooks = [
 
 [[repos]]
 repo = "local"
-hooks = [
-  { 
-    id = "check-uv-lock",
-    name="Check that uv is synced and locked.",
-    entry="uv lock --check"
-}
-]
+
+[[repos.hooks]]
+id = "format"
+name="Run the ruff formatter on the filesystem."
+language="system"
+files=".*\\.py$"
+entry="task format"
+
+[[repos.hooks]]
+id = "check-sync"
+name="Check that uv is synced and locked."
+language="system"
+files="(pyproject.toml|uv.lock)$"
+entry="uv lock --check"

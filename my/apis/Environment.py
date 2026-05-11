@@ -2,6 +2,7 @@
 ### HEAD ###
 ############
 ### STANDARD
+from __future__ import annotations
 from typing import ClassVar
 from pathlib import Path
 import functools as ft
@@ -12,6 +13,7 @@ import pydantic as pyd
 import dotenv
 
 ### INTERNAL
+from ..utils import ut
 from ..types import Buffer
 from ..regex import RegexStore
 
@@ -21,6 +23,8 @@ from ..regex import RegexStore
 ############
 dotenv.load_dotenv()
 initial_env = dict(os.environ)
+
+NOWHERE = Path('/')
 
 
 ############
@@ -143,20 +147,22 @@ class Environment(pyd.BaseModel):
             return Environment._path(key)
 
     @ft.cached_property
-    def paths(self) -> 'Environment._PathEnv':
+    def paths(self) -> Environment._PathEnv:
         """A cached property allowing for ergonomic dot-notation access to coerced path vars."""
         return self._PathEnv()
 
-    @ft.lru_cache(maxsize=256)
+    @ft.lru_cache(maxsize=2**8)
     @staticmethod
     def _path(key: str, default: str = '', mkdir: bool = False) -> Path:
-        val = Environment._get(key, default)
-        ret = Path(val).expanduser().resolve()
-        if mkdir and val:
-            ret.mkdir(parents=True, exist_ok=True)
-        return ret
+        raw = Environment._get(key, default)
+        if not raw:
+            return NOWHERE
+        path = ut.path(raw)
+        if mkdir:
+            path.mkdir(parents=True, exist_ok=True)
+        return path
 
-    def path(self, key: str, default: str = '', mkdir: bool = False) -> Path:
+    def path(self, key: str, default: str | Path = '', mkdir: bool = False) -> Path:
         """Get environment variable as an expanded, resolved path.
 
         Performs variable substitution for ${VAR} or $VAR patterns, then expands
@@ -169,7 +175,7 @@ class Environment(pyd.BaseModel):
         Returns:
             Resolved absolute path.
         """
-        return Environment._path(key, default, mkdir)
+        return Environment._path(key, str(default), mkdir)
 
     # -----
     # FLAGS
@@ -179,7 +185,7 @@ class Environment(pyd.BaseModel):
             return Environment._flag(key)
 
     @ft.cached_property
-    def flags(self) -> 'Environment._FlagEnv':
+    def flags(self) -> Environment._FlagEnv:
         """A cached property allowing for ergonomic dot-notation access to coerced flag vars."""
         return self._FlagEnv()
 
@@ -266,4 +272,4 @@ class Environment(pyd.BaseModel):
 
 
 #: Global instance of this class for convenient access.
-env = Environment()
+env = ENV = Environment()

@@ -4,11 +4,12 @@ The `utils` subpackage provides a comprehensive collection of utility functions 
 
 Individual utility classes can still be imported for more specific use cases or when a smaller import footprint is desired.
 """
+
 from .IterUtils import IterUtils, iter_utils
 from .SyntaxUtils import SyntaxUtils, syntax_utils  # <- iter
 from .TextUtils import TextUtils, text_utils  # <- iter
 from .SemanticUtils import SemanticUtils, semantic_utils  # <- text, iter
-from .SystemUtils import SystemUtils, system_utils  # <- text (<- iter)
+from .SystemUtils import SystemUtils, system_utils  # <- text, iter
 from .MetricUtils import MetricUtils, metric_utils  # <- system (<- text <- iter)
 
 
@@ -21,19 +22,19 @@ utils = Utils
 
 
 __all__ = [
-    'Utils',
-    'ut',
-    'utils',
-    'IterUtils',
-    'iter_utils',
-    'TextUtils',
-    'text_utils',
-    'SystemUtils',
-    'system_utils',
-    'SemanticUtils',
-    'semantic_utils',
-    'SyntaxUtils',
-    'syntax_utils',
-    'MetricUtils',
-    'metric_utils',
+    "Utils",
+    "ut",
+    "utils",
+    "IterUtils",
+    "iter_utils",
+    "TextUtils",
+    "text_utils",
+    "SystemUtils",
+    "system_utils",
+    "SemanticUtils",
+    "semantic_utils",
+    "SyntaxUtils",
+    "syntax_utils",
+    "MetricUtils",
+    "metric_utils",
 ]

@@ -3,8 +3,11 @@
 ############
 ### STANDARD
 import asyncio as aio
-from typing import Any, Self, NamedTuple, overload
+from typing import Any, Self, NamedTuple
 import subprocess as sbp
+import shlex
+import contextlib as ctx
+from pathlib import Path
 
 ### EXTERNAL
 import pydantic as pyd
@@ -44,6 +47,13 @@ class Command(pyd.BaseModel):
         cwd: str | None = None  #: Working directory for command execution.
         out: str | None = None  #: Redirect command output to a file. Not compatible w/ `pipe`.
         pipe: 'Command | None' = None  #: Pipe command output to another command.
+
+    class Result(NamedTuple):
+        """Structured result of command execution."""
+
+        code: int
+        out: str
+        err: str
 
     command: str  #: Base command name.
     args: list[Any] = []  #: Positional arguments.
@@ -102,7 +112,7 @@ class Command(pyd.BaseModel):
         Returns:
             String representations with appropriate quoting.
         """
-        return list(map(self.quote_value, self.args))
+        return list(map(shlex.quote, self.args))
 
     @property
     def named_args(self) -> list[str]:
@@ -118,27 +128,18 @@ class Command(pyd.BaseModel):
                 key = key.replace('_', '-')
             # I.ii. Determine single vs double dash prefix
             key = ('-' if self.options.single_dashes or len(key) == 1 else '--') + key
-            # I.iii. Determine assignment vs space separator
-            sep = '=' if self.options.flag_assignment else ' '
 
             # II. Write plain arg if it's an atomic type, otherwise wrap in quotes
+
             if isinstance(val, bool) and val:
                 ret.append(key)
             else:
-                ret.append(f'{key}{sep}{self.quote_value(val)}')
+                val = shlex.quote(val)
+                if self.options.flag_assignment:
+                    ret.append(f'{key}={val}')
+                else:
+                    ret.extend([key, val])
         return ret
-
-    def quote_value(self, value: Any) -> str:
-        """Quote a value for safe shell usage."""
-        value = str(value)
-        if '"' in value:
-            if "'" not in value:
-                return f"'{value}'"
-            else:
-                return f'"{value.replace('"', '\\"')}"'
-        elif ' ' in value or self.options.always_quote:
-            return f'"{value}"'
-        return value
 
     # -------------------
     # `+` Primary Methods
@@ -155,12 +156,12 @@ class Command(pyd.BaseModel):
                 sections = [sections[1], sections[0]]
             parts.extend(mi.flatten(sections))
 
+        ret = shlex.join(parts)
         if self.options.out:
-            parts.append(f'>> {self.options.out}')
+            ret += f' >> {self.options.out}'
         elif self.options.pipe:
-            parts.append(f'| {self.options.pipe}')
+            ret += f' | {self.options.pipe}'
 
-        ret = ' '.join(parts)
         if self.options.verbose:
             print(ret)
         return ret
@@ -176,30 +177,25 @@ class Command(pyd.BaseModel):
         """A command is truthy if it has any content."""
         return bool(self.command or self.args)
 
-    class _Result(NamedTuple):
-        return_code: int
-        stdout: str
-        stderr: str
-
-    def execute(self) -> _Result:
+    def execute(self) -> Result:
         """Execute a shell command synchronously.
 
         Returns:
-            (return_code, stdout, stderr).
+            (`return_code`, `stdout`, `stderr`).
         """
         cmd = self.assemble()
         ret = sbp.run(cmd, capture_output=True, text=True, shell=True, cwd=self.options.cwd)
-        return Command._Result(
+        return Command.Result(
             ret.returncode or 0,
             (ret.stdout or '').strip(),
             (ret.stderr or '').strip(),
         )
 
-    async def execute_async(self) -> _Result:
+    async def execute_async(self) -> Result:
         """Execute a shell command asynchronously.
 
         Returns:
-            (return_code, stdout, stderr).
+            (`return_code`, `stdout`, `stderr`).
         """
         cmd = self.assemble()
         subprocess = await aio.create_subprocess_shell(
@@ -211,18 +207,18 @@ class Command(pyd.BaseModel):
         )
         stdout, stderr = await subprocess.communicate()
 
-        return Command._Result(
+        return Command.Result(
             subprocess.returncode or 0,
             (stdout or b'').decode().strip(),
             (stderr or b'').decode().strip(),
         )
 
-    async def __call__(self) -> tuple[int, str, str]:
+    async def __call__(self) -> Result:
         """Execute the command asynchronously when the instance is called."""
         return await self.execute_async()
 
     @classmethod
-    def run(cls, command: str, *args: Any, **kwargs: Any) -> tuple[int, str, str]:
+    def run(cls, command: str, *args: Any, **kwargs: Any) -> Result:
         """Convenience method to build & execute a command in one statement.
 
         Args:
@@ -235,7 +231,7 @@ class Command(pyd.BaseModel):
         return cls.new(command, *args, **kwargs).execute()
 
     @classmethod
-    async def run_async(cls, command: str, *args: Any, **kwargs: Any) -> tuple[int, str, str]:
+    async def run_async(cls, command: str, *args: Any, **kwargs: Any) -> Result:
         """Convenience method to build & execute a command in one statement.
 
         Args:
@@ -246,3 +242,15 @@ class Command(pyd.BaseModel):
             (return_code, stdout, stderr).
         """
         return await cls.new(command, *args, **kwargs).execute_async()
+
+    @classmethod
+    async def exa(cls, *args: str, _cwd: str | Path | None = None, **kwargs: Any) -> Result:
+        """Executes a command in the virtual environment asynchronously."""
+        if _cwd is not None:
+            _opts = kwargs.get('options', {})
+            if isinstance(_opts, dict):
+                _opts = Command.Options(**_opts)
+            else:
+                _opts.cwd = str(_cwd)
+            kwargs['options'] = _opts
+        return await cls.run_async(*args, **kwargs)

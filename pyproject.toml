@@ -31,6 +31,7 @@ urls = { Homepage = "https://gitlab.com/doering-ai/libs/basis" }
 ########################
 dependencies = [
   "dotenv>=0.9.9",
+  "identify>=2.6.19",
   "jinja2>=3.1.6",
   "mdformat>=0.7.22",
   "more-itertools>=10.7.0",
@@ -106,69 +107,165 @@ docs = [
 requires = ["uv_build>=0.11.7,<0.12"]
 build-backend = "uv_build"
 [tool.uv.build-backend]
-module-name = 'my'
+module-name = ['my', 'data']
 module-root = ''
+namespace = true
 
 [project.scripts]
 regex-storefront = "my.scripts.regex_storefront:main"
+sync-docs = "my.scripts.sync_docs:main"
 
 #############################
 ### IV. DEVELOPMENT TOOLS ###
 #############################
+# -------
+# Testing
+# -------
+[tool.pytest]
+testpaths = ["tests"]
+
+[tool.coverage.report]
+# Regexes for lines to exclude from consideration
+exclude_also = [
+  'def __repr__',
+  'if +(\w+\.)?(?i:debug):',
+  'assert ',
+  'raise (Assertion|NotImplemented)Error',
+  'if 0:',
+  'if __name__ == .__main__.:',
+  '@(abc\.)?abstractmethod',
+  '^([a-z]\w+?\.)?[A-Z][_A-Z]+(:[^=\n]+)? *=[^\n]+(?=\n\S)',
+]
+omit = ["__init__.py", "data/*", "scratch.py", "*/.venv/*"]
+ignore_errors = true
+
 # ------
 # Typing
 # ------
 [tool.pyrefly]
-min-severity = 'warn'
-project-includes = ["{{module}}/**/*.py*", "tests/**/*.py"]
-project-excludes = [
-  "**/node_modules",
-  "**/__pycache__",
-  "**/.[!/.]*",
-  "**/*venv",
-]
+project-includes = ["my/**/*.py*", "tests/**/*.py*", "data/**/*"]
 check-unannotated-defs = true
 permissive-ignores = true
 
 [tool.pyrefly.errors]
 missing-source = false
 implicit-any = false
+unannotated-parameter = false
 no-access = 'error'
 unused-ignore = 'error'
-unannotated-parameter = 'error'
 unannotated-attribute = 'error'
 
 # -------
 # Linting
 # -------
 [tool.ruff]
-extend = '~/.config/ruff/pyproject.toml'
-[tool.ruff.lint]
-ignore = ['PT', 'E731']
-
-# -------
-# Testing
-# -------
-[tool.pytest]
-testpaths = ["tests"]
-asyncio_mode = "auto"
-
-[tool.coverage.report]
-# Regexes for lines to exclude from consideration
-exclude_also = [
-  # Debug-only code
-  'def __repr__',
-  'if +(\w+\.)?(?i:debug):',
-  # Defensive assertion code
-  'assert ',
-  'raise (Assertion|NotImplemented)Error',
-  # Non-runnable code
-  'if 0:',
-  'if __name__ == .__main__.:',
-  # Abstract methods
-  '@(abc\.)?abstractmethod',
-  # One-line global constants
-  '^([a-z]\w+?\.)?[A-Z][_A-Z]+(:[^=\n]+)? *=[^\n]+(?=\n\S)',
+exclude = [
+  ".*",
+  "__*",
+  "_build",
+  "buck-out",
+  "build",
+  "dist",
+  "node_modules",
+  "prof",
+  "site-packages",
+  "venv",
+  "wheels",
+  "pip-wheel-metadata",
+  "share",
+  "3p",
 ]
-omit = ["__init__.py", "my/templates/*", "scratch.py", "*/.venv/*"]
-ignore_errors = true
+
+indent-width = 4
+line-length = 100
+
+[tool.ruff.format]
+quote-style = "single"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+docstring-code-format = true
+docstring-code-line-length = "dynamic"
+
+[tool.ruff.lint]
+select = [
+  "A",     # builtins
+  "ASYNC", # async
+  "B",     # bugbear
+  "C4",    # comprehensions
+  "D",     # PyDocStyle
+  "E",     # PyCodeStyle errors
+  "F",     # PyFlakes
+  "FA",    # annotations
+  "FAST",  # FastAPI
+  "ISC",   # implicit-str-concat
+  "N",     # Naming
+  "TC",    # type checking
+  "NPY",   # numpy
+  "PIE",   # misc.
+  "PLE",   # PyLint errors
+  "PTH",   # use pathlib
+  "PERF",  # performance
+  "PT",    # pytest
+  "PD",    # pandas
+  "RUF",   # ruff
+  "SIM",   # simplification
+  "UP",    # upgrade 2.7 idioms
+]
+
+ignore = [
+  # Bugbear
+  "B009",
+  "B905",
+
+  # Comprehensions
+  "C408",
+  "C413",
+
+  # PyCodeStyle
+  "E266",
+  "E731", # allow lambdas
+
+  # Naming
+  "N999",
+
+  # PyLint errors
+  "PT013",
+  "PT018",
+
+  # Ruff
+  "RUF022",
+
+  # Simplify
+  "SIM102", # combine nested ifs
+  "SIM114", # combine if branches
+  "SIM118",
+
+  # Upgrade
+  "UP007",
+
+  # PyDocStyle
+  "D100", # docstrings for modules
+  "D104", # docstrings for packages 
+  "D105", # docstrings for magic methods 
+  "D410", # blank line after docstring sections
+  "D411", # blank line before docstring sections
+
+  # Type Checking
+  "TC001", # TYPE_CHECKING blocks in python3.8 (internal)
+  "TC002", # TYPE_CHECKING blocks in python3.8 (external)
+  "TC003", # TYPE_CHECKING blocks in python3.8
+]
+
+[tool.ruff.lint.per-file-ignores]
+'test_*.py' = ['D']
+'*_test.py' = ['D']
+
+[tool.ruff.lint.flake8-pytest-style]
+parametrize-names-type = "csv"
+
+[tool.ruff.lint.flake8-comprehensions]
+allow-dict-calls-with-keyword-arguments = true
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"

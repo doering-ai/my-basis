@@ -9,18 +9,29 @@ from pathlib import Path
 from shutil import get_terminal_size
 from typing import ClassVar
 from unittest.mock import MagicMock
+import functools as ft
 import contextlib as ctx
 import itertools as it
 import subprocess as sbp
 import sys
 import textwrap
+import os
 
 ### EXTERNAL
 import pydantic as pyd
 import more_itertools as mi
+import regex as re
 
 ### INTERNAL (NOTE: If adding new internal imports, update the comments in `__init__.py`)
 from .TextUtils import text_utils
+
+############
+### DATA ###
+############
+_branch = text_utils.multi_rgx
+
+#: A sentinel value that communicates a failure of some kind, or an unininitialized register.
+NOWHERE = Path()
 
 
 ############
@@ -79,9 +90,7 @@ class SystemUtils:
             AssertionError: If any path is invalid or not a directory.
         """
         for path in paths:
-            assert path and path.exists() and path.is_dir(), (
-                f"Invalid directory: {path.as_posix()}"
-            )
+            assert path and path.exists() and path.is_dir(), f'Invalid directory: {path.as_posix()}'
         return True
 
     @classmethod
@@ -96,9 +105,7 @@ class SystemUtils:
             AssertionError: If any path is invalid or not a file.
         """
         for path in paths:
-            assert path and path.exists() and path.is_file(), (
-                f"Invalid file: {path.as_posix()}"
-            )
+            assert path and path.exists() and path.is_file(), f'Invalid file: {path.as_posix()}'
         return True
 
     @classmethod
@@ -171,18 +178,18 @@ class SystemUtils:
         """
         # I. Validate arguments
         if not (text and color):
-            return text or ""
+            return text or ''
 
         # II. Wrap text in (relatively-fancy) zsh coloring syntax
-        ret = f"%F{{{color}}}{text}%f"
+        ret = f'%F{{{color}}}{text}%f'
 
         # III. Wrap result in universal ANSI codes for bold/italic/underline
         if bold:
-            ret = f"\033[1m{ret}\033[22m"
+            ret = f'\033[1m{ret}\033[22m'
         if italic:
-            ret = f"\033[3m{ret}\033[23m"
+            ret = f'\033[3m{ret}\033[23m'
         if underline:
-            ret = f"\033[4m{ret}\033[24m"
+            ret = f'\033[4m{ret}\033[24m'
 
         return ret
 
@@ -197,10 +204,8 @@ class SystemUtils:
             text: Text with zsh color codes already present.
             **kwargs: Additional arguments for `print()`.
         """
-        ret = sbp.run(
-            f"zsh -c 'print -P \"{text}\"'", capture_output=True, text=True, shell=True
-        )
-        print((ret.stdout or "").strip("\n"), **kwargs)
+        ret = sbp.run(f'zsh -c \'print -P "{text}"\'', capture_output=True, text=True, shell=True)
+        print((ret.stdout or '').strip('\n'), **kwargs)
 
     @staticmethod
     def confirm(prompt: str, default_no: bool = False) -> bool:
@@ -215,9 +220,9 @@ class SystemUtils:
         if SystemUtils.AUTO_CONFIRM:
             return True
         elif default_no:
-            return not input(f"{prompt} [y/N] ").lower().strip().startswith("y")
+            return not input(f'{prompt} [y/N] ').lower().strip().startswith('y')
         else:
-            return not input(f"{prompt} [Y/n] ").lower().strip().startswith("n")
+            return not input(f'{prompt} [Y/n] ').lower().strip().startswith('n')
 
     @staticmethod
     def is_installed(*modules: str) -> bool:
@@ -240,37 +245,30 @@ class SystemUtils:
     @classmethod
     def _multiprint_data(
         cls,
-        data: Collection[tuple | pyd.BaseModel | dict]
-        | pyd.BaseModel
-        | dict
-        | Any
-        | None,
+        data: Collection[tuple | pyd.BaseModel | dict] | pyd.BaseModel | dict | Any | None,
         shorten: bool = False,
         depth: int = 0,
     ) -> Iterable[str]:
         """Internal method to recursively format nested data structures for `multiprint()`."""
-        _in = "\t" * depth
+        _in = '\t' * depth
         if data is None:
             return
 
         # I. Series
         elif isinstance(data, str):
-            yield f"{_in}{textwrap.shorten(data, 64, placeholder='...')}"
+            yield f'{_in}{textwrap.shorten(data, 64, placeholder="...")}'
             return
         elif isinstance(data, (set, Sequence)):
             if len(str(data)) < 32:
-                yield f"{_in}{data}"
+                yield f'{_in}{data}'
                 return
 
             for item in data:
                 for child_line in cls._multiprint_data(item, shorten, depth + 1):
-                    if (
-                        mi.ilen(it.takewhile(lambda s: s == "\t", child_line))
-                        == depth + 1
-                    ):
-                        yield f"{_in}- {child_line.strip()}"
+                    if mi.ilen(it.takewhile(lambda s: s == '\t', child_line)) == depth + 1:
+                        yield f'{_in}- {child_line.strip()}'
                     else:
-                        yield f"  {child_line}"
+                        yield f'  {child_line}'
 
         # II. Mappings
         elif isinstance(data, (dict, pyd.BaseModel)):
@@ -278,28 +276,28 @@ class SystemUtils:
                 data = data.model_dump(exclude_defaults=True)
 
             if len(str(data)) < 32:
-                yield f"{_in}{data}"
+                yield f'{_in}{data}'
                 return
 
             for key, val in data.items():
                 children = list(cls._multiprint_data(val, shorten, depth + 1))
                 if len(children) == 1:
-                    yield f"{_in}{key}: {children[0].strip()}"
+                    yield f'{_in}{key}: {children[0].strip()}'
                 else:
-                    yield f"{_in}{key}:"
+                    yield f'{_in}{key}:'
                     yield from children
 
         # III. All Others
         elif isinstance(data, type):
-            yield f"{_in}{data.__name__}"
+            yield f'{_in}{data.__name__}'
         else:
-            yield f"{_in}{data}"
+            yield f'{_in}{data}'
 
     @classmethod
     def multiprint(
         cls,
         *items: Any,
-        title: str = "",
+        title: str = '',
         lines: Iterable[str] | None = None,
         data: dict | pyd.BaseModel | set | Sequence | None = None,
         indent: int = 0,
@@ -347,12 +345,12 @@ class SystemUtils:
 
         # III. Handle indents, which can apply to all or just some of the output
         if indent:
-            prefix = " " * indent
+            prefix = ' ' * indent
             for i in range(indent_range[0], (indent_range[1] or len(lines))):
-                lines[i] = f"{prefix}{lines[i]}"
+                lines[i] = f'{prefix}{lines[i]}'
 
         # IV. Join the lines into a single result, and optionally print it to stdout if requested
-        ret = ("\n" * margins[0]) + "\n".join(lines) + ("\n" * margins[1])
+        ret = ('\n' * margins[0]) + '\n'.join(lines) + ('\n' * margins[1])
         if not quiet:
             print(ret, **kwargs)
         return ret
@@ -361,7 +359,7 @@ class SystemUtils:
     @ctx.contextmanager
     def debug_fence(
         content: Any,
-        mark: str = "-",
+        mark: str = '-',
         width: int = -1,
         indent: int = 0,
     ) -> Generator:
@@ -375,28 +373,46 @@ class SystemUtils:
         """
         if indent:
             width -= indent
-            pre = " " * indent
+            pre = ' ' * indent
         else:
-            pre = ""
+            pre = ''
 
         if not width or width <= 0:
             width = SystemUtils.get_terminal_width()
 
         mark = str(mark).strip()
         if not mark:
-            mark = "-"
+            mark = '-'
         delim = (mark * (width // len(mark) + 1))[:width]
-        print(f"{pre}{delim}")
+        print(f'{pre}{delim}')
         if content:
-            content = f" {content} "
+            content = f' {content} '
             remaining = width - len(content)
             _halves = (remaining // 2, remaining // 2 + (1 if remaining % 2 else 0))
-            left, right = tuple(
-                (mark * (_half // len(mark) + 1))[:_half] for _half in _halves
-            )
-            print(f"{pre}{left}{content}{right}")
+            left, right = tuple((mark * (_half // len(mark) + 1))[:_half] for _half in _halves)
+            print(f'{pre}{left}{content}{right}')
         yield
-        print(f"{pre}{delim}")
+        print(f'{pre}{delim}')
+
+    @staticmethod
+    @ft.lru_cache(maxsize=2**9)
+    def _path(pathstr: str) -> Path:
+        # Refuse empty paths and unexpanded vars
+        pathstr = os.path.expandvars(pathstr)
+        if pathstr.startswith('$') or not pathstr.strip('-./\\ '):
+            return NOWHERE
+        return Path(pathstr).expanduser().resolve()
+
+    @classmethod
+    def path(cls, raw: str | Path | None) -> Path:
+        """Attempt to resolve path with a flexible set of intuitive, iterative steps.
+
+        Args:
+            raw: A path which may or may not be absolute, existent, or even valid.
+        Returns:
+            Ideally a resolved version of that same path, else the same one.
+        """
+        return cls._path(str(raw or ''))
 
 
 system_utils = SystemUtils

@@ -1,4 +1,3 @@
-# See docs/contributing.md for inter-package dependency tree
 from .infra import Key, Keys, Value, Atomic, Series, _Series, Map, _Map
 from .utils import (
     Utils,
@@ -17,8 +16,8 @@ from .utils import (
 )
 from .caches import Cache, NestedCache, PickleCache, FileCache
 from .typing import MyType, Typist, typist, TypeArg, AutocastModel
-from .types import MyEnum, UniqueId, Uid, Span, Buffer, Predicate, MyEnumRow, MyEnumSetRow, Command
-from .apis import GoogleSheet, Environment, env
+from .types import MyEnum, UniqueId, Uid, Span, Buffer, Predicate, MyEnumRow, MyEnumSetRow, Command, Platform
+from .apis import GoogleSheet, Environment, ENV, env, Filesystem, PATHS, FS, fs
 from .regex import (
     RegexStore,
     RegexDebugger,
@@ -44,14 +43,7 @@ from .files import Markdown
 
 __all__ = [
     # infra.py
-    'Key',
-    'Keys',
-    'Value',
-    'Atomic',
-    'Series',
-    '_Series',
-    'Map',
-    '_Map',
+    'Key', 'Keys', 'Value', 'Atomic', 'Series', '_Series', 'Map', '_Map',
     # /utils/
     'iter_utils',
     'IterUtils',
@@ -67,26 +59,18 @@ __all__ = [
     'Utils',
     'utils',
     # /caches/
-    'Cache',
-    'FileCache',
-    'NestedCache',
-    'PickleCache',
+    'Cache', 'FileCache', 'NestedCache', 'PickleCache',
     # /apis/
-    'env',
-    'Environment',
-    'GoogleSheet',
+    'GoogleSheet', 'Environment', 'ENV', 'env', 'Filesystem', 'PATHS', 'FS', 'fs',
     # /typing/
-    'TypeArg',
-    'MyType',
-    'Typist',
-    'typist',
-    'AutocastModel',
+    'TypeArg', 'MyType', 'Typist', 'typist', 'AutocastModel',
     # /types/
     'Buffer',
     'Command',
     'MyEnum',
     'MyEnumRow',
     'MyEnumSetRow',
+    'Platform',
     'Predicate',
     'Span',
     'Uid',

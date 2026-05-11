@@ -9,24 +9,33 @@ from datetime import date, datetime, time, timedelta
 from enum import Enum
 from pathlib import Path
 import functools as ft
+from importlib.resources import files
 
 ### EXTERNAL
 import jinja2 as jn
 import regex as re
+import pydantic as pyd
 
 ### INTERNAL
 # NOTE: do not import anything from this package (to avoid circular imports)
 
-re.DEFAULT_VERSION = re.VERSION1
+re.DEFAULT_VERSION = re.VERSION1  # type: ignore
+
 
 ############
 ### DATA ###
 ############
-BASIS_ROOT_DIR = Path(__file__).parent
-assert BASIS_ROOT_DIR.exists() and BASIS_ROOT_DIR.is_dir()
+class InfraPaths(pyd.BaseModel, arbitrary_types_allowed=True):
+    """A model containing important paths within the package."""
 
-TEMPLATE_DIR = BASIS_ROOT_DIR / 'templates'
-assert TEMPLATE_DIR.exists() and TEMPLATE_DIR.is_dir()
+    my: Path = files('my')  # type: ignore
+    data: Path = files('data')  # type: ignore
+    templates: Path = data / 'templates'
+
+
+#: Immutable object containing important paths within the package.
+#: Use `INFRA_PATHS` to access these paths.
+INFRA_PATHS: InfraPaths = InfraPaths()
 
 ############
 ### BODY ###
@@ -55,8 +64,10 @@ Atomic = str | int | float | bool | bytes | Enum | Time
 # -----
 # JINJA
 # -----
+# To change settings, just modify the mutable object identified by this reference
 JINJA = jn.Environment(
-    loader=jn.FileSystemLoader(TEMPLATE_DIR),
+    # loader=jn.FileSystemLoader(INFRA_PATHS.templates),
+    loader=jn.PackageLoader('data', 'templates'),
     trim_blocks=True,
     lstrip_blocks=True,
 )

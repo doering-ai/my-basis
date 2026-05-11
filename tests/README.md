@@ -215,10 +215,10 @@ For tests that modify global state (like environment variables), use fixtures wi
 
 ```python
 @pyt.fixture
-def temp_env_var(self, monkeypatch):
+def temp_env_var(self, patch: Patch):
     """Fixture to temporarily set environment variables."""
     def _set_var(key: str, value: str):
-        monkeypatch.setitem(cls._ENVIRON, key, value)
+        patch.setitem(cls._ENVIRON, key, value)
         cls._get.cache_clear()  # Clear any caches
     return _set_var
 ```

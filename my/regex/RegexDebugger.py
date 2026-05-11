@@ -51,9 +51,7 @@ class RegexDebugger(RegexStore):
     # -------------------
     # `-` Private Methods
     # -------------------
-    def pinpoint_failure(
-        self, text: Buffer, expr: Regex, prefix: str
-    ) -> tuple[int, MatchData]:
+    def pinpoint_failure(self, text: Buffer, expr: Regex, prefix: str) -> tuple[int, MatchData]:
         """Identifies the first clause to cause an accumulated sub-expression to fail to match.
 
         Args:
@@ -69,7 +67,7 @@ class RegexDebugger(RegexStore):
 
         # I. Iterate through the atoms, progressively testing longer snippets until one breaks
         for i in range(n):
-            snippet = re.compile(rf"{prefix}{expr[:i]}")
+            snippet = re.compile(rf'{prefix}{expr[:i]}')
             if (match := text.match(snippet)) is not None:
                 last_match = self.parse(match)
             else:
@@ -105,36 +103,34 @@ class RegexDebugger(RegexStore):
         definitions = self._render_definitions(*groups_invoked)
 
         # IV. Return a valid RGX expression.
-        return rf"{definitions}{flags}^{self.sanitize(snippet)}"
+        return rf'{definitions}{flags}^{self.sanitize(snippet)}'
 
     def _do_drill(self, group: GroupAtom) -> bool:
         return (
             group.kind in GroupKind._SIMPLE
-            and group.quantifier == ""
+            and group.quantifier == ''
             and not Regex.is_split(group.body)
         )
 
     def _format_expr(self, expr: str | Regex) -> str:
-        return ut.wrap("EXPRESSION", char="-", width=3) + f"\n{expr}"
+        return ut.wrap('EXPRESSION', char='-', width=3) + f'\n{expr}'
 
     def _format_data(self, match: str | MatchData) -> str:
-        return ut.wrap("LAST MATCH", char="-", width=1) + f"\n{match}"
+        return ut.wrap('LAST MATCH', char='-', width=1) + f'\n{match}'
 
     def _format_curated(self, curated_expr: str | Regex) -> str:
-        return ut.wrap("CURATED EXPRESSION", char="-", width=2) + f"\n{curated_expr}"
+        return ut.wrap('CURATED EXPRESSION', char='-', width=2) + f'\n{curated_expr}'
 
     def _format_text(self, text: str | Buffer) -> str:
-        return ut.wrap("UNMATCHED TEXT", char="-", width=1) + f"\n{text}"
+        return ut.wrap('UNMATCHED TEXT', char='-', width=1) + f'\n{text}'
 
     def _format_fulltext(self, text: str | Buffer) -> str:
-        return ut.wrap("FULL TEXT", char="-", width=3) + f"\n{text}"
+        return ut.wrap('FULL TEXT', char='-', width=3) + f'\n{text}'
 
     def _format_fullexpr(self, expr: str | Regex) -> str:
-        return ut.wrap("FULL EXPRESSION", char="-", width=3) + f"\n{expr}"
+        return ut.wrap('FULL EXPRESSION', char='-', width=3) + f'\n{expr}'
 
-    def _format_early_return(
-        self, name: str, explanation: str, text: str, expr: str
-    ) -> list[str]:
+    def _format_early_return(self, name: str, explanation: str, text: str, expr: str) -> list[str]:
         return [
             f'Regular expression "{name}" {explanation}',
             self._format_fulltext(text),
@@ -143,7 +139,7 @@ class RegexDebugger(RegexStore):
 
     @staticmethod
     def _run_pytest(store, name, func, text) -> MatchData:  # pragma: no cover
-        if func == "fullsplit":
+        if func == 'fullsplit':
             delims, segments = store.fullsplit(name, text)
             if to_drop := [i for i, s in enumerate(segments) if not s.strip()]:
                 for i in reversed(to_drop):
@@ -152,7 +148,7 @@ class RegexDebugger(RegexStore):
 
             return MatchData.new(data=dict(delims=delims, segments=segments))
         else:
-            assert hasattr(store, func), f"Unknown function: {func}"
+            assert hasattr(store, func), f'Unknown function: {func}'
             function = getattr(store, func)
             return function(name, text)
 
@@ -174,7 +170,7 @@ class RegexDebugger(RegexStore):
 
             # III.i. Add "hidden" keys that we're testing, as they're automatically trimmed
             if hidden_keys := set(
-                filter(lambda k: k.startswith("_") and k not in data, expected.keys())
+                filter(lambda k: k.startswith('_') and k not in data, expected.keys())
             ):
                 captures = data.match.capturesdict()
                 data |= {key: captures.get(key, []) for key in hidden_keys}
@@ -211,18 +207,14 @@ class RegexDebugger(RegexStore):
         atoms = Regex(self.definitions[name])
 
         # I.i. Drill down through unnecessary wrapper groups, collecting any flags set along the way
-        flags = {"m"}
-        while (
-            len(atoms) == 1
-            and isinstance(grp := atoms.one, GroupAtom)
-            and self._do_drill(grp)
-        ):
+        flags = {'m'}
+        while len(atoms) == 1 and isinstance(grp := atoms.one, GroupAtom) and self._do_drill(grp):
             atoms = Regex(grp.body)
             flags |= grp.flags
 
         # I.ii. Generate a convenient (if oversized) prefix for future repeated use
         definitions = mi.first(Regex.atomize(self.patterns[name].pattern))
-        flag_group = Atom(f"(?{''.join(sorted(flags))})") if flags else Atom("")
+        flag_group = Atom(f'(?{"".join(sorted(flags))})') if flags else Atom('')
         prefix = str(Regex(definitions, flag_group))
 
         # II. Iterate through the groups, matching until we fail
@@ -233,7 +225,7 @@ class RegexDebugger(RegexStore):
             # III.i. All atoms succeeded
             output.extend(
                 [
-                    "Failed to identify failure during debugging (all atoms matched successfully).",
+                    'Failed to identify failure during debugging (all atoms matched successfully).',
                     self._format_expr(self.sanitize(name)),
                     self._format_data(last_match),
                 ]
@@ -245,7 +237,7 @@ class RegexDebugger(RegexStore):
             # III.ii. All atoms failed
             output.extend(
                 [
-                    "All atoms of the regex failed, implicating the first atom OR a context issue.",
+                    'All atoms of the regex failed, implicating the first atom OR a context issue.',
                     self._format_expr(self.sanitize(name)),
                 ]
             )
@@ -253,9 +245,7 @@ class RegexDebugger(RegexStore):
 
         else:
             # III.iii. Main case (partial match up to failure)
-            output.extend(
-                [f"Successfully identified the problematic atom ({failed_idx=})."]
-            )
+            output.extend([f'Successfully identified the problematic atom ({failed_idx=}).'])
             remaining_text = text[last_match.end :]
 
         # IV. Return just the clauses that we think failed
@@ -263,7 +253,7 @@ class RegexDebugger(RegexStore):
         if not curated_rgx:
             output.extend(
                 [
-                    "DEBUGGING ERROR -- failed to curate!",
+                    'DEBUGGING ERROR -- failed to curate!',
                     self._format_expr(self.sanitize(name)),
                 ]
             )
@@ -287,7 +277,7 @@ class RegexDebugger(RegexStore):
         text: str,
         matched: bool,
         expected: bool = True,
-        func: str = "",
+        func: str = '',
     ) -> str:
         """Generate stdout-ready debug output for a regex test that produced unexpected results.
 
@@ -305,57 +295,45 @@ class RegexDebugger(RegexStore):
         assert names
         if isinstance(names, str):
             names = [names]
-        name = names[0].upper() + (f".{func}()" if func else "")
+        name = names[0].upper() + (f'.{func}()' if func else '')
 
         term_width = ut.get_terminal_width()
-        output: list[str] = [f"{' REGEX DEBUGGER ':#^{term_width}}"]
+        output: list[str] = [f'{" REGEX DEBUGGER ":#^{term_width}}']
         preamble = ft.partial(
             self._format_early_return,
             name=name,
             text=text,
-            expr="\n\n".join(map(self.sanitize, names)),
+            expr='\n\n'.join(map(self.sanitize, names)),
         )
 
         # II. Analyze the failure case
         if matched and expected:
             # II.i. Incorrect case
-            output.extend(
-                preamble(explanation="INCORRECTLY MATCHED, returning the wrong data.")
-            )
+            output.extend(preamble(explanation='INCORRECTLY MATCHED, returning the wrong data.'))
 
         elif matched and not expected:
             # II.ii. Unexpected case
-            output.extend(
-                preamble(explanation="UNEXPECTEDLY MATCHED when it should have failed.")
-            )
+            output.extend(preamble(explanation='UNEXPECTEDLY MATCHED when it should have failed.'))
 
         elif expected and not matched:
             # II.iii. Main case
-            output.extend(preamble(explanation="FAILED TO MATCH the full text."))
+            output.extend(preamble(explanation='FAILED TO MATCH the full text.'))
             for i, _name in enumerate(names):
                 if len(names) > 1:
-                    output.append(
-                        ut.wrap(
-                            f"`{i}` DEBUGGING {_name.upper()}...", char="=", width=4
-                        )
-                    )
+                    output.append(ut.wrap(f'`{i}` DEBUGGING {_name.upper()}...', char='=', width=4))
 
                 output.extend(self.debug_failed_match(_name, RegexBuffer(text)))
         else:
-            raise ValueError(
-                "No match, when we expected none -- why call debug_regex_test()?"
-            )
+            raise ValueError('No match, when we expected none -- why call debug_regex_test()?')
 
-        output.extend(["", "#" * term_width])
-        return "\n".join(output)
+        output.extend(['', '#' * term_width])
+        return '\n'.join(output)
 
     @staticmethod
-    def parse_pytest(
-        name: str, case: list | dict | str
-    ) -> tuple[str, str, dict | None]:
+    def parse_pytest(name: str, case: list | dict | str) -> tuple[str, str, dict | None]:
         """Parse a single regex test case (likely from a `.yaml` file)."""
         text: str
-        func = "full"
+        func = 'full'
         expected: dict[str, list[str]] | None = None
 
         if isinstance(case, Series):
@@ -367,15 +345,15 @@ class RegexDebugger(RegexStore):
                 else:
                     expected = {name: [str(case[1])]}
             elif len(case) > 2:
-                raise ValueError(f"Unexpected case length: {len(case)}")
+                raise ValueError(f'Unexpected case length: {len(case)}')
 
         elif isinstance(case, dict):
-            assert "text" in case
-            text = str(case.pop("text"))
-            if "func" in case:
-                func = case.pop("func")
+            assert 'text' in case
+            text = str(case.pop('text'))
+            if 'func' in case:
+                func = case.pop('func')
 
-            if case.get("expect_none", False):
+            if case.get('expect_none', False):
                 pass
             elif case:
                 # II.iv. Main/default mode: verify that the given string returns the given captures
@@ -387,17 +365,17 @@ class RegexDebugger(RegexStore):
                 expected = {}
         else:
             # II.i. Cast to string and verify that any sort of match occurs
-            func = "match"
+            func = 'match'
             text = str(case)
             expected = {}
 
         assert isinstance(text, str)
         assert isinstance(func, str) and func in {
-            "match",
-            "full",
-            "search",
-            "fullsplit",
-            "poly",
+            'match',
+            'full',
+            'search',
+            'fullsplit',
+            'poly',
         }
         return text, func, expected
 
@@ -423,10 +401,10 @@ class RegexDebugger(RegexStore):
             expected: Expected result (None for no match, dict for expected captures).
             verbose: Whether to print debug output on failure.
         """
-        if func in ["full", "poly"]:
-            func += "match"
-        elif func == "split":
-            func = "fullsplit"
+        if func in ['full', 'poly']:
+            func += 'match'
+        elif func == 'split':
+            func = 'fullsplit'
 
         data = cls._run_pytest(store=store, name=name, func=func, text=text)
         success = cls._analyze_pytest(data=data, expected=expected)
@@ -441,8 +419,8 @@ class RegexDebugger(RegexStore):
             pyt.fail(
                 f'{func}({name}, "{text[:32]}") '
                 + (
-                    f"returned {data}, expected {expected}"
+                    f'returned {data}, expected {expected}'
                     if data.match is not None
-                    else "failed to match."
+                    else 'failed to match.'
                 )
             )

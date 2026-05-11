@@ -11,7 +11,7 @@ import pytest as pyt
 from my import typist
 from my.regex import COMMON_RGXS, RegexDebugger
 
-EXAMPLES = typist.from_yaml(Path(__file__).parent / 'common_rgx_tests.yaml')
+EXAMPLES = typist.from_yaml(Path(__file__).parent / 'common-rgx-tests.yaml')
 
 cls = RegexDebugger
 

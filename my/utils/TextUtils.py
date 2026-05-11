@@ -36,9 +36,7 @@ class TextUtils:
     # `0` MANIPULATION & REGEX
     # ------------------------
     @staticmethod
-    def replace(
-        string: str, *args: tuple[str | Pattern, str | Callable[[Match[str]], str]]
-    ) -> str:
+    def replace(string: str, *args: tuple[str | Pattern, str | Callable[[Match[str]], str]]) -> str:
         """Apply multiple regex replacements sequentially to a string.
 
         Args:
@@ -52,9 +50,7 @@ class TextUtils:
         return string
 
     @staticmethod
-    def split_into(
-        text: str, pattern: str | Pattern, n: int = 2, rhs: bool = True
-    ) -> list[str]:
+    def split_into(text: str, pattern: str | Pattern, n: int = 2, rhs: bool = True) -> list[str]:
         """Split string using regex into exactly n parts, padding as needed.
 
         Args:
@@ -68,17 +64,17 @@ class TextUtils:
             AssertionError: If n <= 1 or split operation fails.
         """
         if not text:
-            return [""] * n
+            return [''] * n
 
-        assert n > 1, f"Passed invalid array length `{n}` to split_into(); must be > 1."
+        assert n > 1, f'Passed invalid array length `{n}` to split_into(); must be > 1.'
         parts = re.split(pattern, text, n - 1)
         if delta := n - len(parts):
             if rhs:
-                parts.extend([""] * delta)
+                parts.extend([''] * delta)
             else:
-                parts = ([""] * delta) + parts
+                parts = ([''] * delta) + parts
         assert len(parts) == n, (
-            f"Failed to correctly split {text} by {pattern} into {n}, got {parts}"
+            f'Failed to correctly split {text} by {pattern} into {n}, got {parts}'
         )
         return parts
 
@@ -142,9 +138,9 @@ class TextUtils:
     def multi_rgx(
         *expressions: str | list[str],
         branching: bool = False,
-        sep: str = r" ?",
-        pre: str = "",
-        suf: str = "",
+        sep: str = r' ?',
+        pre: str = '',
+        suf: str = '',
     ) -> str:
         """Combine expression clauses into a single alternating group that matches any of them.
 
@@ -157,17 +153,15 @@ class TextUtils:
         Returns:
             Combined regex pattern in group format `(?|...)` or `(?:...)`.
         """
-        parts = [
-            (expr if isinstance(expr, str) else sep.join(expr)) for expr in expressions
-        ]
-        contents = r"|".join(parts)
-        return rf"{pre}(?{'|' if branching else ':'}{contents}){suf}"
+        parts = [(expr if isinstance(expr, str) else sep.join(expr)) for expr in expressions]
+        contents = r'|'.join(parts)
+        return rf'{pre}(?{"|" if branching else ":"}{contents}){suf}'
 
     # --------------
     # `1` FORMATTING
     # --------------
     @staticmethod
-    def wrap(line: str, prefix: str = "", char: str = "-", width: int = 2) -> str:
+    def wrap(line: str, prefix: str = '', char: str = '-', width: int = 2) -> str:
         """Wrap a line of text with decorative borders.
 
         Args:
@@ -180,11 +174,11 @@ class TextUtils:
         """
         n = (len(line) + 2 + 2 * width) if width else len(line)
         wrapper = prefix + (char * n)
-        return "\n".join(
+        return '\n'.join(
             [
-                "",
+                '',
                 wrapper,
-                prefix + (f"{char * width} {line} {char * width}" if width else line),
+                prefix + (f'{char * width} {line} {char * width}' if width else line),
                 wrapper,
             ]
         )
@@ -201,7 +195,7 @@ class TextUtils:
         """
         if not n:
             return text
-        return textwrap.indent(text, " " * n)
+        return textwrap.indent(text, ' ' * n)
 
     @staticmethod
     def unindent(text: str, n: int = 4) -> str:
@@ -213,8 +207,8 @@ class TextUtils:
         Returns:
             Unindented text.
         """
-        assert n > 0, "Number of indent levels to remove must be > 0."
-        return re.compile(rf"(?m)^ {{1,{n * 4}}}").sub("", text)
+        assert n > 0, 'Number of indent levels to remove must be > 0.'
+        return re.compile(rf'(?m)^ {{1,{n * 4}}}').sub('', text)
 
     @staticmethod
     def strip_quotes(string: str) -> str:
@@ -226,7 +220,7 @@ class TextUtils:
             String with surrounding quotes/emphasis removed.
         """
         string = string.strip()
-        while len(string) > 2 and (c := string[0]) in "_*'\"":
+        while len(string) > 2 and (c := string[0]) in '_*\'"':
             if c == string[-2] and not string[-1].isalnum():
                 string = string[:-1]
 
@@ -250,17 +244,15 @@ class TextUtils:
         """
         return cls.replace(
             string,
-            (cls.RGXS["newlines"], " "),
-            (cls.RGXS["punctuation"], ""),
-            (cls.RGXS["nonwords"], "_"),
-            (cls.RGXS["spaces"], "-"),
-            (cls.RGXS["multihyphens"], "-"),
-        ).strip("_-")
+            (cls.RGXS['newlines'], ' '),
+            (cls.RGXS['punctuation'], ''),
+            (cls.RGXS['nonwords'], '_'),
+            (cls.RGXS['spaces'], '-'),
+            (cls.RGXS['multihyphens'], '-'),
+        ).strip('_-')
 
     @classmethod
-    def clean_string(
-        cls, string: str, case: Literal["lower", "none", "upper"] = "lower"
-    ) -> str:
+    def clean_string(cls, string: str, case: Literal['lower', 'none', 'upper'] = 'lower') -> str:
         """Fully clean and normalize a string for use as identifier or slug.
 
         Applies unidecode, strips whitespace, cleans non-words, and applies case conversion.
@@ -272,9 +264,9 @@ class TextUtils:
             Cleaned and normalized string suitable for identifiers.
         """
         ret = iter_utils.build(string, unidecode, str.strip, cls._clean_nonwords)
-        if case == "lower":
+        if case == 'lower':
             return ret.lower()
-        elif case == "upper":
+        elif case == 'upper':
             return ret.upper()
         else:
             return ret
@@ -288,7 +280,7 @@ class TextUtils:
         Returns:
             List of word strings.
         """
-        return list(cls.RGXS["word"].findall(text))
+        return list(cls.RGXS['word'].findall(text))
 
     @staticmethod
     def line_num(article: str, pos: int | str) -> int:
@@ -301,12 +293,12 @@ class TextUtils:
             Line number (1-indexed).
         """
         if isinstance(pos, int):
-            return article.count("\n", 0, pos) + 1
+            return article.count('\n', 0, pos) + 1
         else:
-            return article.count("\n", 0, article.index(pos)) + 1
+            return article.count('\n', 0, article.index(pos)) + 1
 
     @staticmethod
-    def parse_domain(url: str, default: str = "") -> str:
+    def parse_domain(url: str, default: str = '') -> str:
         """Extract domain name from URL, removing 'www.' prefix.
 
         Args:
@@ -318,7 +310,7 @@ class TextUtils:
         if url:
             try:
                 if host := pyd.HttpUrl(url).host:
-                    return host.replace("www.", "")
+                    return host.replace('www.', '')
             except Exception:
                 pass
         return default
@@ -346,26 +338,26 @@ class TextUtils:
         Returns:
             Unwrapped text with proper spacing and line breaks.
         """
-        text = textwrap.dedent(text.strip("\n"))
-        text = cls.RGXS["comment_prefix"].sub("", text)
+        text = textwrap.dedent(text.strip('\n'))
+        text = cls.RGXS['comment_prefix'].sub('', text)
         lines = text.splitlines()
-        prose_mask = [bool(cls.RGXS["prose_line"].match(line)) for line in lines]
+        prose_mask = [bool(cls.RGXS['prose_line'].match(line)) for line in lines]
 
         acc = lines[0].strip()
         for (prev, prev_is_prose), (cur, cur_is_prose) in it.pairwise(
             zip(lines, prose_mask, strict=True)
         ):
             if not (_stripped := cur.strip()):
-                acc += "\n"
+                acc += '\n'
             elif prev_is_prose and cur_is_prose:
-                if prev.endswith("-") and _stripped[0].isalpha():
+                if prev.endswith('-') and _stripped[0].isalpha():
                     acc += _stripped
                 else:
-                    acc += f" {_stripped}"
+                    acc += f' {_stripped}'
             elif cur_is_prose:
-                acc += f"\n{_stripped}"
+                acc += f'\n{_stripped}'
             else:
-                acc += f"\n{cur}"
+                acc += f'\n{cur}'
 
         return acc
 
@@ -374,15 +366,15 @@ if not TextUtils.RGXS:
     TextUtils.RGXS = TextUtils.regex_dict(
         dict(
             # General
-            comment_prefix=r"(?m)^ ?[*](?: |$)",
-            prose_line=r" *[[:punct:]]*([[:alpha:]]|\d+[^\d.])",
-            word=r"\w+",
+            comment_prefix=r'(?m)^ ?[*](?: |$)',
+            prose_line=r' *[[:punct:]]*([[:alpha:]]|\d+[^\d.])',
+            word=r'\w+',
             # Cleaning
-            newlines=r"\n+",
+            newlines=r'\n+',
             punctuation=r'[\'".]+|(?<=\d),+(?=\d)',
-            nonwords=r" *[^-\w\s]+ *",  # All non-whitespace breaks are underlines
-            spaces=r" +",  # Spaces are just hyphens
-            multihyphens=r"-{2,}",
+            nonwords=r' *[^-\w\s]+ *',  # All non-whitespace breaks are underlines
+            spaces=r' +',  # Spaces are just hyphens
+            multihyphens=r'-{2,}',
         )
     )
 

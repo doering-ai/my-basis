@@ -377,7 +377,7 @@ class GoogleSheet:
         ret = dict()
         for i, reply in enumerate(response['valueRanges']):
             sub_kwargs = kwargs[keys[i]] if i >= n_args else {}
-            ret[reply['range']] = self.deserialize_data(reply['values'], **sub_kwargs)
+            ret[reply['range']] = self.deserialize_data(reply['values'], **sub_kwargs)  # type: ignore
 
         # III. Simplify the keys of the returned dictionary to worksheet names if they're unique
         if ut.all_has_all(ret.keys(), '!'):

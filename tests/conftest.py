@@ -2,6 +2,7 @@
 ### HEAD ###
 ############
 ### STANDARD
+from __future__ import annotations
 from typing import Callable
 from datetime import datetime
 from pathlib import Path
@@ -14,7 +15,7 @@ import regex as re
 ### INTERNAL
 from my import ut, env
 
-re.DEFAULT_VERSION = re.VERSION1
+re.DEFAULT_VERSION = re.VERSION1  # type: ignore
 
 ############
 ### DATA ###
@@ -38,19 +39,23 @@ ut.setup_logging(
 # ------------
 # II. Fixtures
 # ------------
-@pyt.fixture(scope='session')
-def root() -> pyd.DirectoryPath:
-    return Path(__file__).parent.parent.resolve()
+type Patch = pyt.MonkeyPatch
 
 
 @pyt.fixture
-def mock_posix(monkeypatch) -> Callable[[], datetime]:
+def patch(monkeypatch: Patch) -> Patch:
+    """A fixture that provides a `MonkeyPatch` object for use in tests."""
+    return monkeypatch
+
+
+@pyt.fixture
+def mock_posix(patch: Patch) -> Callable[[], datetime]:
     """Set al.posix() to always return a `datetime(2025-01-01)` object when called."""
 
     def mocked() -> datetime:
         return datetime(2025, 1, 1)
 
-    monkeypatch.setattr(ut, 'posix', mocked)
+    patch.setattr(ut, 'posix', mocked)
     return mocked
 
 
@@ -58,22 +63,29 @@ def mock_posix(monkeypatch) -> Callable[[], datetime]:
 # III. Utilities
 # --------------
 def to_tuple(arg: object, base_type: type) -> tuple:
+    """Convert an argument to a tuple if it is not already a tuple or the base type."""
     return (arg,) if (not isinstance(arg, tuple) or isinstance(arg, base_type)) else arg
 
 
 def boolmap(
-    *, false: list | None = None, true: list | None = None, base_type: type = str
+    *,
+    false: list | None = None,
+    true: list | None = None,
+    base_type: type = str,
 ) -> list[tuple]:
     """Generate parameter sets for boolean tests.
 
     Args:
-        true (list[tuple]): List of argument tuples that should evaluate to `True`.
-        false (list[tuple]): List of argument tuples that should evaluate to `False`.
+        false: List of argument tuples that should evaluate to `False`.
+        true: List of argument tuples that should evaluate to `True`.
+        base_type: The base type to check against when converting arguments to tuples. If an
+            argument is not a tuple or is an instance of the base type, it will be converted to a
+            single-element tuple.
 
     Returns:
-        list[tuple]: Combined list of argument tuples with expected boolean results.
+        A valid list of tuple argument sets for `pytest.mark.parametrize()`.
     """
     return [
-        *(to_tuple(param, base_type) + (False,) for param in (false or [])),
-        *(to_tuple(param, base_type) + (True,) for param in (true or [])),
+        *((*to_tuple(param, base_type), False) for param in (false or [])),
+        *((*to_tuple(param, base_type), True) for param in (true or [])),
     ]

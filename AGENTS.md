@@ -29,7 +29,7 @@ task test          # Run tests via st_pytest inside a Sublime Text instance
 task test:dev      # Same, with -vv --sw --no-cov
 ```
 
-Tests are written with **`pytest`** and live in **`tests/`**.  They are run inside SublimeText via the `st_pytest` wrapper from the sibling `PyTest` package, which injects the mock `sublime` / `sublime_plugin` modules so tests can also run from the CLI without a live ST process.
+Tests are written with **`pytest`** and live in **`tests/`**. They are run inside SublimeText via the `st_pytest` wrapper from the sibling `PyTest` package, which injects the mock `sublime` / `sublime_plugin` modules so tests can also run from the CLI without a live ST process.
 
 ### Sublime Text directories
 
@@ -63,7 +63,7 @@ The stored values are then accessible as `self.view`, `self.window`, `self.buffe
 Autobind can be limited to a specific list of method names or disabled entirely with the `autobind` class keyword.
 
 Six plugin families are provided, each inheriting from `MyBase[I]` where `I` is a `CommandArguments` subclass:
-`_MyCommand` (TextCommand), `_MyWindowCommand` (WindowCommand), `_MyAppCommand` (ApplicationCommand), `_MyAppListener` (EventListener), `_MyBufferListener` (TextChangeListener), and `_MyViewListener` (ViewEventListener).
+`_MyViewCommand` (TextCommand), `_MyWindowCommand` (WindowCommand), `_MyAppCommand` (ApplicationCommand), `_MyAppListener` (EventListener), `_MyBufferListener` (TextChangeListener), and `_MyViewListener` (ViewEventListener).
 Async variants of all six live under `plugins/aio/`.
 
 ### Types (`types/`)

@@ -31,8 +31,8 @@ class _MyBufferListener(Generic[_I], MyBase[_I], sbp.TextChangeListener):  # pyr
     `constants.EVENTS`.
 
     All the events mentioned in `constants.ASYNCABLE_EVENTS` have an `on_EVENT_async` variant,
-    though it is only async 'behind the scenes', so-to-speak. To run `asyncio` code, choose one of
-    those functions and wrap your logic in `asyncio.run()`.
+    though it is only async 'behind the scenes', so-to-speak. To run `asyncio` code, I *think* you
+    can choose one of those functions and wrap your logic in `asyncio.run()` (but don't quote me!)
     """
 
     _ALLOW_OVERRIDES: ClassVar[bool] = True

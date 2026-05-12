@@ -9,7 +9,6 @@ from collections import deque
 from collections.abc import Iterator, Callable
 from threading import Lock
 from pathlib import Path
-from io import StringIO
 from traceback import format_exc
 import sys
 import functools as ft
@@ -27,11 +26,6 @@ from ..infra.utils import ut
 from ..infra.Multiplex import Multiplex
 
 Format: TypeAlias = Literal['plain', 'html', 'shell']
-
-
-############
-### DATA ###
-############
 
 
 ############
@@ -195,14 +189,15 @@ class OutputPanel(pyd.BaseModel):
         else:
             raise RuntimeError('Failed to reset output panel: no sheet or panel found.')
 
-    def _clear_view(self, view: sb.View) -> None:
-        with self._writable(view):
-            view.run_command('select_all')
-            view.run_command('right_delete')
-
     # -------------------
     # `-` Private Methods
     # -------------------
+    @classmethod
+    def _clear_view(cls, view: sb.View) -> None:
+        with cls._writable(view):
+            view.run_command('select_all')
+            view.run_command('right_delete')
+
     def _create_html(self) -> sb.HtmlSheet:
         w = self.window
         if existing := self._existing_html():
@@ -231,16 +226,9 @@ class OutputPanel(pyd.BaseModel):
             group = (w.active_group() + 1) % w.num_groups()
             index = -1
 
-        # if path := self.hardcopies[1]:
-        #     # I. If pointed to a real file, rely on Sublime to find an existing version.
-        #     assert path.exists(), f'Hardcopy file {path} does not exist.'
-        #     print('opening...')
-        #     view = w.open_file(str(path), group=group)
-        #     print('open!')
-        #     assert view is not None, f'Failed to open hardcopy file {path} in sheet mode.'
-        #     sheet = view.sheet()
         if existing and (v := existing.view()) and v.is_valid():
             sheet, view = existing, v
+            self._clear_view(view)
         else:
             if existing:
                 existing.close()

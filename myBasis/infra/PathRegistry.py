@@ -65,6 +65,8 @@ class PathRegistry(pyd.BaseModel):
     cache: Directory = _normalize(sb.cache_path())
     #: Package caches in particular.
     data: Directory = cache.parent / 'Package Storage'
+    #: Shared storage for all packages using myBasis.
+    my: Directory = data / 'my'
 
     # ---- Root ----
     #: The root of the installed application, usually in `/opt/sublime_text`.
@@ -75,7 +77,7 @@ class PathRegistry(pyd.BaseModel):
     dist: Directory = root / 'Packages'
 
     # ---- Misc ----
-    console: Path = data / 'myBasis/console.log'
+    console: Path = my / 'console.log'
 
     @staticmethod
     def new(**kwargs: str | Path) -> dict[str, Path]:

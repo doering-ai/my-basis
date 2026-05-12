@@ -1,5 +1,5 @@
 {
     "push_branch": "main",
-    "publish_repo": "gitlab.com/doering-ai/libs/sublime/basis",
-    "publish_version_prefix": "4070"
+    "publish_repo": "gitlab.com/doering-ai/sublime/basis",
+    "publish_version_prefix": "4200"
 }

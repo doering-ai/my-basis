@@ -87,6 +87,7 @@ class TypesMixin:
     # -----------
     WindowId: TypeAlias = int
     ViewId: TypeAlias = int
+    PackageName: TypeAlias = str
 
     # -------------------
     # `-` Pydantic Fields

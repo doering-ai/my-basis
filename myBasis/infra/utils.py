@@ -4,7 +4,15 @@
 ### STANDARD
 from __future__ import annotations
 from collections import defaultdict, deque
-from collections.abc import Callable, Iterator, Sequence, MutableSequence, Iterable, Collection
+from collections.abc import (
+    Callable,
+    Iterator,
+    Sequence,
+    MutableSequence,
+    Iterable,
+    Collection,
+    Generator,
+)
 from pathlib import Path
 from types import FunctionType
 from typing import ClassVar, TypeVar, Any, Literal, Union, NamedTuple, overload
@@ -187,52 +195,88 @@ class Utils(TypesMixin):
             return int((val * 1000) if val < 10 else val)
 
     @classmethod
-    def _clean_shell_args(cls, args: tuple[str | list[str], ...]) -> list[str]:
+    def _clean_shell_args(
+        cls, args: tuple[str | Iterable[str], ...], kwargs: dict[str, Any]
+    ) -> Generator[str]:
         """Clean and flatten the given shell arguments."""
-        return [
-            atom
-            for arg in mi.collapse(args, str, 1)
-            for atom in shlex.split(str(arg).strip())
-            if atom
-        ]
+        for arg in mi.collapse(args, base_type=str, levels=1):
+            yield from filter(bool, shlex.split(str(arg).strip()))
+        for key, val in kwargs.items():
+            if not key.startswith('-'):
+                key = f'-{key}' if len(key) == 1 else f'--{key}'
+
+            if isinstance(val, bool) and val is True:
+                yield key
+            elif isinstance(val, str):
+                yield from (key, val)
+            elif isinstance(val, Iterable):
+                yield from mi.flatten((key, str(v)) for v in val)
+            else:
+                yield from (key, str(val))
 
     @staticmethod
-    @ft.wraps(subprocess.run, assigned=['__annotations__'])
     def ex(*args: str | list[str], **kwargs: Any) -> str | None:
-        """Executes a command in the virtual environment asynchronously."""
-        kwargs.update(dict(capture_output=True, text=True))
+        """Execute the given command as a shell-interpreted subprocess."""
         with ctx.suppress(Exception):
-            result = subprocess.run(Utils._clean_shell_args(args), **kwargs)
+            result = subprocess.run(
+                shlex.join(Utils._clean_shell_args(args, kwargs)),
+                shell=True,
+                capture_output=True,
+                text=True,
+            )
             if result.returncode == 0:
                 return (result.stdout or result.stderr).strip('\n').rstrip(' ')
         return None
 
+    @classmethod
+    def execute(cls, *args: str | list[str], **kwargs: Any) -> str | None:
+        """Execute the given command as a shell-interpreted subprocess."""
+        return cls.ex(*args, **kwargs)
+
     @staticmethod
-    @ft.wraps(aio.create_subprocess_exec, assigned=['__annotations__'])
-    async def exa(*args: str, **kwargs: Any) -> str | None:
-        """Executes a command in the virtual environment asynchronously."""
-        kwargs.update(dict(stdout=aio.subprocess.PIPE, stderr=aio.subprocess.PIPE))
+    async def exa(
+        *args: str | Iterable[str],
+        _cwd: str | Path | None = None,
+        **kwargs: Any,
+    ) -> str | None:
+        """Execute the given command as a shell-interpreted subprocess.
+
+        Args:
+            *args: Command and arguments to execute. Can be multiple strings or lists of strings.
+            _cwd: Optional working directory to execute the command in.
+            **kwargs: Additional keyword arguments that are parsed into command line options.
+        """
+        kwargs.update(dict())
         with ctx.suppress(Exception):
-            proc = await aio.create_subprocess_exec(*Utils._clean_shell_args(args), **kwargs)
+            proc = await aio.create_subprocess_shell(
+                shlex.join(Utils._clean_shell_args(args, kwargs)),
+                stdout=aio.subprocess.PIPE,
+                stderr=aio.subprocess.PIPE,
+                shell=True,
+            )
             stdout, stderr = await proc.communicate()
             if proc.returncode == 0:
                 return (stdout.decode() or stderr.decode()).strip('\n').rstrip(' ')
         return None
 
     @classmethod
+    async def execute_async(cls, *args: str, **kwargs: Any) -> str | None:
+        """Execute the given command as a shell-interpreted subprocess."""
+        return await cls.exa(*args, **kwargs)
+
+    @classmethod
     def rgx_dict(
         cls,
         compile_function: Callable[[str], Pattern[str]] = re.compile,
-        sep=r'',
+        sep: str = r'',
         **kwargs: str | Pattern[str] | Iterable[str],
     ) -> dict[str, Pattern[str]]:
         """Compile the expression strings in the given dictionary, mapping names to Patterns.
 
         Args:
-            expressions: A mapping of string names to regular expressions (compiled or otherwise).
             compile_function: Function to compile patterns (default: re.compile).
             sep: If any values in the expressions dict are lists of strings, join them with this.
-            **kwargs: Additional named patterns to include.
+            **kwargs: A mapping of string names to regular expressions (compiled or otherwise).
         Returns:
             The expressions mapping with all values now compiled.
         """
@@ -502,7 +546,7 @@ class Utils(TypesMixin):
         mark: str = '-',
         width: int = 128,
         indent: int = 0,
-    ) -> Iterator[None]:
+    ) -> Generator:
         """Context manager for printing debug information with a clear visual fence."""
         if indent:
             width -= indent
@@ -644,6 +688,9 @@ class Utils(TypesMixin):
     ) -> Callable[[Callable[P, Any]], Callable[P, None]] | Callable[P, None]:
         """A decorator which debounces the calls to a function. Adapted from LSP.
 
+        To "debounce" calls to an endpoint means to add a short delay, during which any repeated
+        calls merely reset the delay timer rather than executing the function for a second time.
+
         Note that the return value of the function will be discarded, so it only makes sense to use
         this decorator for functions that return None.
         The function will run on Sublime's main thread.
@@ -653,7 +700,8 @@ class Utils(TypesMixin):
                 decorator instead.
             delta: Time to debounce calls for, in milliseconds or as a timedelta.
         Returns:
-            The wrapped function OR a nested decorator prepared to wrap the function.
+            The wrapped function OR a nested decorator prepared to wrap the function, depending on
+            whether a function is passed in explicitly.
         """
         delta = cls.milliseconds(delta)
 
@@ -725,11 +773,11 @@ class Utils(TypesMixin):
     @classmethod
     def indexof(cls, iterable: Sequence[T], *preds: Callable[[T], bool] | T) -> int:
         """Return the first index in the given iterable that satisfies the predicate."""
-        preds = tuple(
+        _preds = tuple(
             (pred if (callable(pred) and isinstance(pred, FunctionType)) else pred.__eq__)
             for pred in preds
         )
-        uni_pred = lambda item: any(fn(item) for fn in preds)
+        uni_pred = lambda item: any(fn(item) for fn in _preds)
         return mi.first(mi.locate(iterable, uni_pred), default=-1)
 
     @classmethod
@@ -829,7 +877,7 @@ class Utils(TypesMixin):
 
     @classmethod
     @ctx.contextmanager
-    def batch_write(cls, view: sb.View, edit: sb.Edit, debug: bool = False) -> Iterator[Writer]:
+    def batch_write(cls, view: sb.View, edit: sb.Edit, debug: bool = False) -> Generator[Writer]:
         """Context manager for batching multiple writes to a view (in reverse position order)."""
         pending_writes: deque[Utils.Write] = deque()
         yield lambda pos, val: pending_writes.append(cls.Write(pos, val))
@@ -913,7 +961,12 @@ class Utils(TypesMixin):
         @staticmethod
         @ft.lru_cache(maxsize=1)
         def _formatters() -> dict[str, Callable[[str], str]]:
-            return dict(LOWER=str.lower, UPPER=str.upper, TITLE=str.title, CAPITAL=str.capitalize)
+            return dict(
+                LOWER=str.lower,
+                UPPER=str.upper,
+                TITLE=str.title,
+                CAPITAL=str.capitalize,
+            )
 
         def apply(self, text: str, _from: Utils.TextCase | None = None) -> str:
             """Apply the formatting style to the given text."""
@@ -1049,7 +1102,8 @@ class Utils(TypesMixin):
             if file is not None and isinstance(data, dict):
                 proj_file = Path(file).expanduser()
                 proj_name = proj_file.stem
-                for raw_path in filter(bool, (f.get('path') for f in data.get('folders', []))):
+                paths: list[str] = [p for f in data.get('folders', []) if (p := f.get('path'))]
+                for raw_path in paths:
                     path = Path(raw_path).expanduser()
 
                     if path.exists():
@@ -1118,7 +1172,8 @@ class Utils(TypesMixin):
         cls = Utils
         package_dirs = cls.package_dirs()
         return next(
-            (name for name, pkg_path in package_dirs if cls.is_relative_to(path, pkg_path)), None
+            (name for name, pkg_path in package_dirs if cls.is_relative_to(path, pkg_path)),
+            None,
         )
 
     @staticmethod

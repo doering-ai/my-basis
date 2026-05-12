@@ -69,7 +69,7 @@ class DynamicPrompt(StaticPrompt):
     # -------------------
     # `.` Initial Methods
     # -------------------
-    # def execute(self, command: StaticPrompt._MyCommand) -> dict:
+    # def execute(self, command: StaticPrompt._MyViewCommand) -> dict:
     #     self.command = command  # type: ignore
     #     data = {}
     #     self.view = self.command.window.show_input_panel(
@@ -86,7 +86,7 @@ class DynamicPrompt(StaticPrompt):
         namespace[name] = ft.update_wrapper(method, getattr(ListHandler, name))
 
     def _generate_namespace(
-        self, command: StaticPrompt._MyCommand
+        self, command: StaticPrompt._MyViewCommand
     ) -> tuple[dict, type[ListHandler]]:
         # I. Build initial namespace from super classes' fields
         namespace, _ = super()._generate_namespace(command)
@@ -135,7 +135,7 @@ class DynamicPrompt(StaticPrompt):
 #                 self.generator(view.substr(sb.Region(0, view.size())))
 
 #     # ---- Given ----
-#     command: StaticPrompt._MyCommand
+#     command: StaticPrompt._MyViewCommand
 #     generator: Callable[[str], ListItems]
 #     raw_args: dict = pyd.Field(default_factory=dict)
 

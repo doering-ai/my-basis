@@ -49,12 +49,13 @@ MODE = 'external'
 Directory = pyd.DirectoryPath
 
 
-class MockedPathCache(pyd.BaseModel):
-    @ft.cached_property
-    def home(self) -> Directory:
+def infer_paths() -> tuple[Directory, Directory, Directory]:
+    def home() -> Directory:
         path = None
         if envvar := os.getenv('ST_HOME'):
             path = Path(envvar).expanduser().resolve()
+        elif envvar := os.getenv('ST_PKGS'):
+            path = Path(envvar).expanduser().resolve().parent
 
         if not (path and path.exists()):
             xdg = Path(os.getenv('XDG_CONFIG_HOME', '~/.config')).expanduser().resolve()
@@ -64,8 +65,7 @@ class MockedPathCache(pyd.BaseModel):
             raise ValueError('Could not infer $ST_MAIN -- please set manually.')
         return path
 
-    @ft.cached_property
-    def cache(self) -> Directory:
+    def cache() -> Directory:
         path = None
         if envvar := os.getenv('ST_CACHE'):
             path = Path(envvar).expanduser().resolve()
@@ -78,15 +78,16 @@ class MockedPathCache(pyd.BaseModel):
             raise ValueError('Could not infer $ST_CACHE -- please set manually.')
         return path
 
-    @ft.cached_property
-    def root(self) -> Directory:
+    def root() -> Directory:
         path = Path(os.getenv('ST_ROOT', '/opt/sublime_text')).expanduser().resolve()
         if not path and path.exists() and path.is_dir():
             raise ValueError('Could not infer $ST_ROOT -- please set manually.')
         return path
 
+    return home(), cache(), root()
 
-PATHS = MockedPathCache()
+
+ST_HOME, ST_CACHE, ST_ROOT = infer_paths()
 
 
 ############
@@ -291,7 +292,7 @@ class Settings:
     _data: dict
     _callbacks: dict[str, Callable[[], None]]
 
-    def __init__(self, id: int | None = None) -> None:  # noqa
+    def __init__(self, id: int | None = None) -> None:
         self.settings_id = id if id is not None else next(self._ID_COUNTER)
         self._data = {}
         self._callbacks = {}

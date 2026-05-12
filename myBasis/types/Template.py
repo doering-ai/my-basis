@@ -4,7 +4,7 @@
 ### STANDARD
 from __future__ import annotations
 from typing import ClassVar, Any, overload
-from typing_extensions import Self
+from typing_extensions import Self, Annotated
 from pathlib import Path
 import functools as ft
 
@@ -17,6 +17,9 @@ import regex as re
 from ..infra.utils import ut
 
 
+############
+### BODY ###
+############
 class Template(pyd.RootModel):
     """A wrapper around Jinja2 templates for use in Sublime Text plugins."""
 
@@ -31,7 +34,7 @@ class Template(pyd.RootModel):
         dirname=r'templates?|tmpls?|data|static|assets?|resources?',
     )
 
-    root: jn.Template
+    root: Annotated[jn.Template, ut.schemify(jn.Template)]
 
     # -------------------
     # `.` Initial Methods

@@ -38,7 +38,7 @@ ListItems: TypeAlias = '_ListItems | tuple[_ListItems, int]'
 class StaticPrompt(pyd.BaseModel, arbitrary_types_allowed=True):
     """The specification of a relatively simple `TextInputHandler`, for use by commands."""
 
-    class _MyCommand(Protocol):
+    class _MyViewCommand(Protocol):
         view: sb.Window
         window: sb.Window
         buffer: sb.Buffer
@@ -102,7 +102,7 @@ class StaticPrompt(pyd.BaseModel, arbitrary_types_allowed=True):
     def _setup_method(namespace: dict[str, Any], name: str, method: Callable) -> None:
         namespace[name] = ft.update_wrapper(method, getattr(TextHandler, name))
 
-    def _generate_namespace(self, command: _MyCommand) -> tuple[dict, type[InputHandler]]:
+    def _generate_namespace(self, command: _MyViewCommand) -> tuple[dict, type[InputHandler]]:
         namespace: dict = dict(command=command)
         _setup = ft.partial(self._setup_method, namespace)
 
@@ -159,7 +159,7 @@ class StaticPrompt(pyd.BaseModel, arbitrary_types_allowed=True):
     # ------------------
     # `*` Public Methods
     # ------------------
-    def generate_input_handler(self, command: _MyCommand, raw_args: dict) -> type[InputHandler]:
+    def generate_input_handler(self, command: _MyViewCommand, raw_args: dict) -> type[InputHandler]:
         """Programatically define a new subclass of TextInputHandler based on this specification."""
         self.raw_args = raw_args
         namespace, base = self._generate_namespace(command)

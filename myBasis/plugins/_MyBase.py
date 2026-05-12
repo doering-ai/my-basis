@@ -19,13 +19,12 @@ from typing import (
     cast,
 )
 from typing_extensions import TypeGuard, TypeAlias
-from collections.abc import Callable, Sequence, Iterator, AsyncIterator
+from collections.abc import Callable, Sequence, Iterator, Generator, AsyncGenerator
 from pathlib import Path
 import inspect
 import functools as ft
 import itertools as it
 import contextlib as ctx
-from datetime import datetime
 import time
 import asyncio as aio
 from urllib.parse import unquote
@@ -48,6 +47,7 @@ from ..types.StaticPrompt import StaticPrompt
 from ..types.CommandArguments import CommandArguments
 
 # pyright: reportSelfClsParameterName=false
+
 
 ############
 ### META ###
@@ -101,7 +101,7 @@ class Meta(type):
     @classmethod
     def __new__(
         metacls,  # noqa: N804
-        cls,
+        cls: MyBase,
         clsname: str,
         bases: tuple[type, ...],
         namespace: dict[str, Any],
@@ -120,18 +120,21 @@ class Meta(type):
             }
             for name, value in namespace.items():
                 # I. Wrap methods from base classes
-                if cls.do_bind_method(value, name, autobind, sb_attrs):
-                    namespace[name] = cls.bind_method(value)
+                if metacls.do_bind_method(value, name, autobind, sb_attrs):
+                    namespace[name] = metacls.bind_method(value)
 
         namespace['DEBUG'] = debug
 
         # Pass everything else along to type
-        return super().__new__(cls, clsname, bases, namespace, **kwargs)
+        return super().__new__(metacls, clsname, bases, namespace, **kwargs)
 
     @staticmethod
     def find_sublime_base(bases: tuple[type, ...]) -> SublimeBase | None:
         next_bases = list(
-            filter((lambda base: isinstance(base, type) and issubclass(base, SublimeBases)), bases)
+            filter(
+                (lambda base: isinstance(base, type) and issubclass(base, SublimeBases)),
+                bases,
+            )
         )
         if ret := next(filter(lambda b: b in SublimeBases, next_bases), None):
             return ret  # type: ignore
@@ -173,7 +176,8 @@ class Meta(type):
         except Exception:
             # III. Obviously, any unexpected failures mean 'no'
             warnings.warn(
-                f'Failed to inspect method `{name}` for binding: {method!r}', stacklevel=3
+                f'Failed to inspect method `{name}` for binding: {method!r}',
+                stacklevel=3,
             )
             return False
 
@@ -280,8 +284,7 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
             self.catch(error)
 
     @classmethod
-    def __init_subclass__(cls, **kwargs):
-        # super().__init_subclass__(**kwargs)
+    def __init_subclass__(cls, **kwargs: Any) -> None:
         for base in getattr(cls, '__orig_bases__', ()):
             origin = get_origin(base)
             if origin is MyBase or (isinstance(origin, type) and issubclass(origin, MyBase)):
@@ -476,7 +479,7 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
         self._log(_text, log_level=log_level, **log_kwargs)
 
     @ctx.contextmanager
-    def update_view_property(self, *names: str) -> Iterator[dict[str, Any]]:
+    def update_view_property(self, *names: str) -> Generator[dict[str, Any]]:
         missing = [n for n in names if n not in self._cache]
         assert not missing, f'Tried to update non-existent view_properties ({missing=}).'
         values = {name: self._cache.values[name] for name in names}
@@ -490,19 +493,19 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
 
     @overload
     @ctx.contextmanager
-    def with_context(self, *, view: View) -> Iterator[None]: ...
+    def with_context(self, *, view: View) -> Generator: ...
 
     @overload
     @ctx.contextmanager
-    def with_context(self, *, buffer: Buffer) -> Iterator[None]: ...
+    def with_context(self, *, buffer: Buffer) -> Generator: ...
 
     @overload
     @ctx.contextmanager
-    def with_context(self, *, window: Window) -> Iterator[None]: ...
+    def with_context(self, *, window: Window) -> Generator: ...
 
     @overload
     @ctx.contextmanager
-    def with_context(self, *, edit: Edit) -> Iterator[None]: ...
+    def with_context(self, *, edit: Edit) -> Generator: ...
 
     @ctx.contextmanager
     def with_context(
@@ -512,9 +515,9 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
         buffer: Buffer | None = None,
         window: Window | None = None,
         edit: Edit | None = None,
-    ) -> Iterator[None]:
+    ) -> Generator:
         """A context manager that sets the given attribute to the given value."""
-        old = {}
+        old: dict = {}
         if view is not None:
             old['view'] = self._view
             old['views'] = self._views
@@ -542,9 +545,17 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
                 self.edit = old['edit']
 
     @ctx.asynccontextmanager
-    async def with_view(self, path: Path | str, **kwargs) -> AsyncIterator[None]:
-        """An async context manager that sets the given attribute to the given value."""
+    async def with_view_async(self, path: Path | str, **kwargs: Any) -> AsyncGenerator:
+        """An async context manager that creates a temporary view of the target file."""
         with self.with_context(view=await self.open_async(path, **kwargs)):
+            if self.has_window():
+                self.window.focus_view(self.view)
+            yield
+
+    @ctx.contextmanager
+    def with_view(self, path: Path | str, **kwargs: Any) -> Generator:
+        """A context manager that creates a temporary view of the target file."""
+        with self.with_context(view=self.open(path, **kwargs)):
             if self.has_window():
                 self.window.focus_view(self.view)
             yield
@@ -865,7 +876,7 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
             raise RuntimeError('No windows found to get settings from.')
 
     @ctx.contextmanager
-    def mutable_settings(self, filename: str) -> Iterator[Settings]:
+    def mutable_settings(self, filename: str) -> Generator[Settings]:
         """A context manager that lets you modify the identified settings file on disk."""
         # I. Clean & pre-verify the given filename
         assert filename, 'Filename must be non-empty.'
@@ -891,7 +902,7 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
         return self.view.id()
 
     @overload
-    def read(self, *args, **kwargs) -> str: ...
+    def read(self, *args: Any, **kwargs: Any) -> str: ...
 
     @overload
     def read(self, region: int) -> str: ...
@@ -928,7 +939,7 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
             self.view.replace(self.edit, pos, text)
 
     @ctx.contextmanager
-    def batch_write(self, debug: bool | None = None) -> Iterator[ut.Writer]:
+    def batch_write(self, debug: bool | None = None) -> Generator[ut.Writer]:
         # return ut.batch_write(self.write, self.DEBUG if debug is None else debug)
         with ut.batch_write(self.view, self.edit, self.DEBUG if debug is None else debug) as writer:
             yield writer
@@ -938,7 +949,7 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
         dest: Region | int | None,
         mode: Literal['normal', 'top', 'center', 'bottom'] = 'normal',
         select: bool = True,
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         """Show the given region or position in the view, selecting it."""
         # I. Normalize the arguments
@@ -1029,7 +1040,8 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
 
         if filters:
             yield from filter(
-                lambda comment: all(f(comment) for f in filters), self.line_comments.values()
+                lambda comment: all(f(comment) for f in filters),
+                self.line_comments.values(),
             )
         else:
             yield from self.line_comments
@@ -1256,6 +1268,19 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
     def folders(self) -> list[Path]:
         """The list of folders in the current window, resolved to absolute paths."""
         return list(map(ut.path, self.cur_window.folders()))
+
+    @property
+    def folder(self) -> Path:
+        # Try our window's folder, then any window's folder, then the current file's project root
+        if _ff := self.folders:
+            return _ff[0]
+
+        if _ffs := next(iter(ut.open_folders().values()), None):
+            return next(_ffs)  # pyrefly: ignore[bad-argument-type]
+
+        if self.has_view():
+            return ut.path(self.view.file_name() or '').parent
+        return Path.cwd()
 
     def open(
         self,

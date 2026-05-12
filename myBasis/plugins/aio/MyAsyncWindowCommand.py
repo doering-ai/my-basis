@@ -27,9 +27,9 @@ class _MyAsyncWindowCommand(Generic[_I], MyBase[_I], sbaio.WindowCommand):
     """A Sublime Text 4 command that is instantiated once per Window.
 
     This class excels for tasks that relate to multiple tabs ('views') at once, whether that means
-    comparing them, modifying them, creating them, or rearranging them.
-    It's recommended you use `MyCommand` instead (based off `sbp.TextCommand`) for a typical usecase
-    involving reading and/or modifying a single tab's contents.
+    comparing them, modifying them, creating them, or rearranging them. It's recommended you use
+    `_MyViewCommand` instead for a typical usecase involving reading and/or modifying a single
+    tab's contents.
     """
 
     _ALLOW_OVERRIDES: ClassVar[bool] = True

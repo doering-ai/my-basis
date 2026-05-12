@@ -3,11 +3,6 @@
 ############
 ### STANDARD
 from __future__ import annotations
-from typing import Any
-from pathlib import Path
-import inspect
-import sys
-import itertools as it
 
 ### EXTERNAL
 import regex as re

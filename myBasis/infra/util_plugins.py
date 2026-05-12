@@ -4,12 +4,9 @@
 ### STANDARD
 from __future__ import annotations
 from pathlib import Path
-import functools as ft
 
 ### EXTERNAL
-import sublime as sb
 import sublime_plugin as sbp
-import pydantic as pyd
 
 ### INTERNAL
 from .utils import ut

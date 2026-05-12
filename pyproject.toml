@@ -6,7 +6,19 @@ name = "sublime-basis"
 version = "0.1.0"
 description = "A basis for using, extending, and designing SublimeText plugins."
 requires-python = "==3.8.*"
-urls = { Homepage = "https://gitlab.com/doering-ai/libs/sublime/basis" }
+urls = { Homepage = "https://gitlab.com/doering-ai/sublime/basis" }
+authors = [{ name = "Robb Doering", email = "robb@doering.ai" }]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Programming Language :: Python :: 3.8",
+  "Operating System :: OS Independent",
+  "Framework :: Pydantic :: 2",
+  "Topic :: Text Editors :: Integrated Development Environments (IDE)",
+  "Topic :: Text Processing :: Markup :: Markdown",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+  "Topic :: Utilities",
+  "Typing :: Typed",
+]
 
 
 ########################
@@ -27,20 +39,18 @@ dependencies = [
 [dependency-groups]
 dev = [
   "better-exceptions>=0.3.3",
-  { include-group = "lint" },
+  { include-group = "eval" },
   { include-group = "test" },
-  { include-group = "typing" },
 ]
 
-typing = [
+eval = [
+  "annotated-types>=0.7.0",
+  "eval-type-backport>=0.3.1",
+  "ruff>=0.14.14",
   "sublime-stubs",
   "types-regex>=2024.11.6.20241221",
   "typing-extensions>=4.13.2",
-  "annotated-types>=0.7.0",
-  "eval-type-backport>=0.3.1",
 ]
-
-lint = ["ruff>=0.14.14"]
 
 test = ["pytest>=8.3.5", "coverage>=7.6.1"]
 
@@ -58,8 +68,11 @@ namespace = true
 
 [tool.uv.sources]
 sublime-stubs = { path = "../.pkgs/sublime-stubs" }
-sublime-lib = { path = "../.pkgs/sublime_lib-2.1.0-py3-none-any.whl" }
-sublime-aio = { path = "../.pkgs/sublime_aio-0.1.6-py3-none-any.whl" }
+sublime-lib = { url = "https://github.com/SublimeText/sublime_lib/releases/download/v2.1.0/sublime_lib-2.1.0-py3-none-any.whl" }
+sublime-aio = { url = "https://github.com/packagecontrol/sublime_aio/releases/download/v0.1.6/sublime_aio-0.1.6-py3-none-any.whl" }
+
+[project.scripts]
+setup-sublime = "myBasis.setup_sublime:main"
 
 #############################
 ### IV. DEVELOPMENT TOOLS ###
@@ -68,57 +81,134 @@ sublime-aio = { path = "../.pkgs/sublime_aio-0.1.6-py3-none-any.whl" }
 # Testing
 # -------
 [tool.pytest]
-testpaths = ["test"]
-filterwarnings = ['ignore:assertions not in:PytestConfigWarning']
+testpaths = ["tests"]
 
 [tool.coverage.report]
 # Regexes for lines to exclude from consideration
 exclude_also = [
-  # Debug-only code
   'def __repr__',
-  'if +(\w+\.)?(?i:debug):',
-  # Defensive assertion code
+  'if[- \w.]+\b(?i:debug):',
   'assert ',
   'raise (Assertion|NotImplemented)Error',
-  # Non-runnable code
   'if 0:',
   'if __name__ == .__main__.:',
-  # Abstract methods
   '@(abc\.)?abstractmethod',
-  # One-line global constants
   '^([a-z]\w+?\.)?[A-Z][_A-Z]+(:[^=\n]+)? *=[^\n]+(?=\n\S)',
 ]
-omit = ["__init__.py", "my/templates/*", "scratch.py", "*/.venv/*"]
+omit = ["__init__.py", "*/.venv/*"]
 ignore_errors = true
 
 # ------
 # Typing
 # ------
 [tool.pyrefly]
-project-includes = ["myBasis/**/*.py*", "test*/**/*.py"]
-project-excludes = [
-  "**/node_modules",
-  "**/__pycache__",
-  "**/.[!/.]*",
-  "**/*venv",
-]
-# Type-check bodies of functions without annotations
+project-excludes = ['**/node_modules', '**/__pycache__', '**/venv', '**/.venv']
 check-unannotated-defs = true
-# Recognize more than just `# type: ignore` and `# pyrefly: ignore`
 permissive-ignores = true
+search-path = ["."]
+
 [tool.pyrefly.errors]
 missing-source = false
 implicit-any = false
-untyped-import = false
-no-access = false
 unannotated-parameter = false
-bad-override = false
+no-access = 'error'
+unused-ignore = 'error'
+unannotated-attribute = 'error'
 
 # -------
 # Linting
 # -------
 [tool.ruff]
-extend = '~/.config/ruff/pyproject.toml'
-[tool.ruff.lint]
-ignore = ['UP', 'PT']
+indent-width = 4
+line-length = 100
 
+[tool.ruff.format]
+quote-style = "single"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+docstring-code-format = true
+docstring-code-line-length = "dynamic"
+
+[tool.ruff.lint]
+select = [
+  "A",     # builtins
+  "ASYNC", # async
+  "B",     # bugbear
+  "C4",    # comprehensions
+  "D",     # PyDocStyle
+  "E",     # PyCodeStyle errors
+  "F",     # PyFlakes
+  "FA",    # annotations
+  "FAST",  # FastAPI
+  "ISC",   # implicit-str-concat
+  "N",     # Naming
+  "TC",    # type checking
+  "NPY",   # numpy
+  "PIE",   # misc.
+  "PLE",   # PyLint errors
+  "PTH",   # use pathlib
+  "PERF",  # performance
+  "PT",    # pytest
+  "PD",    # pandas
+  "RUF",   # ruff
+  "SIM",   # simplification
+  "UP",    # upgrade 2.7 idioms
+]
+
+ignore = [
+  # Bugbear
+  "B009",
+  "B905",
+
+  # Comprehensions
+  "C408",
+  "C413",
+
+  # PyCodeStyle
+  "E266",
+  "E731", # allow lambdas
+
+  # Naming
+  "N999",
+
+  # PyLint errors
+  "PT013",
+  "PT018",
+
+  # Ruff
+  "RUF022",
+
+  # Simplify
+  "SIM102", # combine nested ifs
+  "SIM114", # combine if branches
+  "SIM118",
+
+  # Upgrade
+  "UP007",
+
+  # PyDocStyle
+  "D100", # docstrings for modules
+  "D104", # docstrings for packages 
+  "D105", # docstrings for magic methods 
+  "D410", # blank line after docstring sections
+  "D411", # blank line before docstring sections
+
+  # Type Checking
+  "TC001", # TYPE_CHECKING blocks in python3.8 (internal)
+  "TC002", # TYPE_CHECKING blocks in python3.8 (external)
+  "TC003", # TYPE_CHECKING blocks in python3.8
+]
+
+[tool.ruff.lint.per-file-ignores]
+'test_*.py' = ['D']
+'*_test.py' = ['D']
+
+[tool.ruff.lint.flake8-pytest-style]
+parametrize-names-type = "csv"
+
+[tool.ruff.lint.flake8-comprehensions]
+allow-dict-calls-with-keyword-arguments = true
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"

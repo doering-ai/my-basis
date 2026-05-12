@@ -13,11 +13,12 @@ from .types.StaticPrompt import StaticPrompt
 from .types.DynamicPrompt import DynamicPrompt
 from .types.Comment import Comment
 from .types.Venv import Venv
-# from .types.Template import Template
+from .types.Template import Template
+from .types.PackageSettings import PackageSettings 
 
 # Plugins
 from .plugins._MyBase import MyBase
-from .plugins.MyCommand import _MyCommand
+from .plugins.MyViewCommand import _MyViewCommand
 from .plugins.MyWindowCommand import _MyWindowCommand
 from .plugins.MyAppCommand import _MyAppCommand
 from .plugins.MyAppListener import _MyAppListener
@@ -41,13 +42,15 @@ __all__ = [
     '_MyAsyncViewListener',
     '_MyAsyncWindowCommand',
     '_MyBufferListener',
-    '_MyCommand',
+    '_MyViewCommand',
     '_MyViewListener',
     '_MyWindowCommand',
     'ASYNCABLE_EVENTS',
     'CommandArguments',
     'Comment',
     'Venv',
+    'Template',
+    'PackageSettings',
     'DynamicPrompt',
     'EVENTS',
     'IS_LIVE',
@@ -57,7 +60,6 @@ __all__ = [
     'PathRegistry',
     'PATHS',
     'StaticPrompt',
-    # 'Template',
     'ut',
     'utils',
     'Utils',

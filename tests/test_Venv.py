@@ -14,6 +14,9 @@ import pytest as pyt
 from myBasis.types.Venv import Venv, _FINDERS
 
 
+Patch = pyt.MonkeyPatch
+
+
 ############
 ### DATA ###
 ############
@@ -171,12 +174,12 @@ class TestGetCondaInfo:
         result = _run(venv.get_conda_info())
         assert result is None
 
-    def test_returns_none_when_conda_fails(self, tmp_path: Path, monkeypatch: pyt.MonkeyPatch):
+    def test_returns_none_when_conda_fails(self, tmp_path: Path, patch: Patch):
         """conda-meta present but `conda info --json` fails → None."""
         (tmp_path / 'conda-meta').mkdir()
         import myBasis.infra.utils as utils_module
 
-        monkeypatch.setattr(utils_module.Utils, 'exa', staticmethod(lambda *a, **kw: _async(None)))
+        patch.setattr(utils_module.Utils, 'exa', staticmethod(lambda *a, **kw: _async(None)))
         venv = _make_venv(tmp_path)
         venv.path = tmp_path
         result = _run(venv.get_conda_info())
@@ -187,30 +190,28 @@ class TestFinders:
     """Tests for the registered finder methods."""
 
     # ---- find__envvar ----
-    def test_envvar_returns_path(self, tmp_path: Path, monkeypatch: pyt.MonkeyPatch):
-        monkeypatch.setenv('VIRTUAL_ENV', str(tmp_path))
+    def test_envvar_returns_path(self, tmp_path: Path, patch: Patch):
+        patch.setenv('VIRTUAL_ENV', str(tmp_path))
         venv = _make_venv(tmp_path)
         result = _run(_FINDERS['envvar'](venv))
         assert result is not None
         assert Path(result).resolve() == tmp_path.resolve()
 
-    def test_envvar_returns_none_when_unset(self, tmp_path: Path, monkeypatch: pyt.MonkeyPatch):
-        monkeypatch.delenv('VIRTUAL_ENV', raising=False)
+    def test_envvar_returns_none_when_unset(self, tmp_path: Path, patch: Patch):
+        patch.delenv('VIRTUAL_ENV', raising=False)
         venv = _make_venv(tmp_path)
         result = _run(_FINDERS['envvar'](venv))
         assert result is None
 
     # ---- find__conda_envvar ----
-    def test_conda_envvar_returns_path(self, tmp_path: Path, monkeypatch: pyt.MonkeyPatch):
-        monkeypatch.setenv('CONDA_PREFIX', str(tmp_path))
+    def test_conda_envvar_returns_path(self, tmp_path: Path, patch: Patch):
+        patch.setenv('CONDA_PREFIX', str(tmp_path))
         venv = _make_venv(tmp_path)
         result = _run(_FINDERS['conda_envvar'](venv))
         assert result is not None
 
-    def test_conda_envvar_returns_none_when_unset(
-        self, tmp_path: Path, monkeypatch: pyt.MonkeyPatch
-    ):
-        monkeypatch.delenv('CONDA_PREFIX', raising=False)
+    def test_conda_envvar_returns_none_when_unset(self, tmp_path: Path, patch: Patch):
+        patch.delenv('CONDA_PREFIX', raising=False)
         venv = _make_venv(tmp_path)
         result = _run(_FINDERS['conda_envvar'](venv))
         assert result is None
@@ -259,23 +260,21 @@ class TestConcretize:
         result = _run(venv.concretize())
         assert result is True
 
-    def test_returns_false_when_no_finder_matches(
-        self, tmp_path: Path, monkeypatch: pyt.MonkeyPatch
-    ):
+    def test_returns_false_when_no_finder_matches(self, tmp_path: Path, patch: Patch):
         """Returns False and leaves the venv invalid when all finders return None."""
         import myBasis.types.Venv as venv_module  # noqa
 
         async def _null_finder(self: Venv) -> None:
             return None
 
-        monkeypatch.setattr(venv_module, '_FINDERS', {'null': _null_finder})
+        patch.setattr(venv_module, '_FINDERS', {'null': _null_finder})
         venv = Venv.model_construct(raw='', path=tmp_path, root=Path('/'), kind='', data={})
         object.__setattr__(venv, '_recursed', False)
         result = _run(venv.concretize())
         assert result is False
         assert not venv
 
-    def test_sets_finder_name_on_success(self, tmp_path: Path, monkeypatch: pyt.MonkeyPatch):
+    def test_sets_finder_name_on_success(self, tmp_path: Path, patch: Patch):
         """After a successful concretize, `finder` holds the name of the winning finder."""
         import myBasis.types.Venv as venv_module  # noqa
 
@@ -284,7 +283,7 @@ class TestConcretize:
         async def _win_finder(self: Venv) -> Path:
             return tmp_path
 
-        monkeypatch.setattr(venv_module, '_FINDERS', {'winning': _win_finder})
+        patch.setattr(venv_module, '_FINDERS', {'winning': _win_finder})
         venv = Venv.model_construct(raw='', path=tmp_path, root=Path('/'), kind='', data={})
         object.__setattr__(venv, '_recursed', False)
         result = _run(venv.concretize())
@@ -296,5 +295,5 @@ class TestConcretize:
 ### UTIL ###
 ############
 async def _async(val: Any) -> Any:
-    """Return *val* as a coroutine result, for use with monkeypatch."""
+    """Return *val* as a coroutine result, for use with patch."""
     return val

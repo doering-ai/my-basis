@@ -48,11 +48,12 @@ eval = [
   "eval-type-backport>=0.3.1",
   "ruff>=0.14.14",
   "sublime-stubs",
+  "pyrefly>=0.61.0",
   "types-regex>=2024.11.6.20241221",
   "typing-extensions>=4.13.2",
 ]
 
-test = ["pytest>=8.3.5", "coverage>=7.6.1"]
+test = ["sublime-test", "pytest>=8.3.5", "coverage>=7.6.1"]
 
 
 #########################
@@ -70,6 +71,7 @@ namespace = true
 sublime-stubs = { path = "../.pkgs/sublime-stubs" }
 sublime-lib = { url = "https://github.com/SublimeText/sublime_lib/releases/download/v2.1.0/sublime_lib-2.1.0-py3-none-any.whl" }
 sublime-aio = { url = "https://github.com/packagecontrol/sublime_aio/releases/download/v0.1.6/sublime_aio-0.1.6-py3-none-any.whl" }
+sublime-test = { path = "../test", editable = true }
 
 [project.scripts]
 setup-sublime = "myBasis.setup_sublime:main"
@@ -104,13 +106,7 @@ ignore_errors = true
 # ------
 [tool.pyrefly]
 min-severity = 'warn'
-project-includes = ["myBasis/**/*.py*", "tests/**/*.py"]
-project-excludes = [
-  "**/node_modules",
-  "**/__pycache__",
-  "**/.[!/.]*",
-  "**/*venv",
-]
+# project-includes = ["myBasis/**/*.py*", "tests/**/*.py"]
 # Type-check bodies of functions without annotations
 check-unannotated-defs = true
 permissive-ignores = true

@@ -53,9 +53,9 @@ class TestPlatform:
                 (Platform.MOBILE, 'in', Platform.ANDROID),
                 (Platform.MOBILE, 'in', Platform.IOS),
                 (Platform.OLD, 'in', Platform.ERR),
+                (Platform.IOS, 'and', Platform.ANDROID),  # both include MOBILE
             ],
             false=[
-                (Platform.IOS, 'and', Platform.ANDROID),
                 (Platform.IOS, 'in', Platform.MAC),
             ],
         ),

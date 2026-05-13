@@ -5,7 +5,6 @@
 import asyncio as aio
 from typing import Any, Self, NamedTuple
 import subprocess as sbp
-import shlex
 import contextlib as ctx
 from pathlib import Path
 
@@ -15,6 +14,19 @@ import more_itertools as mi
 
 ### INTERNAL
 from ..infra import Series
+
+
+############
+### DATA ###
+############
+_SAFE = frozenset('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@%_-+=:,./')
+
+
+def _shell_quote(s: str) -> str:
+    """Quote a string for shell embedding using double quotes when necessary."""
+    if not s or all(c in _SAFE for c in s):
+        return s
+    return '"' + s.replace('"', '\\"') + '"'
 
 
 ############
@@ -112,7 +124,7 @@ class Command(pyd.BaseModel):
         Returns:
             String representations with appropriate quoting.
         """
-        return list(map(shlex.quote, self.args))
+        return [_shell_quote(str(a)) for a in self.args]
 
     @property
     def named_args(self) -> list[str]:
@@ -134,11 +146,11 @@ class Command(pyd.BaseModel):
             if isinstance(val, bool) and val:
                 ret.append(key)
             else:
-                val = shlex.quote(val)
+                quoted = _shell_quote(str(val))
                 if self.options.flag_assignment:
-                    ret.append(f'{key}={val}')
+                    ret.append(f'{key}={quoted}')
                 else:
-                    ret.extend([key, val])
+                    ret.append(f'{key} {quoted}')
         return ret
 
     # -------------------
@@ -156,7 +168,7 @@ class Command(pyd.BaseModel):
                 sections = [sections[1], sections[0]]
             parts.extend(mi.flatten(sections))
 
-        ret = shlex.join(parts)
+        ret = ' '.join(parts)
         if self.options.out:
             ret += f' >> {self.options.out}'
         elif self.options.pipe:

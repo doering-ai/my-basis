@@ -399,7 +399,7 @@ class SystemUtils:
     def _path(pathstr: str) -> Path:
         # Refuse empty paths and unexpanded vars
         pathstr = os.path.expandvars(pathstr)
-        if pathstr.startswith('$') or not pathstr.strip('-./\\ '):
+        if pathstr.startswith('$') or not pathstr.strip():
             return NOWHERE
         return Path(pathstr).expanduser().resolve()
 

@@ -1,30 +1,40 @@
 ############
 ### HEAD ###
 ############
+# ruff: noqa: E402
 ### STANDARD
+from __future__ import annotations
 from typing import Any, ClassVar
 from types import FunctionType
+from datetime import datetime
 import functools as ft
 import itertools as it
 import logging
 from pathlib import Path
 
 ### EXTERNAL
+INSTALLED: bool = True
+try:
+    from google.auth.transport.requests import Request
+    from google.oauth2.credentials import Credentials as OAuthCredentials
+    from google_auth_oauthlib.flow import InstalledAppFlow
+    from googleapiclient.discovery import build
+    from google.auth.external_account_authorized_user import Credentials as TokenCredentials
+    import pandas as pd
+except ImportError:
+    INSTALLED = False
+    from unittest.mock import MagicMock
+
+    names = ('pd', 'Request', 'OAuthCredentials', 'InstalledAppFlow', 'build', 'TokenCredentials')
+    for name in names:
+        globals()[name] = MagicMock(name=name)
+
 
 ### INTERNAL
 from ..utils import ut
 from .Environment import env
 
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials as OAuthCredentials
-from google_auth_oauthlib.flow import InstalledAppFlow
-from googleapiclient.discovery import build
-from google.auth.external_account_authorized_user import Credentials as TokenCredentials
-import pandas as pd
-
-DataFrame = pd.DataFrame
 logger = logging.getLogger()
-INSTALLED = True
 
 
 ############
@@ -32,6 +42,10 @@ INSTALLED = True
 ############
 class GoogleSheet:
     """A singleton wrapping the Google Sheets API v4 for usage in scripts and notebooks.
+
+    This code is written against [Google's v4 HTML API](https://developers.google.com/workspace/sheets/api/reference/rest)
+    for their Google Sheets product. They have multiple official python packages, but they all are
+    fatally flawed in one way or another.
 
     Authentication is handled automatically via Google's [OAuth2.0 for Web Server Applications](https://developers.google.com/identity/protocols/oauth2/web-server)
     flow, which works by prompting the user to log in via an auto-launched browser window.
@@ -54,8 +68,11 @@ class GoogleSheet:
     management.
     """
 
-    INST: ClassVar['GoogleSheet|None'] = None
-    SCOPES: ClassVar[list[str]] = ['https://www.googleapis.com/auth/spreadsheets']
+    INST: ClassVar[GoogleSheet | None] = None
+    SCOPES: ClassVar[list[str]] = [
+        'https://www.googleapis.com/auth/spreadsheets',
+        'https://www.googleapis.com/auth/drive.metadata.readonly',
+    ]
     LOGGER: ClassVar[logging.Logger] = logger
 
     _CREDS_DIR: ClassVar[str] = ''
@@ -116,7 +133,7 @@ class GoogleSheet:
         """Disconnect from the current Google Sheet, clearing all cached data and freeing memory."""
         # I. Disconnect on their end
         if self.uid and self.gcreds is not None:
-            self.sheets.close()
+            self.sheets_api.close()
 
         # II. Clear cached properties
         ut.clear_cached_properties(self, 'sheets', 'values')
@@ -135,7 +152,7 @@ class GoogleSheet:
     @staticmethod
     @_import_guard
     def serialize_data(
-        data: DataFrame,
+        data: pd.DataFrame,
         header: bool = True,
         index: bool = False,
     ) -> list[list[str]]:
@@ -158,7 +175,7 @@ class GoogleSheet:
 
     @staticmethod
     @_import_guard
-    def deserialize_data(values: list[list], header: bool = True, index: str = '') -> DataFrame:
+    def deserialize_data(values: list[list], header: bool = True, index: str = '') -> pd.DataFrame:
         """Deserialize a list of lists from the Google Sheets API into a pandas DataFrame.
 
         Args:
@@ -169,14 +186,14 @@ class GoogleSheet:
             A pandas DataFrame representing the data.
         """
         if not any(values):
-            return DataFrame()
+            return pd.DataFrame()
         if header:
             head, *rest = values
             if len(head) < (width := max(map(len, rest)) if rest else 0):
                 head = [*head, *([f'Column {i + 1}' for i in range(len(head), width)])]
-            df = DataFrame(rest, columns=head)
+            df = pd.DataFrame(rest, columns=head)
         else:
-            df = DataFrame(values)
+            df = pd.DataFrame(values)
 
         if index:
             df = df.set_index(index)
@@ -237,7 +254,7 @@ class GoogleSheet:
         Returns:
             The response from the API call.
         """
-        fn = getattr(self.sheets, endpoint)
+        fn = getattr(self.sheets_api, endpoint)
         return fn(spreadsheetId=self.uid, **kwargs).execute()
 
     @_import_guard
@@ -261,7 +278,8 @@ class GoogleSheet:
         unnecessary work is performed. The credentials are automatically refreshed if necessary &
         possible.
 
-        [documentation](googleapis.dev/python/google-auth/latest/reference/google.oauth2.credentials.html)
+        See [Google's documentation](googleapis.dev/python/google-auth/latest/reference/google.oauth2.credentials.html)
+        on the flow for further guidance.
         """
         assert self.SCOPES, 'Must provide at least one scope to authenticate with Google APIs.'
         did_change = False
@@ -322,7 +340,7 @@ class GoogleSheet:
         return env.path('MY_CACHE', self._CACHE_DIR or '~/my/.cache', mkdir=True)
 
     @ft.cached_property
-    def sheets(self) -> Any:
+    def sheets_api(self) -> Any:
         """Build and return the Google Sheets API client."""
         if self.gcreds is None:
             self.auth()
@@ -332,9 +350,24 @@ class GoogleSheet:
         return ret
 
     @ft.cached_property
+    def files_api(self) -> Any:
+        """Build and return the Google Drive API client for file-level operations."""
+        if self.gcreds is None:
+            self.auth()
+        ret = build('drive', 'v3', credentials=self.gcreds).files()
+        assert ret is not None, 'Failed to build Google Drive API.'
+        return ret
+
+    @ft.cached_property
     def values(self) -> Any:
         """Return the Google Sheets API `values` resource."""
-        return self.sheets.values()
+        return self.sheets_api.values()
+
+    def mtime(self) -> datetime | None:
+        """Get the last modified time of the connected Google Sheet, or `None` if not connected."""
+        if self.is_connected:
+            response = self.files_api.get(fileId=self.uid).execute()
+            return datetime.fromisoformat(response['modifiedTime'])
 
     @_import_guard
     def read(
@@ -343,7 +376,7 @@ class GoogleSheet:
         cells: str = 'A1:Z',
         header: bool = True,
         index: str = '',
-    ) -> DataFrame:
+    ) -> pd.DataFrame:
         """Load a single worksheet from the given google sheet via the Google Sheets API.
 
         Args:
@@ -358,7 +391,7 @@ class GoogleSheet:
         return self.deserialize_data(response['values'], header=header, index=index)
 
     @_import_guard
-    def batch_read(self, *args: str, **kwargs: dict[str, Any]) -> dict[str, DataFrame]:
+    def batch_read(self, *args: str, **kwargs: dict[str, Any]) -> dict[str, pd.DataFrame]:
         """Load multiple worksheets/ranges from the given google sheet via the Google Sheets API.
 
         Args:
@@ -414,7 +447,7 @@ class GoogleSheet:
             self.LOGGER.info(f'Successfully cleared ranges {response["clearedRanges"]}.')
 
     @_import_guard
-    def write(self, worksheet: str, data: DataFrame, cells: str = 'A1:Z', **kwargs: Any) -> None:
+    def write(self, worksheet: str, data: pd.DataFrame, cells: str = 'A1:Z', **kwargs: Any) -> None:
         """Write data to a single worksheet in the Google Sheet.
 
         Args:
@@ -432,7 +465,7 @@ class GoogleSheet:
         self.LOGGER.info(f'Successfully updated range {response["updatedRange"]}')
 
     @_import_guard
-    def batch_write(self, **kwargs: DataFrame) -> None:
+    def batch_write(self, **kwargs: pd.DataFrame) -> None:
         """Write multiple DataFrames to the Google Sheet in a single batch operation.
 
         Args:

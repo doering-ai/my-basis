@@ -5,7 +5,6 @@
 from __future__ import annotations
 from enum import IntFlag
 import platform
-import os
 import itertools as it
 
 ### EXTERNAL
@@ -59,9 +58,7 @@ class Platform(IntFlag):
         """Detect the current platform."""
         global _LOCAL
         if not _LOCAL:
-            #: Setup all the strings that we will eventually check
-            uid = ' '.join([platform.system(), platform.uname()[0], os.uname()[0]])
-            uid = uid.lower().strip()
+            uid = platform.system().lower().strip()
             key = next((_k.upper() for _k, _r in _SEARCH_RGXS if _r.search(uid)), 'NONE')
             _LOCAL = cls.__members__[key]
         return _LOCAL

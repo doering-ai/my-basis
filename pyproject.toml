@@ -48,7 +48,6 @@ dependencies = [
 
 [project.optional-dependencies]
 aiohttp = ["aiohttp>=3.12.15"]
-sql = ["sqlalchemy>=2.0.45"]
 myst = ["mdformat-front-matters>=2.0.0", "mdformat-myst>=0.3.0"]
 metrics = [
   "opentelemetry-instrumentation-aiohttp-client>=0.57b0",
@@ -128,7 +127,7 @@ testpaths = ["tests"]
 # Regexes for lines to exclude from consideration
 exclude_also = [
   'def __repr__',
-  'if +(\w+\.)?(?i:debug):',
+  'if[- \w.]+\b(?i:debug):',
   'assert ',
   'raise (Assertion|NotImplemented)Error',
   'if 0:',
@@ -136,16 +135,17 @@ exclude_also = [
   '@(abc\.)?abstractmethod',
   '^([a-z]\w+?\.)?[A-Z][_A-Z]+(:[^=\n]+)? *=[^\n]+(?=\n\S)',
 ]
-omit = ["__init__.py", "data/*", "scratch.py", "*/.venv/*"]
 ignore_errors = true
 
 # ------
 # Typing
 # ------
 [tool.pyrefly]
-project-includes = ["my/**/*.py*", "tests/**/*.py*", "data/**/*"]
+min-severity = 'warn'
+python-version = '3.13'
 check-unannotated-defs = true
 permissive-ignores = true
+search-path = ['.']
 
 [tool.pyrefly.errors]
 missing-source = false
@@ -159,23 +159,6 @@ unannotated-attribute = 'error'
 # Linting
 # -------
 [tool.ruff]
-exclude = [
-  ".*",
-  "__*",
-  "_build",
-  "buck-out",
-  "build",
-  "dist",
-  "node_modules",
-  "prof",
-  "site-packages",
-  "venv",
-  "wheels",
-  "pip-wheel-metadata",
-  "share",
-  "3p",
-]
-
 indent-width = 4
 line-length = 100
 

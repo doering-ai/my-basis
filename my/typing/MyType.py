@@ -17,7 +17,7 @@ import pydantic as pyd
 import more_itertools as mi
 
 # Local imports
-from ..infra import Series
+from ..infra import is_series, is_map
 from ..utils import ut
 from ..caches import Cache
 
@@ -27,7 +27,7 @@ from ..caches import Cache
 ############
 ### BODY ###
 ############
-class MyType(pyd.BaseModel):
+class MyType[Root: type = type[Any]](pyd.BaseModel):
     """A wrapper for any type annotation that normalizes the wide variety of interfaces."""
 
     #: If any of these types are passed into `parse()`, no work will be done and an "inactive"
@@ -85,17 +85,36 @@ class MyType(pyd.BaseModel):
         'Final',
     }
 
-    PARSE_CACHE: ClassVar[Cache[str, 'MyType']] = Cache()
+    PARSE_CACHE: ClassVar[Cache[int, 'MyType']] = Cache()
     RAISE: ClassVar[bool] = False
 
-    src_type: type | Any | None = None
+    #: The original type annotation passed in, which may be unparseable.
+    src_type: Root | Any | None = None
 
     main_type: type | None = None
+    """
+    The main type (e.g. `dict`, `list`, `int`, etc.) or `None` if unparseable. 
+    This applies to
+    cases such as:
+      - Generics (e.g. `dict[str, int]`),
+      - Literals (e.g. `Literal["a", "b"]`)
+      - "Special Types" (e.g. `Optional[int]`, `Union[int, None]`, `Annotated[int, ...]`)
+    For unions, this is `types.UnionType` and the args are the member types.
+    """
+
+    #: The type of generic's "values", which are usually the *final* type argument
     val_type: Optional['MyType'] = None
+
+    #: For mappings, the type of the keys. For other types, None.
     key_type: Optional['MyType'] = None
 
+    #: The name of the type (e.g. 'dict', 'Union', 'Annotated', etc.) or '' if unparseable.
     name: str = ''
-    uid: str = ''
+
+    #: A unique serialized identifier for this type, used for caching.
+    uid: int = 0
+
+    #: The origin of the type, if it has one (e.g. `dict` for `dict[str, int]`); otherwise None.
     origin: type | None = None
     args: tuple['MyType', ...] = tuple()
     literal_members: list[Any] = []
@@ -132,7 +151,7 @@ class MyType(pyd.BaseModel):
             src_type = src_type.__value__
 
         try:
-            uid = str(src_type)
+            uid = hash(str(src_type))
             if cached := cls.PARSE_CACHE[uid]:
                 return cached
 
@@ -159,7 +178,7 @@ class MyType(pyd.BaseModel):
         if not src_data or not hasattr(origin, '__class_getitem__'):
             return cls.parse(origin)
 
-        elif isinstance(src_data, Series):
+        elif is_series(src_data):
             val_types = list(filter(bool, map(cls.metaparse, src_data)))
             if isinstance(src_data, tuple):
                 if len(set(val_types)) == 1:
@@ -170,12 +189,13 @@ class MyType(pyd.BaseModel):
                     args = [vt.src_type for vt in val_types if vt.src_type is not None]
             else:
                 args = [cls._condense_args(val_types)]
-        elif isinstance(src_data, Mapping):
-            key_types = list(filter(bool, map(cls.metaparse, src_data.keys())))
-            val_types = list(filter(bool, map(cls.metaparse, src_data.values())))
+        elif is_map(src_data):
+            _val = dict(src_data)
+            key_types = list(filter(bool, map(cls.metaparse, _val.keys())))
+            val_types = list(filter(bool, map(cls.metaparse, _val.values())))
             args = [cls._condense_args(key_types), cls._condense_args(val_types)]
 
-        return cls.parse(origin[*args] if args else origin)
+        return cls.parse(origin[*args] if args else origin)  # type: ignore
 
     @classmethod
     def _condense_args(cls, args: list['MyType']) -> type | types.UnionType:
@@ -186,7 +206,7 @@ class MyType(pyd.BaseModel):
         Returns:
             Single type if all args are the same, UnionType otherwise.
         """
-        uniques = list(filter(bool, (arg.src_type for arg in set(args))))
+        uniques = [arg.src_type for arg in set(args) if arg.src_type is not None]
         if len(uniques) == 1:
             return uniques[0]
         else:
@@ -369,7 +389,7 @@ class MyType(pyd.BaseModel):
                 # III.i. Handle user defined generics that don't register origin/args properly
                 if inspect.isclass(tvar) and len(orig_bases := types.get_original_bases(tvar)) == 1:
                     base = orig_bases[0]
-                    _origin = ty.get_origin(base)
+                    # _origin = ty.get_origin(base)
                     _args = ty.get_args(base)
                     if _args:
                         origin = tvar
@@ -424,13 +444,13 @@ class MyType(pyd.BaseModel):
         if isinstance(other, MyType):
             return self.uid == other.uid
         elif isinstance(other, type):
-            return self.uid == str(other)
+            return self.uid == hash(str(other))
         elif other is None:
             return self.main_type is None
         return False
 
     def __hash__(self) -> int:
-        return hash(self.uid)
+        return self.uid
 
     def check(self, data: object) -> bool:
         """Check if a given data value matches this type, recursing into containers where needed.

@@ -24,14 +24,13 @@ import pydantic as pyd
 ### INTERNAL (NOTE: If adding new internal imports, update the comments in `__init__.py`)
 from .SystemUtils import SystemUtils
 
+INSTALLED: bool = True
 try:
     import pandas as pd
     from opentelemetry.metrics import Counter as OpenTelemetryCounter
     import logfire as fire
 except ImportError:
     INSTALLED = False
-else:
-    INSTALLED = True
 
 
 ############
@@ -111,7 +110,7 @@ class MetricUtils:
 
         file_handler = lgh.RotatingFileHandler(file, maxBytes=maxsize, backupCount=maxcount)
         file_handler.setLevel(lg.DEBUG if is_dev else lg.INFO)
-        file_handler.setFormatter(lg.Formatter('[%(asynctime)s %(levelname)s] %(message)s'))
+        file_handler.setFormatter(lg.Formatter('[%(asctime)s %(levelname)s] %(message)s'))
 
         # III. Register handler(s) with logger, defaulting to the universal one
         logger.addHandler(file_handler)

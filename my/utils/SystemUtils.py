@@ -2,7 +2,7 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import Any
+from typing import Any, overload, TypeVar
 from collections.abc import Collection, Sequence, Iterable, Generator
 from datetime import datetime, timedelta, UTC
 from pathlib import Path
@@ -16,13 +16,22 @@ import subprocess as sbp
 import sys
 import textwrap
 import os
+import logging
+import regex as re
+
+# I/O
+import pickle
+import tomllib
+import srsly
+from srsly._yaml_api import CustomYaml
+import tomli_w
 
 ### EXTERNAL
 import pydantic as pyd
 import more_itertools as mi
-import regex as re
 
 ### INTERNAL (NOTE: If adding new internal imports, update the comments in `__init__.py`)
+from ..infra import Atomic, Series
 from .TextUtils import text_utils
 
 ############
@@ -33,6 +42,19 @@ _branch = text_utils.multi_rgx
 #: A sentinel value that communicates a failure of some kind, or an unininitialized register.
 NOWHERE = Path()
 
+# Misc aliases
+File = pyd.FilePath
+Directory = pyd.DirectoryPath
+
+ClassType = TypeVar('ClassType')
+
+FileParam = str | bytes | File | None
+RawJsonData = str | int | float | bool | list | dict | None
+FileData = Atomic | Series | dict | pyd.BaseModel
+F = TypeVar('F', bound=FileData)
+
+logger = logging.getLogger()
+
 
 ############
 ### BODY ###
@@ -41,6 +63,28 @@ class SystemUtils:
     """Methods that deal with low-level system resources & APIs."""
 
     AUTO_CONFIRM: ClassVar[bool] = False
+    YAML_CONFIG: ClassVar[CustomYaml] = CustomYaml()
+    LOGGER: ClassVar[logging.Logger] = logger
+
+    ### Regular Expressions (can't use RegexStore because it depends on this class)
+    RGXS: ClassVar[dict[str, re.Pattern]] = text_utils.regex_dict(
+        ### Filetypes
+        filetype=text_utils.multi_rgx(
+            r'(?P<json>jso?n[\dc]|(?:geo|topo|nd)?json)',
+            r'(?P<yaml>ya?ml)',
+            r'(?P<pickle>pkl|pickle|bin|dat)',
+            r'(?P<toml>to?ml)',
+            r'(?P<xml>xml|html)',
+            pre=r'(?i)\.',
+        ),
+    )
+
+    @staticmethod
+    def _typist():
+        """Private, circular accessor to the typist package."""
+        from ..typing.Typist import typist
+
+        return typist
 
     # ---------------
     # `0` DATE & TIME
@@ -413,6 +457,397 @@ class SystemUtils:
             Ideally a resolved version of that same path, else the same one.
         """
         return cls._path(str(raw or ''))
+
+    @classmethod
+    def log(cls, *args: Any, _level: int = 0, **kwargs: Any) -> None:
+        """Log the provided collection of strings, applying common-sense transformations."""
+        cls.LOGGER.log(_level, map(str, mi.collapse(args or [''], base_type=str)))
+
+    @classmethod
+    def info(cls, *args: Any, kwargs: Any) -> None:
+        """Log the provided collection of strings at the INFO level."""
+        cls.log(args, _level=logging.INFO, **kwargs)
+
+    @classmethod
+    def error(cls, *args: Any, kwargs: Any) -> None:
+        """Log the provided collection of strings at the ERROR level."""
+        cls.log(args, _level=logging.ERROR, **kwargs)
+
+    @classmethod
+    def warn(cls, *args: Any, kwargs: Any) -> None:
+        """Log the provided collection of strings at the WARNING level."""
+        cls.log(args, _level=logging.WARN, **kwargs)
+
+    # --------
+    # FILE I/O
+    # --------
+    @overload
+    @classmethod
+    def from_file(cls, file: str | Path) -> dict: ...
+
+    @overload
+    @classmethod
+    def from_file(cls, file: str | Path, tvar: type[F], cast: bool = True) -> F: ...
+
+    @classmethod
+    def from_file(
+        cls,
+        file: str | Path,
+        tvar: type[F] = dict,  # ty:ignore[invalid-parameter-default]
+        cast: bool = True,
+    ) -> F:
+        """Load data from local JSON, YAML, TOML, or Pickle file, then cast to target type.
+
+        In order to cast between the by-far two most common expected types--dict and list--Typist
+        will wrap uncastable values in a dict (w/ one key, `'content'`) or a list (w/ one value).
+
+        Args:
+            file: Path to the file to load. Note that raw strings are NOT allowed here.
+            tvar: Target type to cast the loaded data to (dict by default). Like `cast()`, you
+                  can use complex, nested types here if desired.
+            cast: If True, try to coerce unexpected types before raising an error.
+        Returns:
+            Loaded and cast data from the file.
+        """
+        if not file:
+            cls.LOGGER.error('No file provided.')
+            return tvar()
+        file = cls.path(file)
+        if file.is_file():
+            if file.stat().st_size == 0:
+                cls.LOGGER.error(f'File does not exist: {file}')
+                return tvar()
+        else:
+            cls.LOGGER.error(f'File does not exist: {file}')
+            return tvar()
+
+        if match := cls.RGXS['filetype'].fullmatch(file.suffix):
+            group = next(filter(None, match.groupdict().keys()))
+            if fn := getattr(cls, f'from_{group}', None):
+                return fn(file, tvar, cast)
+        raise ValueError(f'Unsupported file type: {file}')
+
+    @classmethod
+    def to_file(cls, data: FileData, file: str | File) -> None:
+        """Save data to local JSON, YAML, TOML, or Pickle file (depending on file suffix).
+
+        Args:
+            data: The data to save.
+            file: Path to the file to save. Note that raw strings are NOT allowed here.
+        """
+        if not file:
+            return
+        elif not isinstance(file, Path):
+            file = Path(str(file)).expanduser()
+
+        file.parent.mkdir(parents=True, exist_ok=True)
+        if file.suffix in ['.yml', '.yaml']:
+            file.write_text(cls.to_yaml(data))
+        elif file.suffix in ['.json']:
+            file.write_text(cls.to_json(data))
+        elif file.suffix in ['.tml', '.toml']:
+            file.write_text(cls.to_toml(data))
+        elif file.suffix in ['.pkl']:
+            file.write_bytes(cls.to_pickle(data))
+        else:
+            cls.LOGGER.error(f'Unsupported file type: {file}')
+
+    @overload
+    @classmethod
+    def from_json(cls, file: FileParam) -> dict: ...
+
+    @overload
+    @classmethod
+    def from_json(cls, file: FileParam, tvar: type[F], cast: bool = True) -> F: ...
+
+    @classmethod
+    def from_json(
+        cls,
+        file: FileParam,
+        tvar: type[F] = dict,  # ty:ignore[invalid-parameter-default]
+        cast: bool = True,
+    ):
+        """Load data from JSON file or string, then cast to target type. See `from_file()`.
+
+        Args:
+            file: Path to the file to load, or raw JSON string/bytes.
+            tvar: Target type to cast the loaded data to (dict by default). Like `cast()`, you
+                  can use complex, nested types here if desired.
+            cast: If False, data that doesn't match the expected return type raises an error.
+        Returns:
+            Loaded and cast data from the file/string.
+        """
+        if not file:
+            return tvar()  # type: ignore
+        elif isinstance(file, Path):
+            cls.validate_file(file)
+            ret = srsly.read_json(file)
+        else:
+            if isinstance(file, bytes):
+                file = file.decode()
+            ret = srsly.json_loads(file)
+
+        if isinstance(ret, tvar):
+            return ret
+        elif cast:
+            return tvar(ret)  # type: ignore
+        else:
+            raise TypeError(f'Expected `{tvar}`, got `{type(ret)}`.')
+
+    @overload
+    @classmethod
+    def from_yaml(cls, file: FileParam) -> dict: ...
+
+    @overload
+    @classmethod
+    def from_yaml(cls, file: FileParam, tvar: type[F], cast: bool = True) -> F: ...
+
+    @classmethod
+    def from_yaml(
+        cls,
+        file: FileParam,
+        tvar: type[F] = dict,  # ty:ignore[invalid-parameter-default]
+        cast: bool = True,
+    ) -> F:
+        """Load data from YAML file or string, then cast to target type. See `from_file()`.
+
+        Args:
+            file: Path to the file to load, or raw YAML string/bytes.
+            tvar: Target type to cast the loaded data to (dict by default). Like `cast()`, you
+                  can use complex, nested types here if desired.
+            cast: If False, data that doesn't match the expected return type raises an error.
+        Returns:
+            Loaded and cast data from the file/string.
+        """
+        # I. Parse the content using an external library
+        if not file:
+            # I.i. Empty case
+            return tvar()  # type: ignore
+        elif isinstance(file, Path):
+            # I.ii. Local case: Read directly from file
+            cls.validate_file(file)
+            ret = srsly.read_yaml(file)
+        else:
+            # I.iii. Main Case: Attempt to parse in-memory YAML strings
+            if isinstance(file, bytes):
+                file = file.decode()
+            if file.strip().startswith('```yaml'):
+                file = '\n\n'.join(cls.RGXS['yaml'].findall(file))
+
+            ret = srsly.yaml_loads(file)
+
+        # II. Verify & format the response
+        # if isinstance(ret, tvar):
+        if cls._typist().check(ret, tvar):
+            return ret
+        elif not ret:
+            return tvar()  # type: ignore
+        elif cast:
+            with ctx.suppress(ValueError):
+                return tvar(ret)  # type: ignore
+        raise TypeError(f'Expected `{tvar}`, got `{type(ret)}`.')
+
+    @overload
+    @classmethod
+    def from_toml(cls, file: FileParam) -> dict: ...
+
+    @overload
+    @classmethod
+    def from_toml(cls, file: FileParam, tvar: type[F], cast: bool = True) -> F: ...
+
+    @classmethod
+    def from_toml(
+        cls,
+        file: FileParam,
+        tvar: type[F] = dict,  # type: ignore
+        cast: bool = True,
+    ) -> F:
+        """Load data from TOML file or string, then cast to target type. See `from_file()`.
+
+        Args:
+            file: Path to the file to load, or raw TOML string/bytes.
+            tvar: Target type to cast the loaded data to (dict by default). Like `cast()`, you
+                  can use complex, nested types here if desired.
+            cast: If False, data that doesn't match the expected return type raises an error.
+        Returns:
+            Loaded and cast data from the file/string.
+        """
+        tvar = cls._typist().specify(tvar)
+        if not file:
+            return tvar()  # type: ignore
+        elif isinstance(file, Path):
+            ret = tomllib.loads(file.read_text())
+        else:
+            if isinstance(file, bytes):
+                file = file.decode()
+            ret = tomllib.loads(file)
+
+        if isinstance(ret, tvar):
+            return ret
+        elif cast:
+            return tvar(ret)  # type: ignore
+        else:
+            raise TypeError(f'Expected `{tvar}`, got `{type(ret)}`.')
+
+    @overload
+    @classmethod
+    def from_pickle(cls, file: FileParam) -> dict: ...
+
+    @overload
+    @classmethod
+    def from_pickle(cls, file: FileParam, tvar: type[F], cast: bool = True) -> F: ...
+
+    @classmethod
+    def from_pickle(
+        cls,
+        file: FileParam,
+        tvar: type[F] = dict,  # ty:ignore[invalid-parameter-default]
+        cast: bool = True,
+    ) -> F:
+        """Load data from Pickle file or bytes, then cast to target type. See `from_file()`.
+
+        Args:
+            file: Path to the file to load, or raw Pickle bytes/string.
+            tvar: Target type to cast the loaded data to (dict by default). Like `cast()`, you
+                  can use complex, nested types here if desired.
+            cast: If False, data that doesn't match the expected return type raises an error.
+        Returns:
+            Loaded and cast data from the file/string.
+        """
+        if not file:
+            return tvar()  # type: ignore
+        elif isinstance(file, Path):
+            ret = pickle.loads(file.read_bytes())
+        else:
+            if isinstance(file, str):
+                file = file.encode()
+            ret = pickle.loads(file)
+
+        if isinstance(ret, tvar):
+            return ret
+        elif cast:
+            return tvar(ret)  # type: ignore
+        else:
+            raise TypeError(f'Expected `{tvar}`, got `{type(ret)}`.')
+
+    @classmethod
+    def to_yaml(cls, data: FileData, wrap: bool = False, **kwargs) -> str:
+        """Serialize data to a YAML string. See `to_file()` for general details.
+
+        Args:
+            data: The data to serialize.
+            wrap: If True, wrap the output in markdown backticks for YAML.
+            **kwargs: Additional keyword arguments to pass to `srsly.yaml_dumps()`.
+        Returns:
+            YAML string representation of the data.
+        """
+        obj = cls._typist().serialize(data)
+        text = cls.YAML_CONFIG.dump(obj, **kwargs)
+        assert isinstance(text, str), 'Failed to write YAML data.'
+
+        # If we printed a root array, de-intent it
+        if isinstance(data, Series) and text.startswith(' '):
+            text = textwrap.dedent(text)
+
+        # If requested, wrap in markdown bactics
+        if wrap:
+            text = f'```yaml\n{text}\n```'
+        return text
+
+    @classmethod
+    def to_json(cls, data: FileData, wrap: bool = False, **kwargs) -> str:
+        """Serialize data to a JSON string. See `to_file()` for general details.
+
+        Args:
+            data: The data to serialize.
+            wrap: If True, wrap the output in markdown backticks for JSON.
+            **kwargs: Additional keyword arguments to pass to `srsly.json_dumps()`.
+        Returns:
+            JSON string representation of the data.
+        """
+        obj = cls._typist().serialize(data)
+        if 'indent' not in kwargs:
+            kwargs['indent'] = 4
+        text = srsly.json_dumps(obj, **kwargs)
+
+        # If requested, wrap in markdown bactics
+        if wrap:
+            text = f'```json\n{text}\n```'
+        return text
+
+    @classmethod
+    def to_toml(cls, data: FileData, wrap: bool = False, **kwargs) -> str:
+        """Serialize data to a TOML string. See `to_file()` for general details.
+
+        Args:
+            data: The data to serialize.
+            wrap: If True, wrap the output in markdown backticks for TOML.
+            **kwargs: Additional keyword arguments to pass to `tomli_w.dumps()`.
+        Returns:
+            TOML string representation of the data.
+        """
+        obj = cls._typist().serialize(data)
+
+        # Cast to dict, as toml only accepts dicts at the top level
+        if not isinstance(obj, dict):
+            if (
+                isinstance(obj, Series)
+                and len(obj) == 1
+                and isinstance((_obj := mi.first(obj)), dict)
+            ):
+                obj = _obj
+            else:
+                obj = dict(content=obj)
+
+        # II. Serialize w/ default params
+        text = tomli_w.dumps(obj, **kwargs)
+
+        # If requested, wrap in markdown bactics
+        if wrap:
+            text = f'```toml\n{text}\n```'
+        return text
+
+    @classmethod
+    def to_pickle(cls, data: FileData, **kwargs) -> bytes:
+        """Serialize data to Pickle bytes. See `to_file()` for general details.
+
+        Args:
+            data: The data to serialize.
+            **kwargs: Additional keyword arguments to pass to `pickle.dumps()`.
+        Returns:
+            Pickle byte representation of the data.
+        """
+        obj = cls._typist().serialize(data)
+        return pickle.dumps(obj, **kwargs)
+
+    @staticmethod
+    def _configure_yaml(
+        mapping: int = 4,
+        sequence: int = 6,
+        offset: int = 4,
+        sort_keys: bool = False,
+    ) -> None:
+        """Configure the YAML formatting library's defaults up front.
+
+        See the [yaml docs](https://yaml.readthedocs.io/en/latest/detail.html?highlight=indentation#indentation-of-block-sequences)
+        for guidance on the meaning of these parameters.
+
+        All of these options can be overriden when calling `to_yaml()`.
+
+        Args:
+            mapping: Indentation delta between a parent mapping and its keys.
+            sequence: Indentation delta between a parent sequence and a child sequence's contents.
+            offset: Indentation delta between a parent and a child sequence's bullet points.
+            sort_keys: Whether to sort mapping keys on output.
+        """
+        cfg = SystemUtils.YAML_CONFIG
+        cfg.indent(mapping=mapping, sequence=sequence, offset=offset)
+        cfg.sort_base_mapping_type_on_output = sort_keys  # type: ignore
+
+    @classmethod
+    def serialize(cls, data: object, full: bool = False) -> Any:
+        """Thin wrapper around `Typist.serialize()` -- see there for usage info."""
+        return cls._typist().serialize(data, full=full)
 
 
 system_utils = SystemUtils

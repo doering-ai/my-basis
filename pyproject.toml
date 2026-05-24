@@ -135,6 +135,7 @@ exclude_also = [
   '@(abc\.)?abstractmethod',
   '^([a-z]\w+?\.)?[A-Z][_A-Z]+(:[^=\n]+)? *=[^\n]+(?=\n\S)',
 ]
+omit = ['*/__init__.py', '*/__main__.py', '/scripts/']
 ignore_errors = true
 
 # ------

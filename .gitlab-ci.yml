@@ -3,16 +3,14 @@
 ### I. CONTROL BLOCKS ###
 #########################
 variables:
-    PACKAGE: myTest
-    BASE_IMAGE: $CI_REGISTRY_IMAGE/base:latest  # registry.gitlab.com/doering-ai/sublime/mytest/base:latest
-    MAIN_IMAGE: $CI_REGISTRY_IMAGE:latest  # registry.gitlab.com/doering-ai/sublime/mytest:latest
+    IMAGE: $CI_REGISTRY_IMAGE:latest
     SECRET_DETECTION_ENABLED: 'true'
 
 include:
-    - template: Security/Secret-Detection.gitlab-ci.yml
     - component: gitlab.com/gitlab-org/professional-services-automation/tools/utilities/pipeintel/pipeintel@main
       inputs:
         stage: eval
+    - template: Security/Secret-Detection.gitlab-ci.yml
 
 # ---- Lifecyle ----
 # These will be executed in turn, corresponding to one or more jobs below
@@ -29,62 +27,29 @@ workflow:
         - if: $CI_PIPELINE_SOURCE == "merge_request_event"
         - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
-#####################
-### II. TEMPLATES ###
-#####################
-.uv:
-    # This job is never directly executed, but serves as a template for all UV-based jobs.
-    # From https://docs.astral.sh/uv/guides/integration/docker/#available-images
-    image: $MAIN_IMAGE
-
-    # See https://docs.gitlab.com/ci/yaml/#cachekeyfiles
+####################
+### II. TEMPLATE ###
+####################
+default:
+    image: $CI_REGISTRY_IMAGE:latest
     cache:
         - key: {files: [uv.lock]}
           paths: ["${UV_CACHE_DIR}"]
 
-    before_script:
-        - uv sync
-
-    after_script:
-        - uv cache prune --ci
-
 #################
 ### III. JOBS ###
 #################
-build-image:
-    # Build and push the CI container image whenever the Containerfile changes.
-    # Run `task container:push` locally for the first-time bootstrap.
-    stage: build
-    image: docker:26
-    services:
-        - docker:26-dind
-    variables:
-        DOCKER_TLS_CERTDIR: /certs
-    before_script:
-        - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+pytest:
+    stage: test
     script:
-        - docker build -t $BASE_IMAGE -f infra/base.containerfile .
-        - docker push $BASE_IMAGE
-        - docker build -t $MAIN_IMAGE -f Containerfile .
-        - docker push $MAIN_IMAGE
-    rules:
-        - changes:
-            - infra/Containerfile
-            - infra/settings/*
+        - task test:cov
+    coverage: '/TOTAL.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
 
 eval:
     # Run semantic linters on source code
     stage: eval
     script:
-        - task eval:lint
-        - task eval:typecheck
-
-pytest:
-    extends: .uv
-    stage: test
-    script:
-        - task test:cov
-    coverage: '/TOTAL.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
+        - task eval
 
 secret_detection:
     stage: eval

@@ -1,0 +1,5 @@
+Please create another example script for this library, this time called @my/scripts/header_format.py
+    . The script should make extensive use of RegexStore structures as it normalizes the contents
+    of one or more source code directories (dirs with `__init__.py` but not gitignored) as identified
+    via cli args. An `--actions` repeatable cli arg should determine which functions to run
+    on each identified python source code file. All of these functions will

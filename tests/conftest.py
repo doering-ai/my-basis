@@ -3,13 +3,11 @@
 ############
 ### STANDARD
 from __future__ import annotations
-from typing import Callable
+from collections.abc import Callable
 from datetime import datetime
-from pathlib import Path
 
 ### EXTERNAL
 import pytest as pyt
-import pydantic as pyd
 import regex as re
 
 ### INTERNAL
@@ -50,7 +48,7 @@ def patch(monkeypatch: Patch) -> Patch:
 
 @pyt.fixture
 def mock_posix(patch: Patch) -> Callable[[], datetime]:
-    """Set al.posix() to always return a `datetime(2025-01-01)` object when called."""
+    """Set ut.posix() to always return a `datetime(2025-01-01)` object when called."""
 
     def mocked() -> datetime:
         return datetime(2025, 1, 1)

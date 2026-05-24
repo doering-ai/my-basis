@@ -86,7 +86,6 @@ type Collection = Vector  #: an alias for `Vector` following YAML jargon
 
 """
 
-
 @overload
 def is_atomic[T](tvar: type[T]) -> TypeGuard[type[Atomic]]: ...
 @overload
@@ -170,25 +169,3 @@ def is_enum[T](tvar: T | type[T]) -> TypeGuard[Enum | type]:
     return issubclass(tvar, Enum) if isinstance(tvar, type) else isinstance(tvar, Enum)
 
 
-# -----
-# JINJA
-# -----
-# To change settings, just modify the mutable object identified by this reference
-JINJA = jn.Environment(
-    # loader=jn.FileSystemLoader(INFRA_PATHS.templates),
-    loader=jn.PackageLoader('data', 'templates'),
-    trim_blocks=True,
-    lstrip_blocks=True,
-)
-
-
-@ft.lru_cache(maxsize=128)
-def get_template(template_name: str) -> jn.Template:
-    """Load and cache a Jinja2 template from the data/templates directory.
-
-    Args:
-        template_name: Name of template file.
-    Returns:
-        Compiled Jinja2 template.
-    """
-    return JINJA.get_template(template_name)

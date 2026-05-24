@@ -1,7 +1,7 @@
 ############
 ### HEAD ###
 ############
-### STANDARD ###
+### STANDARD
 from typing import Any, ClassVar, Literal, TypeGuard, TypeVar, overload, TypeIs
 import typing
 import collections.abc as abc
@@ -14,34 +14,41 @@ from collections.abc import (
     Sequence,
     Hashable,
 )
-from collections import Counter, deque, defaultdict
+from collections import deque
 from copy import deepcopy
-from datetime import date, datetime, time, timedelta, UTC
-from enum import Enum, Flag
+from datetime import datetime
+from enum import Enum
 from pathlib import Path
 import contextlib as ctx
 import functools as ft
 import inspect
 import itertools as it
 import more_itertools as mi
-import pickle
 import regex as re
-import textwrap
-import tomllib
 import logging
 
-### EXTERNAL ###
-import dateutil.parser
+### EXTERNAL
 import pydantic as pyd
-import srsly
-from srsly._yaml_api import CustomYaml
-import tomli_w
 
-### INTERNAL ###
-from ..infra import Atomic, Time, Series, _Series
+### INTERNAL
+from ..infra import (
+    Atomic,
+    Time,
+    Series,
+    _Series,
+    Scalar,
+    # Vector,
+    Map,
+    Scalars,
+    is_atomic,
+    is_scalar,
+    # is_vector,
+    is_series,
+)
 from ..utils import ut
 from ..caches import NestedCache
 from .MyType import MyType
+from .Cast import Cast
 
 ############
 ### DATA ###
@@ -57,7 +64,7 @@ ClassType = TypeVar('ClassType')
 
 FileParam = str | bytes | File | None
 RawJsonData = str | int | float | bool | list | dict | None
-FileData = Atomic | Series | dict | pyd.BaseModel
+FileData = Atomic | Series | Map | pyd.BaseModel
 F = TypeVar('F', bound=FileData)
 
 ABSTRACT_MAPS = [typing.Mapping, abc.Mapping, abc.MutableMapping]
@@ -70,7 +77,11 @@ ABSTRACT_SEQS = [
     abc.Iterable,
 ]
 
-logger = logging.getLogger(__name__)
+type CaseKey = type | Callable[[object], bool]  #:
+type CaseVal = Callable[[object], Any]
+type Case = tuple[CaseKey, CaseVal]
+
+logger = logging.getLogger()
 
 
 ############
@@ -164,28 +175,11 @@ class Typist(pyd.BaseModel):
     """
 
     # Static Global Members
-    ### Metatypes
-    ATOMIC_TYPES: ClassVar[dict[str, type]] = dict(
-        str=str,
-        int=int,
-        float=float,
-        bool=bool,
-        datetime=datetime,
-        enum=Enum,
-    )
 
     ### Regular Expressions (can't use RegexStore because it depends on this class)
     RGXS: ClassVar[dict[str, re.Pattern]] = ut.regex_dict(
         dict(
-            # Types
-            ### Atomic Types
-            int=r'-?\d+',
-            float=r'-?\d+(?:\.\d+)?',
-            bool=r'(?i:t(?:rue)?|y(?:es)?|no?|f(?:alse)?|enabled?|disabled?|on|off|[01])',
-            bool_true=r'(?i:t(?:rue)?|y(?:es)?|enabled?|on|1)',
-            datetime=r'\d\d(?:\d\d)?[-./]\d\d[-./]\d\d(?:\D\d\d:\d\d:\d\d(?:\.\d+)?)?',
-            enum=r'<(?P<class>[_[:upper:]]\w*)\.(?:\|?(?P<member>[_A-Z\d]+))+: (?P<value>.+)>',
-            # Others
+            ### Misc
             splitter=r' *(?:[,]|\/\/) *',
             no_space_splitter=r'(?<=\w)[.:](?=\w)',
             yaml=r'(?sm)^```yaml *\n(?P<content>.+?)\n``` *$',
@@ -206,8 +200,17 @@ class Typist(pyd.BaseModel):
         )
     )
 
+    ### Metatypes
+    SCALAR_TYPES: ClassVar[dict[str, type]] = dict(
+        str=str,
+        int=int,
+        float=float,
+        bool=bool,
+        datetime=datetime,
+        enum=Enum,
+    )
+
     # YAML Config
-    YAML_CONFIG: ClassVar[CustomYaml] = CustomYaml()
     RAISE: ClassVar[bool] = True
 
     # Dynamic Global Members
@@ -223,29 +226,6 @@ class Typist(pyd.BaseModel):
     # -------------------
     # `.` Initial Methods
     # -------------------
-    @classmethod
-    def _setup(
-        cls,
-        mapping: int = 4,
-        sequence: int = 6,
-        offset: int = 4,
-        sort_keys: bool = False,
-    ) -> None:
-        """Configure the YAML formatting library's defaults up front.
-
-        See the [yaml docs](https://yaml.readthedocs.io/en/latest/detail.html?highlight=indentation#indentation-of-block-sequences)
-        for guidance on the meaning of these parameters.
-
-        All of these options can be overriden when calling `to_yaml()`.
-
-        Args:
-            mapping: Indentation delta between a parent mapping and its keys.
-            sequence: Indentation delta between a parent sequence and a child sequence's contents.
-            offset: Indentation delta between a parent and a child sequence's bullet points.
-            sort_keys: Whether to sort mapping keys on output.
-        """
-        cls.YAML_CONFIG.indent(mapping=mapping, sequence=sequence, offset=offset)
-        cls.YAML_CONFIG.sort_base_mapping_type_on_output = sort_keys  # type: ignore
 
     # -------------------
     # `-` Private Methods
@@ -282,8 +262,8 @@ class Typist(pyd.BaseModel):
 
         c0 = isinstance(data, Collection)
         c1 = issubclass(tvar, Collection)
-        a0 = isinstance(data, Atomic)
-        a1 = issubclass(tvar, Atomic)
+        a0 = is_atomic(data)
+        a1 = is_atomic(tvar)
 
         # II. "Main" score: compare the base types, especially atomics vs. collections
         score = 0
@@ -300,7 +280,7 @@ class Typist(pyd.BaseModel):
         # III. Type-specific cases
         if a0 and a1:
             # III.i. Particularly apt atomic casts
-            if isinstance(data, int) and issubclass(tvar, bool):
+            if isinstance(data, int) and issubclass(tvar, bool):  # type: ignore
                 score += 1 if data in {0, 1} else -1
         elif c0 and c1:
             # III.ii. Compare the nested values of collection generics
@@ -317,7 +297,7 @@ class Typist(pyd.BaseModel):
                         score += 2
                     if cls.match(tuple(set(map(type, vals))), option.val_type):
                         score += 2
-            elif isinstance(data, Series) and issubclass(tvar, Series):
+            elif is_series(data) and is_series(tvar):
                 score += 2
 
                 if option.val_type is None:
@@ -379,523 +359,6 @@ class Typist(pyd.BaseModel):
             return data.decode().strip()
         return data
 
-    def _cast(self, data: object, target: MyType) -> Any | None:
-        """Internal casting implementation that routes to specialized conversion methods.
-
-        Args:
-            data: The source data to cast.
-            target: The target MyType to cast to.
-        Returns:
-            Cast data if successful, None otherwise.
-        """
-        # I. Handle literals as a very special case
-        if target.literal_members:
-            return self._to_literal(data, target)
-
-        # II. Reject casts to unhandled or split types
-        if (main := target.main_type) is None or target.is_split:
-            return None
-
-        # III. Handle all other data types in their own methods
-        if issubclass(main, Atomic):
-            return self._to_atomic(data, main)
-        elif issubclass(main, Mapping):
-            return self._to_map(data, main, target)  # type: ignore
-        elif issubclass(main, Series):
-            return self._to_series(data, main, target)
-        elif inspect.isclass(main):
-            return self._to_class(data, main)
-        else:
-            self.LOGGER.warning(f'Unknown main type for casting: {main}')
-        return None
-
-    def _to_literal(self, data: object, target: MyType) -> object | None:
-        """Cast data to a literal type or literal tuple.
-
-        Args:
-            data: The source data to cast.
-            target: The target literal MyType.
-        Returns:
-            Cast data if it matches the literal, None otherwise.
-        """
-        if not target.literal_members or target.origin is None or data is None:
-            return None
-
-        if target.origin is Literal:
-            # I. Cast Literals
-            if any(val_type.check(data) for val_type in target.args):
-                ret = data
-            else:
-                for val_type in target.args:
-                    ret = self.cast(data, val_type)
-                    if ret is not None and target.literal_check(ret):
-                        return ret
-                return None
-        elif isinstance(target.origin, type) and issubclass(target.origin, tuple):
-            # II. Cast literally-positioned tuples
-            if not isinstance(data, Sequence):
-                data = self._to_series(data, tuple)
-
-            if data is not None and len(data) == len(target.args):
-                ret = target.origin(it.starmap(self.cast, zip(data, target.args, strict=True)))
-            else:
-                return None
-        else:
-            return None
-
-        return ret if target.literal_check(ret) else None
-
-    def _to_atomic[A: Atomic](self, data: object, target: type[A]) -> A | None:
-        """Cast data to an atomic type (str, int, float, bool, Enum, or Time).
-
-        Args:
-            data: The source data to cast.
-            target: The target atomic type.
-        Returns:
-            Cast atomic value if successful, None otherwise.
-        """
-        # 0. Take the first element of a series, if configured to
-        if (isinstance(data, Series) and not issubclass(target, Flag)) and (
-            (self.firsts and len(data) > 0) or (self.atomics and len(data) == 1)
-        ):
-            data = mi.first(data)
-
-        ret = None
-        if isinstance(data, target):
-            return data
-        elif issubclass(target, Enum):
-            ret = self._to_enum(data, target)
-        elif issubclass(target, Time):
-            ret = self._to_time(data, target)
-        elif isinstance(data, Enum):
-            ret = self._enum_to_atomic(data, target)
-        elif isinstance(data, Time):
-            ret = self._time_to_atomic(data, target)
-        elif isinstance(data, str):
-            ret = self._str_to_atomic(data, target)
-        elif issubclass(target, str) and (fn := self.get_str_method(data)):
-            ret = self.invoke(fn)
-
-        if ret is None or not isinstance(ret, target):
-            with ctx.suppress(ValueError, TypeError):
-                ret = target(data if ret is None else ret)  # type: ignore
-        return ret  # type: ignore
-
-    def _enum_to_atomic[A: Atomic](self, data: Enum, target: type[A]) -> A | None:
-        """Convert an Enum to an atomic type (str, int, float, bool, bytes).
-
-        Args:
-            data: The Enum value to convert.
-            target: The target atomic type.
-        Returns:
-            Converted atomic value if successful, None otherwise.
-        """
-        if issubclass(target, str | bytes):
-            if (ret := self.try_method(target, 'write', _tvar=str)) is not None:
-                pass
-            elif isinstance(data.value, str):
-                ret = data.value
-            else:
-                ret = str(data.name).lower()
-            typing.assert_type(ret, str)
-            if issubclass(target, bytes):
-                return target(ret.encode())
-            else:
-                return target(ret)
-        elif issubclass(target, int | float):
-            if isinstance(data.value, int | float):
-                return target(data.value)
-        elif issubclass(target, bool):
-            return target(data.value)
-
-        return None
-
-    def _time_to_atomic[A: Atomic](self, data: Time, target: type[A]) -> A | None:
-        """Convert a Time object to an atomic type (str, int, float, bool, bytes).
-
-        Args:
-            data: The Time value (datetime, date, time, or timedelta) to convert.
-            target: The target atomic type.
-        Returns:
-            Converted atomic value if successful, None otherwise.
-        """
-        # 0. Clean up timezones
-        if isinstance(data, datetime) and data.tzinfo != UTC:
-            data = data.astimezone(UTC)
-        elif isinstance(data, time) and data.tzinfo != UTC:
-            data = data.replace(tzinfo=UTC)
-        assert isinstance(data, Time), f'Invalid time passed: {data}'
-
-        if issubclass(target, str):
-            # I. Cast to string
-            if isinstance(data, datetime | date | time):
-                return target(data.isoformat().split('+', 1)[0])
-            else:
-                return target(data)
-
-        elif issubclass(target, bytes):
-            # IV. Serialize to bytes
-            if (res := self._time_to_atomic(data, str)) is not None:
-                return target(res.encode())
-
-        elif issubclass(target, int | float):
-            # II. Cast to posix timestamps
-            if isinstance(data, datetime):
-                return target(data.timestamp())
-            elif isinstance(data, date):
-                return target(data.toordinal())
-            elif isinstance(data, time):
-                return target(60 * ((60 * data.hour) + data.minute) + data.second)
-            else:
-                return target(data.total_seconds())
-
-        elif issubclass(target, bool):
-            # III. Check for non-zero values
-            if isinstance(data, datetime):
-                return target(data.timestamp() > 0)
-            if isinstance(data, date):
-                return target(data.toordinal() > 0)
-            elif isinstance(data, time):
-                return target(data.hour > 0 or data.minute > 0 or data.second > 0)
-            else:
-                return target(data.total_seconds() > 0)
-
-        return None
-
-    def _str_to_atomic[A: Atomic](self, data: str, target: type[A]) -> A | None:
-        """Convert a string to an atomic type using regex pattern matching.
-
-        Args:
-            data: The string to convert.
-            target: The target atomic type.
-        Returns:
-            Converted atomic value if pattern matches, None otherwise.
-        """
-        data = data.strip()
-        if (issubclass(target, int) and self.RGXS['int'].fullmatch(data)) or (
-            issubclass(target, float) and self.RGXS['float'].fullmatch(data)
-        ):
-            return target(data)
-
-        elif issubclass(target, bool) and self.RGXS['bool'].fullmatch(data):
-            return target(self.RGXS['bool_true'].fullmatch(data))
-
-        elif issubclass(target, Time):
-            return self._str_to_time(data, target)
-
-        elif issubclass(target, bytes):
-            return target(data.encode())
-
-        return None
-
-    def _to_class[C](self, data: object, target: type[C]) -> C | None:
-        """Cast data to a class instance using various instantiation strategies.
-
-        Args:
-            data: The source data to instantiate from.
-            target: The target class type.
-        Returns:
-            Class instance if successful, None otherwise.
-        """
-        # I. First, try to use the semi-standard `new()` method if available
-        if (ret := self.try_method(target, 'new', data, _tvar=target)) is not None:
-            return ret
-
-        if ut.is_map(data):
-            kwargs = self._cast_members(ut.map_items(data), target)
-            ret = self.invoke(target, **kwargs)
-        else:
-            ret = self.invoke(target, data)
-
-        if isinstance(ret, target):
-            return ret
-        return None
-
-    @staticmethod
-    def _cast_members(items: Iterable[tuple[str, Any]], target: type) -> dict[str, Any]:
-        """Cast a mapping's members to match a target class's field types.
-
-        Args:
-            items: Key-value pairs to cast.
-            target: The target class type with type annotations.
-        Returns:
-            Dictionary with cast values matching target's field types.
-        """
-        annotations = ut.instance_aliases(target)
-        return {key: typist.flexcast(val, annotations.get(key, None)) for key, val in items}
-
-    def _to_enum[E: Enum](self, data: object, target: type[E]) -> E | None:
-        """Cast data to an Enum or Flag type.
-
-        Args:
-            data: The source data (int, str, series, or another Enum).
-            target: The target Enum or Flag type.
-        Returns:
-            Enum instance if successful, None otherwise.
-        """
-        # I. If the enum has it's own read method, try that first on any datatype
-        if read_method := self.get_method(target, 'read'):
-            if (ret := self.invoke(read_method, data)) is not None:
-                return ret
-
-        # II. Next, try some Flag-specific transformations
-        if issubclass(target, Flag):
-            members = []
-            if isinstance(data, Series):
-                members = data
-            elif isinstance(data, str) and '|' in data:
-                members = re.split(r' *\| *', data.strip())
-
-            if members:
-                ret = target(0)
-                for member in members:
-                    if _new := self._to_enum(member, target):
-                        ret |= _new
-                return ret
-
-        if isinstance(data, int):
-            # int_to_enum
-            return target(data)
-        elif isinstance(data, str):
-            # str_to_enum
-            data = data.strip()
-            if data.isdigit():
-                return target(int(data))
-            elif ret := target.__members__.get(data.upper(), None):
-                return ret
-        elif isinstance(data, Enum):
-            if read_method:
-                if (ret := self.invoke(read_method, data.value)) is not None:
-                    return ret
-                if (ret := self.invoke(read_method, str(data.name))) is not None:
-                    return ret
-
-            if data.name in target.__members__:
-                return target[data.name]
-            elif key := ut.find_key(target.__members__, data.value):
-                return target[key]
-
-        return None
-
-    def _to_time[T: Time](self, data: object, target: type[T]) -> T | None:
-        """Convert a string or number to a datetime or timedelta object, if possible."""
-        if not isinstance(data, Atomic):
-            data = str(data)
-
-        try:
-            if isinstance(data, str):
-                return self._str_to_time(data, target)
-            elif isinstance(data, int | float):
-                return self._num_to_time(data, target)
-            elif isinstance(data, bool):
-                return None
-            elif isinstance(data, Enum):
-                if (ret := self._to_time(data.value, target)) is not None:
-                    return ret
-                elif (ret := self._to_time(data.name, target)) is not None:
-                    return ret
-            elif isinstance(data, Time):
-                if isinstance(data, datetime) and issubclass(target, time):
-                    _raw = data.time().replace(tzinfo=UTC)
-                    return target(
-                        hour=_raw.hour,
-                        minute=_raw.minute,
-                        second=_raw.second,
-                        microsecond=_raw.microsecond,
-                        tzinfo=UTC,
-                    )
-        except ValueError as e:
-            self.LOGGER.error(f'Cannot cast from {type(data)} to time; {e}')
-        return None
-
-    def _str_to_time[T: Time](self, data: str, target: type[T]) -> T | None:
-        """Convert a string to a Time object using various parsing strategies.
-
-        Args:
-            data: The string to parse.
-            target: The target Time type (datetime, date, time, or timedelta).
-        Returns:
-            Parsed Time object if successful, None otherwise.
-        """
-        data = data.strip()
-        if data.isdigit():
-            return self._to_time(int(data), target)
-        elif Typist.RGXS['float'].fullmatch(data):
-            return self._to_time(float(data), target)
-        elif Typist.RGXS['short_iso_date'].match(data):
-            data = f'20{data}'
-
-        # I. Deserialize from iso timestamps (`yyyy-mm-dd` and/or `hh:mm:ss`)
-        with ctx.suppress(ValueError):
-            if issubclass(target, datetime):
-                return target.fromisoformat(data).replace(tzinfo=UTC)
-            elif issubclass(target, date):
-                return target.fromisoformat(data)
-            elif issubclass(target, time):
-                return target.fromisoformat(data).replace(tzinfo=UTC)
-            elif issubclass(target, timedelta):
-                if matches := list(Typist.RGXS['timedelta'].finditer(data)):
-                    return target(
-                        **{
-                            key: float(val)
-                            for m in matches
-                            for key, val in m.groupdict().items()
-                            if val
-                        }
-                    )
-        # II. Fall back to an external, flexible library
-        if d := dateutil.parser.parse(data):
-            d = d.replace(tzinfo=UTC)
-            if issubclass(target, datetime):
-                return target.fromtimestamp(d.timestamp(), tz=UTC)
-            elif issubclass(target, date):
-                return target.fromordinal(d.toordinal())
-            elif issubclass(target, time):
-                return
-            elif issubclass(target, timedelta):
-                return target(days=d.day, seconds=d.second, microseconds=d.microsecond)
-        return None
-
-    def _num_to_time[T: Time](self, data: int | float, target: type[T]) -> T | None:
-        """Convert a number to a Time object treating it as a timestamp or ordinal.
-
-        Args:
-            data: The numeric value to convert.
-            target: The target Time type (datetime, date, time, or timedelta).
-        Returns:
-            Converted Time object if successful, None otherwise.
-        """
-        if issubclass(target, datetime):
-            return target.fromtimestamp(data, tz=UTC)
-        elif issubclass(target, date):
-            return target.fromordinal(int(data))
-        elif issubclass(target, time):
-            total_seconds = int(data)
-            hours, remainder = divmod(total_seconds, 3600)
-            minutes, seconds = divmod(remainder, 60)
-            microseconds = int((data - total_seconds) * 1_000_000)
-            return target(
-                hour=hours % 24,
-                minute=minutes % 60,
-                second=seconds % 60,
-                microsecond=microseconds,
-                tzinfo=UTC,
-            )
-        elif issubclass(target, timedelta):
-            return target(seconds=float(data))
-        return None
-
-    def _to_map[M: dict](
-        self, data: object, tvar: type[M], details: MyType | None = None
-    ) -> M | None:
-        """Cast data to a mapping type (dict, Counter, etc.).
-
-        Args:
-            data: The source data to cast.
-            tvar: The target mapping type.
-            details: Pre-parsed MyType details (will be parsed if None).
-        Returns:
-            Cast mapping if successful, None otherwise.
-        """
-        # I.i. Parse details if none were given
-        if details is None:
-            details = MyType.parse(tvar)
-            tvar = details.main_type  # type: ignore
-            assert tvar is not None, f'Cannot parse series type from {tvar}'
-
-        # I.ii. Pre-cast strings by parsing JSON or YAML content
-        if data and isinstance(data, str) and data[0] == '{' and data[-1] == '}':
-            with ctx.suppress(Exception):
-                return self.from_yaml(data, tvar)
-
-        # II.i. Main Case: cast maps and map-ready lists of 2-tuples ("items")
-        if ut.is_map(data) and (items := ut.map_items(data)):
-            kvar, vvar = details.key_type, details.val_type
-            keys, values = mi.unzip(items)
-            if kvar:
-                keys = self.multicast(keys, kvar, skip=False)
-            if vvar:
-                values = self.multicast(values, vvar, skip=False)
-            new_data = dict(zip(keys, values, strict=True))
-
-            if issubclass(tvar, defaultdict):
-                return tvar(vvar.main_type if vvar else None, new_data)
-            return tvar(new_data)
-
-        # II.ii. Cast counters, the only map type that takes an iter of single items
-        if issubclass(tvar, Counter) and isinstance(data, Series):
-            if details.key_type:
-                data = self.multicast(data, details.key_type, skip=False)
-            return tvar(data)
-
-        return None
-
-    def _to_series[S: Series](
-        self, data: object, tvar: type[S], details: MyType | None = None
-    ) -> S | None:
-        """Cast data to a series type (list, tuple, set, deque), splitting strings.
-
-        Args:
-            data: The source data to cast.
-            tvar: The target series type.
-            details: Pre-parsed MyType details (will be parsed if None).
-        Returns:
-            Cast series if successful, None otherwise.
-        """
-        # I. Parse details if none were given
-        if details is None:
-            details = MyType.parse(tvar)
-            tvar = details.main_type  # type: ignore
-            assert tvar is not None, f'Cannot parse series type from {tvar}'
-
-        # II. Preprocess data into an iterable form
-        if isinstance(data, str):
-            # II.i. Split strings if configured to do so
-            data = self._split_str(data)
-        elif isinstance(data, Mapping):
-            # II.ii. Split maps into two-tuples if possible, otherwise fail early
-            #        This is to avoid unintentional parsing of just a map's keys
-            if (items := ut.map_items(data)) and (
-                not details.val_type or details.val_type.is_map_item()
-            ):
-                data = items
-            else:
-                return None
-        elif isinstance(data, Flag):
-            # II.iii. Split Flags into their member names
-            dt = type(data)
-            data = [dt(member.value) for member in dt if member in data]
-        elif not isinstance(data, Iterable) and self.wraps:
-            # II.iv. Wrap all other non-iterables to at least give them a shot
-            data = [data]
-
-        # III. Perform the actual casting -- first the values, then the container itself
-        with ctx.suppress(TypeError):
-            if data and isinstance(data, Series) and details.val_type:
-                data = self.multicast(data, details.val_type, skip=False)
-            return tvar(data)  # type: ignore
-        return None
-
-    def _split_str(self, data: str) -> list[str] | None:
-        """Split a string into a list using various delimiters.
-
-        Args:
-            data: The string to split.
-        Returns:
-            List of split strings if delimiters found, None otherwise.
-        """
-        if self.splits and data:
-            if data[0] == '[' and data[-1] == ']' and data.count('[') == 1:
-                # II. Split yaml-like flow sequences
-                with ctx.suppress(Exception):
-                    return self.from_yaml(data, list[str], cast=False)
-            elif char := next(filter(data.__contains__, [',', '//', ':', '.']), ''):
-                # III. Split on common delimiters in order of preference
-                #       e.g. one.oneA:two splits on colons, but one.oneA splits on periods
-                return list(filter(bool, map(str.strip, data.split(char))))
-
-        return [data] if self.wraps else None
-
     @classmethod
     def _concretize(cls, target: MyType, data: object) -> MyType:
         """Convert abstract container types to concrete ones based on data.
@@ -919,7 +382,7 @@ class Typist(pyd.BaseModel):
         elif main in {abc.MutableSet, abc.Set}:
             new_main = set
         elif main in ABSTRACT_SEQS:
-            if isinstance(data, Series) and (_dt := MyType.parse(type(data))):
+            if is_series(data) and (_dt := MyType.parse(type(data))):
                 new_main = _dt.main_type
             else:
                 new_main = list
@@ -1190,19 +653,22 @@ class Typist(pyd.BaseModel):
 
         # II. Return the data as-is if it already matches the target type
         data = self._clean_data(data)
-        if target.check(data):
+        source = MyType.metaparse(data)
+        if self.match(source, target):
             return data
 
         # III. When given abstract classes, arbitrarily choose a concrete type
         if target.main_type is not None:
             target = self._concretize(target, data)
 
-        # IV. Perform the actual casting
+        # IV.i. Try to guess the most likely answers out of long unions
         options = self.sort_options(data, *target.args) if target.is_split else [target]
-        for option in options:
-            if (ret := self._cast(data, option)) is not None:
-                return ret
-        return None
+
+        # IV.ii. Perform the actual casting
+        return next(
+            filter(bool, (Cast(ctx=self, t0=source, t1=_target)(data) for _target in options)),
+            None,
+        )
 
     def flexcast(self, data: object, tvar: TypeArg) -> Any | None:
         """Cast data to a type, returning original data on failure.
@@ -1248,22 +714,21 @@ class Typist(pyd.BaseModel):
         return ret
 
     def flex_deserialize(self, values: Sequence[str] | str) -> list[Atomic]:
-        """Convert a list of strings to their most appropriate `Atomic` type."""
-        values = [values] if isinstance(values, str) else list(values)
-        typing.cast('list[str]', values)
+        """Convert a list of strings to their most appropriate `Scalar` type."""
+        values = [values] if isinstance(values, str) else list(map(str, values))
         new_types = [
             next(
                 (
                     _type
-                    for name, _type in self.ATOMIC_TYPES.items()
-                    if name in self.RGXS and self.RGXS[name].fullmatch(val)
+                    for name, _type in self.SCALAR_TYPES.items()
+                    if (rgx := self.RGXS.get(name, None)) and rgx.fullmatch(val)
                 ),
                 str,
             )
             for val in values
         ]
         return [  #  type:ignore
-            (val if tvar is str else self._to_atomic(val, tvar))
+            (val if tvar is str else self._to_scalar(val, tvar))
             for val, tvar in zip(values, new_types, strict=True)
         ]
 
@@ -1307,34 +772,36 @@ class Typist(pyd.BaseModel):
         Raises:
             TypeError: If casting fails.
         """
+        val = None
         # I. Edge Cases
         if isinstance(data, tvar):
             return data
         elif issubclass(type(data), tvar):
-            return tvar(data)  # type: ignore
-        elif not data:
-            return tvar()  # type: ignore
+            val = data
 
         # II. Casting from atomics
-        if isinstance(data, Atomic):
-            if issubclass(tvar, Series):
-                return tvar([data])
+        elif isinstance(data, Scalars):
+            if is_series(tvar):
+                val = [data]
             elif issubclass(tvar, Mapping):
-                return tvar({'content': data})
+                val = {'content': data}
 
-        # III. Catching mistmatched collections
-        elif isinstance(data, dict) and issubclass(tvar, Series):
-            if len(data) == 1 and isinstance((first := mi.first(data.values())), Series):
-                return tvar(first)
+        # III. Catching mismatched collections
+        elif isinstance(data, dict) and is_series(tvar):
+            if len(data) == 1 and is_series(first := mi.first(data.values())):
+                val = first
             else:
-                return tvar([data])
+                val = [data]
         elif isinstance(data, list) and issubclass(tvar, Mapping):
             if len(data) == 1 and isinstance((first := mi.first(data)), Mapping):
-                return tvar(first)
+                val = first
             else:
-                return tvar({'content': data})
+                val = {'content': data}
 
-        # IV. Main case: give it to _cast and pray
+        if val is not None:
+            return tvar(val)  # type: ignore
+
+        # IV. Main case: coerce it dynamically
         if (ret := self.cast(data, MyType.parse(tvar))) is not None:
             return ret
         raise TypeError(f'Cannot cast file data of type `{type(data)}` to `{tvar}`.')
@@ -1342,40 +809,50 @@ class Typist(pyd.BaseModel):
     # -------------------
     # `*4` TRANSFORMATION
     # -------------------
-    def serialize(
-        self,
-        data: object,
-        cases: dict[type | Callable[[object], bool], Callable[[object], Any]] | None = None,
-        full: bool = False,
-    ) -> Any:
+    @overload
+    def serialize[A: Scalar](
+        self, *data: object, full: bool = False, **cases: Case
+    ) -> list[Scalar]: ...
+
+    @overload
+    def serialize(self, *data: object, full: bool = False, **cases: Case) -> list[Scalar]: ...
+
+    @overload
+    def serialize(self, *data: object, full: bool = False, **cases: Case) -> list[Scalar]: ...
+
+    @overload
+    def serialize(self, *data: object, full: bool = False, **cases: Case) -> list[Scalar]: ...
+
+    def serialize(self, *data: object, full: bool = False, **cases: Case) -> Any:
         """Recursively simplify the given object into serialization-ready, standardized types.
 
         This method is undeniably an opinionated way of preparing data for export, but it should
-        be easy enough to change or add some of these decisions using `cases`. That said, some
-        example type changes are:
+        be easy enough to change or add some of these decisions using `cases`.
 
-        - All pydantic models are converted to dicts using their `model_dump()` method.
-        - All series (sets, lists, deques, and subclasses) are cast to lists.
-        - All maps (dicts, defaultdict, Counters) are cast to dicts.
-        - All enums and time types are converted to strings.
+        The following rules are applied:
+
+        - All **enums** and **times** are converted to strings.
+        - All other **atomics** are left as-is
+        - All **series** are cast to lists.
+        - All **maps** are cast to dicts.
+        - All **models** are converted to dicts using their `model_dump()` method.
 
         Args:
-            data: The source data to serialize.
-            cases: Optional special-case handlers for specific types, that trigger at all depths.
+            data: The source data to serialize. Passing more than one obviously creates a list.
             full: If True, include unset/default fields for pydantic models.
+            **cases: Optional special-case handlers for specific types, that trigger at all depths.
         """
         # 0. If the caller specified a special handler, call that instead
-        if cases:
-            for case, handler in cases.items():
-                if (isinstance(case, type) and isinstance(data, case)) or (
-                    inspect.isfunction(case) and case(data)
-                ):
-                    return handler(data) if handler is not None else data
+        _is_special = lambda _c: (
+            (isinstance(_c, type) and isinstance(data, _c)) or (inspect.isfunction(_c) and _c(data))
+        )
+        if handler := next(filter(_is_special, cases.values()), (None, None))[1]:
+            return handler(data)
 
         # I. Cast special atomics to strings, and return others as-is
-        if isinstance(data, Atomic):
+        if is_scalar(data):
             if isinstance(data, Enum | Time):
-                return self._to_atomic(data, str)
+                return self._to_scalar(data, str)
             else:
                 return data
 
@@ -1386,15 +863,12 @@ class Typist(pyd.BaseModel):
                 return fn()
 
             # II.ii. Rely on the model's serializers and treat the result as a dict
-            if full:
-                data = data.model_dump()
-            else:
-                data = data.model_dump(exclude_unset=True, exclude_defaults=True)
+            data = data.model_dump(exclude_unset=full, exclude_defaults=full)  # type: ignore
 
         # III. Recurse into collections
         if isinstance(data, Collection):
-            _recur = ft.partial(self.serialize, cases=cases, full=full)
-            if isinstance(data, Series):
+            _recur = ft.partial(self.serialize, cases=dict(cases), full=full)
+            if is_series(data):
                 return list(map(_recur, data))
             elif isinstance(data, Mapping):
                 return ut.val_map(_recur, data)
@@ -1518,324 +992,6 @@ class Typist(pyd.BaseModel):
     # ----------------
     # `*5` PERSISTENCE
     # ----------------
-    @overload
-    def from_file(self, file: str | Path) -> dict: ...
-
-    @overload
-    def from_file(self, file: str | Path, tvar: type[F], cast: bool = True) -> F: ...
-
-    def from_file(
-        self,
-        file: str | Path,
-        tvar: type[F] = dict,  # ty:ignore[invalid-parameter-default]
-        cast: bool = True,
-    ) -> F:
-        """Load data from local JSON, YAML, TOML, or Pickle file, then cast to target type.
-
-        In order to cast between the by-far two most common expected types--dict and list--Typist
-        will wrap uncastable values in a dict (w/ one key, `'content'`) or a list (w/ one value).
-
-        Args:
-            file: Path to the file to load. Note that raw strings are NOT allowed here.
-            tvar: Target type to cast the loaded data to (dict by default). Like `cast()`, you
-                  can use complex, nested types here if desired.
-            cast: If False, data that doesn't match the expected return type raises an error.
-        Returns:
-            Loaded and cast data from the file.
-        """
-        if not file:
-            self.LOGGER.error('No file provided.')
-            return tvar()  # type: ignore
-        elif not isinstance(file, Path):
-            file = Path(str(file)).expanduser()
-        ut.validate_file(file)
-
-        if file.suffix in ['.yml', '.yaml']:
-            return self.from_yaml(file, tvar, cast)
-        elif file.suffix in ['.json']:
-            return self.from_json(file, tvar, cast)
-        elif file.suffix in ['.tml', '.toml']:
-            return self.from_toml(file, tvar, cast)
-        elif file.suffix in ['.pkl']:
-            return self.from_pickle(file, tvar, cast)
-        else:
-            raise ValueError(f'Unsupported file type: {file}')
-
-    @overload
-    def from_json(self, file: FileParam) -> dict: ...
-
-    @overload
-    def from_json(self, file: FileParam, tvar: type[F], cast: bool = True) -> F: ...
-
-    def from_json(
-        self,
-        file: FileParam,
-        tvar: type[F] = dict,  # ty:ignore[invalid-parameter-default]
-        cast: bool = True,
-    ):
-        """Load data from JSON file or string, then cast to target type. See `from_file()`.
-
-        Args:
-            file: Path to the file to load, or raw JSON string/bytes.
-            tvar: Target type to cast the loaded data to (dict by default). Like `cast()`, you
-                  can use complex, nested types here if desired.
-            cast: If False, data that doesn't match the expected return type raises an error.
-        Returns:
-            Loaded and cast data from the file/string.
-        """
-        if not file:
-            return tvar()  # type: ignore
-        elif isinstance(file, Path):
-            ut.validate_file(file)
-            ret = srsly.read_json(file)
-        else:
-            if isinstance(file, bytes):
-                file = file.decode()
-            ret = srsly.json_loads(file)
-
-        if isinstance(ret, tvar):
-            return ret
-        elif cast:
-            return tvar(ret)  # type: ignore
-        else:
-            raise TypeError(f'Expected `{tvar}`, got `{type(ret)}`.')
-
-    @overload
-    def from_yaml(self, file: FileParam) -> dict: ...
-
-    @overload
-    def from_yaml(self, file: FileParam, tvar: type[F], cast: bool = True) -> F: ...
-
-    def from_yaml(
-        self,
-        file: FileParam,
-        tvar: type[F] = dict,  # ty:ignore[invalid-parameter-default]
-        cast: bool = True,
-    ) -> F:
-        """Load data from YAML file or string, then cast to target type. See `from_file()`.
-
-        Args:
-            file: Path to the file to load, or raw YAML string/bytes.
-            tvar: Target type to cast the loaded data to (dict by default). Like `cast()`, you
-                  can use complex, nested types here if desired.
-            cast: If False, data that doesn't match the expected return type raises an error.
-        Returns:
-            Loaded and cast data from the file/string.
-        """
-        # I. Parse the content using an external library
-        if not file:
-            # I.i. Empty case
-            return tvar()  # type: ignore
-        elif isinstance(file, Path):
-            # I.ii. Local case: Read directly from file
-            ut.validate_file(file)
-            ret = srsly.read_yaml(file)
-        else:
-            # I.iii. Main Case: Attempt to parse in-memory YAML strings
-            if isinstance(file, bytes):
-                file = file.decode()
-            if file.strip().startswith('```yaml'):
-                file = '\n\n'.join(self.RGXS['yaml'].findall(file))
-
-            ret = srsly.yaml_loads(file)
-
-        # II. Verify & format the response
-        # if isinstance(ret, tvar):
-        if self.check(ret, tvar):
-            return ret
-        elif not ret:
-            return tvar()  # type: ignore
-        elif cast:
-            with ctx.suppress(ValueError):
-                return tvar(ret)  # type: ignore
-        raise TypeError(f'Expected `{tvar}`, got `{type(ret)}`.')
-
-    @overload
-    def from_toml(self, file: FileParam) -> dict: ...
-
-    @overload
-    def from_toml(self, file: FileParam, tvar: type[F], cast: bool = True) -> F: ...
-
-    def from_toml(
-        self,
-        file: FileParam,
-        tvar: type[F] = dict,  # ty:ignore[invalid-parameter-default]
-        cast: bool = True,
-    ) -> F:
-        """Load data from TOML file or string, then cast to target type. See `from_file()`.
-
-        Args:
-            file: Path to the file to load, or raw TOML string/bytes.
-            tvar: Target type to cast the loaded data to (dict by default). Like `cast()`, you
-                  can use complex, nested types here if desired.
-            cast: If False, data that doesn't match the expected return type raises an error.
-        Returns:
-            Loaded and cast data from the file/string.
-        """
-        tvar = self.specify(tvar)
-        if not file:
-            return tvar()  # type: ignore
-        elif isinstance(file, Path):
-            ret = tomllib.loads(file.read_text())
-        else:
-            if isinstance(file, bytes):
-                file = file.decode()
-            ret = tomllib.loads(file)
-
-        if isinstance(ret, tvar):
-            return ret
-        elif cast:
-            return tvar(ret)  # type: ignore
-        else:
-            raise TypeError(f'Expected `{tvar}`, got `{type(ret)}`.')
-
-    @overload
-    def from_pickle(self, file: FileParam) -> dict: ...
-
-    @overload
-    def from_pickle(self, file: FileParam, tvar: type[F], cast: bool = True) -> F: ...
-
-    def from_pickle(
-        self,
-        file: FileParam,
-        tvar: type[F] = dict,  # ty:ignore[invalid-parameter-default]
-        cast: bool = True,
-    ) -> F:
-        """Load data from Pickle file or bytes, then cast to target type. See `from_file()`.
-
-        Args:
-            file: Path to the file to load, or raw Pickle bytes/string.
-            tvar: Target type to cast the loaded data to (dict by default). Like `cast()`, you
-                  can use complex, nested types here if desired.
-            cast: If False, data that doesn't match the expected return type raises an error.
-        Returns:
-            Loaded and cast data from the file/string.
-        """
-        if not file:
-            return tvar()  # type: ignore
-        elif isinstance(file, Path):
-            ret = pickle.loads(file.read_bytes())
-        else:
-            if isinstance(file, str):
-                file = file.encode()
-            ret = pickle.loads(file)
-
-        if isinstance(ret, tvar):
-            return ret
-        elif cast:
-            return tvar(ret)  # type: ignore
-        else:
-            raise TypeError(f'Expected `{tvar}`, got `{type(ret)}`.')
-
-    def to_file(self, data: FileData, file: str | File) -> None:
-        """Save data to local JSON, YAML, TOML, or Pickle file (depending on file suffix).
-
-        Args:
-            data: The data to save.
-            file: Path to the file to save. Note that raw strings are NOT allowed here.
-        """
-        if not file:
-            return
-        elif not isinstance(file, Path):
-            file = Path(str(file)).expanduser()
-
-        file.parent.mkdir(parents=True, exist_ok=True)
-        if file.suffix in ['.yml', '.yaml']:
-            file.write_text(self.to_yaml(data))
-        elif file.suffix in ['.json']:
-            file.write_text(self.to_json(data))
-        elif file.suffix in ['.tml', '.toml']:
-            file.write_text(self.to_toml(data))
-        elif file.suffix in ['.pkl']:
-            file.write_bytes(self.to_pickle(data))
-        else:
-            self.LOGGER.error(f'Unsupported file type: {file}')
-
-    def to_yaml(self, data: FileData, wrap: bool = False, **kwargs) -> str:
-        """Serialize data to a YAML string. See `to_file()` for general details.
-
-        Args:
-            data: The data to serialize.
-            wrap: If True, wrap the output in markdown backticks for YAML.
-            **kwargs: Additional keyword arguments to pass to `srsly.yaml_dumps()`.
-        Returns:
-            YAML string representation of the data.
-        """
-        obj = self.serialize(data)
-        text = self.YAML_CONFIG.dump(obj, **kwargs)
-        assert isinstance(text, str), 'Failed to write YAML data.'
-
-        # If we printed a root array, de-intent it
-        if isinstance(data, Series) and text.startswith(' '):
-            text = textwrap.dedent(text)
-
-        # If requested, wrap in markdown bactics
-        if wrap:
-            text = f'```yaml\n{text}\n```'
-        return text
-
-    def to_json(self, data: FileData, wrap: bool = False, **kwargs) -> str:
-        """Serialize data to a JSON string. See `to_file()` for general details.
-
-        Args:
-            data: The data to serialize.
-            wrap: If True, wrap the output in markdown backticks for JSON.
-            **kwargs: Additional keyword arguments to pass to `srsly.json_dumps()`.
-        Returns:
-            JSON string representation of the data.
-        """
-        obj = self.serialize(data)
-        if 'indent' not in kwargs:
-            kwargs['indent'] = 4
-        text = srsly.json_dumps(obj, **kwargs)
-
-        # If requested, wrap in markdown bactics
-        if wrap:
-            text = f'```json\n{text}\n```'
-        return text
-
-    def to_toml(self, data: FileData, wrap: bool = False, **kwargs) -> str:
-        """Serialize data to a TOML string. See `to_file()` for general details.
-
-        Args:
-            data: The data to serialize.
-            wrap: If True, wrap the output in markdown backticks for TOML.
-            **kwargs: Additional keyword arguments to pass to `tomli_w.dumps()`.
-        Returns:
-            TOML string representation of the data.
-        """
-        obj = self.serialize(data)
-
-        # Cast to dict, as toml only accepts dicts at the top level
-        if not isinstance(obj, dict):
-            if (
-                isinstance(obj, Series)
-                and len(obj) == 1
-                and isinstance((_obj := mi.first(obj)), dict)
-            ):
-                obj = _obj
-            else:
-                obj = dict(content=obj)
-
-        # II. Serialize w/ default params
-        text = tomli_w.dumps(obj, **kwargs)
-
-        # If requested, wrap in markdown bactics
-        if wrap:
-            text = f'```toml\n{text}\n```'
-        return text
-
-    def to_pickle(self, data: FileData, **kwargs) -> bytes:
-        """Serialize data to Pickle bytes. See `to_file()` for general details.
-
-        Args:
-            data: The data to serialize.
-            **kwargs: Additional keyword arguments to pass to `pickle.dumps()`.
-        Returns:
-            Pickle byte representation of the data.
-        """
-        obj = self.serialize(data)
-        return pickle.dumps(obj, **kwargs)
 
     # ---------------
     # `*6` INVOCATION
@@ -1930,8 +1086,8 @@ class Typist(pyd.BaseModel):
         if len(args) == 1:
             if any(map(cls._param_is_keyword, params)) and (items := ut.map_items(args[0])):
                 kwargs = dict(items) | kwargs
-            elif isinstance(args[0], Series):
-                args = tuple(args[0])
+            elif is_series(args[0]):
+                args = tuple(args[0])  # type: ignore
             else:
                 return None
             with ctx.suppress(TypeError):
@@ -2063,5 +1219,4 @@ class Typist(pyd.BaseModel):
         return None
 
 
-Typist._setup()
 typist = Typist(atomics=True, splits=True)

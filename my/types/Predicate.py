@@ -21,8 +21,6 @@ from ..typing import Typist, MyType
 # Create a local typist with the most permissive possible configuration.
 typist = Typist(firsts=True, atomics=True, splits=True, wraps=True)
 
-re.DEFAULT_VERSION = re.VERSION1
-
 
 ############
 ### BODY ###
@@ -105,7 +103,7 @@ class Predicate(pyd.BaseModel):
         target = typist.parse(tvar)
         if not target:
             return source
-        kvar, vvar = target.key_type, target.val_type
+        kvar, vvar = target.keys, target.vals
 
         # IV. Expand nested structures into new dicts
         if ut.any_has_any(source.keys(), '.') and (
@@ -253,12 +251,12 @@ class Predicate(pyd.BaseModel):
     # -------------------
     def to_yaml(self, **kwargs) -> str:
         """Serialize the Predicate to a YAML string."""
-        return typist.to_yaml(self._abbreviate(self.serialize()), **kwargs)
+        return ut.to_yaml(self._abbreviate(self.serialize()), **kwargs)
 
     @classmethod
     def from_yaml(cls, text: str, **kwargs) -> 'Predicate':
         """Create a Predicate from a YAML string."""
-        return cls.new(typist.from_yaml(text), **kwargs)
+        return cls.new(ut.from_yaml(text), **kwargs)
 
     def write(self, field: str, value: Any, overwrite: bool | None = None):
         """Add a value to a field in this predicate, with custom overriding logic.

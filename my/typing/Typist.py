@@ -2,14 +2,14 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import Any, ClassVar, Literal, TypeGuard, TypeVar, overload, TypeIs
+from __future__ import annotations
+from typing import Any, ClassVar, Literal, TypeGuard, TypeVar, overload, TypeIs, Self
 import typing
 import collections.abc as abc
 from collections.abc import (
     Collection,
     Callable,
     Iterable,
-    Iterator,
     Mapping,
     Sequence,
     Hashable,
@@ -31,22 +31,16 @@ import logging
 import pydantic as pyd
 
 ### INTERNAL
-from ..infra import (
-    Atomic,
-    Time,
-    Series,
-    _Series,
-    Scalar,
-    # Vector,
+from ..infra.types import (
+    _Vec,
+    Atom,
     Map,
+    Scalar,
     Scalars,
-    is_atomic,
-    is_scalar,
-    # is_vector,
-    is_series,
+    Time,
+    Vec,
 )
 from ..utils import ut
-from ..caches import NestedCache
 from .MyType import MyType
 from .Cast import Cast
 
@@ -64,7 +58,7 @@ ClassType = TypeVar('ClassType')
 
 FileParam = str | bytes | File | None
 RawJsonData = str | int | float | bool | list | dict | None
-FileData = Atomic | Series | Map | pyd.BaseModel
+FileData = Atom | Vec | Map | pyd.BaseModel
 F = TypeVar('F', bound=FileData)
 
 ABSTRACT_MAPS = [typing.Mapping, abc.Mapping, abc.MutableMapping]
@@ -214,18 +208,51 @@ class Typist(pyd.BaseModel):
     RAISE: ClassVar[bool] = True
 
     # Dynamic Global Members
-    MATCH_CACHE: ClassVar[NestedCache[tuple[str, str], bool]] = NestedCache(signature=(str, str))
     LOGGER: ClassVar[logging.Logger] = logger
+    _INST: ClassVar[Typist]
 
-    # Instance Members (for changing CASTING behavior only)
-    atomics: bool = False
-    firsts: bool = False
-    splits: bool = False
-    wraps: bool = False
+    class Options(pyd.BaseModel):
+        """Options for controlling the behavior of typecasting."""
+
+        #: Whether to flexibly cast all vecotrs to atoms, based on their first element.
+        firsts: bool = False
+        #: Whether to flexibly cast len=1 vecotrs to atoms.
+        atomics: bool = False
+        #: Whether to split up strings when casting them to vectors.
+        splits: bool = False
+        #: Whether to flexibly wrap atoms when casting them to vectors.
+        wraps: bool = False
+
+        @classmethod
+        def preset(cls, level: Literal['strict', 'basic', 'flex'] = 'basic') -> Self:
+            """Get a preset configuration for typecasting behavior."""
+            if level == 'strict':
+                return cls(atomics=False, firsts=False, splits=False, wraps=False)
+            elif level == 'basic':
+                return cls(atomics=True, firsts=False, splits=True, wraps=False)
+            elif level == 'flex':
+                return cls(atomics=True, firsts=True, splits=True, wraps=True)
+            else:
+                raise ValueError(f'Invalid preset level: {level}')
+
+    #: Configuration options
+    options: Options = Options()
 
     # -------------------
     # `.` Initial Methods
     # -------------------
+    @classmethod
+    def inst(cls) -> Typist:
+        """Get the global instance of Typist."""
+        if not hasattr(cls, '_INST'):
+            cls._INST = cls(options=cls.Options.preset('basic'))
+        return cls._INST
+
+    def __init__(self, **kwargs):
+        """Initialize a Typist instance with optional configuration for casting behavior."""
+        super().__init__(**kwargs)
+        if not hasattr(Typist, '_INST'):
+            Typist._INST = self
 
     # -------------------
     # `-` Private Methods
@@ -253,7 +280,7 @@ class Typist(pyd.BaseModel):
             Integer score where higher values indicate better fit.
         """
         # I. Validate and parse args, catching edge cases
-        if not (tvar := option.main_type):
+        if not (tvar := option.main):
             return -10
         elif option.check(data):
             return 10
@@ -262,8 +289,12 @@ class Typist(pyd.BaseModel):
 
         c0 = isinstance(data, Collection)
         c1 = issubclass(tvar, Collection)
-        a0 = is_atomic(data)
-        a1 = is_atomic(tvar)
+        a0 = cls.is_atom(data)
+        a1 = cls.is_atom(tvar)
+        if cls.is_atom(data):
+            print(data)
+        if cls.is_atom(tvar):
+            print(tvar)
 
         # II. "Main" score: compare the base types, especially atomics vs. collections
         score = 0
@@ -287,25 +318,25 @@ class Typist(pyd.BaseModel):
             score += 2
             if ut.is_map(data) and issubclass(tvar, Mapping):
                 score += 2
-                if option.key_type is None:
+                if option.keys is None:
                     score += 1
-                if option.val_type is None:
+                if option.vals is None:
                     score += 1
                 if items := ut.map_items(data):
                     keys, vals = mi.unzip(items)
-                    if cls.match(tuple(set(map(type, keys))), option.key_type):
+                    if cls.match(tuple(set(map(type, keys))), option.keys):
                         score += 2
-                    if cls.match(tuple(set(map(type, vals))), option.val_type):
+                    if cls.match(tuple(set(map(type, vals))), option.vals):
                         score += 2
-            elif is_series(data) and is_series(tvar):
+            elif cls.is_vec(data) and cls.is_vec_type(tvar):
                 score += 2
 
-                if option.val_type is None:
+                if option.vals is None:
                     score += 1
                 elif (
                     data
                     and isinstance(data, Iterable)
-                    and cls.match(tuple(set(map(type, data))), option.val_type)
+                    and cls.match(tuple(set(map(type, data))), option.vals)
                 ):
                     score += 2
 
@@ -342,23 +373,6 @@ class Typist(pyd.BaseModel):
 
         return MyType.parse(new_src)
 
-    @staticmethod
-    def _clean_data(data: object) -> object | None:
-        """Clean and normalize data for processing.
-
-        Args:
-            data: The data to clean.
-        Returns:
-            Cleaned data with iterators converted to lists and strings stripped.
-        """
-        if isinstance(data, Iterator):
-            return list(data)
-        elif isinstance(data, str):
-            return data.strip()
-        elif isinstance(data, bytes):
-            return data.decode().strip()
-        return data
-
     @classmethod
     def _concretize(cls, target: MyType, data: object) -> MyType:
         """Convert abstract container types to concrete ones based on data.
@@ -369,21 +383,21 @@ class Typist(pyd.BaseModel):
         Returns:
             Tuple of (potentially modified MyType, potentially modified main type).
         """
-        main = target.main_type
+        main = target.main
         if main is None:
             return target
 
         new_main = None
         if main in ABSTRACT_MAPS:
             if isinstance(data, Mapping) and (_dt := MyType.parse(type(data))):
-                new_main = _dt.main_type
+                new_main = _dt.main
             else:
                 new_main = dict
         elif main in {abc.MutableSet, abc.Set}:
             new_main = set
         elif main in ABSTRACT_SEQS:
-            if is_series(data) and (_dt := MyType.parse(type(data))):
-                new_main = _dt.main_type
+            if cls.is_vec(data) and (_dt := MyType.parse(type(data))):
+                new_main = _dt.main
             else:
                 new_main = list
 
@@ -421,60 +435,9 @@ class Typist(pyd.BaseModel):
             param.VAR_KEYWORD,
         }
 
-    @classmethod
-    def _match_literals(cls, t0: MyType, t1: MyType, intersect: bool) -> bool:
-        """Check if two literal types match according to subset or intersection logic.
-
-        Args:
-            t0: First MyType with literal members.
-            t1: Second MyType with literal members.
-            intersect: If True, check for intersection; if False, check for subset.
-        Returns:
-            True if types match according to the specified logic.
-        """
-        # 0. Setup
-        lit0, lit1 = t0.literal_members, t1.literal_members
-        o0, o1 = t0.origin, t1.origin
-
-        _recur = ft.partial(cls.match, intersect=intersect)
-
-        if lit0 and lit1:
-            assert o0 and o1, "Found literal without an origin, which doesn't make sense."
-            if o0 is Literal and o1 is Literal:
-                # I.i. Two literals are basically the same as container types, just with objects
-                fn = ut.has_any if intersect else ut.has_all
-                return fn(t1.literal_members, *t0.literal_members)
-
-            elif issubclass(o0, o1) and issubclass(o1, tuple):  # type: ignore
-                # I.ii. Two positional tuples must always match exactly
-                return len(t0.args) == len(t1.args) and all(
-                    it.starmap(_recur, zip(t0.args, t1.args, strict=True))
-                )
-        elif lit0 and (m1 := t1.main_type):
-            assert o0, "Found literal without an origin, which doesn't make sense."
-            if o0 is Literal:
-                # II.i. A literal can be a subset of an atomic type(s)
-                fn = any if intersect else all
-                return fn(_recur(arg, t1) for arg in t0.args)
-            elif issubclass(o0, m1) and issubclass(m1, tuple):
-                if len(t1.args) == 0:
-                    # II.ii. Any positional tuple is a subset of its plain base
-                    return True
-                elif t1.val_type:
-                    # II.iii. Theoretically, a positional tuple could a subset of a typed tuple
-                    #         e.g. tuple[int, str] x tuple[object, ...]
-                    return all(_recur(arg, t1.val_type) for arg in t0.args)
-
-        elif lit1 and intersect and t0.main_type:
-            # III. Just recurse w/ flipped arguments for DRY reasons
-            return cls._match_literals(t1, t0, intersect=False)
-
-        return False
-
     # -------------------
     # `+` Primary Methods
     # -------------------
-
     def __repr__(self) -> str:
         return 'Typist'
 
@@ -498,8 +461,15 @@ class Typist(pyd.BaseModel):
     # `*2` COMPARISON
     # ---------------
     @classmethod
-    def check[T](cls, data, tvar: type[T]) -> TypeIs[T]:
-        """Check if a data matches a type variable. See `MyType.check()` for details."""
+    def check[T](cls, data, tvar: type[T] | MyType[T]) -> TypeIs[T]:
+        """Check if a given data value matches this type, recursing into containers where needed.
+
+        Args:
+            data: The data value to check. Ideally not an exhaustable iter.
+            tvar: The type to check against.
+        Returns:
+            True if *all* aspects of this type are satisfied by this data, including nested types.
+        """
         return MyType.parse(tvar).check(data)
 
     @classmethod
@@ -513,64 +483,10 @@ class Typist(pyd.BaseModel):
         return any(cls.check(value, tvar) for value in list(iterable))
 
     @classmethod
+    @ft.wraps(MyType.match)
     def match(cls, lhs: TypeArg, rhs: TypeArg, intersect: bool = False) -> bool:
-        """Check if the first type is valid subset of the second.
-
-        Args:
-            lhs: The source type.
-            rhs: The target type.
-            intersect: If `True`, check for any overlap between the two types
-                       rather than full subset coverage.
-        """
-        # I. Parse the types (if they're already parsed, no work is done)
-        if isinstance(lhs, MyType):
-            t0, lhs = lhs, lhs.src_type
-        else:
-            t0 = MyType.parse(lhs)
-
-        if isinstance(rhs, MyType):
-            t1, rhs = rhs, rhs.src_type
-        else:
-            t1 = MyType.parse(rhs)
-
-        # II.i. Any & None (i.e. unspecified) are true, but unhandled MyTypes are always false
-        if {lhs, rhs} & {Any, None}:
-            return True
-        elif not (t0 and t1):
-            return False
-
-        # II.i. Check cache based on simple stringification
-        cache_key = str(lhs), str(rhs)
-        if intersect:
-            cache_key = (cache_key[0], cache_key[1] + '.I')
-        if (cached := cls.MATCH_CACHE[*cache_key]) is not None:
-            return cached
-
-        ret = False
-        _recur = ft.partial(cls.match, intersect=intersect)
-        if t0.literal_members or t1.literal_members:
-            # III.i. Literal case
-            ret = cls._match_literals(t0, t1, intersect)
-        elif not (mt0 := t0.main_type) or not (mt1 := t1.main_type):
-            # III.ii. Unhandled case
-            ret = False
-        elif t0.is_split or t1.is_split:
-            # III.iii. Unions case
-            lhs_options = t0.args if t0.is_split else [t0]
-            rhs_options = t1.args if t1.is_split else [t1]
-            fn = any if intersect else all
-            ret = fn(any(_recur(lo, ro) for ro in rhs_options) for lo in lhs_options)
-        else:
-            # IV. Main case: check for simple subclass coverage for the main type and any children
-            ret = issubclass(mt0, mt1) or (issubclass(mt1, mt0) if intersect else False)
-            if ret and t0.key_type and t1.key_type:
-                ret &= _recur(t0.key_type, t1.key_type)
-            if ret and t0.val_type and t1.val_type:
-                ret &= _recur(t0.val_type, t1.val_type)
-
-        # Cache & return
-        cls.MATCH_CACHE[*cache_key] = ret
-        return ret
+        """See `MyType.match`."""
+        return MyType.match(lhs, rhs, intersect)
 
     def match_instances(self, lhs: object, rhs: object, intersect: bool = False) -> bool:
         """Check if two instances have matching types.
@@ -625,11 +541,11 @@ class Typist(pyd.BaseModel):
             return any(self.seek_usage(t0, ann) for ann in ut.instance_fields(container).values())
         else:
             # III.ii.b. Recurse into container values
-            if t1.key_type and self.seek_usage(t0, t1.key_type):
+            if t1.keys and self.seek_usage(t0, t1.keys):
                 return True
 
-            if t1.val_type:
-                return self.seek_usage(t0, t1.val_type)
+            if t1.vals:
+                return self.seek_usage(t0, t1.vals)
             elif t1.literal_members and t1.origin is tuple:
                 return any(self.seek_usage(t0, arg) for arg in t1.literal_members)
 
@@ -652,13 +568,13 @@ class Typist(pyd.BaseModel):
         target = MyType.parse(tvar)
 
         # II. Return the data as-is if it already matches the target type
-        data = self._clean_data(data)
+        data = MyType._normalize(data)
         source = MyType.metaparse(data)
         if self.match(source, target):
             return data
 
         # III. When given abstract classes, arbitrarily choose a concrete type
-        if target.main_type is not None:
+        if target.main is not None:
             target = self._concretize(target, data)
 
         # IV.i. Try to guess the most likely answers out of long unions
@@ -685,7 +601,7 @@ class Typist(pyd.BaseModel):
     def multicast[V](
         self,
         values: Iterable[Any],
-        tvar: type[V] | Any,
+        tvar: type[V] | MyType[V] | Any,
         skip: bool = False,
     ) -> list[V] | list:
         """Cast multiple values to a target type.
@@ -713,8 +629,8 @@ class Typist(pyd.BaseModel):
                 raise TypeError(f'Cannot cast value `{value}` to type `{tvar}`.')
         return ret
 
-    def flex_deserialize(self, values: Sequence[str] | str) -> list[Atomic]:
-        """Convert a list of strings to their most appropriate `Scalar` type."""
+    def flex_deserialize(self, values: Sequence[str] | str) -> list[Atom]:
+        """Convert a list of strings to their most appropriate Atomic types."""
         values = [values] if isinstance(values, str) else list(map(str, values))
         new_types = [
             next(
@@ -781,14 +697,15 @@ class Typist(pyd.BaseModel):
 
         # II. Casting from atomics
         elif isinstance(data, Scalars):
-            if is_series(tvar):
+            if self.is_vec_type(tvar):
                 val = [data]
-            elif issubclass(tvar, Mapping):
+            elif self.is_map_type(tvar):
                 val = {'content': data}
 
         # III. Catching mismatched collections
-        elif isinstance(data, dict) and is_series(tvar):
-            if len(data) == 1 and is_series(first := mi.first(data.values())):
+        elif self.is_map(data) and self.is_vec_type(tvar):
+            _d = dict(data)
+            if len(_d) == 1 and self.is_vec(first := mi.first(_d.values())):
                 val = first
             else:
                 val = [data]
@@ -850,7 +767,7 @@ class Typist(pyd.BaseModel):
             return handler(data)
 
         # I. Cast special atomics to strings, and return others as-is
-        if is_scalar(data):
+        if self.is_scalar(data):
             if isinstance(data, Enum | Time):
                 return self._to_scalar(data, str)
             else:
@@ -868,21 +785,21 @@ class Typist(pyd.BaseModel):
         # III. Recurse into collections
         if isinstance(data, Collection):
             _recur = ft.partial(self.serialize, cases=dict(cases), full=full)
-            if is_series(data):
+            if self.is_vec(data):
                 return list(map(_recur, data))
             elif isinstance(data, Mapping):
                 return ut.val_map(_recur, data)
 
         return data
 
-    def assemble(
+    def assemble[T: dict](
         self,
-        base: dict,
-        *args: dict,
+        base: T,
+        *args: T,
         copy: bool = True,
         sort: bool = True,
         dups: bool = False,
-    ) -> dict:
+    ) -> T:
         """Combine dictionaries, recursively merging nested structures wherever possible.
 
         Args:
@@ -895,7 +812,7 @@ class Typist(pyd.BaseModel):
             Merged dictionary.
         """
         if base is None:
-            base = {}
+            base = {}  # type: ignore
         elif copy:
             base = deepcopy(base)
 
@@ -916,7 +833,7 @@ class Typist(pyd.BaseModel):
             old = base[key]
             if isinstance(old, Collection) and isinstance(new, Collection):
                 tvar = MyType.metaparse(old)
-                if tvar.main_type is None or (_cast := self.cast(new, tvar)) is None:
+                if tvar.main is None or (_cast := self.cast(new, tvar)) is None:
                     base[key] = new
                 elif isinstance(old, dict):
                     self.assemble(old, _cast, copy=False)
@@ -1086,7 +1003,7 @@ class Typist(pyd.BaseModel):
         if len(args) == 1:
             if any(map(cls._param_is_keyword, params)) and (items := ut.map_items(args[0])):
                 kwargs = dict(items) | kwargs
-            elif is_series(args[0]):
+            elif cls.is_vec(args[0]):
                 args = tuple(args[0])  # type: ignore
             else:
                 return None
@@ -1158,7 +1075,7 @@ class Typist(pyd.BaseModel):
     def try_method[T](
         self,
         obj: object,
-        methods: str | _Series[str],
+        methods: str | _Vec[str],
         *args,
         _tvar: type[T],
         _strict: Literal[True],
@@ -1169,7 +1086,7 @@ class Typist(pyd.BaseModel):
     def try_method(
         self,
         obj: object,
-        methods: str | _Series[str],
+        methods: str | _Vec[str],
         *args,
         _tvar: None = None,
         _strict: Literal[True],
@@ -1180,7 +1097,7 @@ class Typist(pyd.BaseModel):
     def try_method[T](
         self,
         obj: object,
-        methods: str | _Series[str],
+        methods: str | _Vec[str],
         *args,
         _tvar: type[T],
         **kwargs,
@@ -1188,13 +1105,13 @@ class Typist(pyd.BaseModel):
 
     @overload
     def try_method(
-        self, obj: object, methods: str | _Series[str], *args, **kwargs
+        self, obj: object, methods: str | _Vec[str], *args, **kwargs
     ) -> object | None: ...
 
     def try_method[T](
         self,
         obj: object,
-        methods: str | _Series[str],
+        methods: str | _Vec[str],
         *args,
         _tvar: type[T] | None = None,
         _strict: bool = False,
@@ -1219,4 +1136,4 @@ class Typist(pyd.BaseModel):
         return None
 
 
-typist = Typist(atomics=True, splits=True)
+typist = Typist.inst()

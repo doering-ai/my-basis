@@ -70,17 +70,17 @@ class TestMyType:
             exp_union_args = {arg.src_type for arg in cls.parse(exp[0]).args}
             assert found_args == exp_union_args
         elif len(exp) == 1:
-            assert inst.main_type is exp[0]
-            assert not inst.val_type
-            assert not inst.key_type
+            assert inst.main is exp[0]
+            assert not inst.vals
+            assert not inst.keys
         elif len(exp) == 2:
-            assert inst.main_type is exp[0]
-            self.check_inst(inst.val_type, exp[1])
-            assert not inst.key_type
+            assert inst.main is exp[0]
+            self.check_inst(inst.vals, exp[1])
+            assert not inst.keys
         elif len(exp) == 3:
-            assert inst.main_type is exp[0]
-            self.check_inst(inst.key_type, exp[1])
-            self.check_inst(inst.val_type, exp[2])
+            assert inst.main is exp[0]
+            self.check_inst(inst.keys, exp[1])
+            self.check_inst(inst.vals, exp[2])
 
     # -------------------
     # `.` Initial Methods
@@ -106,7 +106,7 @@ class TestMyType:
     )
     def test_parse__atomic(self, data):
         inst = cls.parse(data)
-        assert inst.main_type is data
+        assert inst.main is data
         assert len(inst.args) == 0
         assert bool(inst)
 
@@ -208,10 +208,10 @@ class TestMyType:
         inst = cls.parse(data)
 
         if inst.origin is Literal:
-            assert inst.main_type is None
+            assert inst.main is None
             assert {arg.src_type for arg in inst.args} == set(expected)
         elif inst.origin is not None and issubclass(inst.origin, tuple):
-            assert inst.main_type == inst.origin
+            assert inst.main == inst.origin
             assert [arg.src_type for arg in inst.args] == expected
         else:
             pyt.fail(f'{inst!r} is invalid.')
@@ -285,7 +285,7 @@ class TestMyType:
     def test_parse__unhandled(self, data):
         inst = cls.parse(data)
         assert not inst
-        assert inst.main_type is None
+        assert inst.main is None
 
     @pyt.mark.parametrize(
         'data, expected',
@@ -640,7 +640,7 @@ class TestMyType:
     def test_parse_ellipsis(self):
         # Test that Ellipsis is converted to EllipsisType
         inst = cls.parse(Ellipsis)
-        assert inst.main_type is types.EllipsisType
+        assert inst.main is types.EllipsisType
 
     def test_members(self):
         # Define a test Pydantic model
@@ -663,7 +663,7 @@ class TestMyType:
         assert all(isinstance(m, MyType) for m in members)
 
         # Check the types of the members
-        member_types = {m.main_type for m in members}
+        member_types = {m.main for m in members}
         assert member_types == {str, int, float, bool}
 
     def test_members_empty(self):

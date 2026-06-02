@@ -18,6 +18,7 @@ import textwrap
 import os
 import logging
 import regex as re
+from importlib.resources import files, Traversable
 
 # I/O
 import pickle
@@ -31,8 +32,15 @@ import pydantic as pyd
 import more_itertools as mi
 
 ### INTERNAL (NOTE: If adding new internal imports, update the comments in `__init__.py`)
-from ..infra import Atomic, Series
+from ..infra.types import Atomic, Vec, Vectors
 from .TextUtils import text_utils
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..typing.Typist import Typist  # noqa: TC004
+
+PathLike = str | Path | Traversable
 
 ############
 ### DATA ###
@@ -50,7 +58,7 @@ ClassType = TypeVar('ClassType')
 
 FileParam = str | bytes | File | None
 RawJsonData = str | int | float | bool | list | dict | None
-FileData = Atomic | Series | dict | pyd.BaseModel
+FileData = Atomic | Vec | dict | pyd.BaseModel
 F = TypeVar('F', bound=FileData)
 
 logger = logging.getLogger()
@@ -79,8 +87,9 @@ class SystemUtils:
         ),
     )
 
+    @ft.lru_cache(1)
     @staticmethod
-    def _typist():
+    def _typist() -> Typist:
         """Private, circular accessor to the typist package."""
         from ..typing.Typist import typist
 
@@ -483,7 +492,7 @@ class SystemUtils:
     # --------
     @overload
     @classmethod
-    def from_file(cls, file: str | Path) -> dict: ...
+    def from_file(cls, file: PathLike) -> dict: ...
 
     @overload
     @classmethod
@@ -746,7 +755,7 @@ class SystemUtils:
         assert isinstance(text, str), 'Failed to write YAML data.'
 
         # If we printed a root array, de-intent it
-        if isinstance(data, Series) and text.startswith(' '):
+        if isinstance(data, Vectors) and text.startswith(' '):
             text = textwrap.dedent(text)
 
         # If requested, wrap in markdown bactics
@@ -791,7 +800,7 @@ class SystemUtils:
         # Cast to dict, as toml only accepts dicts at the top level
         if not isinstance(obj, dict):
             if (
-                isinstance(obj, Series)
+                isinstance(obj, Vectors)
                 and len(obj) == 1
                 and isinstance((_obj := mi.first(obj)), dict)
             ):

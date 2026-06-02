@@ -13,7 +13,7 @@ import pydantic as pyd
 import regex as re
 
 ### INTERNAL
-from ..infra import INFRA_PATHS
+from ..infra.constants import INFRA_PATHS
 from ..utils import ut
 from ..regex import RegexStore
 from ..typing import typist
@@ -128,6 +128,9 @@ class Filesystem(pyd.BaseModel):
     """A registry of file paths, mapping string names to Path objects."""
 
     RGXS: ClassVar[RegexStore] = RGXS
+    PATH_VARS: ClassVar[dict[str, str]] = {
+        f'{key}': val for key, val in os.environ.items() if val.count('/') >= 2 and val[0] == '/'
+    }
 
     # ---- Dynamic / Runtime ----
     plat: Platform = Platform.local()
@@ -219,6 +222,8 @@ class Filesystem(pyd.BaseModel):
     def is_relative_to(cls, child: Path | str, parent: Path | str) -> bool:
         """Naively check if the child is relative to the proposed parent.
 
+        Necessary because of a seemingly undocumented lack of this method in Python3.8 paths.
+
         Args:
             child: Path to check.
             parent: Proposed parent path.
@@ -228,20 +233,23 @@ class Filesystem(pyd.BaseModel):
         return str(child).startswith(str(parent))
 
     @classmethod
-    def relativize(cls, path: Path, *parents: Path | str) -> Path | None:
-        """Relativize the given path to the first matching parent, if possible.
+    def relativize(cls, path: Path, *ancestors: Path | str) -> Path | None:
+        """Relativize the given path to the first matching parent if possible, or none otherwise.
 
         Args:
-            path: Path to relativize.
-            *parents: One or more parent paths to check against.
+            path: Path to relativize, which must be absolute. Doesn't have to exist.
+            *ancestors: One or more potential ancestors to check against.
         Returns:
-            The same path but relevant to one of the parents if possible, otherwise None.
+            The same path but relevant to one of the ancestors if possible, otherwise None.
         """
+        if not path.is_absolute():
+            return None
+
         return next(
             (
-                path.relative_to(parent)
-                for parent in map(cls.path, parents)
-                if cls.is_relative_to(path, parent)
+                path.relative_to(anc)
+                for anc in map(cls.path, ancestors)
+                if cls.is_relative_to(path, anc)
             ),
             None,
         )
@@ -270,6 +278,19 @@ class Filesystem(pyd.BaseModel):
                 print(f'Found trigger "{trigger}" in {ancestor}')
                 return ancestor
         return None
+
+    @classmethod
+    def shortpath(cls, path: str | Path | None) -> str:
+        """Relativize the given path to a shorter form if possible. For casual use."""
+        if not path:
+            return ''
+        path = cls.path(path)
+
+        ancestors = {'.': Path.cwd(), '~': Path.home(), **cls.PATH_VARS}
+        return next(
+            (str(Path(k, r)) for k, v in ancestors.items() if (r := cls.relativize(path, v))),
+            '',
+        )
 
 
 #: Define a default--and thus "naive local", so-to-speak--instance of the type.

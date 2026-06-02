@@ -22,14 +22,16 @@ import functools as ft
 import more_itertools as mi
 
 ### INTERNAL (NOTE: If adding new internal imports, update the comments in `__init__.py`)
-from ..infra import Series, _Map
+from ..infra.types import (
+    Vecs,
+    Map,
+    _Map,
+)
 
 
 ############
 ### DATA ###
 ############
-type MapItems[K: Hashable, V] = Iterable[tuple[K, V]]
-type Map[K: Hashable, V] = Mapping[K, V] | MapItems[K, V]
 
 
 ############
@@ -54,9 +56,9 @@ class IterUtils:
         return ft.reduce(lambda acc, fn: fn(acc), functions, val)
 
     @classmethod
-    def map_items[K: Hashable | Any = Any, V = Any](
+    def map_items[K: Hashable = Hashable, V = Any](
         cls,
-        value: Mapping[K, V] | Iterable[tuple[K, V]],
+        value: _Map[K, V],
     ) -> list[tuple[K, V]]:
         """Extract key-value pairs from mapping-like or tuple sequence objects.
 
@@ -81,7 +83,7 @@ class IterUtils:
         value: Mapping[K, V] | Iterable[tuple[K, V]] | object,
         ktype: type[K] | None = None,
         vtype: type[V] | None = None,
-    ) -> TypeIs[Map[K, V]]:
+    ) -> TypeIs[_Map[K, V]]:
         """Check if value is a map, or coercable to one. Can apply type checking.
 
         Args:
@@ -103,7 +105,7 @@ class IterUtils:
         if isinstance(value, Iterator):
             value = list(value)
 
-        if isinstance(value, Series):
+        if isinstance(value, Vecs):
             return all(
                 isinstance(v, tuple)
                 and len(v) == 2
@@ -199,7 +201,7 @@ class IterUtils:
     @classmethod
     def find_key[K: Hashable, V](
         cls,
-        items: Mapping[K, V] | Iterable[tuple[K, V]],
+        items: _Map[K, V],
         predicate: Callable[[V], bool] | V = bool,
         default: K | None = None,
     ) -> K | None:
@@ -230,6 +232,19 @@ class IterUtils:
         """
         return next(filter(container.__contains__, items), None)
 
+    @overload
+    @classmethod
+    def condense[V: object](
+        cls, items: Iterable[V | None], pred: Callable[[V], bool] = bool
+    ) -> list[V]: ...
+    @overload
+    @classmethod
+    def condense[V: object](
+        cls, items: Iterable[V | Literal[False]], pred: Callable[[V], bool] = bool
+    ) -> list[V]: ...
+    @overload
+    @classmethod
+    def condense[V](cls, items: Iterable[V], pred: Callable[[V], bool] = bool) -> list[V]: ...
     @classmethod
     def condense[V](cls, items: Iterable[V], pred: Callable[[V], bool] = bool) -> list[V]:
         """Filter items by predicate, returning list of matches.
@@ -245,7 +260,7 @@ class IterUtils:
     @classmethod
     def map_condense[K: Hashable, V](
         cls,
-        items: Mapping[K, V] | Iterable[tuple[K, V]],
+        items: _Map[K, V],
         pred: Callable[[V], bool] = bool,
     ) -> Iterator[tuple[K, V]]:
         """Filter a mapping by a predicate function on values.
@@ -260,7 +275,10 @@ class IterUtils:
 
     @classmethod
     def get_all[K: Hashable, V](
-        cls, dictionary: dict[K, V], *args: K, mandatory: bool = False
+        cls,
+        dictionary: dict[K, V],
+        *args: K,
+        mandatory: bool = False,
     ) -> dict[K, V]:
         """Extract multiple keys from dictionary.
 
@@ -394,18 +412,47 @@ class IterUtils:
         return cls.val_map(fn, {f: f for f in fields}, drop)
 
     @classmethod
-    def chain_map[V, R](cls, funcs: Iterable[Callable[[V], R]], item: V) -> Iterator[R]:
+    def chain_map[**P, R](
+        cls,
+        functions: Iterable[Callable[P, R]],
+        *args: P.args,
+        **kwargs: P.kwargs,
+    ) -> Iterator[R]:
         """Apply multiple functions to an item, yielding non-falsy results.
 
         Args:
-            funcs: Functions to apply.
-            item: Item to pass to each function.
+            functions: Functions to apply.
+            *args: Positional arguments to pass to each function.
+            **kwargs: Keyword arguments to pass to each function.
         Yields:
             Non-falsy results from function applications.
         """
-        for func in funcs:
-            if ret := func(item):
+        for func in functions:
+            if ret := func(*args, **kwargs):
                 yield ret
+
+    @classmethod
+    def inverse_map[**P, R](
+        cls,
+        functions: Iterable[Callable[P, R]],
+        predicate: Callable[[R], Any] | None,
+        *args: P.args,
+        **kwargs: P.kwargs,
+    ) -> Iterator[R]:
+        """Apply multiple functions to a single set of arguments, returning filtered results.
+
+        Args:
+            functions: Functions to apply.
+            predicate: Predicate with which to filter results (default: `bool()` for truthiness).
+            *args: Positional arguments to pass to each function.
+            **kwargs: Keyword arguments to pass to each function.
+        Yields:
+            Non-falsy results from function applications.
+        """
+        pred = predicate or (lambda x: x)
+        yield from (ret for func in functions if pred(ret := func(*args, **kwargs)))
+
+    invmap = ft.wraps(inverse_map)(inverse_map)
 
     @classmethod
     def indexof[T](cls, iterable: Sequence[T], *preds: Callable[[T], bool] | T) -> int:
@@ -677,6 +724,10 @@ class IterUtils:
         if to_drop:
             for index in reversed(to_drop):
                 del data[index]
+
+    # -----
+    # OTHER
+    # -----
 
 
 iter_utils = IterUtils

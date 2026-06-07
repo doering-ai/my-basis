@@ -2,6 +2,7 @@
 ### HEAD ###
 ############
 ### STANDARD
+from __future__ import annotations
 from typing import Any, IO
 from collections.abc import (
     Callable,
@@ -15,7 +16,7 @@ from collections.abc import (
 from types import BuiltinFunctionType, FunctionType
 from collections import deque
 from datetime import date, datetime, time, timedelta
-from enum import Enum, Flag, auto
+from enum import Enum
 
 ### EXTERNAL
 import pydantic as pyd
@@ -33,38 +34,38 @@ import pydantic as pyd
 # Type Aliases
 # ------------
 # ---- Scalars ----
-type Stream = bytearray | memoryview | IO
+Stream = bytearray | memoryview | IO
 Streams = (bytearray, memoryview, IO)
-type String = str | bytes | Stream
+String = str | bytes | Stream
 Strings = (str, bytes, *Streams)
 
-type Scalar = int | float | complex | bool
+Scalar = int | float | complex | bool
 Scalars = (int, float, complex, bool)
 
-type Time = date | time | datetime | timedelta
+Time = date | time | datetime | timedelta
 Times = (date, time, datetime, timedelta)
 
-type Atom = String | Scalar | Time | Enum
+Atom = String | Scalar | Time | Enum
 Atoms = (*Strings, *Scalars, *Times, Enum)
 
 # ---- Structs ----
-type Vec = list | tuple | Set | deque
+Vec = list | tuple | Set | deque
 type _Vec[V] = list[V] | tuple[V, ...] | Set[V] | deque[V]
 Vecs = (list, tuple, Set, deque)
 
-type Map = Mapping[Hashable, Any] | list[tuple[Hashable, Any]] | ItemsView
+Map = Mapping[Hashable, Any] | list[tuple[Hashable, Any]] | ItemsView
 type _Map[K: Hashable, V] = Mapping[K, V] | list[tuple[K, V]] | ItemsView[K, V]
 Maps = (Mapping, ItemsView)  #: NOTE: Does not cover lists of (key, val) pairs.
 
-type Dataclass = object
-type Model = pyd.BaseModel | Dataclass
+Dataclass = object
+Model = pyd.BaseModel | Dataclass
 # No plural -- must use `my.check.is_model`
 
-type Iter = Iterable | AsyncIterable
+Iter = Iterable | AsyncIterable
 type _Iter[T] = Iterable[T] | AsyncIterable[T]
 Iters = (Iterable, AsyncIterable)
 
-type Struct = Vec | Map | Iter | Model
+Struct = Vec | Map | Iter | Model
 type _Struct[T0, T1 = Any] = _Vec[T0] | _Map[T0, T1] | _Iter[T0] | Model
 Structs = (*Vecs, *Maps, *Iters, pyd.BaseModel)
 
@@ -78,26 +79,3 @@ type Object = Atom | Struct | Func
 Objects = (*Atoms, *Structs, *Funcs)
 
 TYPESET = {*Atoms, *Structs, *Funcs}
-
-
-class Types(Flag):
-    """Convient comparison method for hierarchical types."""
-
-    # ---- Atom----
-    BUFFER = auto()
-    STRING = auto() | BUFFER
-    SCALAR = auto()
-    TIME = auto()
-    ENUM = auto()
-    ATOM = STRING | SCALAR | TIME | ENUM
-
-    # ---- Structs ----
-    VEC = auto()
-    MAP = auto()
-    MODEL = auto()
-    STRUCT = VEC | MAP | MODEL
-
-    # ---- Other ----
-    ITER = auto()
-    FUNC = auto()
-    OBJECT = ATOM | STRUCT | ITER | FUNC

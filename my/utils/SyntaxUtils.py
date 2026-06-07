@@ -3,7 +3,7 @@
 ############
 ### STANDARD
 from collections import deque
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Collection
 from types import ModuleType
 from typing import Annotated, Any
 import functools as ft
@@ -16,17 +16,18 @@ import pydantic as pyd
 import regex as re
 
 ### INTERNAL (NOTE: If adding new internal imports, update the comments in `__init__.py`)
-from ..infra import Series
+from ..infra.types import Vecs, Maps
+from ._UtilsBase import _UtilsBase
 from .IterUtils import iter_utils
 
 
-re.DEFAULT_VERSION = re.VERSION1
+re.DEFAULT_VERSION = re.VERSION1  # type: ignore
 
 
 ############
 ### BODY ###
 ############
-class SyntaxUtils:
+class SyntaxUtils(_UtilsBase):
     """Methods for syntax-y tasks (i.e. related to data's form rather than its content)."""
 
     # -----------------
@@ -117,7 +118,7 @@ class SyntaxUtils:
         Returns:
             Dictionary mapping field aliases to their type annotations.
         """
-        if not isinstance(cls, pyd.BaseModel):
+        if not issubclass(cls, pyd.BaseModel):
             return SyntaxUtils.instance_fields(cls)
 
         ret = {}
@@ -160,25 +161,23 @@ class SyntaxUtils:
             True if value was found and replaced, False otherwise.
         """
         children: Collection[Collection | pyd.BaseModel] | None = None
-        if isinstance(obj, Series):
+        if isinstance(obj, Vecs):
             if old in obj:
-                if isinstance(obj, Sequence):
+                if isinstance(obj, (list, deque)):
                     index = obj.index(old)
-                    if isinstance(obj, list | deque):
-                        # Lists
-                        obj[index] = new
-                    elif isinstance(obj, tuple):
-                        # Tuples
-                        obj = (*obj[:index], new, *obj[index + 1 :])
-                else:
-                    # Sets
+                    obj[index] = new
+                elif isinstance(obj, tuple):
+                    index = obj.index(old)
+                    obj = (*obj[:index], new, *obj[index + 1 :])
+                    return True
+                elif isinstance(obj, set):
                     obj.remove(old)
                     obj.add(new)
-                return True
+                    return True
             else:
                 children = obj
 
-        elif isinstance(obj, Mapping):
+        elif isinstance(obj, Maps):
             if key := iter_utils.find_key(obj, old):
                 obj[key] = new  # type:ignore
                 return True

@@ -69,6 +69,8 @@ type Case = tuple[CaseKey, CaseVal]
 
 logger = logging.getLogger()
 
+ty: Typist
+
 
 ############
 ### BODY ###
@@ -1004,3 +1006,4 @@ class Typist(Check, Match, Cast):
 
 
 ty = typist = Typist.inst()
+ut.set_typist(ty)

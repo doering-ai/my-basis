@@ -15,13 +15,14 @@ import regex as re
 
 ### INTERNAL
 # NOTE: If adding new internal imports, update the comments in `__init__.py`
+from ._UtilsBase import _UtilsBase
 from .IterUtils import iter_utils
 
 
 ############
 ### BODY ###
 ############
-class TextUtils:
+class TextUtils(_UtilsBase):
     """Methods that clean, search, split, and otherwise interact with strings.
 
     Parts of this class overlap in scope with `RegexStore` (namely `regex_dict()`), but ultimately

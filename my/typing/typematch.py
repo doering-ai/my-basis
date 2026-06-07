@@ -2,13 +2,7 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import (
-    overload,
-    ClassVar,
-    TypeIs,
-    Literal,
-    Any,
-)
+from typing import overload, ClassVar, TypeIs, Literal, Any
 from types import NoneType
 import functools as ft
 import itertools as it
@@ -18,8 +12,7 @@ import itertools as it
 ### INTERNAL
 from ..utils import ut
 from ..caches import NestedCache
-from ._common import TypeArg  # , AnyType
-from .MyType import MyType
+from .MyType import MyType, TypeArg
 
 
 ############
@@ -95,28 +88,21 @@ class Match:
     # ------------------
     @overload
     @classmethod
-    def match[T1](
-        cls, t0: type, t1: type[T1] | MyType[T1] | tuple[type[T1], ...], inter: bool = False
-    ) -> TypeIs[type[T1]]: ...
-    @overload
-    @classmethod
-    def match[T1](
-        cls, t0: MyType, t1: type[T1] | MyType[T1] | tuple[type[T1], ...], inter: bool = False
-    ) -> TypeIs[MyType[T1]]: ...
-    @overload
-    @classmethod
-    def match[T1](
-        cls,
-        t0: tuple[type, ...],
-        t1: type[T1] | MyType[T1] | tuple[type[T1], ...],
-        inter: bool = False,
-    ) -> TypeIs[tuple[type, ...]]: ...
-    @overload
-    @classmethod
     def match(cls, t0: None, t1: Any, inter: bool = False) -> TypeIs[NoneType]: ...
     @overload
     @classmethod
     def match(cls, t0: Any, t1: None, inter: bool = False) -> TypeIs[Literal[False]]: ...
+    @overload
+    @classmethod
+    def match[T1](cls, t0: type, t1: TypeArg[T1], inter: bool = False) -> TypeIs[type[T1]]: ...
+    @overload
+    @classmethod
+    def match[T1](cls, t0: MyType, t1: TypeArg[T1], inter: bool = False) -> TypeIs[MyType[T1]]: ...
+    @overload
+    @classmethod
+    def match[T1](
+        cls, t0: tuple[type, ...], t1: TypeArg[T1], inter: bool = False
+    ) -> TypeIs[tuple[type, ...]]: ...
     @classmethod
     def match(cls, t0: TypeArg, t1: TypeArg, inter: bool = False) -> bool:
         """Check if the first type is valid subset of the second (or intersects, if so set).
@@ -170,3 +156,6 @@ class Match:
         # Cache & return
         cls.MATCH_CACHE[cache_key] = ret
         return ret
+
+
+tym = typematch = Match

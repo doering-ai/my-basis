@@ -9,17 +9,17 @@ from .Regex import Regex
 from .Tree import Tree
 
 __all__ = [
-    'META_RGXS',
+    'Atom',
     'FLAGS',
+    'GroupAtom',
+    'GroupKind',
+    'META_RGXS',
     'NO_ESC',
     'NON_ESC',
-    'QUANT',
     'ParseData',
+    'QUANT',
     'Quantifier',
-    'GroupKind',
-    'Atom',
-    'GroupAtom',
-    'SetAtom',
     'Regex',
+    'SetAtom',
     'Tree',
 ]

@@ -27,6 +27,8 @@ from typing import (
     get_origin,
     Union,
     IO,
+    TypeAlias,
+    NamedTuple,
 )
 from collections import Counter, deque
 from collections.abc import (
@@ -69,54 +71,42 @@ from ..infra.types import (
 )
 from ..utils import ut
 from ..caches import Cache
-from ._common import TypeArg
 from . import typecheck, typematch
 
 
 ############
-### BODY ###
+### DATA ###
 ############
-@ft.total_ordering
-class MyType[T](pyd.BaseModel, covariant=True):
-    """A wrapper for any type annotation that normalizes the wide variety of interfaces."""
+type TypeArg[T = Any] = type[T] | MyType[T] | tuple[type[T], ...] | Any | None
 
-    #: If any of these types are passed into `parse()`, no work will be done and an "inactive"
-    #: instance will be returned (i.e. it will only have `root` defined, and will be falsey).
-    FILTERS: ClassVar[dict[str, set[str]]] = dict(
-        universal={
-            '',
-            'Any',
-        },
-        functional={
+
+class _Filters(NamedTuple):
+    universal: frozenset[str] = frozenset(('', 'Any'))
+    funcs: frozenset[str] = frozenset(('Callable', 'Coroutine'))
+    structs: frozenset[str] = frozenset(
+        (
+            'AsyncGenerator',
+            'AsyncIterable',
+            'AsyncIterator',
             'Generator',
             'Iterator',
-            'AsyncIterator',
-            'AsyncIterable',
-            'AsyncGenerator',
-        },
-        structs={
-            'TypedDict',  # treat like BaseModel
-        },
-        types={
-            # from types module
-            'Ellipsis',
-            'EllipsisType',
-            'TypeAlias',
-            'TypeAliasType',
-        },
-        simple={
-            'ClassVar',
-            'Optional',
+            'TypedDict',
+        )
+    )
+    simple: frozenset[str] = frozenset(
+        (
             'Annotated',
-            'Required',
-            'NotRequired',
+            'ClassVar',
             'Final',
             'NoneType',
-        },
-        unhandled={
-            'Callable',  # deprecated
+            'NotRequired',
+            'Optional',
+            'Required',
+        )
+    )
+    unhandled: frozenset[str] = frozenset(
+        (
             'Type',  # deprecated
-            'Coroutine',
             'NoReturn',
             'TypeGuard',
             'NewType',  # shouldn't exist at runtime
@@ -130,17 +120,32 @@ class MyType[T](pyd.BaseModel, covariant=True):
             'CapsuleType',
             'NotImplementedType',
             # Possible, but not yet handled:
-            'NamedTuple',  # treat like tuple but w/ names
-            'Protocol',  # try isinstance
-            ### IMPORTANT: TypeVars are completely unhandled as of now.
-            ### Could do it with .__bound__, perhaps?
+            'NamedTuple',  # treat like tuple but w/ names?
+            'Protocol',  # try isinstance?
+            #: **IMPORTANT:** TypeVars are completely unhandled as of now.
+            #: Could do it with .__bound__, perhaps?
             'TypeVar',
             'TypeVarTuple',
             'ParamSpec',
             'ParamSpecArgs',
             'ParamSpecKwargs',
-        },
+        )
     )
+
+    #: From the `types` module.
+    types: frozenset[str] = frozenset(('Ellipsis', 'EllipsisType', 'TypeAlias', 'TypeAliasType'))
+
+
+############
+### BODY ###
+############
+@ft.total_ordering
+class MyType[T](pyd.BaseModel, covariant=True):
+    """A wrapper for any type annotation that normalizes the wide variety of interfaces."""
+
+    #: If any of these types are passed into `parse()`, no work will be done and an "inactive"
+    #: instance will be returned (i.e. it will only have `root` defined, and will be falsey).
+    FILTERS: ClassVar[_Filters] = _Filters()
 
     PARSE_CACHE: ClassVar[Cache[int, MyType]] = Cache()
     RAISE: ClassVar[bool] = False
@@ -210,10 +215,10 @@ class MyType[T](pyd.BaseModel, covariant=True):
             self.args = tuple(self._process_args(options))
             self.is_split = True
             self.main = UnionType
-        elif self.name in self.FILTERS['unhandled']:
+        elif self.name in self.FILTERS.unhandled:
             # II. Ignore unhandled types, just setting self.origin for the curious & persistent
             pass
-        elif self.name in self.FILTERS['simple']:
+        elif self.name in self.FILTERS.simple:
             # III. Unwrap simple forms (e.g. `Annotated[str]`)
             if contents := mi.first(filter(bool, self._process_args(args)), None):
                 # Overwrite all our pydantic vars with the `contents`'s versions
@@ -283,9 +288,9 @@ class MyType[T](pyd.BaseModel, covariant=True):
                 and (val := getattr(root, '__value__', None)) is not None
             ):
                 return cls.parse(val)
-            elif name in cls.FILTERS['universal']:
+            elif name in cls.FILTERS.universal:
                 return cls()
-            elif name in (cls.FILTERS[k] for k in ('simple')):
+            elif name in (cls.FILTERS.simple,):
                 # I.ii. Parse special forms
                 return cls.parse(root)
         # II. Infer the type annotation of *data*
@@ -468,7 +473,7 @@ class MyType[T](pyd.BaseModel, covariant=True):
         return bool(
             tvar is not None
             and (name := getattr(tvar, '__name__', ''))
-            and name not in cls.FILTERS['unhandled']
+            and name not in cls.FILTERS.unhandled
         )
 
     @classmethod

@@ -22,6 +22,7 @@ import inspect
 import pydantic as pyd
 
 ### INTERNAL (NOTE: If adding new internal imports, update the comments in `__init__.py`)
+from ._UtilsBase import _UtilsBase
 from .SystemUtils import SystemUtils
 
 INSTALLED: bool = True
@@ -42,7 +43,7 @@ type Metrics = OpenTelemetryCounter | dict[str, int] | pd.Series
 ############
 ### BODY ###
 ############
-class MetricUtils:
+class MetricUtils(_UtilsBase):
     """Methods deal with logging, telemetry, and other measurement tasks.
 
     ```{important}

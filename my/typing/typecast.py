@@ -64,7 +64,7 @@ from ..infra.types import (
     Object,
 )
 from ..utils import ut
-from .MyType import MyType
+from .MyType import MyType, TypeArg
 from .typecheck import ty
 from ._common import ABSTRACT_GENERICS
 
@@ -77,14 +77,6 @@ Dtim = datetime
 Delt = timedelta
 Scal = Scalar
 
-type CaseKey = type | Callable[[object], bool]  #:
-type CaseVal = Callable[[object], Any]
-type Case = tuple[CaseKey, CaseVal]
-
-
-type AnyType[T] = type[T] | MyType[T]
-type TypeParam = TypeVar | TypeVarTuple | ParamSpec
-TypeParams = (TypeVar, TypeVarTuple, ParamSpec)
 
 ############
 ### DATA ###
@@ -95,6 +87,15 @@ _TY = TYPESET
 type Transform[T0 = Any, T1 = Any] = Callable[[Cast[T0, T1]], object | None]
 type TransformEntry[T0 = Any, T1 = Any] = tuple[MyType[T0], MyType[T1], Transform[T0, T1]]
 _TRANSFORMS: list[TransformEntry] = []
+
+type CaseKey = type | Callable[[object], bool]  #:
+type CaseVal = Callable[[object], Any]
+type Case = tuple[CaseKey, CaseVal]
+
+
+type AnyType[T] = type[T] | MyType[T]
+type TypeParam = TypeVar | TypeVarTuple | ParamSpec
+TypeParams = (TypeVar, TypeVarTuple, ParamSpec)
 
 
 def get_type_params[F: FunctionType](fn: F) -> list[tuple[str, MyType]]:
@@ -1098,36 +1099,6 @@ class Cast[T0, T1](pyd.BaseModel):
             if (ret := self._finalize(tr(self))) is not None:
                 return ret
 
-    @overload
-    def upper_cast[V](self, data: object, tvar: type[V]) -> V | None: ...
-
-    @overload
-    def upper_cast(self, data: object, tvar: Any) -> Any | None: ...
-
-    def upper_cast[V](self, data: object, tvar: type[V] | Any) -> V | Any | None:
-        """Attempt to cast/coerce the  data to the given type, returning None if unsuccessful."""
-        # I. Return null if the target is invalid
-        if data is None or tvar in {None, Any}:
-            return None
-        target = MyType.parse(tvar)
-
-        # II. Return the data as-is if it already matches the target type
-        if ty.check(data, target):
-            return data
-
-        # III. When given abstract classes, arbitrarily choose a concrete type
-        if target.main is not None:
-            target = self.concretize(target, data)
-
-        # IV.i. Try to guess the most likely answers out of long unions
-        options = self.sort_options(data, *target.args) if target.is_split else [target]
-
-        # IV.ii. Perform the actual casting
-        return next(
-            filter(bool, (Cast.cast(ctx=self, t0=source, t1=_target)(data) for _target in options)),
-            None,
-        )
-
     def flexcast(self, data: object, tvar: TypeArg) -> Any | None:
         """Cast data to a type, returning original data on failure.
 
@@ -1137,8 +1108,9 @@ class Cast[T0, T1](pyd.BaseModel):
         Returns:
             Cast data if successful, original data otherwise.
         """
-        res = self.cast(data, tvar)
-        return res if res is not None else data
+        if tvar and (res := self.cast(data, tvar)) is not None:  # pyrefly: ignore
+            return res
+        return data
 
     def multicast[V](
         self,
@@ -1170,3 +1142,6 @@ class Cast[T0, T1](pyd.BaseModel):
             else:
                 raise TypeError(f'Cannot cast value `{value}` to type `{tvar}`.')
         return ret
+
+
+tyt = typecast = Cast

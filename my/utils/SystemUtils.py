@@ -2,6 +2,7 @@
 ### HEAD ###
 ############
 ### STANDARD
+from __future__ import annotations
 from typing import Any, overload, TypeVar
 from collections.abc import Collection, Sequence, Iterable, Generator
 from datetime import datetime, timedelta, UTC
@@ -18,7 +19,6 @@ import textwrap
 import os
 import logging
 import regex as re
-from importlib.resources import files, Traversable
 
 # I/O
 import pickle
@@ -32,15 +32,17 @@ import pydantic as pyd
 import more_itertools as mi
 
 ### INTERNAL (NOTE: If adding new internal imports, update the comments in `__init__.py`)
-from ..infra.types import Atomic, Vec, Vectors
+# Local imports
+from ..infra.types import (
+    Atom,
+    Vec,
+)
+from ._UtilsBase import _UtilsBase
 from .TextUtils import text_utils
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from ..typing.Typist import Typist  # noqa: TC004
-
-PathLike = str | Path | Traversable
+# from typing import TYPE_CHECKING
+# if TYPE_CHECKING:
+#     from ..typing.Typist import Typist
 
 ############
 ### DATA ###
@@ -58,16 +60,22 @@ ClassType = TypeVar('ClassType')
 
 FileParam = str | bytes | File | None
 RawJsonData = str | int | float | bool | list | dict | None
-FileData = Atomic | Vec | dict | pyd.BaseModel
-F = TypeVar('F', bound=FileData)
+FileData = Atom | Vec | dict | pyd.BaseModel
+if isinstance(5, FileData):
+    print('yes!')
+FileData2 = Atom | Vec | dict | pyd.BaseModel
+if isinstance(5, FileData2):
+    print('no!')
 
+
+F = TypeVar('F', bound=FileData)
 logger = logging.getLogger()
 
 
 ############
 ### BODY ###
 ############
-class SystemUtils:
+class SystemUtils(_UtilsBase):
     """Methods that deal with low-level system resources & APIs."""
 
     AUTO_CONFIRM: ClassVar[bool] = False
@@ -86,14 +94,6 @@ class SystemUtils:
             pre=r'(?i)\.',
         ),
     )
-
-    @ft.lru_cache(1)
-    @staticmethod
-    def _typist() -> Typist:
-        """Private, circular accessor to the typist package."""
-        from ..typing.Typist import typist
-
-        return typist
 
     # ---------------
     # `0` DATE & TIME
@@ -492,12 +492,10 @@ class SystemUtils:
     # --------
     @overload
     @classmethod
-    def from_file(cls, file: PathLike) -> dict: ...
-
+    def from_file(cls, file: str | Path) -> dict: ...
     @overload
     @classmethod
     def from_file(cls, file: str | Path, tvar: type[F], cast: bool = True) -> F: ...
-
     @classmethod
     def from_file(
         cls,
@@ -518,19 +516,11 @@ class SystemUtils:
         Returns:
             Loaded and cast data from the file.
         """
-        if not file:
+        file = cls.path(file)
+        if not file or not file.is_file():
             cls.LOGGER.error('No file provided.')
             return tvar()
-        file = cls.path(file)
-        if file.is_file():
-            if file.stat().st_size == 0:
-                cls.LOGGER.error(f'File does not exist: {file}')
-                return tvar()
-        else:
-            cls.LOGGER.error(f'File does not exist: {file}')
-            return tvar()
-
-        if match := cls.RGXS['filetype'].fullmatch(file.suffix):
+        elif match := cls.RGXS['filetype'].fullmatch(file.suffix):
             group = next(filter(None, match.groupdict().keys()))
             if fn := getattr(cls, f'from_{group}', None):
                 return fn(file, tvar, cast)
@@ -647,7 +637,7 @@ class SystemUtils:
 
         # II. Verify & format the response
         # if isinstance(ret, tvar):
-        if cls._typist().check(ret, tvar):
+        if cls.ty.check(ret, tvar):
             return ret
         elif not ret:
             return tvar()  # type: ignore
@@ -681,7 +671,7 @@ class SystemUtils:
         Returns:
             Loaded and cast data from the file/string.
         """
-        tvar = cls._typist().specify(tvar)
+        tvar = cls.ty.specify(tvar)
         if not file:
             return tvar()  # type: ignore
         elif isinstance(file, Path):
@@ -750,12 +740,12 @@ class SystemUtils:
         Returns:
             YAML string representation of the data.
         """
-        obj = cls._typist().serialize(data)
+        obj = cls.ty.serialize(data)
         text = cls.YAML_CONFIG.dump(obj, **kwargs)
         assert isinstance(text, str), 'Failed to write YAML data.'
 
         # If we printed a root array, de-intent it
-        if isinstance(data, Vectors) and text.startswith(' '):
+        if isinstance(data, Vec) and text.startswith(' '):
             text = textwrap.dedent(text)
 
         # If requested, wrap in markdown bactics
@@ -774,7 +764,7 @@ class SystemUtils:
         Returns:
             JSON string representation of the data.
         """
-        obj = cls._typist().serialize(data)
+        obj = cls.ty.serialize(data)
         if 'indent' not in kwargs:
             kwargs['indent'] = 4
         text = srsly.json_dumps(obj, **kwargs)
@@ -795,15 +785,11 @@ class SystemUtils:
         Returns:
             TOML string representation of the data.
         """
-        obj = cls._typist().serialize(data)
+        obj = cls.ty.serialize(data)
 
         # Cast to dict, as toml only accepts dicts at the top level
         if not isinstance(obj, dict):
-            if (
-                isinstance(obj, Vectors)
-                and len(obj) == 1
-                and isinstance((_obj := mi.first(obj)), dict)
-            ):
+            if isinstance(obj, Vec) and len(obj) == 1 and isinstance((_obj := mi.first(obj)), dict):
                 obj = _obj
             else:
                 obj = dict(content=obj)
@@ -826,7 +812,7 @@ class SystemUtils:
         Returns:
             Pickle byte representation of the data.
         """
-        obj = cls._typist().serialize(data)
+        obj = cls.ty.serialize(data)
         return pickle.dumps(obj, **kwargs)
 
     @staticmethod
@@ -856,7 +842,7 @@ class SystemUtils:
     @classmethod
     def serialize(cls, data: object, full: bool = False) -> Any:
         """Thin wrapper around `Typist.serialize()` -- see there for usage info."""
-        return cls._typist().serialize(data, full=full)
+        return cls.ty.serialize(data, full=full)
 
 
 system_utils = SystemUtils

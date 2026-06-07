@@ -27,6 +27,7 @@ from ..infra.types import (
     Map,
     _Map,
 )
+from ._UtilsBase import _UtilsBase
 
 
 ############
@@ -37,7 +38,7 @@ from ..infra.types import (
 ############
 ### BODY ###
 ############
-class IterUtils:
+class IterUtils(_UtilsBase):
     """Utility functions for working with iterators, sequences, mappings, and other containers."""
 
     # ----------------
@@ -451,8 +452,6 @@ class IterUtils:
         """
         pred = predicate or (lambda x: x)
         yield from (ret for func in functions if pred(ret := func(*args, **kwargs)))
-
-    invmap = ft.wraps(inverse_map)(inverse_map)
 
     @classmethod
     def indexof[T](cls, iterable: Sequence[T], *preds: Callable[[T], bool] | T) -> int:

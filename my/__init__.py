@@ -75,7 +75,20 @@ from .utils import (
     syntax_utils,
 )
 from .caches import Cache, NestedCache, PickleCache, FileCache
-from .typing import MyType, Typist, typist, TypeArg, AutocastModel
+from .typing import (
+    AutocastModel,
+    MyType,
+    ty,
+    tyc,
+    tym,
+    TypeArg,
+    TypeCast,
+    TypeCheck,
+    TypeMatch,
+    Typist,
+    typist,
+    tyt,
+)
 from .types import MyEnum, UniqueId, Uid, Span, Buffer, Predicate, Command, Platform
 from .apis import GoogleSheet, Environment, ENV, env, Filesystem, PATHS, FS, fs
 from .regex import (
@@ -146,20 +159,27 @@ __all__ = [
     'NestedCache',
     'PickleCache',
     # /apis/
-    'GoogleSheet',
-    'Environment',
     'ENV',
     'env',
+    'Environment',
     'Filesystem',
-    'PATHS',
     'FS',
     'fs',
+    'GoogleSheet',
+    'PATHS',
     # /typing/
-    'TypeArg',
+    'AutocastModel',
     'MyType',
+    'ty',
+    'tyc',
+    'tym',
+    'TypeArg',
+    'TypeCast',
+    'TypeCheck',
+    'TypeMatch',
     'Typist',
     'typist',
-    'AutocastModel',
+    'tyt',
     # /types/
     'Buffer',
     'Command',

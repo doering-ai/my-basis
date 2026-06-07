@@ -13,14 +13,24 @@ but I was personally motivated by the kind of second-level flexibility only poss
 in a system diffuse with these tools (secret, Free, open-source, or otherwise).
 """
 
-from .MyType import MyType
-from .Typist import Typist, typist, TypeArg
+from .MyType import MyType, TypeArg
+from .typecheck import tyc, Check as TypeCheck
+from .typematch import tym, Match as TypeMatch
+from .typecast import tyt, Cast as TypeCast
+from .Typist import Typist, typist, ty
 from .AutocastModel import AutocastModel
 
 __all__ = [
+    'AutocastModel',
     'MyType',
+    'ty',
+    'tyc',
+    'tym',
+    'TypeArg',
+    'TypeCast',
+    'TypeCheck',
+    'TypeMatch',
     'Typist',
     'typist',
-    'TypeArg',
-    'AutocastModel',
+    'tyt',
 ]

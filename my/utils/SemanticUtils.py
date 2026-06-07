@@ -11,16 +11,17 @@ import itertools as it
 import regex as re
 
 ### INTERNAL (NOTE: If adding new internal imports, update the comments in `__init__.py`)
+from ._UtilsBase import _UtilsBase
 from .IterUtils import iter_utils
 from .TextUtils import text_utils
 
-re.DEFAULT_VERSION = re.VERSION1
+re.DEFAULT_VERSION = re.VERSION1  # type: ignore
 
 
 ############
 ### BODY ###
 ############
-class SemanticUtils:
+class SemanticUtils(_UtilsBase):
     """Methods for semantic-y tasks (i.e. related to data's contant rather than its form)."""
 
     # ------------------

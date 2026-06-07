@@ -39,8 +39,7 @@ from ..infra.types import (
     Func,
     Funcs,
 )
-from .MyType import MyType
-from ._common import TypeArg
+from .MyType import MyType, TypeArg
 from ..utils import ut
 
 
@@ -397,4 +396,4 @@ class Check[T0, T1](pyd.BaseModel):
         return all(cls.check(v, tvar) for v in data)
 
 
-ty = typecheck = Check
+tyc = typecheck = Check

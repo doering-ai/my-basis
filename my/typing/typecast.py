@@ -28,7 +28,7 @@ from io import BytesIO
 from types import FunctionType, UnionType
 from datetime import date, datetime, time, timedelta, UTC
 from enum import Enum, Flag
-from collections import Counter, defaultdict
+from collections import Counter, defaultdict, deque
 from dataclasses import is_dataclass, Field
 import logging
 import contextlib as ctx
@@ -65,8 +65,9 @@ from ..infra.types import (
 )
 from ..utils import ut
 from .MyType import MyType, TypeArg
-from .typecheck import ty
+from .typecheck import tyc
 from ._common import ABSTRACT_GENERICS
+from ._TypingBase import _TypingBase
 
 from typing import TYPE_CHECKING
 
@@ -84,7 +85,7 @@ Scal = Scalar
 logger = logging.getLogger()
 _TY = TYPESET
 
-type Transform[T0 = Any, T1 = Any] = Callable[[Cast[T0, T1]], object | None]
+type Transform[T0 = Any, T1 = Any] = Callable[[TypeCast[T0, T1]], object | None]
 type TransformEntry[T0 = Any, T1 = Any] = tuple[MyType[T0], MyType[T1], Transform[T0, T1]]
 _TRANSFORMS: list[TransformEntry] = []
 
@@ -98,26 +99,15 @@ type TypeParam = TypeVar | TypeVarTuple | ParamSpec
 TypeParams = (TypeVar, TypeVarTuple, ParamSpec)
 
 
-def get_type_params[F: FunctionType](fn: F) -> list[tuple[str, MyType]]:
-    """Extract type parameters from a function's `__type_params__` attribute, if present."""
-    raw: list[TypeParam] = list(getattr(fn, '__type_params__', []))
-    ret: list[tuple[str, MyType]] = []
-    for param in raw:
-        name = param.__name__
-        if isinstance(param, TypeVar):
-            ret.append((param.__name__, MyType.new(param.__bound__)))
-        elif isinstance(param, TypeVarTuple):
-            ret.extend((f'{name}_{i}', MyType.new(e)) for i, e in enumerate(param))
-    return ret
+_TRQUE: deque = deque()
 
 
 ############
 ### BODY ###
 ############
-class Cast[T0, T1](pyd.BaseModel):
+class TypeCast[T0, T1](_TypingBase, pyd.BaseModel):
     """An ephemeral state machine that the cast defined by its inputs."""
 
-    TRANSFORMS: ClassVar[list[TransformEntry]] = _TRANSFORMS
     RGXS: ClassVar[dict[str, re.Pattern]] = ut.regex_dict(
         ### Atomic Types
         int=r'-?\d+',
@@ -138,7 +128,8 @@ class Cast[T0, T1](pyd.BaseModel):
             )
         ),
     )
-    ctx: ClassVar[Typist]
+
+    _SETUP: ClassVar[bool] = False
 
     t0: MyType[T0]
     t1: MyType[T1]
@@ -146,7 +137,7 @@ class Cast[T0, T1](pyd.BaseModel):
     _orig_data: Any | None = None
 
     @pyd.model_validator(mode='before')
-    def _val_cast(self) -> Cast:
+    def _new_cast(self) -> TypeCast:
         if self._orig_data is None:
             self._orig_data = self.data
             self.data = self._normalize(self.data)
@@ -156,44 +147,22 @@ class Cast[T0, T1](pyd.BaseModel):
     @staticmethod
     def register[F: FunctionType](fn: F) -> F:
         """Decorator to register a function as a Cast transform based on its type parameters."""
-        name = getattr(fn, '__name__', 'fn')
-        tps = get_type_params(fn)
-        if len(tps) == 0:
-            raise ValueError(
-                f'Function {name} must have type parameters to register as a Cast transform.'
-            )
-        elif len(tps) == 2:
-            _raw = [MyType.new(t) for _, t in tps]
-            k0, k1 = _raw[0], _raw[1]
-        else:
-            _dtps = dict(tps)
-            k0, k1 = _dtps.get('S', MyType()), _dtps.get('T', MyType())
-
-        # Insert this just before any transform that is more general than it, dropping duplicates
-        pos = len(cache := Cast.TRANSFORMS)
-        for i, (_k0, _k1, _tr) in enumerate(cache):
-            if _k0 == k0 and _k1 == k1:
-                logger.warning(
-                    f'({k0}, {k1}, {_tr.__name__}) already registered; cannot register {name}'
-                )
-                break
-            elif _k0 in k0 or _k1 in k1:
-                pos = i
-                break
-        cache.insert(pos, (k0, k1, fn))
-
+        _TRQUE.append(fn)
         return fn
+
+    @classmethod
+    def setup(cls) -> None:
+        """Register all transforms defined in this file."""
+        if not cls._SETUP:
+            while _TRQUE:
+                cls._register_impl(_TRQUE.popleft())
+            cls._SETUP = True
 
     # -------------------
     # `.` Initial Methods
     # -------------------
     def __init__(self, data: T0, target: AnyType[T1], source: AnyType[T0] | None = None, **kwargs):
         """Initialize the (highly-ephemeral) casting context."""
-        if not hasattr(Cast, 'ctx'):
-            from .Typist import Typist
-
-            Cast.ctx = Typist()
-
         self.t0 = MyType.new(source) if source else MyType.new(data)
         self.t1 = MyType.new(target)
         super().__init__(data=data, **kwargs)
@@ -254,7 +223,7 @@ class Cast[T0, T1](pyd.BaseModel):
         elif isinstance(data, bytes):
             return data.decode()
         elif isinstance(data, Streams):
-            return Cast.cast(data, str)
+            return TypeCast.cast(data, str)
         elif isinstance(data, Iterable) and not isinstance(data, (*Vecs, *Maps)):
             return list(data)
         elif isinstance(data, datetime) and data.tzinfo != UTC:
@@ -266,8 +235,38 @@ class Cast[T0, T1](pyd.BaseModel):
     # -------------------
     # `-` Private Methods
     # -------------------
+    @classmethod
+    def _register_impl(cls, fn: Transform) -> None:
+        """Decorator to register a function as a Cast transform based on its type parameters."""
+        name = getattr(fn, '__name__', 'fn')
+        ty_params = cls.get_type_params(fn)
+        if len(ty_params) == 0:
+            raise ValueError(
+                f'Function {name} must have type parameters to register as a Cast transform.'
+            )
+        elif len(ty_params) == 2:
+            _raw = [MyType.new(t) for _, t in ty_params]
+            k0, k1 = _raw[0], _raw[1]
+        else:
+            _dtps = dict(ty_params)
+            k0, k1 = _dtps.get('S', MyType()), _dtps.get('T', MyType())
 
-    def _cast_members(self, items: Iterable[tuple[str, Any]], target: type) -> dict[str, Any]:
+        # Insert this just before any transform that is more general than it; drop duplicates
+        cache = _TRANSFORMS
+        pos = len(cache)
+        for i, (_k0, _k1, _tr) in enumerate(cache):
+            if _k0 == k0 and _k1 == k1:
+                logger.warning(
+                    f'({k0}, {k1}, {_tr.__name__}) already registered; cannot register {name}'
+                )
+                break
+            elif _k0 in k0 or _k1 in k1:
+                pos = i
+                break
+        cache.insert(pos, (k0, k1, fn))
+
+    @classmethod
+    def _cast_members(cls, items: Iterable[tuple[str, Any]], target: type) -> dict[str, Any]:
         """Cast a mapping's members to match a target class's field types.
 
         Args:
@@ -277,18 +276,31 @@ class Cast[T0, T1](pyd.BaseModel):
             Dictionary with cast values matching target's field types.
         """
         annotations = ut.instance_aliases(target)
-        return {key: self.ctx.flexcast(val, annotations.get(key, None)) for key, val in items}
+        return {key: cls._ty().flexcast(val, annotations.get(key, None)) for key, val in items}
+
+    @staticmethod
+    def get_type_params[F: FunctionType](fn: F) -> list[tuple[str, MyType]]:
+        """Extract type parameters from a function's `__type_params__` attribute, if present."""
+        raw: list[TypeParam] = list(getattr(fn, '__type_params__', []))
+        ret: list[tuple[str, MyType]] = []
+        for param in raw:
+            name = param.__name__
+            if isinstance(param, TypeVar):
+                ret.append((param.__name__, MyType.new(param.__bound__)))
+            elif isinstance(param, TypeVarTuple):
+                ret.extend((f'{name}_{i}', MyType.new(e)) for i, e in enumerate(param))
+        return ret
 
     # ---------------
     # `-1` Transforms
     # ---------------
     @register
-    def _stream_to_str[S: Stream, T: str](self: Cast) -> str | None:
+    def _stream_to_str[S: Stream, T: str](self: TypeCast) -> str | None:
         """``113 -> 111`` transform."""
         return b.decode() if (b := self.to(bytes)) else None
 
     @register
-    def _stream_to_bytes[S: Stream, T: bytes](self: Cast) -> bytes | None:
+    def _stream_to_bytes[S: Stream, T: bytes](self: TypeCast) -> bytes | None:
         ret = self.data
         if isinstance(ret, bytearray):
             return bytes(ret)
@@ -301,25 +313,25 @@ class Cast[T0, T1](pyd.BaseModel):
             return self.data
 
     @register
-    def _stream_to_string[S: Stream, T: String](self: Cast) -> str | None:
+    def _stream_to_string[S: Stream, T: String](self: TypeCast) -> str | None:
         return self.to(str)
 
     @register
-    def _string_to_stream[S: String, T: Stream](self: Cast) -> str | bytes | None:
+    def _string_to_stream[S: String, T: Stream](self: TypeCast) -> str | bytes | None:
         if issubclass(self._t1, (bytearray, memoryview, BytesIO)):
             return self.cast(self.data, bytes)
         else:
             return self.cast(self.data, str)
 
     @register
-    def _string_to_str[S: String, T: str](self: Cast) -> str | None:
+    def _string_to_str[S: String, T: str](self: TypeCast) -> str | None:
         val = self.data
         if isinstance(val, bytes):
             val = val.decode()
         return val
 
     @register
-    def _string_to_string[S: String, T: String](self: Cast) -> String | None:
+    def _string_to_string[S: String, T: String](self: TypeCast) -> String | None:
         if isinstance(self.data, Streams):
             return self.cast(self.data, str)
 
@@ -327,7 +339,7 @@ class Cast[T0, T1](pyd.BaseModel):
         return self.cast(self.data, source=self.t0, target=str)
 
     @register
-    def _string_to_scalar[S: String, T: Scalar](self: Cast[S, T]) -> Scalar | None:
+    def _string_to_scalar[S: String, T: Scalar](self: TypeCast[S, T]) -> Scalar | None:
         if (val := self._to_str()) is None:
             pass
         elif issubclass(self._t1, bool) and self.RGXS['bool'].fullmatch(val):
@@ -336,7 +348,7 @@ class Cast[T0, T1](pyd.BaseModel):
             return self._try_to_deserialize(val)
 
     @register
-    def _string_to_time[S: String, T: Time](self: Cast[S, T]) -> Time | None:
+    def _string_to_time[S: String, T: Time](self: TypeCast[S, T]) -> Time | None:
         # I. Normalize & analyze data
         data = self._to_str()
         if data is None:
@@ -382,17 +394,17 @@ class Cast[T0, T1](pyd.BaseModel):
         return None
 
     @register
-    def _string_to_map[S: String, T: Map](self: Cast[S, T]) -> Map | None:
-        data = Cast.cast(self.data, str)
+    def _string_to_map[S: String, T: Map](self: TypeCast[S, T]) -> Map | None:
+        data = TypeCast.cast(self.data, str)
         if data:
             with ctx.suppress(Exception):
                 return ut.from_yaml(data, dict)
 
     @register
-    def _string_to_vec[S: String, T: Vec](self: Cast[S, T]) -> Vec | None:
+    def _string_to_vec[S: String, T: Vec](self: TypeCast[S, T]) -> Vec | None:
         if text := self.to(str):
-            do_split, do_wrap = self.ctx.options.splits, self.ctx.options.wraps
-            if do_split and text:
+            options = self.ty.options
+            if options.splits and options.wraps:
                 if match := self.RGXS['brackets'].fullmatch(text.strip()):
                     # I. Split json/yaml-like flow sequences
                     with ctx.suppress(Exception):
@@ -407,34 +419,34 @@ class Cast[T0, T1](pyd.BaseModel):
                     #     e.g. one.oneA:two splits on colons, but one.oneA splits on periods
                     return list(filter(bool, map(str.strip, text.split(char))))
 
-            if do_wrap:
+            if options.wraps:
                 return [text]
 
     @register
-    def _string_to_struct(self: Cast[String, Struct]) -> T1 | None:
+    def _string_to_struct(self: TypeCast[String, Struct]) -> T1 | None:
         return None
 
     @register
-    def _scalar_to_string(self: Cast[Scalar, String]) -> T1 | None:
+    def _scalar_to_string(self: TypeCast[Scalar, String]) -> T1 | None:
         return None
 
     @register
-    def _scalar_to_scalar(self: Cast[Scalar, Scalar]) -> T1 | None:
+    def _scalar_to_scalar(self: TypeCast[Scalar, Scalar]) -> T1 | None:
         return None
 
     @register
-    def _scalar_to_time(self: Cast[Scalar, Time]) -> T1 | None:
+    def _scalar_to_time(self: TypeCast[Scalar, Time]) -> T1 | None:
         return None
 
     @register
-    def _time_to_string[S: Time, T: String](self: Cast[S, T]) -> String | None:
+    def _time_to_string[S: Time, T: String](self: TypeCast[S, T]) -> String | None:
         if isinstance(self.data, datetime | date | time):
             return self.data.isoformat()
         elif isinstance(self.data, timedelta):
             return str(self.data.total_seconds())
 
     @register
-    def _time_to_scalar[S: Time, T: Scalar](self: Cast[S, T]) -> Time | Scalar | None:
+    def _time_to_scalar[S: Time, T: Scalar](self: TypeCast[S, T]) -> Time | Scalar | None:
         d = self.data
         if isinstance(d, datetime):
             return d.timestamp()
@@ -447,11 +459,11 @@ class Cast[T0, T1](pyd.BaseModel):
         return d
 
     @register
-    def _time_to_struct[S: Time, T: Struct](self: Cast[S, T]) -> object | None:
+    def _time_to_struct[S: Time, T: Struct](self: TypeCast[S, T]) -> object | None:
         return None
 
     @register
-    def _datetime_to_time[S: datetime, T: Time](self: Cast[S, T]) -> Time | None:
+    def _datetime_to_time[S: datetime, T: Time](self: TypeCast[S, T]) -> Time | None:
         if issubclass(self._t1, time):
             return self.data.time().replace(tzinfo=UTC)
         elif issubclass(self._t1, date):
@@ -461,7 +473,7 @@ class Cast[T0, T1](pyd.BaseModel):
         return self.data
 
     @register
-    def _date_to_time[S: date, T: Time](self: Cast[S, T]) -> Time | None:
+    def _date_to_time[S: date, T: Time](self: TypeCast[S, T]) -> Time | None:
         ret = self.data
         if issubclass(self._t1, time):
             return time()
@@ -472,7 +484,7 @@ class Cast[T0, T1](pyd.BaseModel):
         return ret
 
     @register
-    def _time_to_time[S: time, T: Time](self: Cast[S, T]) -> T | None:
+    def _time_to_time[S: time, T: Time](self: TypeCast[S, T]) -> T | None:
         if issubclass(self._t1, datetime):
             pass
         elif issubclass(self._t1, date):
@@ -481,36 +493,36 @@ class Cast[T0, T1](pyd.BaseModel):
             pass
 
     @register
-    def _timedelta_to_time[S: timedelta, T: Time](self: Cast[S, T]) -> T | None:
-        num = Cast.cast(self.data, source=self.t0, target=int)
-        return Cast.cast(num, source=int, target=self.t1)
+    def _timedelta_to_time[S: timedelta, T: Time](self: TypeCast[S, T]) -> T | None:
+        num = TypeCast.cast(self.data, source=self.t0, target=int)
+        return TypeCast.cast(num, source=int, target=self.t1)
 
     @register
-    def _enum_to_string[S: Enum, T: String](self: Cast[S, T]) -> object | None:
-        ret = self.ctx.try_method(self._t1, 'write', _tvar=str)
+    def _enum_to_string[S: Enum, T: String](self: TypeCast[S, T]) -> object | None:
+        ret = self.ty.try_method(self._t1, 'write', _tvar=str)
         if ret is None:
             name, value = self.data.name, self.data.value
             return value if isinstance(value, str) else str(name).lower()
         return ret
 
     @register
-    def _enum_to_scalar[S: Enum, T: Scalar](self: Cast[S, T]) -> T | None:
+    def _enum_to_scalar[S: Enum, T: Scalar](self: TypeCast[S, T]) -> T | None:
         value = self.data.value
         if value and isinstance(value, (*Strings, *Scalars)):
-            return Cast.cast(value, self._t1)
+            return TypeCast.cast(value, self._t1)
 
     @register
-    def _enum_to_time[S: Enum, T: Time](self: Cast[S, T]) -> T | None:
+    def _enum_to_time[S: Enum, T: Time](self: TypeCast[S, T]) -> T | None:
         value = self.data.value
         if value and isinstance(value, (*Strings, *Scalars)):
-            return Cast.cast(value, self._t1)
+            return TypeCast.cast(value, self._t1)
 
     @register
-    def _enum_to_enum[S: Enum, T: Enum](self: Cast[S, T]) -> T | None:
+    def _enum_to_enum[S: Enum, T: Enum](self: TypeCast[S, T]) -> T | None:
         # I. If the enum has it's own read method, try that on the name and value
         name, value = self.data.name, self.data.value
         for val in (name, value):
-            if ret := self.ctx.try_method(self._t1, 'read', val, _tvar=self._t1):
+            if ret := self.ty.try_method(self._t1, 'read', val, _tvar=self._t1):
                 return ret
 
         if name in self._t1.__members__:
@@ -527,28 +539,28 @@ class Cast[T0, T1](pyd.BaseModel):
             return ret
 
     @register
-    def _enum_to_vec[S: Enum, T: Vec](self: Cast[S, T]) -> T | None:
+    def _enum_to_vec[S: Enum, T: Vec](self: TypeCast[S, T]) -> T | None:
         return None
 
     @register
-    def _enum_to_map[S: Enum, T: Map](self: Cast[S, T]) -> T | None:
+    def _enum_to_map[S: Enum, T: Map](self: TypeCast[S, T]) -> T | None:
         return None
 
     @register
-    def _enum_to_iter[S: Enum, T: Iter](self: Cast[S, T]) -> T | None:
+    def _enum_to_iter[S: Enum, T: Iter](self: TypeCast[S, T]) -> T | None:
         return None
 
     @register
-    def _enum_to_model[S: Enum, T: Model](self: Cast[S, T]) -> T | None:
+    def _enum_to_model[S: Enum, T: Model](self: TypeCast[S, T]) -> T | None:
         return None
 
     @register
-    def _object_to_enum[S: Object, T: Enum](self: Cast[S, T]) -> T | None:
-        ret = self.ctx.try_method(self._t1, 'read', self.data, _tvar=self._t1)
+    def _object_to_enum[S: Object, T: Enum](self: TypeCast[S, T]) -> T | None:
+        ret = self.ty.try_method(self._t1, 'read', self.data, _tvar=self._t1)
         return ret if ret is not None else None
 
     @register
-    def _string_to_flag[S: String, T: Flag](self: Cast[S, T]) -> T | None:
+    def _string_to_flag[S: String, T: Flag](self: TypeCast[S, T]) -> T | None:
         text = self._to_str()
         if text is None:
             return
@@ -563,11 +575,11 @@ class Cast[T0, T1](pyd.BaseModel):
                 return ret  # type: ignore[bad-return]
 
     @register
-    def _scalar_to_enum[S: Scalar, T: Enum](self: Cast[S, T]) -> T | None:
+    def _scalar_to_enum[S: Scalar, T: Enum](self: TypeCast[S, T]) -> T | None:
         return self._t1(self.data)
 
     @register
-    def _string_to_enum[S: String, T: Enum](self: Cast[S, T]) -> str | Enum | None:
+    def _string_to_enum[S: String, T: Enum](self: TypeCast[S, T]) -> str | Enum | None:
         text = (self._to_str() or '').strip()
         if not text:
             return
@@ -586,29 +598,29 @@ class Cast[T0, T1](pyd.BaseModel):
         return ret
 
     @register
-    def _atom_to_vec[S: Atom, T: Vec](self: Cast[S, T]) -> list | None:
+    def _atom_to_vec[S: Atom, T: Vec](self: TypeCast[S, T]) -> list | None:
         if self.data and self.t1.vals:
             with ctx.suppress(TypeError):
                 return [self.to(self.t1.vals)]
 
     @register
-    def _flag_to_vec[S: Flag, T: Vec](self: Cast[S, T]) -> list | None:
+    def _flag_to_vec[S: Flag, T: Vec](self: TypeCast[S, T]) -> list | None:
         return [self._t0(member.value) for member in self._t0 if member in self.data]
 
     @register
-    def _flag_to_map[S: Flag, T: Map](self: Cast[S, T]) -> dict | None:
+    def _flag_to_map[S: Flag, T: Map](self: TypeCast[S, T]) -> dict | None:
         return {member.name: member.value for member in self._t0 if member in self.data}
 
     @register
-    def _atom_to_map[S: Atom, T: Map](self: Cast[S, T]) -> dict | None:
+    def _atom_to_map[S: Atom, T: Map](self: TypeCast[S, T]) -> dict | None:
         return None
 
     @register
-    def _atom_to_struct[S: Atom, T: Struct](self: Cast[S, T]) -> list | dict | Model | None:
+    def _atom_to_struct[S: Atom, T: Struct](self: TypeCast[S, T]) -> list | dict | Model | None:
         return None
 
     @register
-    def _vec_to_flag[S: Vec, T: Flag](self: Cast[S, T]) -> T | None:
+    def _vec_to_flag[S: Vec, T: Flag](self: TypeCast[S, T]) -> T | None:
         ret = self._t1(0)
         for member in self.data:
             if (_new := self.cast(member, self._t1)) is not None:
@@ -616,11 +628,11 @@ class Cast[T0, T1](pyd.BaseModel):
         return ret
 
     @register
-    def _vec_to_time[S: Vec, T: Time](self: Cast[S, T]) -> Time | list | None:
+    def _vec_to_time[S: Vec, T: Time](self: TypeCast[S, T]) -> Time | list | None:
 
         if not (d := list(self.data)):
             pass
-        elif len(d) == 1 and (_vt := self.t0.vals) and ty.is_atom_type(_vt):
+        elif len(d) == 1 and (_vt := self.t0.vals) and tyc.is_atom_type(_vt):
             # I. Unwrap monotomic lists
             return self.proxy(d[0])
         elif len(d) >= 3:
@@ -636,29 +648,29 @@ class Cast[T0, T1](pyd.BaseModel):
         return d
 
     @register
-    def _vec_to_atom[S: Vec, T: Atom](self: Cast[S, T]) -> T | None:
+    def _vec_to_atom[S: Vec, T: Atom](self: TypeCast[S, T]) -> T | None:
         if self.data:
             return self.proxy(mi.first(self.data))
 
     @register
-    def _vec_to_vec[S: Vec, T: Vec](self: Cast[S, T]) -> list | None:
+    def _vec_to_vec[S: Vec, T: Vec](self: TypeCast[S, T]) -> list | None:
         if self.t0.vals and self.t0.vals != self.t1.vals:
-            return self.ctx.multicast(self.data, self.t1.vals, skip=False)
+            return self.ty.multicast(self.data, self.t1.vals, skip=False)
         return self.to(list)
 
     @register
-    def _vec_to_map[S: Vec, T: Map](self: Cast[S, T]) -> dict | None:
-        if ty.is_map(self.data):
+    def _vec_to_map[S: Vec, T: Map](self: TypeCast[S, T]) -> dict | None:
+        if tyc.is_map(self.data):
             # I. Cast item lists (i.e. lists of 2-tuples)
             return dict(self.data)
 
         elif issubclass(self._t1, Counter):
             # II. Cast counters, the only map type that takes an iter of single items
             if _kt := self.t1.keys:
-                return Counter(self.ctx.multicast(self.data, _kt, skip=False))
+                return Counter(self.ty.multicast(self.data, _kt, skip=False))
 
     @register
-    def _vec_to_iter[S: Vec, T: Iter](self: Cast[S, T]) -> Iterable | AsyncIterable | None:
+    def _vec_to_iter[S: Vec, T: Iter](self: TypeCast[S, T]) -> Iterable | AsyncIterable | None:
         if isinstance(self.data, AsyncIterable):
 
             async def _gen() -> AsyncGenerator:
@@ -670,55 +682,55 @@ class Cast[T0, T1](pyd.BaseModel):
             return iter(self.data)
 
     @register
-    def _vec_to_model[S: Vec, T: Model](self: Cast[S, T]) -> T | None:
+    def _vec_to_model[S: Vec, T: Model](self: TypeCast[S, T]) -> T | None:
 
         if issubclass(self._t1, pyd.BaseModel):
             return self._object_to_model()
         return None
 
     @register
-    def _map_to_string[S: Map, T: String](self: Cast[S, T]) -> T | None:
+    def _map_to_string[S: Map, T: String](self: TypeCast[S, T]) -> T | None:
         return None
 
     @register
-    def _map_to_scalar[S: Map, T: Scalar](self: Cast[S, T]) -> T | None:
+    def _map_to_scalar[S: Map, T: Scalar](self: TypeCast[S, T]) -> T | None:
         return None
 
     @register
-    def _map_to_time[S: Map, T: Time](self: Cast[S, T]) -> T | None:
+    def _map_to_time[S: Map, T: Time](self: TypeCast[S, T]) -> T | None:
         return None
 
     @register
-    def _map_to_enum[S: Map, T: Enum](self: Cast[S, T]) -> T | None:
+    def _map_to_enum[S: Map, T: Enum](self: TypeCast[S, T]) -> T | None:
         return None
 
     @register
-    def _map_to_vec[S: Map, T: Vec](self: Cast[S, T]) -> list | None:
+    def _map_to_vec[S: Map, T: Vec](self: TypeCast[S, T]) -> list | None:
         items = ut.map_items(self.data)
 
         if not self.t1.vals:
             return items
         elif self.t1.vals.is_map_item():
-            return self.ctx.multicast(items, self.t1.vals, skip=False)
+            return self.ty.multicast(items, self.t1.vals, skip=False)
         elif self.t1.vals.match(self.t0):
             return [self.data]
         else:
-            return self.ctx.multicast((k for k, _ in items), self.t1.vals, skip=False)
+            return self.ty.multicast((k for k, _ in items), self.t1.vals, skip=False)
 
     @register
-    def _map_to_iter[S: Map, T: Iter](self: Cast[S, T]) -> T | None:
+    def _map_to_iter[S: Map, T: Iter](self: TypeCast[S, T]) -> T | None:
         return self.proxy(self.to(list))
 
     @register
-    def _map_to_map[S: Map, T: Map](self: Cast[S, T]) -> Map | None:
+    def _map_to_map[S: Map, T: Map](self: TypeCast[S, T]) -> Map | None:
         if not (items := ut.map_items(self.data)):
             return
 
         keys, values = mi.unzip(items)
         if self.t1.keys:
-            keys = self.ctx.multicast(keys, self.t1.keys, skip=False)
+            keys = self.ty.multicast(keys, self.t1.keys, skip=False)
         if self.t1.vals:
-            values = self.ctx.multicast(values, self.t1.vals, skip=False)
+            values = self.ty.multicast(values, self.t1.vals, skip=False)
         data = dict(zip(keys, values, strict=True))
 
         # Handle special cases here
@@ -729,7 +741,7 @@ class Cast[T0, T1](pyd.BaseModel):
             return data.items()
 
     @register
-    def _map_to_iter[S: Map, T: Iter](self: Cast[S, T]) -> Iter | None:
+    def _map_to_iter[S: Map, T: Iter](self: TypeCast[S, T]) -> Iter | None:
         if (
             self.t1.vals
             and self.t1.vals.main
@@ -739,7 +751,7 @@ class Cast[T0, T1](pyd.BaseModel):
             return iter(ut.map_items(self.data))
 
     @register
-    def _iter_to_vec[S: Iter, T: Vec](self: Cast[S, T]) -> list | None:
+    def _iter_to_vec[S: Iter, T: Vec](self: TypeCast[S, T]) -> list | None:
         data: Iterable | AsyncIterable = self.data
         if isinstance(data, AsyncIterable):
 
@@ -754,16 +766,16 @@ class Cast[T0, T1](pyd.BaseModel):
             ret = list(data)
 
         if self.t1.vals:
-            return self.ctx.multicast(ret, self.t1.vals, skip=False)
+            return self.ty.multicast(ret, self.t1.vals, skip=False)
         return ret
 
     @register
-    def _iter_to_object[S: Iter, T: object](self: Cast[S, T]) -> T | None:
+    def _iter_to_object[S: Iter, T: object](self: TypeCast[S, T]) -> T | None:
         """Hailmary fallback for iterables that at least casts them to a list first."""
         return self.proxy(self.to(list))
 
     def _model_fields(
-        self: Cast, model: type[Model] | None
+        self: TypeCast, model: type[Model] | None
     ) -> dict[str, FieldInfo] | dict[str, Field] | dict[str, Any]:
         """Return a map of field names to their annotations, if available."""
         if not model:
@@ -779,10 +791,10 @@ class Cast[T0, T1](pyd.BaseModel):
         return {}
 
     @register
-    def _model_to_map[S: Model, T: Map](self: Cast[S, T]) -> T | dict | None:
+    def _model_to_map[S: Model, T: Map](self: TypeCast[S, T]) -> T | dict | None:
         if isinstance(self.data, pyd.BaseModel):
             return self.proxy(self.data.model_dump())
-        elif result := self.ctx.try_method(self.data, 'to_dict'):
+        elif result := self.ty.try_method(self.data, 'to_dict'):
             return self.proxy(result)
         return self.proxy(
             {
@@ -793,13 +805,13 @@ class Cast[T0, T1](pyd.BaseModel):
         )
 
     @register
-    def _model_to_model[S: Model, T: Model](self: Cast[S, T]) -> T | None:
+    def _model_to_model[S: Model, T: Model](self: TypeCast[S, T]) -> T | None:
         f0, f1 = self._model_fields(self._t0), self._model_fields(self._t1)
         if f0 and f1 and (shared := set(f0.keys()) & set(f1.keys())):
             return self.proxy({f: getattr(self.data, f) for f in shared})
 
     @register
-    def _model_to_object[S: Model, T: Object](self: Cast[S, T]) -> T | None:
+    def _model_to_object[S: Model, T: Object](self: TypeCast[S, T]) -> T | None:
         fields = self._model_fields(self._t0)
         if 'root' in fields:
             return self.proxy(getattr(self.data, 'root'))
@@ -807,7 +819,7 @@ class Cast[T0, T1](pyd.BaseModel):
             return self.proxy({f: getattr(self.data, f) for f in fields})
 
     @register
-    def _object_to_model[S: Any, T: Model](self: Cast[S, T]) -> T | None:
+    def _object_to_model[S: Any, T: Model](self: TypeCast[S, T]) -> T | None:
         """Cast data to a class instance using various instantiation strategies.
 
         Args:
@@ -817,22 +829,22 @@ class Cast[T0, T1](pyd.BaseModel):
             Class instance if successful, None otherwise.
         """
         # I. First, try to use the semi-standard `new()` method if available
-        if (ret := self.ctx.try_method(self._t1, 'new', self.data, _tvar=self._t1)) is not None:
+        if (ret := self.ty.try_method(self._t1, 'new', self.data, _tvar=self._t1)) is not None:
             return ret
         elif ut.is_map(self.data):
             kwargs = self._cast_members(ut.map_items(self.data), self._t1)
-            return self.ctx.invoke(self._t1, **kwargs)
+            return self.ty.invoke(self._t1, **kwargs)
         else:
-            return self.ctx.invoke(self._t1, self.data)
+            return self.ty.invoke(self._t1, self.data)
 
     @register
-    def _func_to_str[S: Func, T: str](self: Cast[S, str]) -> str | None:
+    def _func_to_str[S: Func, T: str](self: TypeCast[S, str]) -> str | None:
         return self.data.__name__ if self.data else None
 
     @register
-    def _func_to_atom[S: Func, T: Atom](self: Cast[S, T]) -> T | None:
-        args, rets = ty.describe_func(self.data)
-        if len(rets) == 1 and len(args) == 0 and ty.is_atom_type(rets[0]):
+    def _func_to_atom[S: Func, T: Atom](self: TypeCast[S, T]) -> T | None:
+        args, rets = tyc.describe_func(self.data)
+        if len(rets) == 1 and len(args) == 0 and tyc.is_atom_type(rets[0]):
             return self.proxy(self.data())
 
     # ----------------------------------
@@ -886,7 +898,7 @@ class Cast[T0, T1](pyd.BaseModel):
                     (
                         ret
                         for vals in self.t1.args
-                        if (ret := self.cast(data, vals)) is not None and ty.check(ret, self.t1)
+                        if (ret := self.cast(data, vals)) is not None and tyc.check(ret, self.t1)
                     ),
                     None,
                 )
@@ -896,11 +908,11 @@ class Cast[T0, T1](pyd.BaseModel):
                 data = self.cast(data, tuple)
 
             if data is not None and len(data) == len(self.t1.args):
-                cast_values = list(it.starmap(Cast.cast, zip(data, self.t1.args, strict=True)))
+                cast_values = list(it.starmap(TypeCast.cast, zip(data, self.t1.args, strict=True)))
                 # Use the parent type's actual class constructor directly via this handle
                 ret = origin(cast_values)  # type: ignore
 
-        return ret if ret is not None and ty.check(ret, self.t1) else None
+        return ret if ret is not None and tyc.check(ret, self.t1) else None
 
     @classmethod
     def _try_to_deserialize(cls, text: str) -> Scalar | None:
@@ -1022,11 +1034,11 @@ class Cast[T0, T1](pyd.BaseModel):
 
         new_main = None
         if main in ABSTRACT_GENERICS['maps']:
-            new_main = _dt.main if ty.is_map(data) and (_dt := MyType.parse(type(data))) else dict
+            new_main = _dt.main if tyc.is_map(data) and (_dt := MyType.parse(type(data))) else dict
         elif main in ABSTRACT_GENERICS['sets']:
             new_main = set
         elif main in ABSTRACT_GENERICS['vecs']:
-            new_main = _dt.main if ty.is_vec(data) and (_dt := MyType.parse(type(data))) else list
+            new_main = _dt.main if tyc.is_vec(data) and (_dt := MyType.parse(type(data))) else list
 
         if new_main is not None:
             return cls._derive_container(target, new_main)
@@ -1035,11 +1047,10 @@ class Cast[T0, T1](pyd.BaseModel):
     # ------------------
     # `*` Public Methods
     # ------------------
-
     @classmethod
-    def _try_read_enum[T: Enum](cls, data: object, target: type[T], ctx: Typist) -> object | None:
-        if read_method := ctx.get_method(target, 'read'):
-            if (ret := ctx.invoke(read_method, data)) is not None:
+    def _try_read_enum[T: Enum](cls, data: object, target: type[T]) -> object | None:
+        if read_method := cls._ty().get_method(target, 'read'):
+            if (ret := cls._ty().invoke(read_method, data)) is not None:
                 return ret
 
     def to[Tt1](self, t1: AnyType[Tt1]) -> Tt1 | None:
@@ -1074,7 +1085,7 @@ class Cast[T0, T1](pyd.BaseModel):
         Returns:
             Cast data if successful, None otherwise.
         """
-        return Cast(data, target, source)()
+        return TypeCast(data, target, source)()
 
     def __call__(self, new_data: T0 | None = None) -> T1 | None:
         """Main entrypoint for casting a value to a new type."""
@@ -1144,4 +1155,4 @@ class Cast[T0, T1](pyd.BaseModel):
         return ret
 
 
-tyt = typecast = Cast
+tyt = typecast = TypeCast

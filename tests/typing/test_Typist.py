@@ -25,6 +25,7 @@ from ..conftest import boolmap
 ############
 ### DATA ###
 ############
+cls = Typist
 typist = Typist(firsts=True, atomics=True, splits=True, wraps=True)
 
 

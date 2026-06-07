@@ -13,12 +13,13 @@ import itertools as it
 from ..utils import ut
 from ..caches import NestedCache
 from .MyType import MyType, TypeArg
+from ._TypingBase import _TypingBase
 
 
 ############
 ### BODY ###
 ############
-class Match:
+class TypeMatch(_TypingBase):
     """Type matching utilities for MyType and Typist."""
 
     MATCH_CACHE: ClassVar[NestedCache[tuple[str, str], bool]] = NestedCache(signature=(str, str))
@@ -128,7 +129,7 @@ class Match:
 
         # II.i. Check cache based on simple stringification
         cache_key = str(r0), str(r1) + ('.I' if inter else '')
-        if (cached := Match.MATCH_CACHE[cache_key]) is not None:
+        if (cached := TypeMatch.MATCH_CACHE[cache_key]) is not None:
             return cached
 
         ret = False
@@ -158,4 +159,4 @@ class Match:
         return ret
 
 
-tym = typematch = Match
+tym = typematch = TypeMatch

@@ -16,7 +16,7 @@ import more_itertools as mi
 
 ### INTERNAL
 from my import MyType, RegexStore, GoogleSheet, env
-from my.typing.typecast import Cast, Transform
+from my.typing.typecast import TypeCast, Transform
 
 
 ############
@@ -107,11 +107,11 @@ class Matrix(pyd.BaseModel):
     def is_implicit(cls, source: MyType, target: MyType) -> bool:
         """Determine if a cast from source to target can be performed implicitly."""
         return bool(
-            source.matches(target) or cls.RGXS.fullmatch('implicit', f'{source.idx}-{target.idx}')
+            source.match(target) or cls.RGXS.fullmatch('implicit', f'{source.idx}-{target.idx}')
         )
 
     def render_transforms(self) -> list[list[str]]:
-        """Render a row of cells for every one of our typecast transforms."""
+        """Render a row of cells for every one of our cast transforms."""
         n_header_col = 4
         return [
             [*('' for _ in range(n_header_col)), *(map(str, MyType.IDXS.values()))],
@@ -122,7 +122,7 @@ class Matrix(pyd.BaseModel):
                 'target_idx',
                 *(map(str, MyType.IDXS.keys())),
             ],
-            *it.starmap(self._render_transform, Cast.TRANSFORMS),
+            *it.starmap(self._render_transform, TypeCast.TRANSFORMS),
         ]
 
     def render_typecasts(self) -> list[list[str]]:
@@ -137,7 +137,7 @@ class Matrix(pyd.BaseModel):
                 'is_native',
                 *(map(str, MyType.IDXS.keys())),
             ],
-            *it.starmap(self._render_transform, Cast.TRANSFORMS),
+            *it.starmap(self._render_transform, TypeCast.TRANSFORMS),
         ]
 
     # ------------------

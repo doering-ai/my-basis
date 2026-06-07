@@ -40,17 +40,18 @@ from ..infra.types import (
     Funcs,
 )
 from .MyType import MyType, TypeArg
+from ._TypingBase import _TypingBase
 from ..utils import ut
 
 
 ############
 ### BODY ###
 ############
-class Check[T0, T1](pyd.BaseModel):
+class TypeCheck[T0, T1](_TypingBase, pyd.BaseModel):
     """Utilities for qualifying the types of data objects."""
 
-    data = T0
-    root = TypeArg[T1]
+    data: T0
+    root: TypeArg[T1]
 
     @ft.cached_property
     def t0(self) -> MyType[T0]:
@@ -79,10 +80,7 @@ class Check[T0, T1](pyd.BaseModel):
             return self.root is NoneType
         elif self.data is Ellipsis:
             return self.root is EllipsisType
-        elif (
-            self.t0.origin
-            and getattr(self.t0.origin, '__name__', '') in MyType.FILTERS['unhandled']
-        ):
+        elif self.t0.origin and getattr(self.t0.origin, '__name__', '') in MyType.FILTERS.unhandled:
             return False
 
         # Composite types
@@ -396,4 +394,4 @@ class Check[T0, T1](pyd.BaseModel):
         return all(cls.check(v, tvar) for v in data)
 
 
-tyc = typecheck = Check
+tyc = typecheck = TypeCheck

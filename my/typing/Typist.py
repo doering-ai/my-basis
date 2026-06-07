@@ -41,9 +41,9 @@ from ..infra.types import (
 )
 from ..utils import ut
 from .MyType import MyType
-from .typematch import Match
-from .typecast import Cast
-from .typecheck import Check
+from .typematch import TypeMatch
+from .typecast import TypeCast
+from .typecheck import TypeCheck
 
 ############
 ### DATA ###
@@ -75,7 +75,7 @@ ty: Typist
 ############
 ### BODY ###
 ############
-class Typist(Check, Match, Cast):
+class Typist(TypeCheck, TypeMatch, TypeCast):
     """Semi-singleton interface for building systems that are resilient to slight inconsistencies.
 
     Specifically, this class provides runtime type introspection, parsing, and coercion capabilities
@@ -886,7 +886,7 @@ class Typist(Check, Match, Cast):
         # IV.ii. Perform the actual casting
         t0 = MyType.typeof(data)
         return next(
-            filter(bool, (Cast(data=data, target=t1, source=t0)() for t1 in options)),
+            filter(bool, (TypeCast(data=data, target=t1, source=t0)() for t1 in options)),
             None,
         )
 

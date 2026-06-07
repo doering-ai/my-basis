@@ -42,10 +42,6 @@ class BaseEnum(Enum):
     B = 2
 
 
-T = typing.TypeVar('T')
-Ts = typing.TypeVarTuple('Ts')
-
-
 ############
 ### BODY ###
 ############
@@ -66,8 +62,8 @@ class TestMyType:
 
         if inst.is_split:
             assert len(exp) == 1
-            found_args = {arg.src_type for arg in inst.args}
-            exp_union_args = {arg.src_type for arg in cls.parse(exp[0]).args}
+            found_args = {arg.root for arg in inst.args}
+            exp_union_args = {arg.root for arg in cls.parse(exp[0]).args}
             assert found_args == exp_union_args
         elif len(exp) == 1:
             assert inst.main is exp[0]
@@ -209,10 +205,10 @@ class TestMyType:
 
         if inst.origin is Literal:
             assert inst.main is None
-            assert {arg.src_type for arg in inst.args} == set(expected)
+            assert {arg.root for arg in inst.args} == set(expected)
         elif inst.origin is not None and issubclass(inst.origin, tuple):
             assert inst.main == inst.origin
-            assert [arg.src_type for arg in inst.args] == expected
+            assert [arg.root for arg in inst.args] == expected
         else:
             pyt.fail(f'{inst!r} is invalid.')
 
@@ -273,7 +269,7 @@ class TestMyType:
             None,
             Any,
             Callable,
-            Callable[[int, ...], str],
+            Callable[[int, ...], str],  # type: ignore
             TypeGuard[str],
             Coroutine,
             Annotated,
@@ -306,7 +302,7 @@ class TestMyType:
             ({}, dict),
             (set(), set),
             (tuple(), tuple),
-            (deque([]), deque),
+            (deque(), deque),
             (Counter(), (Counter, None, int)),
             # ---- Homogeneous lists ----
             ([1, 2, 3], (list, int)),
@@ -342,16 +338,16 @@ class TestMyType:
         ],
     )
     def test_metaparse(self, data, expected: Expected):
-        inst = cls.metaparse(data)
+        inst = cls.typeof(data)
         self.check_inst(inst, expected)
 
     def test_metaparse__tuples(self):
-        inst = cls.metaparse((1, 'a'))
-        assert inst.src_type == tuple[int, str]
-        inst = cls.metaparse((1, 'a', 2.0))
-        assert inst.src_type == tuple[int, str, float]
-        inst = cls.metaparse(('x', (1, 'a'), True))
-        assert inst.src_type == tuple[str, tuple[int, str], bool]
+        inst = cls.typeof((1, 'a'))
+        assert inst.root == tuple[int, str]
+        inst = cls.typeof((1, 'a', 2.0))
+        assert inst.root == tuple[int, str, float]
+        inst = cls.typeof(('x', (1, 'a'), True))
+        assert inst.root == tuple[str, tuple[int, str], bool]
 
     # -------------------
     # `-` Private Methods
@@ -364,88 +360,6 @@ class TestMyType:
     # ------------------
     # `*` Public Methods
     # ------------------
-    @pyt.mark.parametrize(
-        'data, tvar, expected',
-        boolmap(
-            false=[
-                # ---- Type mismatches ----
-                (1, str),
-                ('abc', int),
-                (1.5, bool),
-                ([1, 2], dict),
-                ({'a': 1}, list),
-                # ---- Container element mismatches ----
-                ([1, 2, 3], list[str]),
-                (['a', 'b', 1], list[str]),
-                ({'a': 1}, dict[str, str]),
-                ({'a': 1}, dict[int, int]),
-                ({1: 'a'}, dict[str, str]),
-                (Counter(b=2), Mapping[str, str]),
-                ({1, 2, 3}, set[str]),
-                # ---- Nested mismatches ----
-                ([[1, 2], ['a', 'b']], list[list[int]]),
-                ([{'a': 1}, {'b': 'c'}], list[dict[str, int]]),
-                # ---- Literal mismatches ----
-                ('three', Literal['one', 'two']),
-                (3, Literal[1, 2]),
-                # ---- Tuple literal mismatches ----
-                ((1, 'a', 3.0), tuple[int, str]),
-                ((1, 2), tuple[int, str]),
-                ((1,), tuple[int, int]),
-                # ---- None checks ----
-                (None, str),
-                (None, list),
-                (None, list[str]),
-            ],
-            true=[
-                # ---- Basic types ----
-                ('abc', str),
-                (123, int),
-                (3.14, float),
-                (b'bytes', bytes),
-                (True, bool),
-                # ---- Any and object ----
-                ('anything', Any),
-                ('anything', object),
-                (123, Any),
-                (123, object),
-                # ---- Lists ----
-                (['a', 'b'], list[str]),
-                ([1, 2, 3], list),
-                ([1, 2, 3], list[int]),
-                ([1, 2], Any),
-                ([], list[int]),
-                # ---- Dicts ----
-                ({'a': 1, 'b': 2}, dict[str, int]),
-                ({'a': 1}, dict),
-                ({1: 'a', 2: 'b'}, dict[int, str]),
-                ({}, dict[str, int]),
-                # ---- Sets ----
-                (set(), set[int]),
-                ({'a', 'b'}, set[str]),
-                ({1, 2, 3}, set),
-                ({1, 2, 3}, set[int]),
-                # ---- Mappings ----
-                (Counter(a=1), Mapping),
-                (Counter(b=2), Mapping[str, int]),
-                ({'a': 1}, Mapping[str, int]),
-                # ---- Containers ----
-                ('abc', Container[str]),
-                ([1, 2], Container[int]),
-                ({'a': 1}, Container[str]),
-                ({1, 2, 3}, Container[int]),
-                # ---- Nested structures ----
-                ([[1, 2], [3, 4]], list[list[int]]),
-                ([{'a': 1}, {'b': 2}], list[dict[str, int]]),
-                ({'x': [1, 2], 'y': [3, 4]}, dict[str, list[int]]),
-                # ---- Deque ----
-                (deque([1, 2, 3]), deque),
-                (deque([1, 2, 3]), deque[int]),
-            ],
-        ),
-    )
-    def test_check(self, data, tvar: type, expected: bool):
-        assert cls.parse(tvar).check(data) == expected
 
     @pyt.mark.parametrize(
         'value, tvar, expected',

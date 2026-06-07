@@ -27,7 +27,6 @@ from typing import (
     get_origin,
     Union,
     IO,
-    TypeAlias,
     NamedTuple,
 )
 from collections import Counter, deque
@@ -43,7 +42,7 @@ from collections.abc import (
 from io import StringIO, BytesIO
 import inspect
 import dataclasses
-from enum import Enum, Flag, auto
+from enum import Enum, Flag
 from datetime import date, time, datetime, timedelta
 import functools as ft
 import contextlib as ctx
@@ -71,7 +70,7 @@ from ..infra.types import (
 )
 from ..utils import ut
 from ..caches import Cache
-from . import typecheck, typematch
+from ._TypingBase import _TypingBase
 
 
 ############
@@ -81,8 +80,16 @@ type TypeArg[T = Any] = type[T] | MyType[T] | tuple[type[T], ...] | Any | None
 
 
 class _Filters(NamedTuple):
-    universal: frozenset[str] = frozenset(('', 'Any'))
-    funcs: frozenset[str] = frozenset(('Callable', 'Coroutine'))
+    #: Universal types are treated as the base of everything
+    universal: frozenset[str] = frozenset(('', 'Unknown', 'Any'))
+    #: Functional types
+    funcs: frozenset[str] = frozenset(
+        (
+            'Callable',
+            'Coroutine',
+        )
+    )
+    #: Structural types (i.e. vectors, maps, and models)
     structs: frozenset[str] = frozenset(
         (
             'AsyncGenerator',
@@ -93,6 +100,7 @@ class _Filters(NamedTuple):
             'TypedDict',
         )
     )
+    #: Simple wrapper types
     simple: frozenset[str] = frozenset(
         (
             'Annotated',
@@ -104,6 +112,7 @@ class _Filters(NamedTuple):
             'Required',
         )
     )
+    #: Forms that treat as `None` on sight.
     unhandled: frozenset[str] = frozenset(
         (
             'Type',  # deprecated
@@ -140,7 +149,7 @@ class _Filters(NamedTuple):
 ### BODY ###
 ############
 @ft.total_ordering
-class MyType[T](pyd.BaseModel, covariant=True):
+class MyType[T](_TypingBase, pyd.BaseModel):
     """A wrapper for any type annotation that normalizes the wide variety of interfaces."""
 
     #: If any of these types are passed into `parse()`, no work will be done and an "inactive"
@@ -154,6 +163,12 @@ class MyType[T](pyd.BaseModel, covariant=True):
 
     #: The original type annotation passed in, which may be unparseable.
     root: type[T] | Any | None = None
+
+    #: The name of the type (e.g. 'dict', 'Union', 'Annotated', etc.) or '' if unparseable.
+    name: str = ''
+
+    #: A unique serialized identifier for this type, used for caching.
+    uid: int = 0
 
     main: type | None = None
     """
@@ -171,15 +186,14 @@ class MyType[T](pyd.BaseModel, covariant=True):
     #: For mappings, the type of the keys. For other types, None.
     keys: MyType | None = None
 
-    #: The name of the type (e.g. 'dict', 'Union', 'Annotated', etc.) or '' if unparseable.
-    name: str = ''
+    #: The arguments of generic types; only needed for advanced usecases.
+    args: tuple[MyType, ...] = tuple()
 
-    #: A unique serialized identifier for this type, used for caching.
-    uid: int = 0
+    # ---- Internal attributes ----
 
     #: The origin of the type, if it has one (e.g. `dict` for `dict[str, int]`); otherwise None.
     origin: type | None = None
-    args: tuple[MyType, ...] = tuple()
+
     literal_members: list[Any] = []
     is_split: bool = False
 
@@ -372,8 +386,8 @@ class MyType[T](pyd.BaseModel, covariant=True):
         if not data or not hasattr(origin, '__class_getitem__'):
             return cls.parse(origin)  # type: ignore
 
-        if typecheck.Check.is_vec(data):
-            valss = list(filter(bool, map(cls.typeof, data)))
+        if cls._ty().is_vec(data):
+            valss = ut.condense(map(cls.typeof, data))
             if isinstance(data, tuple):
                 if len(set(valss)) == 1:
                     t = valss[0].root
@@ -383,7 +397,7 @@ class MyType[T](pyd.BaseModel, covariant=True):
                     args = [vt.root for vt in valss if vt.root is not None]
             else:
                 args = [cls._condense_args(valss)]
-        elif typecheck.Check.is_map(data):
+        elif cls._ty().is_map(data):
             _val = dict(data)
             _keys, _vals = _val.keys(), _val.values()
             keyss, valss = [ut.condense(map(cls.typeof, _i)) for _i in (_keys, _vals)]
@@ -431,14 +445,14 @@ class MyType[T](pyd.BaseModel, covariant=True):
                 self.literal_members = list(args)
         elif n == 1:
             arg = args[0]
-            if typecheck.Check.is_map(origin):
+            if self.ty.is_map(origin):
                 # II. Catch mono-keyed maps (e.g. Counters)
                 if issubclass(origin, Counter):
                     return arg, self.parse(int)
             else:
                 # III. Catch any generics with singular values -- the most common kind by far
                 return None, arg
-        elif n == 2 and typecheck.Check.is_map(origin):
+        elif n == 2 and self.ty.is_map(origin):
             # IV. Catch double-keyed (key+val) maps
             return args[0], args[1]
         return None, None
@@ -607,7 +621,7 @@ class MyType[T](pyd.BaseModel, covariant=True):
         Returns:
             True if *all* aspects of this type are satisfied by this data, including nested types.
         """
-        return typecheck.Check.check(data, self.root) if self else False
+        return self.ty.check(data, self.root) if self else False
 
     @overload
     def __contains__(self, child: None) -> TypeIs[NoneType]: ...
@@ -622,7 +636,7 @@ class MyType[T](pyd.BaseModel, covariant=True):
     def __contains__(self, child: MyType | type | object | None) -> bool:
         """Determines whether the preceeding type is a valid subset of this one."""
         if isinstance(child, (type, MyType)):
-            return typematch.Match.match(child, self, False)
+            return self.ty.match(child, self, False)
         return False
 
     @overload
@@ -638,7 +652,7 @@ class MyType[T](pyd.BaseModel, covariant=True):
     def __and__(self, other: MyType | type | object | None) -> bool:
         """Determines other type ."""
         if isinstance(other, (type, MyType)):
-            return typematch.Match.match(other, self, True)
+            return self.ty.match(other, self, True)
         return False
 
     @classmethod
@@ -658,7 +672,7 @@ class MyType[T](pyd.BaseModel, covariant=True):
         if t0 is None or t1 is None:
             return False
 
-        return typematch.Match.match(MyType.new(t0), MyType.new(t1), inter)
+        return cls._ty().match(MyType.new(t0), MyType.new(t1), inter)
 
     @overload
     def match(self, other: None) -> TypeIs[NoneType]: ...
@@ -673,7 +687,7 @@ class MyType[T](pyd.BaseModel, covariant=True):
     def match(self, other: MyType | type | object | None) -> bool:
         """Type guard for the instances of the root type of this instance."""
         if isinstance(other, (type, MyType)):
-            return typematch.Match.match(self, other, True)
+            return self.ty.match(self, other, True)
         return False
 
     def members(self) -> Iterator[MyType]:
@@ -740,29 +754,6 @@ class MyType[T](pyd.BaseModel, covariant=True):
 ############
 ### DATA ###
 ############
-class KnownType(Flag):
-    """Convient comparison method for hierarchical types."""
-
-    # ---- Atom----
-    BUFFER = auto()
-    STRING = auto() | BUFFER
-    SCALAR = auto()
-    TIME = auto()
-    ENUM = auto()
-    ATOM = STRING | SCALAR | TIME | ENUM
-
-    # ---- Structs ----
-    VEC = auto()
-    MAP = auto()
-    MODEL = auto()
-    STRUCT = VEC | MAP | MODEL
-
-    # ---- Other ----
-    ITER = auto()
-    FUNC = auto()
-    OBJECT = ATOM | STRUCT | ITER | FUNC
-
-
 _idx_data: dict[str, Any] = {
     '0': Object,
     '1': Atom,

@@ -14,9 +14,9 @@ in a system diffuse with these tools (secret, Free, open-source, or otherwise).
 """
 
 from .MyType import MyType, TypeArg
-from .typecheck import tyc, Check as TypeCheck
-from .typematch import tym, Match as TypeMatch
-from .typecast import tyt, Cast as TypeCast
+from .typematch import tym, TypeMatch
+from .typecheck import tyc, TypeCheck
+from .typecast import tyt, TypeCast as TypeCast
 from .Typist import Typist, typist, ty
 from .AutocastModel import AutocastModel
 

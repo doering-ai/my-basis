@@ -11,7 +11,6 @@ chatbot or agent calls a tool beyond itself.
 One could use this library to add some 'just-in-case' magic to one of the many existing solutions,
 but I was personally motivated by the kind of second-level flexibility only possible when working
 in a system diffuse with these tools (secret, Free, open-source, or otherwise).
-
 """
 
 from .MyType import MyType

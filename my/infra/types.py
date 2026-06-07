@@ -2,7 +2,7 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import Any, IO, Protocol, runtime_checkable
+from typing import Any, IO
 from collections.abc import (
     Callable,
     Hashable,
@@ -11,8 +11,6 @@ from collections.abc import (
     ItemsView,
     Set,
     AsyncIterable,
-    Iterator,
-    AsyncIterator,
 )
 from types import BuiltinFunctionType, FunctionType
 from collections import deque
@@ -26,12 +24,6 @@ import pydantic as pyd
 
 ### ALIASES
 
-
-# class StdDataclass(Protocol): __dataclass_fields__: dict[str, Any]
-# class PydDataclass(Protocol): __pydantic_fields__
-
-
-type Dataclass = object
 
 ############
 ### BODY ###
@@ -64,6 +56,7 @@ type Map = Mapping[Hashable, Any] | list[tuple[Hashable, Any]] | ItemsView
 type _Map[K: Hashable, V] = Mapping[K, V] | list[tuple[K, V]] | ItemsView[K, V]
 Maps = (Mapping, ItemsView)  #: NOTE: Does not cover lists of (key, val) pairs.
 
+type Dataclass = object
 type Model = pyd.BaseModel | Dataclass
 # No plural -- must use `my.check.is_model`
 
@@ -81,7 +74,7 @@ type _Func[**PSpec, R = Any] = Callable[PSpec, R]
 Funcs = (FunctionType, BuiltinFunctionType, Callable)
 
 # ---- Object ----
-type Object = Func
+type Object = Atom | Struct | Func
 Objects = (*Atoms, *Structs, *Funcs)
 
 TYPESET = {*Atoms, *Structs, *Funcs}

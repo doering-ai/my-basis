@@ -175,7 +175,7 @@ class GoogleSheet:
 
     @staticmethod
     @_import_guard
-    def deserialize_data(values: list[list], header: bool = True, index: str = '') -> pd.DataFrame:
+    def deserialize_data(values: list[list], header: int = 1, index: str = '') -> pd.DataFrame:
         """Deserialize a list of lists from the Google Sheets API into a pandas DataFrame.
 
         Args:
@@ -188,8 +188,10 @@ class GoogleSheet:
         if not any(values):
             return pd.DataFrame()
         if header:
+            if header > 1:
+                values = values[header - 1 :]
             head, *rest = values
-            if len(head) < (width := max(map(len, rest)) if rest else 0):
+            if rest and len(head) < (width := max(map(len, rest))):
                 head = [*head, *([f'Column {i + 1}' for i in range(len(head), width)])]
             df = pd.DataFrame(rest, columns=head)
         else:
@@ -374,7 +376,7 @@ class GoogleSheet:
         self,
         worksheet: str,
         cells: str = 'A1:Z',
-        header: bool = True,
+        header: int = 1,
         index: str = '',
     ) -> pd.DataFrame:
         """Load a single worksheet from the given google sheet via the Google Sheets API.
@@ -382,8 +384,8 @@ class GoogleSheet:
         Args:
             worksheet: The name (NOT ID) of the worksheet to load.
             cells: The range of cells to load.
-            header: If true, use the first returned row as column names.
-            index: The column to use as the index, if any.
+            header: The index of the row to use as column names; rows before it are ignored.
+            index: The index of the column to use as the row names (i.e. the 'index'), if any.
         Returns:
             A pandas DataFrame with the worksheet data.
         """

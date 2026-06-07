@@ -3,11 +3,8 @@
 ############
 ### STANDARD
 from __future__ import annotations
-from typing import Any, ClassVar, Literal, TypeGuard, TypeVar, overload, TypeIs, Self
-import typing
-import collections.abc as abc
+from typing import Any, ClassVar, Literal, TypeGuard, TypeVar, overload, Self
 from collections.abc import (
-    Collection,
     Callable,
     Iterable,
     Mapping,
@@ -32,17 +29,21 @@ import pydantic as pyd
 
 ### INTERNAL
 from ..infra.types import (
-    _Vec,
-    Atom,
-    Map,
     Scalar,
     Scalars,
-    Time,
+    Atoms,
+    Atom,
+    _Vec,
     Vec,
+    Iter,
+    Map,
+    Model,
 )
 from ..utils import ut
 from .MyType import MyType
-from .Cast import Cast
+from .typematch import Match
+from .typecast import Cast
+from .typecheck import Check
 
 ############
 ### DATA ###
@@ -61,15 +62,6 @@ RawJsonData = str | int | float | bool | list | dict | None
 FileData = Atom | Vec | Map | pyd.BaseModel
 F = TypeVar('F', bound=FileData)
 
-ABSTRACT_MAPS = [typing.Mapping, abc.Mapping, abc.MutableMapping]
-ABSTRACT_SEQS = [
-    typing.Iterable,
-    typing.Sequence,
-    typing.Collection,
-    abc.Sequence,
-    abc.Collection,
-    abc.Iterable,
-]
 
 type CaseKey = type | Callable[[object], bool]  #:
 type CaseVal = Callable[[object], Any]
@@ -81,7 +73,7 @@ logger = logging.getLogger()
 ############
 ### BODY ###
 ############
-class Typist(pyd.BaseModel):
+class Typist(Check, Match, Cast):
     """Semi-singleton interface for building systems that are resilient to slight inconsistencies.
 
     Specifically, this class provides runtime type introspection, parsing, and coercion capabilities
@@ -257,8 +249,7 @@ class Typist(pyd.BaseModel):
     # -------------------
     # `-` Private Methods
     # -------------------
-    @classmethod
-    def sort_options(cls, data: object, *options: MyType) -> list[MyType]:
+    def sort_options(self, data: object, *options: MyType) -> list[MyType]:
         """Sort type options by how well they fit the given data for coercion.
 
         Args:
@@ -267,7 +258,8 @@ class Typist(pyd.BaseModel):
         Returns:
             List of MyType options sorted by fitness score (best first).
         """
-        return list(sorted(options, key=lambda opt: cls._score_option(data, opt), reverse=True))
+        fn = ft.partial(self._score_option, data=data)
+        return list(sorted(options, key=fn, reverse=True))
 
     @classmethod
     def _score_option(cls, data: object, option: MyType) -> int:
@@ -287,14 +279,10 @@ class Typist(pyd.BaseModel):
         elif option.is_split:
             return max(*(cls._score_option(data, subopt) for subopt in option.args))
 
-        c0 = isinstance(data, Collection)
-        c1 = issubclass(tvar, Collection)
+        c0 = cls.is_struct(data)
+        c1 = cls.is_struct_type(tvar)
         a0 = cls.is_atom(data)
-        a1 = cls.is_atom(tvar)
-        if cls.is_atom(data):
-            print(data)
-        if cls.is_atom(tvar):
-            print(tvar)
+        a1 = cls.is_atom_type(tvar)
 
         # II. "Main" score: compare the base types, especially atomics vs. collections
         score = 0
@@ -333,11 +321,7 @@ class Typist(pyd.BaseModel):
 
                 if option.vals is None:
                     score += 1
-                elif (
-                    data
-                    and isinstance(data, Iterable)
-                    and cls.match(tuple(set(map(type, data))), option.vals)
-                ):
+                elif data and cls.match(tuple(set(map(type, data))), option.vals):
                     score += 2
 
         return score
@@ -354,56 +338,6 @@ class Typist(pyd.BaseModel):
             return ''
         else:
             return str(file)
-
-    @classmethod
-    def _derive_container(cls, old: MyType, new_origin: type[Collection]) -> MyType:
-        """Create a new container type based on an existing one with a different origin.
-
-        Args:
-            old: The original MyType to derive from.
-            new_origin: The new origin type to use.
-        Returns:
-            New MyType with the new origin but preserving args from old.
-        """
-        if old.origin and old.args:
-            new_args = (arg.src_type for arg in old.args)
-            new_src = new_origin[*new_args]  # type: ignore
-        else:
-            new_src = new_origin
-
-        return MyType.parse(new_src)
-
-    @classmethod
-    def _concretize(cls, target: MyType, data: object) -> MyType:
-        """Convert abstract container types to concrete ones based on data.
-
-        Args:
-            target: The target MyType.
-            data: The source data to inform concretization.
-        Returns:
-            Tuple of (potentially modified MyType, potentially modified main type).
-        """
-        main = target.main
-        if main is None:
-            return target
-
-        new_main = None
-        if main in ABSTRACT_MAPS:
-            if isinstance(data, Mapping) and (_dt := MyType.parse(type(data))):
-                new_main = _dt.main
-            else:
-                new_main = dict
-        elif main in {abc.MutableSet, abc.Set}:
-            new_main = set
-        elif main in ABSTRACT_SEQS:
-            if cls.is_vec(data) and (_dt := MyType.parse(type(data))):
-                new_main = _dt.main
-            else:
-                new_main = list
-
-        if new_main is not None:
-            return cls._derive_container(target, new_main)
-        return target
 
     @classmethod
     def _param_is_positional(cls, param: inspect.Parameter) -> bool:
@@ -461,18 +395,6 @@ class Typist(pyd.BaseModel):
     # `*2` COMPARISON
     # ---------------
     @classmethod
-    def check[T](cls, data, tvar: type[T] | MyType[T]) -> TypeIs[T]:
-        """Check if a given data value matches this type, recursing into containers where needed.
-
-        Args:
-            data: The data value to check. Ideally not an exhaustable iter.
-            tvar: The type to check against.
-        Returns:
-            True if *all* aspects of this type are satisfied by this data, including nested types.
-        """
-        return MyType.parse(tvar).check(data)
-
-    @classmethod
     def all_are[T](cls, iterable: Iterable, tvar: type[T]) -> TypeGuard[Iterable[T]]:
         """Check if all values in an iterable match a type variable."""
         return all(cls.check(value, tvar) for value in list(iterable))
@@ -482,25 +404,17 @@ class Typist(pyd.BaseModel):
         """Check if any value in an iterable matches a type variable."""
         return any(cls.check(value, tvar) for value in list(iterable))
 
-    @classmethod
-    @ft.wraps(MyType.match)
-    def match(cls, lhs: TypeArg, rhs: TypeArg, intersect: bool = False) -> bool:
-        """See `MyType.match`."""
-        return MyType.match(lhs, rhs, intersect)
-
-    def match_instances(self, lhs: object, rhs: object, intersect: bool = False) -> bool:
+    def match_instances(self, t0: object, t1: object, intersect: bool = False) -> bool:
         """Check if two instances have matching types.
 
         Args:
-            lhs: First instance.
-            rhs: Second instance.
+            t0: First instance.
+            t1: Second instance.
             intersect: If True, check for intersection; if False, check for subset.
         Returns:
             True if the instances' types match.
         """
-        t0 = MyType.metaparse(lhs)
-        t1 = MyType.metaparse(rhs)
-        return self.match(t0, t1, intersect)
+        return self.match(MyType.typeof(t0), MyType.typeof(t1), intersect)
 
     @classmethod
     def type_partition[T0, T1 = object](
@@ -533,7 +447,7 @@ class Typist(pyd.BaseModel):
         """
         t0 = MyType.parse(target)
         t1 = MyType.parse(container)
-        if self.match(t0, t1, intersect=True):
+        if self.match(t0, t1, True):
             return True
 
         if inspect.isclass(container):
@@ -554,81 +468,6 @@ class Typist(pyd.BaseModel):
     # -------------
     # `*3` COERCION
     # -------------
-    @overload
-    def cast[V](self, data: object, tvar: type[V]) -> V | None: ...
-
-    @overload
-    def cast(self, data: object, tvar: Any) -> Any | None: ...
-
-    def cast[V](self, data: object, tvar: type[V] | Any) -> V | Any | None:
-        """Attempt to cast/coerce the  data to the given type, returning None if unsuccessful."""
-        # I. Return null if the target is invalid
-        if data is None or tvar in {None, Any}:
-            return None
-        target = MyType.parse(tvar)
-
-        # II. Return the data as-is if it already matches the target type
-        data = MyType._normalize(data)
-        source = MyType.metaparse(data)
-        if self.match(source, target):
-            return data
-
-        # III. When given abstract classes, arbitrarily choose a concrete type
-        if target.main is not None:
-            target = self._concretize(target, data)
-
-        # IV.i. Try to guess the most likely answers out of long unions
-        options = self.sort_options(data, *target.args) if target.is_split else [target]
-
-        # IV.ii. Perform the actual casting
-        return next(
-            filter(bool, (Cast(ctx=self, t0=source, t1=_target)(data) for _target in options)),
-            None,
-        )
-
-    def flexcast(self, data: object, tvar: TypeArg) -> Any | None:
-        """Cast data to a type, returning original data on failure.
-
-        Args:
-            data: The source data to cast.
-            tvar: The target type.
-        Returns:
-            Cast data if successful, original data otherwise.
-        """
-        res = self.cast(data, tvar)
-        return res if res is not None else data
-
-    def multicast[V](
-        self,
-        values: Iterable[Any],
-        tvar: type[V] | MyType[V] | Any,
-        skip: bool = False,
-    ) -> list[V] | list:
-        """Cast multiple values to a target type.
-
-        Args:
-            values: Iterable of values to cast.
-            tvar: The target type to cast to.
-            skip: If True, skip failed casts; if False, raise TypeError on failure.
-        Returns:
-            List of cast values (or original values if skip=True).
-        """
-        # I. Parse the type once
-        target = MyType.parse(tvar)
-
-        # II. Cast the contents iteratively, either skipping failures or throwing TypeError
-        ret = []
-        for value in values:
-            if value is None:
-                ret.append(None)
-            elif (result := self.cast(value, target)) is not None:
-                ret.append(result)
-            elif skip:
-                continue
-            else:
-                raise TypeError(f'Cannot cast value `{value}` to type `{tvar}`.')
-        return ret
-
     def flex_deserialize(self, values: Sequence[str] | str) -> list[Atom]:
         """Convert a list of strings to their most appropriate Atomic types."""
         values = [values] if isinstance(values, str) else list(map(str, values))
@@ -644,7 +483,7 @@ class Typist(pyd.BaseModel):
             for val in values
         ]
         return [  #  type:ignore
-            (val if tvar is str else self._to_scalar(val, tvar))
+            (val if tvar is str else self.cast(val, tvar))
             for val, tvar in zip(values, new_types, strict=True)
         ]
 
@@ -727,20 +566,16 @@ class Typist(pyd.BaseModel):
     # `*4` TRANSFORMATION
     # -------------------
     @overload
-    def serialize[A: Scalar](
-        self, *data: object, full: bool = False, **cases: Case
-    ) -> list[Scalar]: ...
-
+    def serialize(self, data: Scalar, full: bool = False, **cases: Case) -> Scalar: ...
     @overload
-    def serialize(self, *data: object, full: bool = False, **cases: Case) -> list[Scalar]: ...
-
+    def serialize(self, data: Atom, full: bool = False, **cases: Case) -> str: ...
     @overload
-    def serialize(self, *data: object, full: bool = False, **cases: Case) -> list[Scalar]: ...
-
+    def serialize(self, data: Map | Model, full: bool = False, **cases: Case) -> dict: ...
     @overload
-    def serialize(self, *data: object, full: bool = False, **cases: Case) -> list[Scalar]: ...
-
-    def serialize(self, *data: object, full: bool = False, **cases: Case) -> Any:
+    def serialize(self, data: Vec | Iter, full: bool = False, **cases: Case) -> list: ...
+    @overload
+    def serialize(self, data: object, full: bool = False, **cases: Case) -> object: ...
+    def serialize(self, data: object, full: bool = False, **cases: Case) -> Any:
         """Recursively simplify the given object into serialization-ready, standardized types.
 
         This method is undeniably an opinionated way of preparing data for export, but it should
@@ -767,28 +602,29 @@ class Typist(pyd.BaseModel):
             return handler(data)
 
         # I. Cast special atomics to strings, and return others as-is
-        if self.is_scalar(data):
-            if isinstance(data, Enum | Time):
-                return self._to_scalar(data, str)
+        if self.is_atom(data):
+            if isinstance(data, Enum) or self.is_time(data):
+                return self.cast(data, str)
             else:
                 return data
 
         # II. Look for familiar functions on models, else treat them as dictionaries
-        elif isinstance(data, pyd.BaseModel):
-            if fn := self.get_method(data, 'serialize'):
+        elif self.is_model(data):
+            if (res := self.try_method(data, 'serialize')) and isinstance(res, (list, dict, Atoms)):
                 # II.i. Shortcut to a model-specific `serialize()` function
-                return fn()
+                return res
 
             # II.ii. Rely on the model's serializers and treat the result as a dict
-            data = data.model_dump(exclude_unset=full, exclude_defaults=full)  # type: ignore
+            if isinstance(data, pyd.BaseModel):
+                data = data.model_dump(exclude_unset=full, exclude_defaults=full)  # type: ignore
 
         # III. Recurse into collections
-        if isinstance(data, Collection):
+        if self.is_struct(data):
             _recur = ft.partial(self.serialize, cases=dict(cases), full=full)
-            if self.is_vec(data):
-                return list(map(_recur, data))
-            elif isinstance(data, Mapping):
+            if self.is_map(data):
                 return ut.val_map(_recur, data)
+            else:
+                return list(map(_recur, self.cast(data, list) or []))
 
         return data
 
@@ -823,24 +659,25 @@ class Typist(pyd.BaseModel):
         other, *rest = _args
 
         # I. Partition fields on the second dict based on presence in the base
-        unique, shared = mi.partition(lambda item: item[0] in base, other.items())
+        _unique, _shared = ut.partition(other.items(), lambda item: item[0] in base)
 
         # II. Unique fields overwrite completely
-        base |= dict(unique)
+        base |= dict(_unique)
 
         # III. Shared fields are recursively merged if possible, otherwise overwritten
-        for key, new in shared:
+        for key, new in _shared:
             old = base[key]
-            if isinstance(old, Collection) and isinstance(new, Collection):
-                tvar = MyType.metaparse(old)
-                if tvar.main is None or (_cast := self.cast(new, tvar)) is None:
+            tvar = MyType.typeof(old)
+            if self.is_struct(old) and self.is_struct(new):
+                res = self.cast(new, tvar)
+                if res is None:
                     base[key] = new
                 elif isinstance(old, dict):
-                    self.assemble(old, _cast, copy=False)
+                    self.assemble(old, res, copy=False)
                 elif isinstance(old, set):
-                    old.update(_cast)
+                    old.update(res)
                 elif isinstance(old, list):
-                    old.extend(new)
+                    old.extend(res)
                     if not dups:
                         ut.drop_duplicates(old)
                     if sort:
@@ -1013,13 +850,43 @@ class Typist(pyd.BaseModel):
 
         # II.iii. Packed attempt
         if len(kwargs) > 0 and any(
-            cls.match(param.annotation, Mapping)
-            for param in filter(cls._param_is_positional, params)
+            cls.is_map_type(param.annotation) for param in filter(cls._param_is_positional, params)
         ):
             with ctx.suppress(TypeError):
                 bound = sig.bind(*args, kwargs)
                 return bound
         return None
+
+    @overload
+    def upper_cast[V](self, data: object, tvar: type[V]) -> V | None: ...
+
+    @overload
+    def upper_cast(self, data: object, tvar: Any) -> Any | None: ...
+
+    def upper_cast[V](self, data: object, tvar: type[V] | Any) -> V | Any | None:
+        """Attempt to cast/coerce the  data to the given type, returning None if unsuccessful."""
+        # I. Return null if the target is invalid
+        if data is None or tvar in {None, Any}:
+            return None
+        target = MyType.parse(tvar)
+
+        # II. Return the data as-is if it already matches the target type
+        if ty.check(data, target):
+            return data
+
+        # III. When given abstract classes, arbitrarily choose a concrete type
+        if target.main is not None:
+            target = self.concretize(target, data)
+
+        # IV.i. Try to guess the most likely answers out of long unions
+        options = self.sort_options(data, *target.args) if target.is_split else [target]
+
+        # IV.ii. Perform the actual casting
+        t0 = MyType.typeof(data)
+        return next(
+            filter(bool, (Cast(data=data, target=t1, source=t0)() for t1 in options)),
+            None,
+        )
 
     @overload
     @classmethod
@@ -1136,4 +1003,4 @@ class Typist(pyd.BaseModel):
         return None
 
 
-typist = Typist.inst()
+ty = typist = Typist.inst()

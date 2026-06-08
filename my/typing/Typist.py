@@ -42,7 +42,7 @@ from ..infra.types import (
 from ..utils import ut
 from .MyType import MyType
 from .typematch import TypeMatch
-from .typecast import TypeCast
+from .typecast import TypeCast, Transform
 from .typecheck import TypeCheck
 
 ############
@@ -241,12 +241,6 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
         if not hasattr(cls, '_INST'):
             cls._INST = cls(options=cls.Options.preset('basic'))
         return cls._INST
-
-    def __init__(self, **kwargs):
-        """Initialize a Typist instance with optional configuration for casting behavior."""
-        super().__init__(**kwargs)
-        if not hasattr(Typist, '_INST'):
-            Typist._INST = self
 
     # -------------------
     # `-` Private Methods
@@ -878,7 +872,7 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
 
         # III. When given abstract classes, arbitrarily choose a concrete type
         if target.main is not None:
-            target = self.concretize(target, data)
+            target = Transform.concretize(target, data)
 
         # IV.i. Try to guess the most likely answers out of long unions
         options = self.sort_options(data, *target.args) if target.is_split else [target]
@@ -886,7 +880,7 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
         # IV.ii. Perform the actual casting
         t0 = MyType.typeof(data)
         return next(
-            filter(bool, (TypeCast(data=data, target=t1, source=t0)() for t1 in options)),
+            filter(bool, (self.cast(data, t1, source=t0) for t1 in options)),
             None,
         )
 

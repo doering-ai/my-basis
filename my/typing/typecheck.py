@@ -50,8 +50,8 @@ from ..utils import ut
 class TypeCheck[T0, T1](_TypingBase, pyd.BaseModel):
     """Utilities for qualifying the types of data objects."""
 
-    data: T0
-    root: TypeArg[T1]
+    data: T0 = None  # type: ignore[assignment]
+    root: TypeArg[T1] = None
 
     @ft.cached_property
     def t0(self) -> MyType[T0]:
@@ -73,26 +73,28 @@ class TypeCheck[T0, T1](_TypingBase, pyd.BaseModel):
     # -------------------
     def __call__(self) -> bool:
         """Determine whether the given data is a valid instance of the given type."""
-        # Special types
+        name = getattr(self.t0.origin, '__name__', '')
+
+        # I. Special Forms
+        if name in MyType.FILTERS.universal:
+            return True
+        elif self.t0.origin and name in MyType.FILTERS.unhandled:
+            return False
         if not self.t1:
             return True
         elif self.data is None:
             return self.root is NoneType
         elif self.data is Ellipsis:
             return self.root is EllipsisType
-        elif self.t0.origin and getattr(self.t0.origin, '__name__', '') in MyType.FILTERS.unhandled:
-            return False
 
-        # Composite types
+        # II. Composite types
         if self.t1.is_split:
             return any(option.check(self.data) for option in self.t1.args)
         elif self.t1.literal_members:
             return self.is_literal(self.data, self.t1)
 
-        # Main cases: normal types, probably nested
-        if self.t1.main is None:
-            return False
-        elif not isinstance(self.data, self.t1.main):
+        # III. Main cases: normal types, probably nested
+        if self.t1.main is None or not isinstance(self.data, self.t1.main):
             return False
         elif self.t1.keys and self.t1.vals and self.is_map(self.data):
             if items := ut.map_items(self.data):

@@ -20,6 +20,8 @@ from .typecast import tyt, TypeCast as TypeCast
 from .Typist import Typist, typist, ty
 from .AutocastModel import AutocastModel
 
+TypeCast.setup()
+
 __all__ = [
     'AutocastModel',
     'MyType',

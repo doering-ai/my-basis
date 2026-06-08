@@ -35,3 +35,7 @@ class _TypingBase(pyd.BaseModel):
 
             _TypingBase.TY = typist
         return _TypingBase.TY
+
+    @classmethod
+    def setup(cls) -> None:
+        pass

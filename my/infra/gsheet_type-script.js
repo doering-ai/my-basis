@@ -8,7 +8,7 @@ const idxs = tc_sheet.getSheetValues(3, 2, 42, 1).map(row => `${row[0]}`);
  * Renders the impacts of a given transform on a per-type basis. 
  *
  * @param {String[][]} sources List of idxs for the source of each transform.
- * @param {String[][[]]} targets List of idxs for the target of each transform.
+ * @param {String[][]} targets List of idxs for the target of each transform.
  * @return {String[][]} range of '-' for sources, '+' for targets, and '-/+' for self-references.
  * @customfunction
  */
@@ -79,7 +79,7 @@ function TYPECAST_RENDER(transforms) {
  * 
  * @param {String} source 
  * @param {String} target 
- * @return {String[]} array of '-' for sources, '+' for targets, and '-/+' for self-references.
+ * @return {String[]}
  * @customfunction
  */
 function apply_transform(source, target) {
@@ -105,3 +105,5 @@ function apply_transform(source, target) {
     }
   });
 }
+
+ret = apply_transform('a', 'b');

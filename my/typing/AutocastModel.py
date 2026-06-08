@@ -8,7 +8,7 @@ from typing import Any
 import pydantic as pyd
 
 ### INTERNAL
-from .typecast import TypeCast
+from .typecast import Transform
 from .Typist import typist
 
 
@@ -38,7 +38,7 @@ class AutocastModel(pyd.BaseModel):
         Returns:
             Dictionary with values cast to match model field types.
         """
-        return TypeCast._cast_members(data, cls)
+        return Transform._cast_members(data, cls)
 
     @pyd.model_serializer(mode='wrap')
     def _auto_serialize(self, handler) -> dict[str, Any]:

@@ -2,7 +2,8 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import ClassVar, Self
+from __future__ import annotations
+from typing import ClassVar, Self, overload
 from collections.abc import Iterable, Iterator
 
 ### EXTERNAL
@@ -10,15 +11,15 @@ import regex as re
 from pydantic_core import core_schema as pyds
 
 ### INTERNAL
-from ..infra import Series, DELIM
-
-re.DEFAULT_VERSION = re.VERSION1
+from ..infra.types import Vec, String, Scalar, _Vec, _Iter, Iter, Atom
+from ..infra.constants import DELIM
+from ..typing import ty
 
 
 ############
 ### BODY ###
 ############
-class Span(tuple[int, int]):
+class Span[T: Scalar](tuple[T, T]):
     """An immutable half-open interval [start, end), typically representing a text range.
 
     Spans are a simple wrapper around `tuple[int, int]` built to support arithmetic (shifting by
@@ -35,33 +36,67 @@ class Span(tuple[int, int]):
     # -------------------
     # `.` Initial Methods
     # -------------------
-    def __new__(cls, arg0: Series | int | float | str | Iterator | Self = -1, arg1: int | str = -1):
+    @overload  # empty
+    def __new__(cls) -> Span[int]: ...
+    @overload  # basic
+    def __new__[S: Scalar](cls, arg0: S, arg1: S) -> Span[S]: ...
+    @overload  # monoarg
+    def __new__[S: Scalar](cls, arg0: Span[S] | tuple[S, S]) -> Span[S]: ...
+    @overload
+    def __new__[S: Scalar](
+        cls,
+        arg0: String | Scalar | Span,
+        arg1: String | Scalar,
+        tvar: type[S],
+    ) -> Span[S]: ...
+    def __new__[S: Scalar](
+        cls,
+        arg0: String | Scalar | Span[S] | tuple[S, S] = -1,
+        arg1: String | Scalar = -1,
+        tvar: type[S] | None = None,
+    ) -> Span[S]:
         """Create a new Span instance, overriding default tuple behavior w/ flexible coercion."""
         if isinstance(arg0, Span):
-            return arg0
+            # Don't bother autoconverting span contents
+            return arg0  # type: ignore
+        if tvar is None:
+            # Set default to integer spans
+            tvar = int  # type: ignore
 
-        elif isinstance(arg0, str):
+        a1 = ty.cast(arg1, int)
+        if a1 is None:
+            raise ValueError(f'Invalid second argument for Span: {arg1}')
+
+        if isinstance(arg0, String):
             # II. Handle string input with delimiters
-            parts = cls.DELIM_RGX.split(arg0)
-            assert 0 < len(parts) <= 2, f'Cannot parse span from string: {arg0}'
-            if len(parts) == 2:
-                x0, x1 = int(parts[0]), int(parts[1])
-            else:
-                x0, x1 = int(arg0), int(arg1 if arg1 != -1 else arg0)
+            a0 = ty.normalize(arg0).strip()
+            assert a0, 'Cannot create Span from empty string'
+            parts = cls.DELIM_RGX.split(a0)
+            match len(parts), parts:
+                case 1, (p0,):
+                    x0 = int(p0)
+                    return x0, (x0 if (a1 == -1) else a1)
+                case 2, (p0, p1):
+                    x0, x1 = int(p0), int(p1)
+                case _:
+                    raise ValueError(f'Invalid string format for Span: {arg0}')
 
-        elif isinstance(arg0, Iterable):
+        elif isinstance(arg0, Iter):
             # I. Handle tuple input
-            arg0 = tuple(arg0)
-            assert len(arg0) == 2, 'Tuple must have exactly 2 elements'
-            x0, x1 = int(arg0[0]), int(arg0[1])  # type: ignore
+            if (tup := ty.cast(arg0, tuple[int, int])) is not None:
+                x0, x1 = tup
+            else:
+                x0 = x1 = max(a1, 0)
 
         elif arg0 == arg1:
-            # III. Handle empty parameters and points
-            x0 = x1 = max(int(arg0), 0)
+            # III. Handle empty rangers, missing parameters, and/or points
+            x0 = x1 = max(a1, 0)
 
         elif arg1 != -1:
             # IV. Handle numeric input with second argument
-            x0, x1 = int(arg0), int(arg1)
+            if (_x0 := ty.cast(arg0, int)) is not None:
+                x0, x1 = _x0, a1
+            raise ValueError(f'Invalid first argument for Span: {arg0}')
         else:
             raise ValueError('Must provide either a tuple/string or two numeric arguments')
 
@@ -141,14 +176,14 @@ class Span(tuple[int, int]):
     # `*1` Properties
     # ---------------
     @property
-    def delta(self) -> int:
+    def delta(self) -> T:
         """Return the length of this span."""
         return self[1] - self[0]
 
     # ------------
     # `*2` Methods
     # ------------
-    def intersects(self, other: tuple[int, int] | Self | list[Self]) -> bool:
+    def intersects(self, other: tuple[T, T] | Self | list[Self]) -> bool:
         """Check if this span overlaps with another span.
 
         Args:
@@ -158,7 +193,7 @@ class Span(tuple[int, int]):
         """
         return other in self
 
-    def join(self, other: Self | tuple[int, int]) -> Self:
+    def join(self, other: Self | tuple[T, T]) -> Self:
         """Create a span that encompasses both this span and another.
 
         Args:
@@ -166,10 +201,10 @@ class Span(tuple[int, int]):
         Returns:
             New span from the minimum start to maximum end.
         """
-        return self.__class__(min(self[0], other[0]), max(self[1], other[1]))
+        return type(self)(min(self[0], other[0]), max(self[1], other[1]))
 
     @classmethod
-    def serialize(cls, *args: Self | tuple[int, int]) -> str:
+    def serialize(cls, *args: Self | tuple[T, T]) -> str:
         """Serialize multiple spans to a delimited string.
 
         Args:

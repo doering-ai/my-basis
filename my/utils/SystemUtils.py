@@ -36,6 +36,8 @@ import more_itertools as mi
 from ..infra.types import (
     Atom,
     Vec,
+    Struct,
+    String,
 )
 from ._UtilsBase import _UtilsBase
 from .TextUtils import text_utils
@@ -58,17 +60,10 @@ Directory = pyd.DirectoryPath
 
 ClassType = TypeVar('ClassType')
 
-FileParam = str | bytes | File | None
+FileParam = String | Path | None
 RawJsonData = str | int | float | bool | list | dict | None
-FileData = Atom | Vec | dict | pyd.BaseModel
-if isinstance(5, FileData):
-    print('yes!')
-FileData2 = Atom | Vec | dict | pyd.BaseModel
-if isinstance(5, FileData2):
-    print('no!')
 
-
-F = TypeVar('F', bound=FileData)
+F = TypeVar('F', bound=Atom | Struct)
 logger = logging.getLogger()
 
 
@@ -85,13 +80,18 @@ class SystemUtils(_UtilsBase):
     ### Regular Expressions (can't use RegexStore because it depends on this class)
     RGXS: ClassVar[dict[str, re.Pattern]] = text_utils.regex_dict(
         ### Filetypes
-        filetype=text_utils.multi_rgx(
+        filetype=_branch(
             r'(?P<json>jso?n[\dc]|(?:geo|topo|nd)?json)',
             r'(?P<yaml>ya?ml)',
             r'(?P<pickle>pkl|pickle|bin|dat)',
             r'(?P<toml>to?ml)',
             r'(?P<xml>xml|html)',
             pre=r'(?i)\.',
+        ),
+        pathy=_branch(
+            r'[/\\]',
+            r'\.\.',
+            r'~',
         ),
     )
 
@@ -492,14 +492,14 @@ class SystemUtils(_UtilsBase):
     # --------
     @overload
     @classmethod
-    def from_file(cls, file: str | Path) -> dict: ...
+    def from_file(cls, file: FileParam) -> dict: ...
     @overload
     @classmethod
-    def from_file(cls, file: str | Path, tvar: type[F], cast: bool = True) -> F: ...
+    def from_file(cls, file: FileParam, tvar: type[F], cast: bool = True) -> F: ...
     @classmethod
     def from_file(
         cls,
-        file: str | Path,
+        file: FileParam,
         tvar: type[F] = dict,  # ty:ignore[invalid-parameter-default]
         cast: bool = True,
     ) -> F:
@@ -509,17 +509,19 @@ class SystemUtils(_UtilsBase):
         will wrap uncastable values in a dict (w/ one key, `'content'`) or a list (w/ one value).
 
         Args:
-            file: Path to the file to load. Note that raw strings are NOT allowed here.
+            file: Path to the file to load. Note that raw content is NOT accepted here.
             tvar: Target type to cast the loaded data to (dict by default). Like `cast()`, you
                   can use complex, nested types here if desired.
             cast: If True, try to coerce unexpected types before raising an error.
         Returns:
             Loaded and cast data from the file.
         """
-        file = cls.path(file)
+        if not file:
+            raise ValueError('No file provided.')
+        text = cls.ty.cast(file, str)
+        file = cls.path(text)
         if not file or not file.is_file():
-            cls.LOGGER.error('No file provided.')
-            return tvar()
+            raise ValueError(f'No/Invalid file provided: {text}')
         elif match := cls.RGXS['filetype'].fullmatch(file.suffix):
             group = next(filter(None, match.groupdict().keys()))
             if fn := getattr(cls, f'from_{group}', None):
@@ -527,7 +529,7 @@ class SystemUtils(_UtilsBase):
         raise ValueError(f'Unsupported file type: {file}')
 
     @classmethod
-    def to_file(cls, data: FileData, file: str | File) -> None:
+    def to_file(cls, data: Atom | Struct, file: str | File) -> None:
         """Save data to local JSON, YAML, TOML, or Pickle file (depending on file suffix).
 
         Args:
@@ -581,10 +583,10 @@ class SystemUtils(_UtilsBase):
         elif isinstance(file, Path):
             cls.validate_file(file)
             ret = srsly.read_json(file)
+        elif (text := cls.ty.cast(file, str)) is not None:
+            ret = srsly.json_loads(text)
         else:
-            if isinstance(file, bytes):
-                file = file.decode()
-            ret = srsly.json_loads(file)
+            raise ValueError(f'Unsupported input type for JSON loading: {type(file)}')
 
         if isinstance(ret, tvar):
             return ret
@@ -593,14 +595,17 @@ class SystemUtils(_UtilsBase):
         else:
             raise TypeError(f'Expected `{tvar}`, got `{type(ret)}`.')
 
+    @classmethod
+    def is_pathy(cls, text: str) -> bool:
+        """Heuristic check for whether a string looks like a file path."""
+        return bool(4 < len(text) < 255 and cls.RGXS['pathy'].search(text))
+
     @overload
     @classmethod
     def from_yaml(cls, file: FileParam) -> dict: ...
-
     @overload
     @classmethod
     def from_yaml(cls, file: FileParam, tvar: type[F], cast: bool = True) -> F: ...
-
     @classmethod
     def from_yaml(
         cls,
@@ -628,6 +633,7 @@ class SystemUtils(_UtilsBase):
             ret = srsly.read_yaml(file)
         else:
             # I.iii. Main Case: Attempt to parse in-memory YAML strings
+            cls.ty.cast()
             if isinstance(file, bytes):
                 file = file.decode()
             if file.strip().startswith('```yaml'):
@@ -674,8 +680,6 @@ class SystemUtils(_UtilsBase):
         tvar = cls.ty.specify(tvar)
         if not file:
             return tvar()  # type: ignore
-        elif isinstance(file, Path):
-            ret = tomllib.loads(file.read_text())
         else:
             if isinstance(file, bytes):
                 file = file.decode()
@@ -715,8 +719,6 @@ class SystemUtils(_UtilsBase):
         """
         if not file:
             return tvar()  # type: ignore
-        elif isinstance(file, Path):
-            ret = pickle.loads(file.read_bytes())
         else:
             if isinstance(file, str):
                 file = file.encode()
@@ -730,7 +732,7 @@ class SystemUtils(_UtilsBase):
             raise TypeError(f'Expected `{tvar}`, got `{type(ret)}`.')
 
     @classmethod
-    def to_yaml(cls, data: FileData, wrap: bool = False, **kwargs) -> str:
+    def to_yaml(cls, data: Atom | Struct, wrap: bool = False, **kwargs) -> str:
         """Serialize data to a YAML string. See `to_file()` for general details.
 
         Args:
@@ -754,7 +756,7 @@ class SystemUtils(_UtilsBase):
         return text
 
     @classmethod
-    def to_json(cls, data: FileData, wrap: bool = False, **kwargs) -> str:
+    def to_json(cls, data: Atom | Struct, wrap: bool = False, **kwargs) -> str:
         """Serialize data to a JSON string. See `to_file()` for general details.
 
         Args:
@@ -775,7 +777,7 @@ class SystemUtils(_UtilsBase):
         return text
 
     @classmethod
-    def to_toml(cls, data: FileData, wrap: bool = False, **kwargs) -> str:
+    def to_toml(cls, data: Atom | Struct, wrap: bool = False, **kwargs) -> str:
         """Serialize data to a TOML string. See `to_file()` for general details.
 
         Args:
@@ -803,7 +805,7 @@ class SystemUtils(_UtilsBase):
         return text
 
     @classmethod
-    def to_pickle(cls, data: FileData, **kwargs) -> bytes:
+    def to_pickle(cls, data: Atom | Struct, **kwargs) -> bytes:
         """Serialize data to Pickle bytes. See `to_file()` for general details.
 
         Args:

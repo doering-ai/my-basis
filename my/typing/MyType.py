@@ -655,6 +655,12 @@ class MyType[T](_TypingBase, pyd.BaseModel):
             return self.ty.match(other, self, True)
         return False
 
+    def __rand__(self, other: MyType | type | object | None) -> bool:
+        """Determines whether this type intersects with the preceeding one."""
+        if isinstance(other, (type, MyType)):
+            return self.ty.match(other, self, True)
+        return False
+
     @classmethod
     @overload
     def _match[T1](cls, t0: None, t1: TypeArg[T1]) -> TypeIs[NoneType]: ...
@@ -685,9 +691,9 @@ class MyType[T](_TypingBase, pyd.BaseModel):
     @overload
     def match(self, other: object) -> TypeIs[type[T]]: ...
     def match(self, other: MyType | type | object | None) -> bool:
-        """Type guard for the instances of the root type of this instance."""
+        """Determines whether the given type value is a subset of this type."""
         if isinstance(other, (type, MyType)):
-            return self.ty.match(self, other, True)
+            return self.ty.match(other, self)  # note that this checks the ARG for membership
         return False
 
     def members(self) -> Iterator[MyType]:
@@ -724,16 +730,6 @@ class MyType[T](_TypingBase, pyd.BaseModel):
             self.main,
             self.keys.main if self.keys else None,
             self.vals.main if self.vals else None,
-        )
-
-    def is_map_item(self) -> bool:
-        """Check if this type represents a mapping item (2-tuple key-value pair).
-
-        Returns:
-            True if this is a tuple[K, V] with exactly 2 non-None type args.
-        """
-        return self.main is tuple and (
-            (len(self.args) == 2 and self.args[-1].root is not EllipsisType) or len(self.args) == 0
         )
 
     @ft.cached_property

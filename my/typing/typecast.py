@@ -13,6 +13,7 @@ from typing import (
     TypeVarTuple,
     ParamSpec,
     Literal,
+    TYPE_CHECKING,
 )
 from collections.abc import (
     Callable,
@@ -23,6 +24,7 @@ from collections.abc import (
     AsyncIterable,
     AsyncGenerator,
     ItemsView,
+    Hashable,
 )
 from io import BytesIO
 from types import FunctionType, UnionType
@@ -42,9 +44,13 @@ import more_itertools as mi
 import regex as re
 import dateutil.parser
 
+
 ### INTERNAL
 from ..infra.types import (
     TYPESET,
+    _Iter,
+    _Vec,
+    _Map,
     Stream,
     Streams,
     String,
@@ -65,11 +71,11 @@ from ..infra.types import (
 )
 from ..utils import ut
 from .MyType import MyType
-from .typecheck import tyc
 from ._common import ABSTRACT_GENERICS
 from ._TypingBase import _TypingBase
 
-from typing import TYPE_CHECKING
+from .typematch import tym
+from .typecheck import tyc
 
 if TYPE_CHECKING:
     from my import Typist  # noqa
@@ -245,6 +251,35 @@ class TypeCast(_TypingBase):
                 raise TypeError(f'Cannot cast value `{value}` to type `{tvar}`.')
         return ret
 
+    @overload
+    @classmethod
+    def normalize(cls, data: String) -> str: ...
+    @overload
+    @classmethod
+    def normalize[V](cls, data: _Vec[V] | _Iter[V]) -> list[V]: ...
+    @overload
+    @classmethod
+    def normalize[K: Hashable, V](cls, data: _Map[K, V]) -> dict[K, V]: ...
+    @overload
+    @classmethod
+    def normalize[V](cls, data: V) -> V: ...
+    @classmethod
+    def normalize(cls, data: object) -> object:
+        """Normalize the input data into a more workable form for casting."""
+        if data is None or isinstance(data, (type, UnionType)):
+            return data
+        elif tyc.is_string(data):
+            return cls.cast(data, str)
+        elif tyc.is_vec(data) or tyc.is_iter(data):
+            return cls.cast(data, list)
+        elif isinstance(data, Iterable) and not isinstance(data, (Vec, Map)):
+            return list(data)
+        elif isinstance(data, datetime) and data.tzinfo != UTC:
+            return data.astimezone(UTC)
+        elif isinstance(data, time) and data.tzinfo != UTC:
+            return data.replace(tzinfo=UTC)
+        return data
+
 
 tyt = typecast = TypeCast
 register = TypeCast.register
@@ -253,26 +288,8 @@ register = TypeCast.register
 class Transform[T0, T1](_TypingBase, pyd.BaseModel):
     """An ephemeral class that represents a single attempted coercion."""
 
-    RGXS: ClassVar[dict[str, re.Pattern]] = ut.regex_dict(
-        ### Atomic Types
-        int=r'-?\d+',
-        float=r'-?\d+(?:\.\d+)?',
-        complex=r'-?\d+(?:\.\d+)?[jJ](?:\s*[+-]\s*\d+(?:\.\d+)?[jJ])?',
-        bool=r'(?i:t(?:rue)?|y(?:es)?|no?|f(?:alse)?|enabled?|disabled?|on|off|[01])',
-        bool_true=r'(?i:t(?:rue)?|y(?:es)?|enabled?|on|1)',
-        datetime=r'\d\d(?:\d\d)?[-./]\d\d[-./]\d\d(?:\D\d\d:\d\d:\d\d(?:\.\d+)?)?',
-        enum=r'<(?P<class>[_[:upper:]]\w*)\.(?:\|?(?P<member>[_A-Z\d]+))+: (?P<value>.+)>',
-        csv=r'^(?P<w>\b\w+\b\s*)(?:(?P<d>[^\w\s]+)\s*(?P>w)(?:\g<d>(?P>w))*)?$',
-        brackets=r'(?:^\w+: )?(\[(?:[^\[\\]++(?:\\.|(?1))?)*+\])',
-        implicit=re.compile(
-            ut.multi_rgx(
-                r'^(\d+)-\1\d*',  # super->sub transformations are assumed
-                r'11[12]-11[12]',  # str|byte -> str|byte is handled by internal machinery
-                r'(12)\d*-\1\d*',  # Scalar -> Scalar
-                r'(2[12])\d*-\1\d*',  # Vec and Map types handle intra-family conversions
-            )
-        ),
-    )
+    RGXS: ClassVar[dict[str, re.Pattern]] = TypeCast.RGXS
+
     t0: MyType[T0]
     t1: MyType[T1]
     data: T0
@@ -282,7 +299,7 @@ class Transform[T0, T1](_TypingBase, pyd.BaseModel):
     # -------------------
     def __init__(self, data: T0, target: AnyType[T1], source: AnyType[T0] | None = None, **kwargs):
         """Initialize the (highly-ephemeral) casting context."""
-        normalized = Transform.normalize(data)
+        normalized = tyt.normalize(data)
         t0 = MyType.new(source) if source else MyType.typeof(normalized)
         t1 = MyType.new(target)
         super().__init__(data=normalized, t0=t0, t1=t1, **kwargs)
@@ -315,43 +332,6 @@ class Transform[T0, T1](_TypingBase, pyd.BaseModel):
 
         with ctx.suppress(Exception):
             return t1(data)  # type: ignore[bad-return]
-
-    @overload
-    @classmethod
-    def normalize[C](cls, data: Iterator[C] | AsyncIterator[C]) -> list[C]: ...
-    @overload
-    @classmethod
-    def normalize(cls, data: String) -> str: ...
-    @overload
-    @classmethod
-    def normalize[C](cls, data: C) -> C: ...
-    @classmethod
-    def normalize(cls, data: object) -> object:
-        """Normalize the input data into a more workable form for casting."""
-        if isinstance(data, (type, UnionType, str)):
-            return data
-        elif isinstance(data, AsyncIterator):
-
-            async def async_gen() -> list:
-                ret = []
-                async for item in data:
-                    ret.append(item)  # noqa: PERF401
-                return ret
-
-            return aio.run(async_gen())
-        elif isinstance(data, Iterator):
-            return list(mi.spy(data)[1])
-        elif isinstance(data, bytes):
-            return data.decode()
-        elif isinstance(data, Streams):
-            return tyt.cast(data, str)
-        elif isinstance(data, Iterable) and not isinstance(data, (*Vecs, *Maps)):
-            return list(data)
-        elif isinstance(data, datetime) and data.tzinfo != UTC:
-            return data.astimezone(UTC)
-        elif isinstance(data, time) and data.tzinfo != UTC:
-            return data.replace(tzinfo=UTC)
-        return data
 
     # -------------------
     # `-` Private Methods
@@ -418,6 +398,19 @@ class Transform[T0, T1](_TypingBase, pyd.BaseModel):
 
     @register
     def _string_to_scalar[S: String, T: Scalar](self: Transform[S, T]) -> Scalar | None:
+        if (text := self._to_str()) is None:
+            return
+        elif issubclass(self._t1, bool) and self.RGXS['bool'].fullmatch(text):
+            return self.RGXS['bool_true'].fullmatch(text) is not None
+        else:
+            return self._try_to_deserialize(text)
+
+    @register
+    def _object_to_int[S: Scalar, T: Scalar](self: Transform[S, T]) -> Scalar | None:
+        pass
+
+    @register
+    def _atom_to_scalar[S: Atom, T: Scalar](self: Transform[S, T]) -> Scalar | None:
         if (val := self._to_str()) is None:
             pass
         elif issubclass(self._t1, bool) and self.RGXS['bool'].fullmatch(val):
@@ -748,7 +741,7 @@ class Transform[T0, T1](_TypingBase, pyd.BaseModel):
                 return Counter(self.ty.multicast(self.data, _kt, skip=False))
 
     @register
-    def _vec_to_iter[S: Vec, T: Iter](self: Transform[S, T]) -> Iterable | AsyncIterable | None:
+    def _vec_to_iter[S: Vec, T: Iter](self: Transform[S, T]) -> Iterator | AsyncIterator | None:
         if isinstance(self.data, AsyncIterable):
 
             async def _gen() -> AsyncGenerator:
@@ -787,12 +780,16 @@ class Transform[T0, T1](_TypingBase, pyd.BaseModel):
         items = ut.map_items(self.data)
 
         if not self.t1.vals:
+            # I. Without guidance, skip casting altogether
             return items
-        elif self.t1.vals.is_map_item():
-            return self.ty.multicast(items, self.t1.vals, skip=False)
         elif self.t1.vals.match(self.t0):
+            # II. Wrap objects in lists
             return [self.data]
+        elif self.ty.match(self.t1.vals, tuple[Any, Any]):
+            # III. Cast items as tuples of (key, value) pairs
+            return self.ty.multicast(items, self.t1.vals, skip=False)
         else:
+            # IV. Cast items as keys only, mimicing python default behavior
             return self.ty.multicast((k for k, _ in items), self.t1.vals, skip=False)
 
     @register
@@ -1143,7 +1140,7 @@ class Transform[T0, T1](_TypingBase, pyd.BaseModel):
         """Main entrypoint for casting a value to a new type."""
         # I. Normalize data
         if new_data:
-            self.data = self.normalize(new_data)
+            self.data = tyt.normalize(new_data)
 
         # II. Branch immediately for special cases
         if self.t1.literal_members:

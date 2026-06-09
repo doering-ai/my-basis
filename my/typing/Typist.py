@@ -21,11 +21,11 @@ import functools as ft
 import inspect
 import itertools as it
 import more_itertools as mi
-import regex as re
 import logging
 
 ### EXTERNAL
 import pydantic as pyd
+from regex import Pattern
 
 ### INTERNAL
 from ..infra.types import (
@@ -165,7 +165,7 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
     # Static Global Members
 
     ### Regular Expressions (can't use RegexStore because it depends on this class)
-    RGXS: ClassVar[dict[str, re.Pattern]] = ut.regex_dict(
+    RGXS: ClassVar[dict[str, Pattern]] = ut.regex_dict(
         dict(
             ### Misc
             splitter=r' *(?:[,]|\/\/) *',
@@ -867,7 +867,7 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
         target = MyType.parse(tvar)
 
         # II. Return the data as-is if it already matches the target type
-        if ty.check(data, target):
+        if self.check(data, target):
             return data
 
         # III. When given abstract classes, arbitrarily choose a concrete type
@@ -880,7 +880,7 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
         # IV.ii. Perform the actual casting
         t0 = MyType.typeof(data)
         return next(
-            filter(bool, (self.cast(data, t1, source=t0) for t1 in options)),
+            filter(bool, (self.cast(data, target=t1, source=t0) for t1 in options)),
             None,
         )
 

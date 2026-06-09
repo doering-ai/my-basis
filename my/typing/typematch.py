@@ -4,6 +4,8 @@
 ### STANDARD
 from typing import overload, ClassVar, TypeIs, Literal, Any
 from types import NoneType
+from collections.abc import Hashable
+import contextlib as ctx
 import functools as ft
 import itertools as it
 
@@ -83,6 +85,18 @@ class TypeMatch(_TypingBase):
     # -------------------
     # `+` Primary Methods
     # -------------------
+    @classmethod
+    def is_map_item_type[T](cls, tvar: TypeArg[T]) -> bool:
+        """Check if this type represents a mapping item (2-tuple key-value pair)."""
+        tvar = MyType.new(tvar)
+        args, n = tvar.args, len(tvar.args)
+        if tvar.main is tuple:
+            match n, args:
+                case 0, _:
+                    return True
+                case 2, (k, _):
+                    return cls.match(k.main, Hashable)
+        return False
 
     # ------------------
     # `*` Public Methods
@@ -132,14 +146,14 @@ class TypeMatch(_TypingBase):
         if (cached := TypeMatch.MATCH_CACHE[cache_key]) is not None:
             return cached
 
-        ret = False
         _recur = ft.partial(cls.match, inter=inter)
+        ret = False
         if t0.literal_members or t1.literal_members:
             # III.i. Literal case
             ret = cls._match_literals(t0, t1, inter)
         elif not (m0 and m1):
             # III.ii. Unhandled case
-            ret = False
+            pass
         elif t0.is_split or t1.is_split:
             # III.iii. Unions case
             lhs_options = t0.args if t0.is_split else [t0]
@@ -148,11 +162,9 @@ class TypeMatch(_TypingBase):
             ret = fn(any(_recur(lo, ro) for ro in rhs_options) for lo in lhs_options)
         else:
             # IV. Main case: check for simple subclass coverage for the main type and any children
-            ret = (
-                (issubclass(m0, m1) or (inter and issubclass(m1, m0)))
-                and _recur(t0.keys, t1.keys)
-                and _recur(t0.vals, t1.vals)
-            )
+            with ctx.suppress(TypeError):
+                ret = issubclass(m0, m1) or (inter and issubclass(m1, m0))
+            ret = ret and _recur(t0.keys, t1.keys) and _recur(t0.vals, t1.vals)
 
         # Cache & return
         cls.MATCH_CACHE[cache_key] = ret

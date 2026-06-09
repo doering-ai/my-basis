@@ -1,4 +1,7 @@
-# `basis/my/`: Technical Overview of the `my-basis` python package
+# `my` Python Library
+
+This document is a high-level overview of the engineering decisions behind the my Python package.
+For general project information, see [the root directory](/README.md).
 
 ### Subpackage Dependency Tree
 

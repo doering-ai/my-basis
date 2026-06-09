@@ -1,0 +1,29 @@
+# Changes here will be overwritten by Copier
+_commit: v0.1.2-1-ge5a1fc7
+_src_path: .
+build_system: uv
+caption: An extensive utility library for python, focusing especially on iterables
+    and a Regex "Store".
+cicd: true
+current: private
+deps: []
+host: gitlab.com
+host_group: doering-ai
+host_path: libs/basis
+license: MPL-2.0
+package: my
+path: libs/basis
+planned: launch
+pod: ' own '
+precommit: true
+priority: P1
+pypi_uid: my-basis
+pyver: 13
+rtd_uid: my-basis
+tagline: Ergonomic Python Utilities
+tags:
+- lib
+- py
+- pypi
+title: myBasis
+uid: my-basis

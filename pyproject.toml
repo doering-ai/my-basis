@@ -3,26 +3,21 @@
 ###################
 [project]
 name = "my-basis"
-version = "0.9.0"
-description = "A shared repository of basic python utilties for clean, functional text processing."
+version = "0.1.0"
+description = "An extensive utility library for python, focusing especially on iterables and a Regex 'Store'."
 readme = "README.md"
 authors = [{ name = "Robb Doering", email = "robb@doering.ai" }]
-license = "MPL-2.0"
 requires-python = ">=3.13"
 classifiers = [
-  "Development Status :: 4 - Beta",
   "Programming Language :: Python :: 3.13",
-  "Operating System :: OS Independent",
-  "Framework :: OpenTelemetry",
   "Framework :: Pydantic :: 2",
-  "Framework :: Pytest",
+  "Intended Audience :: Developers",
   "Topic :: Software Development :: Libraries :: Python Modules",
-  "Topic :: System :: Logging",
-  "Topic :: Text Processing :: Markup :: Markdown",
   "Topic :: Text Processing :: General",
   "Topic :: Utilities",
   "Typing :: Typed",
 ]
+
 urls = { Homepage = "https://gitlab.com/doering-ai/libs/basis" }
 
 
@@ -64,14 +59,15 @@ google = [
 
 [dependency-groups]
 dev = [
-  "better-exceptions>=0.3.3",
-  "bpython>=0.26",
-  "mk>=3.0.0",
-  "prek>=0.3.13",
+  { include-group = "cli" },
   { include-group = "eval" },
   { include-group = "test" },
   { include-group = "docs" },
 ]
+
+# Sub-groups for development dependencies
+cli = ["bpython>=0.26", "better-exceptions>=0.3.3", "prek>=0.3.13"]
+# Evaluation dependencies for type checking, linting, and code analysis
 eval = [
   "ruff>=0.14.10",
   "types-python-dateutil>=2.9.0.20250822",
@@ -80,6 +76,7 @@ eval = [
   "pandas-stubs>=2.3.0.250703",
   "pyrefly>=0.62.0",
 ]
+# Testing dependencies for unit tests, coverage, and test utilities
 test = [
   "coverage>=7.10.5",
   "pytest-asyncio>=1.1.0",
@@ -87,17 +84,23 @@ test = [
   "pytest>=8.4.1",
   "syrupy>=5.1.0",
 ]
+# Documentation dependencies for building and hosting project documentation
 docs = [
-  "furo>=2025.12.19",
-  "linkify-it-py>=2.0.3",
-  "myst-parser>=4.0.1",
-  "sphinx>=8.2.3",
-  "sphinx-hoverxref>=1.4.2",
-  "sphinx-last-updated-by-git>=0.3.8",
-  "sphinx-notfound-page>=1.1.0",
-  # "sphinx-rtd-theme>=3.0.2",
+  "furo>=2025.12.19",                  # HTML Theme
+  "linkify-it-py>=2.0.3",              # Nested sphinx dependency
+  "myst-parser>=4.0.1",                # Support myst syntax
+  "sphinx>=8.2.3",                     # Documentation generator
+  "sphinx-hoverxref>=1.4.2",           # Cross-referencing tool
+  "sphinx-last-updated-by-git>=0.3.8", # Git integration for last updated info
+  "sphinx-notfound-page>=1.1.0",       # Custom 404 page for missing docs
 ]
 
+# [tool.uv]
+# This 10-day buffer is a critical cybersafety measure; do not remove without an alternative!
+# exclude-newer = "10 days"
+
+# [tool.uv.exclude-newer-package]
+# Put any dependencies that you're working on/with in this list to exempt them from the buffer
 
 #########################
 ### III. BUILD SYSTEM ###
@@ -106,8 +109,8 @@ docs = [
 requires = ["uv_build>=0.11.7,<0.12"]
 build-backend = "uv_build"
 [tool.uv.build-backend]
-module-name = ['my', 'data']
-module-root = ''
+module-name = ["my", "data"]
+module-root = ""
 namespace = true
 
 [project.scripts]
@@ -135,13 +138,13 @@ exclude_also = [
   '@(abc\.)?abstractmethod',
   '^([a-z]\w+?\.)?[A-Z][_A-Z]+(:[^=\n]+)? *=[^\n]+(?=\n\S)',
 ]
-omit = ['*/__init__.py', '*/__main__.py', '/scripts/']
 ignore_errors = true
 
 # ------
 # Typing
 # ------
 [tool.pyrefly]
+project-includes = ["/**/*.py*", "tests/**/*.py*"]
 min-severity = 'warn'
 python-version = '3.13'
 check-unannotated-defs = true
@@ -225,9 +228,6 @@ ignore = [
   "SIM114", # combine if branches
   "SIM118",
 
-  # Upgrade
-  "UP007",
-
   # PyDocStyle
   "D100", # docstrings for modules
   "D104", # docstrings for packages 
@@ -235,10 +235,8 @@ ignore = [
   "D410", # blank line after docstring sections
   "D411", # blank line before docstring sections
 
-  # Type Checking
-  "TC001", # TYPE_CHECKING blocks in python3.8 (internal)
-  "TC002", # TYPE_CHECKING blocks in python3.8 (external)
-  "TC003", # TYPE_CHECKING blocks in python3.8
+  # Upgrade
+  "UP007",
 ]
 
 [tool.ruff.lint.per-file-ignores]

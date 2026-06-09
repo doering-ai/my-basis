@@ -155,5 +155,8 @@ lib-cov
 htmlcov/
 nosetests.xml
 
+# Because Taskfile.dist.yaml is present
+Taskfile.yaml
+
 # Sublime Text
 formatter.assets/

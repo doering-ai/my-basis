@@ -14,9 +14,9 @@ import pydantic as pyd
 import json
 
 ### INTERNAL
-from ..infra import Series, Map, _Series
+from ..infra.types import Vec, Map, String, Atom, Struct
 from ..utils import ut
-from ..typing import Typist, MyType
+from ..typing import Typist, MyType, ty
 
 # Create a local typist with the most permissive possible configuration.
 typist = Typist(firsts=True, atomics=True, splits=True, wraps=True)
@@ -61,7 +61,7 @@ class Predicate(pyd.BaseModel):
     @classmethod
     def new(
         cls,
-        *args: Any,
+        *args: Struct | Atom | Self | None,
         duplicates: bool = False,
         overwrite: bool = False,
         **kwargs,
@@ -124,18 +124,20 @@ class Predicate(pyd.BaseModel):
     # -------------------
     # `-` Private Methods
     # -------------------
-    def _process_arg(self, arg: Any) -> None:
+    def _process_arg(self, arg: Struct | Atom | Self | None) -> None:
         if not arg:
             return
         elif isinstance(arg, Predicate):
             self += arg
-        elif ut.is_map(arg):
+        elif ty.is_model(arg):
+            self += ty.cast(arg, dict, {})
+        elif ty.is_map(arg):
             self += dict(arg)
         elif isinstance(arg, str):
             arg = arg.strip()
             if self.RGXS['jsonesque'].fullmatch(arg) and (_casted := typist.cast(arg, dict)):
                 self += _casted
-        elif isinstance(arg, Iterable):
+        elif ty.is_iter(arg):
             for sub_arg in arg:
                 self._process_arg(sub_arg)
         else:
@@ -188,13 +190,13 @@ class Predicate(pyd.BaseModel):
         Returns:
             A list of strings.
         """
-        if isinstance(val, str):
-            return [val]
-        elif isinstance(val, Series):
-            data = list(map(cls._cast_to_str, val))
+        if isinstance(val, Vec) and len(val) > 0:
+            data = [(ty.cast(item, str) or '') for item in val]
             return data if duplicates else list(mi.unique_everseen(data))
+        elif isinstance(val, Map):
+            data = [f'{k}: {v}' for k, v in ut.map_items(val)]
         else:
-            return [cls._cast_to_str(val)]
+            return [ty.cast(val, str) or '']
 
     @classmethod
     def _cast_to_str(cls, val: Any) -> str:
@@ -317,10 +319,10 @@ class Predicate(pyd.BaseModel):
         if isinstance(other, str):
             # I. Basic key check
             return other in self.data
-        elif isinstance(other, Series) and typist.all_are(other, str):
+        elif isinstance(other, Iterable) and ty.all_are(other, str):
             # II. Check for a collection of keys
             return self.has_all(*other)
-        elif isinstance(other, dict | list | Predicate):
+        elif isinstance(other, (Vec, Map, Predicate)):
             # III. Check for key: value pairs (NOT paying attention to value ordering)
             _other = self.new(other, duplicates=self.duplicates)
             assert isinstance(_other, Predicate)  # no idea...

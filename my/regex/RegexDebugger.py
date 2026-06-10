@@ -11,7 +11,7 @@ import regex as re
 import pytest as pyt
 
 ### INTERNAL
-from ..infra import Series
+from ..infra.types import Vec
 from ..utils import ut
 from ..types import Buffer
 from .meta import GroupKind, Atom, Regex, GroupAtom
@@ -330,13 +330,14 @@ class RegexDebugger(RegexStore):
         return '\n'.join(output)
 
     @staticmethod
-    def parse_pytest(name: str, case: list | dict | str) -> tuple[str, str, dict | None]:
+    def parse_pytest(name: str, case: Vec | dict | str) -> tuple[str, str, dict | None]:
         """Parse a single regex test case (likely from a `.yaml` file)."""
         text: str
         func = 'full'
         expected: dict[str, list[str]] | None = None
 
-        if isinstance(case, Series):
+        if isinstance(case, Vec):
+            case = list(case)
             text = str(case[0])
             if len(case) == 2:
                 # II.ii. Verify that it matches and the named group returns the given value

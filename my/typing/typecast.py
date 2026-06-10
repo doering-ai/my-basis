@@ -26,16 +26,17 @@ from collections.abc import (
     ItemsView,
     Hashable,
 )
-from io import BytesIO
-from types import FunctionType, UnionType
-from datetime import date, datetime, time, timedelta, UTC
-from enum import Enum, Flag
 from collections import Counter, defaultdict, deque
 from dataclasses import is_dataclass, Field
-import logging
-import contextlib as ctx
+from datetime import date, datetime, time, timedelta, UTC
+from enum import Enum, Flag
+from io import BytesIO
+from types import FunctionType, UnionType
 import asyncio as aio
+import contextlib as ctx
+import inspect
 import itertools as it
+import logging
 
 ### EXTERNAL
 import pydantic as pyd
@@ -52,9 +53,7 @@ from ..infra.types import (
     _Vec,
     _Map,
     Stream,
-    Streams,
     String,
-    Strings,
     Scalar,
     Scalars,
     Time,
@@ -74,16 +73,14 @@ from .MyType import MyType
 from ._common import ABSTRACT_GENERICS
 from ._TypingBase import _TypingBase
 
-from .typematch import tym
+# from .typematch import tym
 from .typecheck import tyc
 
 if TYPE_CHECKING:
     from my import Typist  # noqa
 
-Dtim = datetime
-Delt = timedelta
-Scal = Scalar
-
+Empty = type[inspect.Parameter.empty]
+empty = inspect.Parameter.empty
 
 ############
 ### DATA ###
@@ -199,26 +196,45 @@ class TypeCast(_TypingBase):
     # --------------
     @overload
     @staticmethod
-    def cast[Tt0, Tt1](data: Tt0, target: type[Tt1] | MyType[Tt1]) -> Tt1 | None: ...
+    def cast[Tt0, Tt1](
+        data: Tt0,
+        target: type[Tt1] | MyType[Tt1],
+        default: Tt1,
+    ) -> Tt1: ...
     @overload
     @staticmethod
     def cast[Tt0, Tt1](
-        data: Tt0, *, source: AnyType[Tt0], target: type[Tt1] | MyType[Tt1]
+        data: Tt0,
+        target: type[Tt1] | MyType[Tt1],
+    ) -> Tt1 | None: ...
+    @overload
+    @staticmethod
+    def cast[Tt0, Tt1](
+        data: Tt0,
+        *,
+        source: AnyType[Tt0],
+        target: type[Tt1] | MyType[Tt1],
     ) -> Tt1 | None: ...
     @staticmethod
     def cast[Tt0, Tt1](
-        data: Tt0, target: type[Tt1] | MyType[Tt1], *, source: AnyType[Tt0] | None = None
+        data: Tt0,
+        target: type[Tt1] | MyType[Tt1],
+        default: Tt1 | None = None,
+        source: AnyType[Tt0] | None = None,
     ) -> Tt1 | None:
         """Internal casting implementation that routes to specialized conversion methods.
 
         Args:
             data: The source data to cast.
             source: The MyType of the source data.
+            default: The default value to return if casting fails.
             target: The target MyType to cast to.
         Returns:
             Cast data if successful, None otherwise.
         """
-        return Transform(data, target, source)()
+        tr = Transform(data, target, source)
+        ret = tr()
+        return default if ret is None else ret
 
     def multicast[V](
         self,
@@ -266,19 +282,64 @@ class TypeCast(_TypingBase):
     @classmethod
     def normalize(cls, data: object) -> object:
         """Normalize the input data into a more workable form for casting."""
-        if data is None or isinstance(data, (type, UnionType)):
-            return data
-        elif tyc.is_string(data):
-            return cls.cast(data, str)
-        elif tyc.is_vec(data) or tyc.is_iter(data):
-            return cls.cast(data, list)
-        elif isinstance(data, Iterable) and not isinstance(data, (Vec, Map)):
-            return list(data)
-        elif isinstance(data, datetime) and data.tzinfo != UTC:
-            return data.astimezone(UTC)
-        elif isinstance(data, time) and data.tzinfo != UTC:
-            return data.replace(tzinfo=UTC)
+        if not (data is None or isinstance(data, (type, UnionType))):
+            match data:
+                case String():
+                    return cls.cast(data, str)
+                case Map():
+                    return cls.cast(data, dict)
+                case Vec() | Iter():
+                    return cls.cast(data, list)
+                case datetime(tzinfo=tz) if tz != UTC:
+                    return data.astimezone(UTC)
+                case time(tzinfo=tz) if tz != UTC:
+                    return data.replace(tzinfo=UTC)
         return data
+
+    @overload
+    @classmethod
+    def read_scalars[S: Scalar](cls, data: String, tvar: type[S] | MyType[S]) -> list[S]: ...
+    @overload
+    @classmethod
+    def read_scalars(cls, data: String) -> list[Scalar]: ...
+    @classmethod
+    def read_scalars[S: Scalar = Scalar](
+        cls,
+        data: String,
+        tvar: type[S] | MyType[S] = Scalar,  # ty:ignore[invalid-parameter-default]
+    ) -> list[S]:
+        """Attempt to read scalar types from data using regex patterns.
+
+        Args:
+            data: The source data to read from.
+            tvar: The scalar type to seek out.
+        Returns:
+            Scalar value if successful, None otherwise.
+        """
+        if not data:
+            return []
+        target: MyType[S] = MyType.new(tvar)
+        text = tyt.normalize(data)
+        targets: tuple[type[Scalar], ...] = tuple(filter(target.match, Scalars))
+
+        counts = {
+            _name: _val
+            for t in targets
+            if ((_name := t.__name__) and (_val := cls.RGXS[_name].findall(text)))
+        }
+        if not counts:
+            return []
+
+        def _calc(item: tuple[str, list[str]]) -> int:
+            """Sort potential target types by their coverage of the string."""
+            _, matches = item
+            return int((len(text) - sum(map(len, matches))) / len(text))
+
+        name, matches = min(counts.items(), key=_calc)
+        if name == 'bool':
+            return [(cls.RGXS['bool_true'].fullmatch(m)) for m in matches]
+
+        return []
 
 
 tyt = typecast = TypeCast
@@ -388,11 +449,6 @@ class Transform[T0, T1](_TypingBase, pyd.BaseModel):
             val = val.decode()
         return val
 
-    @register
-    def _string_to_string[S: String, T: String](self: Transform) -> String | None:
-        if isinstance(self.data, Streams):
-            return tyt.cast(self.data, str)
-
     def _to_str(self) -> str | None:
         return tyt.cast(self.data, source=self.t0, target=str)
 
@@ -473,25 +529,28 @@ class Transform[T0, T1](_TypingBase, pyd.BaseModel):
 
     @register
     def _string_to_vec[S: String, T: Vec](self: Transform[S, T]) -> Vec | None:
-        if text := self.to(str):
-            options = self.ty.options
-            if options.splits and options.wraps:
-                if match := self.RGXS['brackets'].fullmatch(text.strip()):
-                    # I. Split json/yaml-like flow sequences
-                    with ctx.suppress(Exception):
-                        return ut.from_yaml(match[0], list[str], cast=False)
-                elif '\n' in text:
-                    lines = text.splitlines()
-                    if self.t1.vals and String not in self.t1.vals:
-                        lines = ut.condense(map(str.strip, lines))
+        text = self.to(str)
+        if not text:
+            return
 
-                elif char := next(filter(text.__contains__, [',', '//', ':', '.']), ''):
-                    # II. Split on common delimiters in order of preference
-                    #     e.g. one.oneA:two splits on colons, but one.oneA splits on periods
-                    return list(filter(bool, map(str.strip, text.split(char))))
+        options = self.ty.options
+        if options.splits and options.wraps:
+            if match := self.RGXS['brackets'].fullmatch(text.strip()):
+                # I. Split json/yaml-like flow sequences
+                with ctx.suppress(Exception):
+                    return ut.from_yaml(match[0], list[str], cast=False)
+            elif '\n' in text:
+                lines = text.splitlines()
+                if self.t1.vals and String not in self.t1.vals:
+                    lines = ut.condense(map(str.strip, lines))
 
-            if options.wraps:
-                return [text]
+            elif char := next(filter(text.__contains__, [',', '//', ':', '.']), ''):
+                # II. Split on common delimiters in order of preference
+                #     e.g. one.oneA:two splits on colons, but one.oneA splits on periods
+                return list(filter(bool, map(str.strip, text.split(char))))
+
+        if options.wraps:
+            return [text]
 
     @register
     def _string_to_struct[S: String, T: Struct](self: Transform) -> T | None:
@@ -565,27 +624,26 @@ class Transform[T0, T1](_TypingBase, pyd.BaseModel):
 
     @register
     def _timedelta_to_time[S: timedelta, T: Time](self: Transform[S, T]) -> T | None:
-        num = tyt.cast(self.data, source=self.t0, target=int)
-        return tyt.cast(num, source=int, target=self.t1)
+        return self.by(int)
 
     @register
     def _enum_to_string[S: Enum, T: String](self: Transform[S, T]) -> object | None:
-        ret = self.ty.try_method(self._t1, 'write', _tvar=str)
-        if ret is None:
-            name, value = self.data.name, self.data.value
-            return value if isinstance(value, str) else str(name).lower()
-        return ret
+        if ret := self.ty.try_method(self._t1, 'write', _tvar=str):
+            return ret
+
+        name, value = self.data.name, self.data.value
+        return value if isinstance(value, str) else name.lower()
 
     @register
     def _enum_to_scalar[S: Enum, T: Scalar](self: Transform[S, T]) -> T | None:
         value = self.data.value
-        if value and isinstance(value, (*Strings, *Scalars)):
+        if value and isinstance(value, (String, Scalar)):
             return tyt.cast(value, self._t1)
 
     @register
     def _enum_to_time[S: Enum, T: Time](self: Transform[S, T]) -> T | None:
         value = self.data.value
-        if value and isinstance(value, (*Strings, *Scalars)):
+        if value and isinstance(value, (String, Scalar)):
             return tyt.cast(value, self._t1)
 
     @register
@@ -793,10 +851,6 @@ class Transform[T0, T1](_TypingBase, pyd.BaseModel):
             return self.ty.multicast((k for k, _ in items), self.t1.vals, skip=False)
 
     @register
-    def _map_to_iter[S: Map, T: Iter](self: Transform[S, T]) -> T | None:
-        return self.proxy(self.to(list))
-
-    @register
     def _map_to_map[S: Map, T: Map](self: Transform[S, T]) -> Map | None:
         if not (items := ut.map_items(self.data)):
             return
@@ -814,16 +868,6 @@ class Transform[T0, T1](_TypingBase, pyd.BaseModel):
                 return self._t1(self.t1.vals.main, data)
         elif issubclass(self._t1, ItemsView):
             return data.items()
-
-    @register
-    def _map_to_iter[S: Map, T: Iter](self: Transform[S, T]) -> Iter | None:
-        if (
-            self.t1.vals
-            and self.t1.vals.main
-            and issubclass(self.t1.vals.main, tuple)
-            and len(self.t1.vals.args) == 2
-        ):
-            return iter(ut.map_items(self.data))
 
     @register
     def _iter_to_vec[S: Iter, T: Vec](self: Transform[S, T]) -> list | None:
@@ -847,7 +891,11 @@ class Transform[T0, T1](_TypingBase, pyd.BaseModel):
     @register
     def _iter_to_object[S: Iter, T: object](self: Transform[S, T]) -> T | None:
         """Hailmary fallback for iterables that at least casts them to a list first."""
-        return self.proxy(self.to(list))
+        return self.by(list)
+
+    @register
+    def _object_to_iter[S: Map, T: Iter](self: Transform[S, T]) -> T | None:
+        return self.by(list)
 
     def _model_fields(
         self: Transform, model: type[Model] | None
@@ -867,17 +915,24 @@ class Transform[T0, T1](_TypingBase, pyd.BaseModel):
 
     @register
     def _model_to_map[S: Model, T: Map](self: Transform[S, T]) -> T | dict | None:
+        ret: dict[str, Any]
         if isinstance(self.data, pyd.BaseModel):
-            return self.proxy(self.data.model_dump())
-        elif result := self.ty.try_method(self.data, 'to_dict'):
-            return self.proxy(result)
-        return self.proxy(
-            {
+            ret = self.data.model_dump()
+        elif result := self.ty.try_method(self.data, 'to_dict', _tvar=dict):
+            ret = result
+        else:
+            ret = {
                 f: val
                 for f in self._model_fields(self._t1)
-                if (val := getattr(self.data, f, None) is not None)
+                if (val := getattr(self.data, f, empty) is not empty)
             }
-        )
+
+        if not ret:
+            return {}
+        elif isinstance(ret, dict):
+            return self.proxy(ret)
+
+        return self.proxy(ret)
 
     @register
     def _model_to_model[S: Model, T: Model](self: Transform[S, T]) -> T | None:
@@ -959,15 +1014,15 @@ class Transform[T0, T1](_TypingBase, pyd.BaseModel):
             Cast data if it matches the literal, None otherwise.
         """
         data = self.data
-        origin = self.t1.origin
-        ret: T1 | None = None
+        origin: type[T1] | None = self.t1.origin
         if not self.t1.literal_members or origin is None or data is None:
-            return ret
+            return
 
+        ret: Any | None = None
         if origin is Literal:
             # I. Cast Literals
             if any(vals.check(data) for vals in self.t1.args):
-                ret = data  # type: ignore
+                ret = data
             else:
                 ret = next(
                     (
@@ -977,17 +1032,21 @@ class Transform[T0, T1](_TypingBase, pyd.BaseModel):
                     ),
                     None,
                 )
+
         elif isinstance(origin, type) and issubclass(origin, tuple):
             # II. Cast literally-positioned tuples
-            if not isinstance(data, Vecs):
-                data = tyt.cast(data, tuple)
+            data = tyt.cast(data, list)
+            if data is None or len(data) != len(self.t1.args):
+                return
+            cast_values = tuple(it.starmap(tyt.cast, zip(data, self.t1.args, strict=True)))
+            ret = origin(cast_values)
 
-            if data is not None and len(data) == len(self.t1.args):
-                cast_values = list(it.starmap(tyt.cast, zip(data, self.t1.args, strict=True)))
-                # Use the parent type's actual class constructor directly via this handle
-                ret = origin(cast_values)  # type: ignore
+        else:
+            raise TypeError(f'Unsupported literal origin: {origin}')
 
-        return ret if ret is not None and tyc.check(ret, self.t1) else None
+        # III. Validate and return
+        if ret is not None and tyc.check(ret, self.t1):
+            return ret
 
     @classmethod
     def _try_to_deserialize(cls, text: str) -> Scalar | None:
@@ -1135,6 +1194,15 @@ class Transform[T0, T1](_TypingBase, pyd.BaseModel):
     def proxy(self, data: Any) -> T1 | None:
         """Shorthand for casting new data to our target type."""
         return tyt.cast(data, self.t1)
+
+    def by(self, *args: AnyType) -> T1 | None:
+        """Shorthand casting to the target type through one or more intermediary types."""
+        cur: Any = self.data
+        for t0, t1 in it.pairwise((*args, self._t1)):
+            cur = tyt.cast(cur, source=t0, target=t1)
+            if cur is None:
+                break
+        return cur
 
     def __call__(self, new_data: T0 | None = None) -> T1 | None:
         """Main entrypoint for casting a value to a new type."""

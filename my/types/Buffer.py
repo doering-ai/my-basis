@@ -20,8 +20,6 @@ import numpy.typing as npt
 from ..utils import ut
 from .Span import Span
 
-re.DEFAULT_VERSION = re.VERSION1
-
 ############
 ### DATA ###
 ############

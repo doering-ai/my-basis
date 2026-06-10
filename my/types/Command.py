@@ -2,18 +2,17 @@
 ### HEAD ###
 ############
 ### STANDARD
-import asyncio as aio
 from typing import Any, Self, NamedTuple
-import subprocess as sbp
-import contextlib as ctx
 from pathlib import Path
+import asyncio as aio
+import subprocess as sbp
 
 ### EXTERNAL
 import pydantic as pyd
 import more_itertools as mi
 
 ### INTERNAL
-from ..infra import Series
+from ..infra.types import Vec
 
 
 ############
@@ -106,7 +105,7 @@ class Command(pyd.BaseModel):
             if (pipe := options.get('pipe', None)) and not isinstance(pipe, Command):
                 if isinstance(pipe, dict):
                     options['pipe'] = cls.new(**pipe)
-                elif isinstance(pipe, Series):
+                elif isinstance(pipe, Vec):
                     options['pipe'] = cls.new(*pipe)
                 else:
                     options['pipe'] = cls.new(str(pipe))

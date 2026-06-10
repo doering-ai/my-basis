@@ -4,16 +4,22 @@
 ### STANDARD
 from __future__ import annotations
 from typing import ClassVar, Self, overload
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable
 
 ### EXTERNAL
 import regex as re
 from pydantic_core import core_schema as pyds
+import more_itertools as mi
 
 ### INTERNAL
-from ..infra.types import Vec, String, Scalar, _Vec, _Iter, Iter, Atom
+from ..infra.types import String, Scalar
 from ..infra.constants import DELIM
-from ..typing import ty
+from ..typing import ty, TypeCast, MyType
+
+import inspect
+
+Empty = type[inspect.Parameter.empty]
+empty = inspect.Parameter.empty
 
 
 ############
@@ -39,70 +45,77 @@ class Span[T: Scalar](tuple[T, T]):
     @overload  # empty
     def __new__(cls) -> Span[int]: ...
     @overload  # basic
-    def __new__[S: Scalar](cls, arg0: S, arg1: S) -> Span[S]: ...
+    def __new__[S: Scalar = int](cls, arg0: S, arg1: S) -> Span[S]: ...
     @overload  # monoarg
-    def __new__[S: Scalar](cls, arg0: Span[S] | tuple[S, S]) -> Span[S]: ...
+    def __new__[S: Scalar = int](cls, arg0: Span[S] | tuple[S, S]) -> Span[S]: ...
     @overload
     def __new__[S: Scalar](
         cls,
-        arg0: String | Scalar | Span,
+        arg0: String | Scalar | tuple[Scalar, Scalar] | Span,
         arg1: String | Scalar,
-        tvar: type[S],
+        tvar: type[S] | MyType[S],
     ) -> Span[S]: ...
     def __new__[S: Scalar](
         cls,
-        arg0: String | Scalar | Span[S] | tuple[S, S] = -1,
-        arg1: String | Scalar = -1,
-        tvar: type[S] | None = None,
+        arg0: String | Scalar | Span[S] | tuple[S, S] | Empty = empty,
+        arg1: String | Scalar | Empty = empty,
+        tvar: type[S] | MyType[S] = int,  # ty:ignore[invalid-parameter-default]
     ) -> Span[S]:
         """Create a new Span instance, overriding default tuple behavior w/ flexible coercion."""
         if isinstance(arg0, Span):
             # Don't bother autoconverting span contents
             return arg0  # type: ignore
-        if tvar is None:
-            # Set default to integer spans
-            tvar = int  # type: ignore
+        elif arg0 is empty:
+            return cls(0, 0, tvar)
+        elif arg1 is not empty:
+            arg0 = (arg0, arg1)  # type: ignore
 
-        a1 = ty.cast(arg1, int)
-        if a1 is None:
+        # Set default to integer spans
+        _type: MyType[S] = MyType(tvar or int)  # type: ignore
+        main = _type.main
+        if main is None:
             raise ValueError(f'Invalid second argument for Span: {arg1}')
 
-        if isinstance(arg0, String):
+        x0, x1 = cls._new_impl(arg0, main)
+        if isinstance(x0, (int, float)) and isinstance(x1, (int, float)):
+            assert x0 <= x1, f'Invalid span: {x0} > {x1}'
+        return super().__new__(cls, (x0, x1))  # type: ignore
+
+    @classmethod
+    def _new_impl[S: Scalar](
+        cls,
+        data: String | Scalar | Span[S] | Iterable[Scalar] | Empty | None,
+        tvar: type[S],
+    ) -> tuple[S, S]:
+        zero = tvar()
+        if data in {empty, None}:
+            # I. Null-equivelant args result in a set of zeros, which are falsey
+            return zero, zero
+
+        if isinstance(data, String):
             # II. Handle string input with delimiters
-            a0 = ty.normalize(arg0).strip()
-            assert a0, 'Cannot create Span from empty string'
-            parts = cls.DELIM_RGX.split(a0)
-            match len(parts), parts:
+            text = ty.normalize(data).strip()
+            nums = TypeCast.read_scalars(text, tvar)
+            match len(nums), nums:
                 case 1, (p0,):
-                    x0 = int(p0)
-                    return x0, (x0 if (a1 == -1) else a1)
+                    return p0, p0
                 case 2, (p0, p1):
-                    x0, x1 = int(p0), int(p1)
+                    return p0, p1
                 case _:
-                    raise ValueError(f'Invalid string format for Span: {arg0}')
+                    raise ValueError(f'Invalid string format for Span: {data}')
 
-        elif isinstance(arg0, Iter):
-            # I. Handle tuple input
-            if (tup := ty.cast(arg0, tuple[int, int])) is not None:
-                x0, x1 = tup
-            else:
-                x0 = x1 = max(a1, 0)
-
-        elif arg0 == arg1:
+        elif isinstance(data, Scalar):
             # III. Handle empty rangers, missing parameters, and/or points
-            x0 = x1 = max(a1, 0)
+            if (x0 := ty.cast(data, tvar)) is not None:
+                return x0, x0
 
-        elif arg1 != -1:
+        elif isinstance(data, Iterable):
             # IV. Handle numeric input with second argument
-            if (_x0 := ty.cast(arg0, int)) is not None:
-                x0, x1 = _x0, a1
-            raise ValueError(f'Invalid first argument for Span: {arg0}')
-        else:
-            raise ValueError('Must provide either a tuple/string or two numeric arguments')
+            a0, a1 = mi.padded((ty.cast(d, tvar) for d in mi.take(2, data)), zero)
+            if a0 is not None and a1 is not None:
+                return a0, a1
 
-        # Create and return the tuple
-        assert x0 <= x1, f'Invalid span: {x0} > {x1}'
-        return super().__new__(cls, (x0, x1))
+        raise ValueError(f'Invalid first argument for Span: {data=}, t0={type(data)}, {tvar=})')
 
     @classmethod
     def __get_pydantic_core_schema__(cls, source: type, handler) -> pyds.CoreSchema:
@@ -163,7 +176,7 @@ class Span[T: Scalar](tuple[T, T]):
             return any(v in self for v in value)
         return False
 
-    def __add__(self, other: object) -> 'Span':
+    def __add__(self, other: object) -> Span:
         if isinstance(other, int):
             return Span((self[0] + other, self[1] + other))
         if isinstance(other, (tuple, list)) and len(other) == 2:

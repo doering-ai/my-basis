@@ -2,16 +2,33 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import overload, ClassVar, TypeIs, Literal, Any
-from types import NoneType
-from collections.abc import Hashable
+from typing import overload, ClassVar, TypeIs, Literal, is_typeddict, Any
+from collections.abc import Hashable, Iterable
+from enum import Enum
+from dataclasses import is_dataclass
 import contextlib as ctx
 import functools as ft
 import itertools as it
+import inspect
 
 ### EXTERNAL
+import pydantic as pyd
 
 ### INTERNAL
+from ..infra.types import (
+    Stream,
+    String,
+    Scalar,
+    Time,
+    Atom,
+    Vec,
+    Iter,
+    Map,
+    Model,
+    Struct,
+    Func,
+    Funcs,
+)
 from ..utils import ut
 from ..caches import NestedCache
 from .MyType import MyType, TypeArg
@@ -103,10 +120,10 @@ class TypeMatch(_TypingBase):
     # ------------------
     @overload
     @classmethod
-    def match(cls, t0: None, t1: Any, inter: bool = False) -> TypeIs[NoneType]: ...
+    def match(cls, t0: None, t1: Any, inter: bool = False) -> Literal[False]: ...
     @overload
     @classmethod
-    def match(cls, t0: Any, t1: None, inter: bool = False) -> TypeIs[Literal[False]]: ...
+    def match(cls, t0: Any, t1: None, inter: bool = False) -> Literal[False]: ...
     @overload
     @classmethod
     def match[T1](cls, t0: type, t1: TypeArg[T1], inter: bool = False) -> TypeIs[type[T1]]: ...
@@ -136,9 +153,9 @@ class TypeMatch(_TypingBase):
             return True
 
         # II.i. Any & None (i.e. unspecified) are true, but unhandled MyTypes are always false
-        if {r0, r1} & {Any, None}:
+        if r0 is Any or r1 is Any:
             return True
-        elif not (t0 and t1):
+        elif r0 is None or r1 is None or not (t0 and t1):
             return False
 
         # II.i. Check cache based on simple stringification
@@ -167,8 +184,170 @@ class TypeMatch(_TypingBase):
             ret = ret and _recur(t0.keys, t1.keys) and _recur(t0.vals, t1.vals)
 
         # Cache & return
-        cls.MATCH_CACHE[cache_key] = ret
+        TypeMatch.MATCH_CACHE[cache_key] = ret
         return ret
+
+    # ---- STREAM ----
+    @overload
+    @classmethod
+    def is_stream_type(cls, tvar: MyType) -> TypeIs[MyType[Stream]]: ...
+    @overload
+    @classmethod
+    def is_stream_type(cls, tvar: type) -> TypeIs[type[Stream]]: ...
+    @classmethod
+    def is_stream_type(cls, tvar: MyType | type) -> bool:
+        """Determine if a variable is a Stream type."""
+        return bool(main := MyType.new(tvar).main) and issubclass(main, Stream)
+
+    # ---- STRING ----
+    @overload
+    @classmethod
+    def is_string_type(cls, tvar: MyType) -> TypeIs[MyType[String]]: ...
+    @overload
+    @classmethod
+    def is_string_type(cls, tvar: type) -> TypeIs[type[String]]: ...
+    @classmethod
+    def is_string_type(cls, tvar: MyType | type) -> bool:
+        """Determine if a variable is a String type."""
+        return bool(main := MyType.new(tvar).main) and issubclass(main, String)
+
+    # ---- SCALAR ----
+    @overload
+    @classmethod
+    def is_scalar_type(cls, tvar: MyType) -> TypeIs[MyType[Scalar]]: ...
+    @overload
+    @classmethod
+    def is_scalar_type(cls, tvar: type) -> TypeIs[type[Scalar]]: ...
+    @classmethod
+    def is_scalar_type(cls, tvar: MyType | type) -> bool:
+        """Determine if a variable is a Scalar type."""
+        return bool(main := MyType.new(tvar).main) and issubclass(main, Scalar)
+
+    # ---- TIME ----
+    @overload
+    @classmethod
+    def is_time_type(cls, tvar: MyType) -> TypeIs[MyType[Time]]: ...
+    @overload
+    @classmethod
+    def is_time_type(cls, tvar: type) -> TypeIs[type[Time]]: ...
+    @classmethod
+    def is_time_type(cls, tvar: MyType | type) -> bool:
+        """Determine if a variable is a Time type."""
+        return bool(main := MyType.new(tvar).main) and issubclass(main, Time)
+
+    # ---- ATOM ----
+    @overload
+    @classmethod
+    def is_atom_type(cls, tvar: MyType) -> TypeIs[MyType[Atom]]: ...
+    @overload
+    @classmethod
+    def is_atom_type(cls, tvar: type) -> TypeIs[type[Atom]]: ...
+    @classmethod
+    def is_atom_type(cls, tvar: MyType | type) -> bool:
+        """Determine if a variable is a Atom type."""
+        tvar = MyType.new(tvar)
+        return bool(tvar.main) and (
+            cls.is_string_type(tvar)
+            or cls.is_scalar_type(tvar)
+            or cls.is_time_type(tvar)
+            or issubclass(tvar.main, Enum)
+        )
+
+    # ---- VEC ----
+    @overload
+    @classmethod
+    def is_vec_type(cls, tvar: MyType) -> TypeIs[MyType[Vec]]: ...
+    @overload
+    @classmethod
+    def is_vec_type(cls, tvar: type) -> TypeIs[type[Vec]]: ...
+    @classmethod
+    def is_vec_type(cls, tvar: MyType | type) -> bool:
+        """Determine if a variable is a Vec type."""
+        return bool(main := MyType.new(tvar).main) and issubclass(main, Vec)
+
+    # ---- MAP ----
+    @overload
+    @classmethod
+    def is_map_type(cls, tvar: MyType) -> TypeIs[MyType[Map]]: ...
+    @overload
+    @classmethod
+    def is_map_type(cls, tvar: type) -> TypeIs[type[Map]]: ...
+    @classmethod
+    def is_map_type(cls, tvar: MyType | type) -> bool:
+        """Determine if a variable is a Map type."""
+        tvar = MyType.new(tvar)
+        return bool(
+            tvar.main
+            and (
+                issubclass(tvar.main, Map)
+                or (cls.is_iter_type(tvar.main) and tym.match(tvar.vals, tuple[Any, Any]))
+            )
+        )
+
+    # ---- ITER ----
+    @overload
+    @classmethod
+    def is_iter_type(cls, tvar: MyType) -> TypeIs[MyType[Iter]]: ...
+    @overload
+    @classmethod
+    def is_iter_type(cls, tvar: type) -> TypeIs[type[Iter]]: ...
+    @classmethod
+    def is_iter_type(cls, tvar: MyType | type) -> bool:
+        """Determine if a variable is a non-struct, non-atomic Iterable type (mostly iterators)."""
+        return (
+            bool(main := MyType.new(tvar).main)
+            and issubclass(main, Iter)
+            and not (cls.is_string_type(main) or cls.is_vec_type(main) or cls.is_map_type(main))
+        )
+
+    # ---- STRUCT ----
+    @overload
+    @classmethod
+    def is_struct_type(cls, tvar: MyType) -> TypeIs[MyType[Struct]]: ...
+    @overload
+    @classmethod
+    def is_struct_type(cls, tvar: type) -> TypeIs[type[Struct]]: ...
+    @classmethod
+    def is_struct_type(cls, tvar: MyType | type) -> bool:
+        """Determine if a variable is a struct type."""
+        return bool(main := MyType.new(tvar).main) and (
+            issubclass(main, Iterable) or cls.is_model_type(tvar)
+        )
+
+    # ---- FUNC ----
+    @overload
+    @classmethod
+    def is_func_type(cls, tvar: MyType) -> TypeIs[MyType[Func]]: ...
+    @overload
+    @classmethod
+    def is_func_type(cls, tvar: type) -> TypeIs[type[Func]]: ...
+    @classmethod
+    def is_func_type(cls, tvar: MyType | type) -> bool:
+        """Determine if a variable is a Func type."""
+        return bool(main := MyType.new(tvar).main) and issubclass(main, Funcs)
+
+    # ---- MODEL ----
+    @overload
+    @classmethod
+    def is_model_type[M: Model](cls, tvar: MyType) -> TypeIs[MyType[M]]: ...
+    @overload
+    @classmethod
+    def is_model_type[M: Model](cls, tvar: type) -> TypeIs[type[M]]: ...
+    @classmethod
+    def is_model_type(cls, tvar: MyType | type) -> bool:
+        """Determine if a variable is a model type."""
+        tvar = MyType.new(tvar)
+        main = tvar.main
+        return (
+            bool(main)
+            and inspect.isclass(main)
+            and (
+                issubclass(main, pyd.BaseModel)
+                or is_typeddict(main)
+                or pyd.dataclasses.is_pydantic_dataclass(main)
+                or is_dataclass(main)
+            )
+        )
 
 
 tym = typematch = TypeMatch

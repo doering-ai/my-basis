@@ -27,6 +27,7 @@ from typing import (
     get_origin,
     Union,
     IO,
+    Never,
 )
 from collections import Counter, deque
 from collections.abc import (
@@ -44,7 +45,6 @@ import dataclasses
 from enum import Enum, Flag
 from datetime import date, time, datetime, timedelta
 import functools as ft
-import itertools as it
 import contextlib as ctx
 
 # Modular imports
@@ -71,78 +71,14 @@ from ..infra.types import (
 from ..utils import ut
 from ..caches import Cache
 from ._TypingBase import _TypingBase
+from .SpecialForm import SpecialForm as Form
 
 ############
 ### DATA ###
 ############
 type TypeArg[T = Any] = type[T] | MyType[T] | tuple[type[T], ...] | Any | None
-
-
-class _Filters(pyd.BaseModel):
-    #: Universal types are treated as the base of everything
-    universal: set[str] = {'', 'Unknown', 'Any'}
-    #: Functional types
-    funcs: set[str] = {'Callable', 'Coroutine'}
-    #: Structural types (i.e. vectors, maps, and models)
-    structs: set[str] = {
-        'AsyncGenerator',
-        'AsyncIterable',
-        'AsyncIterator',
-        'Generator',
-        'Iterator',
-        'TypedDict',
-    }
-    #: Simple wrapper types
-    monoarg: set[str] = {
-        'Annotated',
-        'ClassVar',
-        'Final',
-        'NoneType',
-        'NotRequired',
-        'Required',
-    }
-    #: Wrappers of more than one type at once
-    polyarg: set[str] = {'Union', 'Unpack', 'Optional'}
-
-    #: Forms that treat as `None` on sight.
-    unhandled: set[str] = {
-        'Type',  # deprecated
-        'NoReturn',
-        'TypeGuard',
-        'NewType',  # shouldn't exist at runtime
-        # >= 3.10
-        'Self',
-        'Never',
-        'LiteralString',  # Too complicated & rare
-        'Concatenate',
-        # >= 3.13
-        'ReadOnly',
-        'CapsuleType',
-        'NotImplementedType',
-        # Possible, but not yet handled:
-        'NamedTuple',  # treat like tuple but w/ names?
-        'Protocol',  # try isinstance?
-        #: **IMPORTANT:** TypeVars are completely unhandled as of now.
-        #: Could do it with `TypeVar.__bound__()`, perhaps?
-        'TypeVar',
-        'TypeVarTuple',
-        'ParamSpec',
-        'ParamSpecArgs',
-        'ParamSpecKwargs',
-        # From the `types` module
-        'TypeIs',
-        'Ellipsis',
-        'EllipsisType',
-        'TypeAlias',
-        'TypeAliasType',
-    }
-
-    def __contains__(self, other: object) -> bool:
-        if not isinstance(other, str):
-            other = getattr(other, '__name__', '')
-        return len(other) > 0 and ut.has_any(
-            other, (f for f in it.chain(*self.model_dump().values()))
-        )
+Empty = type[inspect.Parameter.empty]
+empty = inspect.Parameter.empty
 
 
 ############
@@ -215,23 +151,37 @@ class MyType[T](_TypingBase, pyd.BaseModel):
     assert MyType(Optional[int]).main is None
     ```
     Some cases:
-      - Generics (e.g. `dict[str, int]`) produce
-      - Literals (e.g. `Literal["a", "b"]`)
-      - "Special Types" (e.g. `Optional[int]`, `Union[int, None]`, `Annotated[int, ...]`)
-    For unions, this is `types.UnionType` and the args are the member types.
+      - Basic generics use their origins, while the vast majority of Atoms use themselves in full.
+
+      - Literals use `Literal`.
+
+      - Monotomic "Special Forms" (e.g. `Optional[int]`, `Annotated[int, ...]`) use a type or union
+        representing the wrapped content of the inner form.
+
+      - Polytomic "Special Forms" (e.g. `Union[int, str]` -> `UnionType`, `Unpack[str, str]` ->
+        `Unpack`) us a type representing the wrapping content of the outer form.
     """
 
-    #: If any of these types are passed into `parse()`, no work will be done and an "inactive"
-    #: instance will be returned (i.e. it will only have `root` defined, and will be falsey).
-    FILTERS: ClassVar[_Filters] = _Filters()
+    POS: ClassVar[MyType[Any]]
+    NEG: ClassVar[MyType[NoneType]]
 
-    PARSE_CACHE: ClassVar[Cache[int, MyType]] = Cache()
+    #: Whether to raise exceptions when type casting fails unexpectedly.
     RAISE: ClassVar[bool] = False
 
+    #: Performance cache based on full type stringification (i.e. `__str__()`)
+    PARSE_CACHE: ClassVar[Cache[int, MyType]] = Cache()
+
+    #: Cache of manually indexed types, where the key is a unique, hierarchical identifier.
     IDXS: ClassVar[dict[str, MyType]] = {}
 
+    #: The original value passed in -- used for `uid` generation.
+    raw: Any = NoneType
+
     #: The original type annotation passed in, which may be unparseable.
-    root: type[T] | Any | None = None
+    root: type | UnionType | TypeAliasType | object | None = None
+
+    #: The main type, which usually just means the type itself or its origin.
+    main: type[T] | type[UnionType] | type[NoneType] | None = None
 
     #: The name of the type (e.g. 'dict', 'Union', 'Annotated', etc.) or '' if unparseable.
     name: str = ''
@@ -239,46 +189,49 @@ class MyType[T](_TypingBase, pyd.BaseModel):
     #: A unique serialized identifier for this type, used for caching.
     uid: int = 0
 
-    main: type | None = None
-    """
-    The main type, which usually just means the type itself or its origin. Is `None` if unparseable.
-    See the discussion in the class-level documentation.
-    """
-
-    #: The type of generic's "values", which are usually the *final* type argument
-    vals: MyType | None = None
-
-    #: For mappings, the type of the keys. For other types, None.
-    keys: MyType | None = None
-
     #: The arguments of generic types; only needed for advanced usecases.
     args: tuple[MyType, ...] = tuple()
 
-    # ---- Internal attributes ----
+    #: The the type annotation for the contents of a generic collection.
+    #: The vast majority of generics are monotyped so only use this field (e.g. vecs & iters).
+    vals: MyType = pyd.Field(default_factory=lambda: MyType.POS)
 
+    #: For mappings, the type annotation of the keys. For other types, None.
+    #: Can sometimes be monotype, e.g. `Counter[str]` -> `dict[str, int]`
+    keys: MyType = pyd.Field(default_factory=lambda: MyType.POS)
+
+    # ---- Internal attributes ----
     #: The origin of the type, if it has one (e.g. `dict` for `dict[str, int]`); otherwise None.
     origin: type | None = None
 
     #: For literal types, the list of literal members (e.g. `["a", "b"]` for `Literal["a", "b"]`).
     literal_members: list[Any] = []
 
-    #: Whether this type represents a union of alternatives, matching any of its consituents.
-    is_split: bool = False
-
     # -------------------
     # `.` Initial Methods
     # -------------------
     @overload
-    def __init__[R = Any](self: MyType[R]): ...
+    def __init__(self: MyType[NoneType], root: None, **kwargs): ...
     @overload
-    def __init__[R: NoneType](self: MyType[R], root: None, uid: int = 0, **kwargs): ...
+    def __init__[R = Any](self: MyType[R], root: TypeArg[R], **kwargs): ...
     @overload
-    def __init__[R](self: MyType[R], root: TypeArg[R], uid: int = 0, **kwargs): ...
-    # @overload
-    # def __init__[R](self: MyType[R], root: R, uid: int = 0, **kwargs): ...
-    def __init__[R](self, root: TypeArg[R] = Any, uid: int = 0, **kwargs):
-        """Initialize a MyType instance with the given source type and unique identifier."""
-        super().__init__(root=root, uid=uid or hash(str(root)), **kwargs)
+    def __init__[R = Any](self: MyType[R], root: TypeArg[R] = Any, uid: int = 0, **kwargs): ...
+    def __init__[R = Any](self, root: TypeArg[R] = Any, uid: int = 0, **kwargs):
+        """Initialize a MyType instance with the given source type and unique identifier.
+
+        This function is overriden from `pyd.BaseModel` so as to allow positional args.
+
+        Args:
+            root: The original type annotation that this MyType instance represents. Can be any type
+            or None.
+
+            uid: A unique identifier for this type, used for caching. If not provided, will be
+            generated from the stringified root.
+
+            **kwargs: Additional keyword arguments to pass to the BaseModel initializer.
+        """
+        kwargs.pop('raw', None)
+        super().__init__(raw=root, root=root, uid=uid or hash(str(root)), **kwargs)
 
     @overload
     @staticmethod
@@ -288,10 +241,10 @@ class MyType[T](_TypingBase, pyd.BaseModel):
     def new(root: None) -> MyType[NoneType]: ...
     @overload
     @staticmethod
-    def new[R](root: TypeArg[R]) -> MyType[R]: ...
+    def new[R](root: tuple[type[R], ...]) -> MyType[Union[type[R], ...]]: ...
     @overload
     @staticmethod
-    def new[R](root: tuple[type[R], ...]) -> MyType[Union[type[R], ...]]: ...
+    def new[R](root: TypeArg[R]) -> MyType[R]: ...
     @overload
     @staticmethod
     def new[R](root: type[R] | MyType[R]) -> MyType[R]: ...
@@ -299,77 +252,61 @@ class MyType[T](_TypingBase, pyd.BaseModel):
     @staticmethod
     def new[R](root: R) -> MyType[R]: ...
     @staticmethod
-    def new(root: TypeArg | Any | None = None) -> MyType:
+    def new(root: TypeArg | Any | Empty = empty) -> MyType:
         """Create a new MyType instance by parsing a type OR inferring the full type of a value."""
         cls = MyType
-        if root is None:
-            # 0. None -> uninitialized Any
-            return cls()
-        name = getattr(root, '__name__', '')
-
-        if isinstance(root, (type, MyType, TypeAliasType, tuple)):
-            # I.i. Parse direct types
+        # 0. Handle edge & null cases, prep data
+        if root in {empty, Empty, Any}:
+            return cls.POS
+        elif root in {None, NoneType, Never}:
+            return cls.NEG
+        elif (
+            isinstance(root, (type, MyType, UnionType))
+            or (isinstance(root, tuple) and all(isinstance(t, type) for t in root))
+            or (Form.classify(root) != Form.NONE)
+        ):
             return cls.parse(root)
-
-        if name.startswith('TypeAlias') and (val := getattr(root, '__value__', None)) is not None:
-            return cls.parse(val)
-        elif name in cls.FILTERS.universal:
-            return cls()
-        elif name in (cls.FILTERS.monoarg,):
-            # I.ii. Parse special forms
-            return cls.parse(root)
-
-        # II. Infer the type annotation of *data*
-        return cls.typeof(root)
+        else:
+            # II. Infer annotations for untyped data
+            return cls.typeof(root)
 
     @overload
     @classmethod
-    def parse[Rm: MyType](cls, root: Rm, throw: bool = True) -> Rm: ...
+    def parse[Rm: MyType](cls, root: Rm, throw: bool = False) -> Rm: ...
     @overload
     @classmethod
-    def parse[R](cls, root: type[R], throw: bool = True) -> MyType[R]: ...
+    def parse[R](cls, root: type[R], throw: bool = False) -> MyType[R]: ...
     @overload
     @classmethod
-    def parse[Rt: tuple[type, ...]](cls, root: Rt, throw: bool = True) -> MyType[Rt]: ...
+    def parse[Rt: tuple[type, ...]](cls, root: Rt, throw: bool = False) -> MyType[Rt]: ...
     @overload
     @classmethod
-    def parse(cls, root: UnionType, throw: bool = True) -> MyType: ...
+    def parse(cls, root: UnionType, throw: bool = False) -> MyType: ...
     @overload
     @classmethod
-    def parse(cls, root: TypeAliasType, throw: bool = True) -> MyType: ...
+    def parse(cls, root: TypeAliasType, throw: bool = False) -> MyType: ...
     @overload
     @classmethod
-    def parse(cls, root: None, throw: bool = True) -> MyType[NoneType]: ...
+    def parse(cls, root: None, throw: bool = False) -> MyType[NoneType]: ...
     @overload
     @classmethod
-    def parse(cls, root: object, throw: bool = True) -> MyType: ...
+    def parse(cls, root: object, throw: bool = False) -> MyType: ...
     @classmethod
-    def parse[R](cls, root: object, throw: bool = True) -> MyType:
+    def parse[R](cls, root: object, throw: bool = False) -> MyType:
         """Decompose a given type so that other methods can intelligently handly each part in turn.
 
         By far the most likely usecase is for containers such as `dict[str, int]` (which becomes the
         tuple `(dict, str, int)`) and `list[int]` (which becomes `(list, int, None)`), but it's
         useful for other generics, unions (e.g. `string | int`), and special non-type forms
-        (e.g. `Annotated` and `Literal`). See `MyType.UNHANDLED_TYPES` for a best-effort list
-        of unhandled annotations.
+        (e.g. `Annotated` and `Literal`).
 
         Args:
             root: The type annotation to decompose -- either a type, a union of types, or None.
             throw: If True, will re-raise any exceptions encountered during parsing.
         Returns:
-            1. The **main type** (e.g. `dict`, `list`, `int`, etc.) or `None` if unparseable.
-            2. The **key type** (for mappings) or `None`.
-            3. The **value type** (for any generics with just one type arg) or `None`.
+            A MyType instance with the root set to the original type, and the other fields
+            populated according to the structure of that type.
         """
-        if isinstance(root, MyType):
-            return root
-        elif root is Ellipsis:
-            root = EllipsisType  # type: ignore
-        elif root is None:
-            root = NoneType  # type: ignore
-        elif isinstance(root, TypeAliasType):
-            root = root.__value__
-
         try:
             uid = hash(str(root))
             if cached := cls.PARSE_CACHE[uid]:
@@ -393,81 +330,127 @@ class MyType[T](_TypingBase, pyd.BaseModel):
         Returns:
             Parsed MyType instance representing the inferred type.
         """
+        ty = cls._ty()
         origin = type(data)
         args = []
+        # 0. Return immediately for null args and non-generics
         if not data or not hasattr(origin, '__class_getitem__'):
-            return cls.parse(origin)  # type: ignore
+            return cls.parse(origin)
 
-        if cls._ty().is_vec(data):
-            valss = ut.condense(map(cls.typeof, data))
+        if ty.is_vec(data):
+            valtypes = ut.condense(map(cls.typeof, data))
             if isinstance(data, tuple):
-                if len(set(valss)) == 1:
-                    t = valss[0].root
+                if len(set(valtypes)) == 1:
+                    t = valtypes[0].root
                     assert t is not None
                     args = [t, Ellipsis]
                 else:
-                    args = [vt.root for vt in valss if vt.root is not None]
+                    args = [vt.root for vt in valtypes if vt.root is not None]
             else:
-                args = [cls._condense_args(valss)]
-        elif cls._ty().is_map(data):
-            _val = dict(data)
-            _keys, _vals = _val.keys(), _val.values()
-            keyss, valss = [ut.condense(map(cls.typeof, _i)) for _i in (_keys, _vals)]
-            args = [cls._condense_args(keyss), cls._condense_args(valss)]
+                args = [cls._join(valtypes)]
+        elif ty.is_map(data):
+            d = dict(data)
+            cls._join(
+                [
+                    cls.typeof(mi.first(d.keys())),
+                    *(cls.typeof(_member) for _member in d.values()),
+                ]
+            )
 
         return cls.parse(origin[*args] if args else origin)  # type: ignore
 
+    @ft.cached_property
+    def none(self) -> MyType[NoneType]:
+        """A MyType instance that only matches None."""
+        return MyType.NEG
+
+    @ft.cached_property
+    def all(self) -> MyType[Any]:
+        """A MyType instance that matches everything."""
+        return MyType.POS
+
+    @pyd.field_validator('root', mode='before')
+    @classmethod
+    def _process_root(cls, root: Any) -> Any:
+        if isinstance(root, MyType):
+            return root.root
+
+        # I. Exit early for type builtins, and stop to recurse into any aliases
+        if root in (Ellipsis, EllipsisType):
+            return EllipsisType
+        elif root in (None, NoneType):
+            return NoneType
+        elif (value := getattr(root, '__value__', None)) is not None:
+            return cls._process_root(value)
+
+        match Form.classify(root):
+            case Form.UNIV:
+                return Any
+            case Form.NONE:
+                return NoneType
+            case Form.COND:
+                return bool
+            case Form.COND:
+                return root
+            case _:
+                return NoneType
+
+    @ft.cached_property
+    def special_form(self) -> Form:
+        return Form.classify(self.root)
+
     @pyd.model_validator(mode='after')
     def _process_src(self) -> Self:
-        """Process the source type annotation to populate the MyType fields."""
-        # 0. Validate & parse the source type
+        # 0. Validate & parse the source type, but don't save the args yet
         if not self.root or not self.uid:
             return self
-        self.name, self.origin, args = self._read(self.root)
+        self.name, self.origin, args = self._0_read(self.root)
 
-        if branches := self._split(self.name, self.origin, args):
+        if branches := self._1_split(self.name, self.origin, args):
             # I. Split for divergent types (e.g. `Union[int, str]`)
             self.args = tuple(self._process_args(branches))
-            self.is_split = True
             self.main = UnionType
-        elif self.name in self.FILTERS.unhandled:
-            # II. Ignore unhandled types, just setting self.origin for the curious & persistent
-            pass
-        elif self.name in self.FILTERS.monoarg:
-            # III. Unwrap simple forms (e.g. `Annotated[str]`)
-            if contents := mi.first(filter(bool, self._process_args(args)), None):
-                # Overwrite all our pydantic vars with the `contents`'s versions
-                # NOTE: keep our uid & root, for caching purposes
-                self.main = contents.main
-                self.keys = contents.keys
-                self.vals = contents.vals
-                self.is_split = contents.is_split
-                self.name = contents.name
-                self.origin = contents.origin
-                self.args = (*contents.args,)
-                self.literal_members = contents.literal_members
+            return self
         elif self.origin is Literal:
-            # IV. Process literals
+            # II. Process set literals
             self.literal_members = list(args)
             self.args = tuple(set(map(MyType.new, args)))
-        else:
-            # V. Process args for all remaining types, though only generics should have them
-            self.args = tuple(self._process_args(args))
-            if self.origin:
-                # V.i. Parameterized Generics (e.g. structs)
-                self.main = self.origin
-                self._process_generic(self.origin, self.args)
-            elif isinstance(self.root, type):
-                # V.ii. Atomics (e.g. strings, unparameterized structs)
-                self.main = self.root
-                # Niche Subcases
-                if issubclass(self.root, Counter) and not self.vals:
-                    self.vals = MyType.new(int)
-                elif issubclass(self.root, Enum):
-                    self.keys = MyType.new(str)
-                    if not self.vals:
-                        vals = list(self.root.__members__.values())
-                        self.vals = MyType.typeof(vals[0]) if vals else MyType.new(int)
+            return self
+
+        match Form.classify(self.root):
+            case Form.NONE:
+                # II. Ignore unhandled types, not setting `main` at all
+                return self
+            case Form.MONO:
+                # III. Unwrap simple forms (e.g. `Annotated[str]`)
+                if contents := mi.first(filter(bool, self._process_args(args)), None):
+                    # Overwrite all our pydantic vars with the `contents`'s versions
+                    # NOTE: keep our uid & root for caching purposes
+                    self.__dict__.update(
+                        {
+                            k: v
+                            for k, v in contents.__dict__.items()
+                            if k in MyType.model_fields and k not in {'uid', 'root'}
+                        }
+                    )
+            case _:
+                # V. Process args for all remaining types, though only generics should have them
+                self.args = tuple(self._process_args(args))
+                if self.origin:
+                    # V.i. Parameterized Generics (e.g. structs)
+                    self.main = self.origin
+                    self._process_generic(self.origin, self.args)
+                elif isinstance(self.root, type):
+                    # V.ii. Atomics (e.g. strings, unparameterized structs)
+                    self.main = self.root
+                    # Niche Subcases
+                    if issubclass(self.root, Counter) and not self.vals:
+                        self.vals = MyType.new(int)
+                    elif issubclass(self.root, Enum):
+                        self.keys = MyType.new(str)
+                        if not self.vals:
+                            vals = list(self.root.__members__.values())
+                            self.vals = MyType.typeof(mi.first(vals, int))
         return self
 
     # -------------------
@@ -523,7 +506,7 @@ class MyType[T](_TypingBase, pyd.BaseModel):
         return None, None
 
     @classmethod
-    def _condense_args(cls, args: list[MyType]) -> type | UnionType:  # type: ignore[not-a-type]
+    def _join(cls, *args: TypeArg) -> type | UnionType:
         """Condense multiple type arguments into a single type or union.
 
         Args:
@@ -531,33 +514,31 @@ class MyType[T](_TypingBase, pyd.BaseModel):
         Returns:
             Single type if all args are the same, UnionType otherwise.
         """
-        uniques = [arg.root for arg in set(args) if arg.root is not None]
-        if len(uniques) == 1:
-            return uniques[0]
+        types = {t for a in args if a is not None and (t := cls.new(a))}
+
+        n = len(types)
+        if n == 0:
+            return Empty
+        if n == 1:
+            return types.pop().main or Empty
         else:
-            acc, *rest = uniques
-            for other in rest:
-                acc = acc | other
-            return acc
+            head = types.pop().main or Empty
+            for other in types:
+                head = head | (other.main or Empty)
+        return head
 
     @classmethod
-    def _is_type(cls, tvar: Any) -> TypeGuard[type | GenericAlias]:  # type: ignore[not-a-type]
-        """Check if a value is a valid, handleable type.
-
-        Args:
-            tvar: The value to check.
-        Returns:
-            True if tvar is a type that can be parsed.
-        """
+    def _is_type(cls, tvar: Any) -> TypeGuard[type | GenericAlias]:
+        """Determine whether a value is a valid, handleable type."""
         return bool(
             tvar is not None
             and (name := getattr(tvar, '__name__', ''))
-            and name not in cls.FILTERS.unhandled
+            and name not in Form.NONE.value
         )
 
     @classmethod
-    def _parseable(cls, tvar: Any) -> TypeGuard[type | tuple[type, ...]]:  # type: ignore[not-a-type]
-        """Check if a value or tuple of values are parseable types.
+    def _parseable(cls, tvar: Any) -> TypeGuard[type | tuple[type, ...]]:
+        """Determine whether a value or tuple of values are parseable types.
 
         Args:
             tvar: The value or tuple to check.
@@ -570,7 +551,7 @@ class MyType[T](_TypingBase, pyd.BaseModel):
             return cls._is_type(tvar)
 
     @classmethod
-    def _read(cls, tvar: Any) -> tuple[str, type[Any] | None, tuple]:
+    def _0_read(cls, tvar: Any) -> tuple[str, type[Any] | None, tuple]:
         """Get the immediate basic values of this type, without any recursion.
 
         Args:
@@ -602,7 +583,7 @@ class MyType[T](_TypingBase, pyd.BaseModel):
         return name, origin, args
 
     @classmethod
-    def _split(cls, name: str, origin: Any | None, args: tuple) -> tuple:
+    def _1_split(cls, name: str, origin: Any | None, args: tuple) -> tuple:
         """Decompose a union or tuple type into its member types.
 
         Args:
@@ -612,11 +593,10 @@ class MyType[T](_TypingBase, pyd.BaseModel):
         Returns:
             Tuple of member types if it's a union/tuple, empty tuple otherwise.
         """
-        if name == '' or len(args) == 0:
+        n = len(args)
+        if name == '' or n == 0:
             return args
-        if origin is Unpack and len(args) == 1:
-            return get_args(args[0])
-        elif name in cls.FILTERS.polyarg or isinstance(origin, UnionType):
+        elif name in Form.POLY.value or isinstance(origin, UnionType):
             return args
         else:
             return tuple()
@@ -624,24 +604,34 @@ class MyType[T](_TypingBase, pyd.BaseModel):
     # -------------------
     # `+` Primary Methods
     # -------------------
-    @property
-    def rtype(self) -> type[T]:
-        """Get the original type annotation that this MyType instance represents."""
-        ret = self.root
-        if isinstance(ret, type):
-            return ret
-        elif self.is_split:
-            if self.origin is Unpack and len(self) == 1:
-                return self.args[0].rtype
-            elif self.origin is UnionType:
-                return Union[self.args]  # type: ignore
-        elif len(self) > 0 and isinstance(self.args[0].root, type):
-            return self.args[0].root
-        return Any  # type: ignore
 
     # ------------------
     # `*` Public Methods
     # ------------------
+    @property
+    def is_split(self) -> bool:
+        """Whether this type is a union of multiple types."""
+        return self.main == UnionType
+
+    @property
+    def rtype(self) -> type | UnionType:
+        """A version of the root that has been lightly coerced into being a regular type.
+
+        Returns `Any` if the root is not parseable as a type, or if it's a split type with an
+        unparseable root.
+        """
+        ret = self.root
+        if isinstance(ret, (type, UnionType)):
+            return ret
+        elif self.origin is Unpack:
+            return self.args[0].rtype
+        elif self.is_split:
+            return UnionType
+        elif len(self.args) > 0 and isinstance(self.args[0].root, type):
+            return self.args[0].root
+
+        return Any
+
     # ------------------
     # `*0` Magic Methods
     # ------------------
@@ -766,7 +756,7 @@ class MyType[T](_TypingBase, pyd.BaseModel):
         return False
 
     def check(self, data: object) -> TypeIs[T]:
-        """Check if a given data value matches this type, recursing into containers where needed.
+        """Determine whether a given data value matches this type, recursing into containers.
 
         Args:
             data: The data value to check. Ideally not an exhaustable iter.
@@ -825,6 +815,15 @@ class MyType[T](_TypingBase, pyd.BaseModel):
             '0',
         )
 
+    @staticmethod
+    def _calc_idx_dist(lhs: str, rhs: str) -> int:
+        """Calculate a distance metric between two hierarchical IDs."""
+        lhs, rhs = lhs.strip(), rhs.strip()
+        if pre := list(mi.longest_common_prefix([lhs, rhs])):
+            lhs, rhs = lhs[len(pre) :], rhs[len(pre) :]
+        # older, younger = sorted((lhs, rhs), key=lambda s: f'{len(s)}_{s}')
+        return len(lhs) + len(rhs)
+
 
 ############
 ### DATA ###
@@ -875,4 +874,5 @@ _idx_data: dict[str, Any] = {
 }
 MyType.IDXS = ut.val_map(MyType.new, _idx_data)
 
-AnyType: MyType[Any] = MyType.new(Any)
+MyType.POS = MyType.new(Any)
+MyType.NEG = MyType.new(None)

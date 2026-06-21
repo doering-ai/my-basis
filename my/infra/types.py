@@ -61,7 +61,7 @@ Struct = Vec | Map | Iter | Model
 type _Struct[T0, T1 = Any] = _Vec[T0] | _Map[T0, T1] | _Iter[T0] | Model
 
 # ---- Funcs ----
-type Func = FunctionType | BuiltinFunctionType
+Func = FunctionType | BuiltinFunctionType
 type _Func[**PSpec, R = Any] = Callable[PSpec, R]
 
 # ---- Object ----
@@ -84,6 +84,9 @@ Objects = (*Atoms, *Structs, *Funcs)
 TYPESET = {*Atoms, *Structs, *Funcs}
 
 
+# -----------
+# Misc
+# -----------
 # -----------------
 # Type Enumerations
 # -----------------
@@ -129,15 +132,15 @@ class KnownType(Flag):
     ITEMSVIEW = auto()
     MAP = MAPPING | ITEMSVIEW
 
-    ITERABLE = auto()
-    ASYNCITERABLE = auto()
-    ITER = ITERABLE | ASYNCITERABLE
-
     BASEMODEL = auto()
     DATACLASS = auto()
     MODEL = BASEMODEL | DATACLASS
 
-    STRUCT = VEC | MAP | ITER | MODEL
+    STRUCT = VEC | MAP | MODEL
+
+    ITERABLE = auto()
+    ASYNCITERABLE = auto()
+    ITER = ITERABLE | ASYNCITERABLE | STRUCT
 
     # ---- Funcs ----
     FUNC = auto()
@@ -145,9 +148,6 @@ class KnownType(Flag):
     OBJECT = SCALAR | TIMES | STRING | ENUM | STRUCT | FUNC
 
 
-# -----------
-# Exploratory
-# -----------
 Series = Vec | Iter
 type _Series[T] = _Vec[T] | _Iter[T]
 Serieses = (Vecs, Iters)

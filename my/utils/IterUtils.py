@@ -2,7 +2,7 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import Any, Literal, overload, TypeIs
+from typing import Any, Literal, overload
 from collections.abc import (
     Callable,
     Collection,
@@ -23,9 +23,11 @@ import more_itertools as mi
 
 ### INTERNAL (NOTE: If adding new internal imports, update the comments in `__init__.py`)
 from ..infra.types import (
-    Vecs,
+    Vec,
     Map,
     _Map,
+    Func,
+    Model,
 )
 from ._UtilsBase import _UtilsBase
 
@@ -33,6 +35,7 @@ from ._UtilsBase import _UtilsBase
 ############
 ### DATA ###
 ############
+type Pred[V, R = bool] = V | Iterable[V] | Callable[[V], R]
 
 
 ############
@@ -77,44 +80,6 @@ class IterUtils(_UtilsBase):
             if all(isinstance(v, tuple) and len(v) == 2 for v in series):
                 return series  # type: ignore
         return []
-
-    @classmethod
-    def is_map[K: Hashable | Any = Any, V = Any](
-        cls,
-        value: Mapping[K, V] | Iterable[tuple[K, V]] | object,
-        ktype: type[K] | None = None,
-        vtype: type[V] | None = None,
-    ) -> TypeIs[_Map[K, V]]:
-        """Check if value is a map, or coercable to one. Can apply type checking.
-
-        Args:
-            value: Object to check.
-            ktype: Optional type for keys.
-            vtype: Optional type for values.
-        Returns:
-            True if value is mapping-like or sequence of 2-tuples, with optional type checks.
-        """
-        if value is None:
-            return False
-
-        _kt, _vt = ktype or object, vtype or object
-        if isinstance(value, Mapping):
-            return (all(isinstance(k, _kt) for k in value.keys())) and (
-                all(isinstance(v, _vt) for v in value.values())
-            )
-
-        if isinstance(value, Iterator):
-            value = list(value)
-
-        if isinstance(value, Vecs):
-            return all(
-                isinstance(v, tuple)
-                and len(v) == 2
-                and isinstance(v[0], _kt)
-                and isinstance(v[1], _vt)
-                for v in value
-            )
-        return False
 
     @classmethod
     def partition[V](cls, items: Iterable[V], pred: Callable[[V], bool]) -> tuple[list[V], list[V]]:
@@ -222,7 +187,7 @@ class IterUtils(_UtilsBase):
         return next((key for key, value in cls.map_items(items) if predicate(value)), default)
 
     @classmethod
-    def next_in[V](cls, container: Container[V], items: Iterable[V]) -> V | None:
+    def next_in[V](cls, container: Container, items: Iterable[V]) -> V | None:
         """Find first item from iterable that exists in container.
 
         Args:
@@ -236,18 +201,13 @@ class IterUtils(_UtilsBase):
     @overload
     @classmethod
     def condense[V: object](
-        cls, items: Iterable[V | None], pred: Callable[[V], bool] = bool
+        cls, items: Iterable[V | Literal[False] | None], pred: Pred[V] = bool
     ) -> list[V]: ...
     @overload
     @classmethod
-    def condense[V: object](
-        cls, items: Iterable[V | Literal[False]], pred: Callable[[V], bool] = bool
-    ) -> list[V]: ...
-    @overload
+    def condense[V](cls, items: Iterable[V], pred: Pred[V] = bool) -> list[V]: ...
     @classmethod
-    def condense[V](cls, items: Iterable[V], pred: Callable[[V], bool] = bool) -> list[V]: ...
-    @classmethod
-    def condense[V](cls, items: Iterable[V], pred: Callable[[V], bool] = bool) -> list[V]:
+    def condense[V](cls, items: Iterable[V], pred: Pred[V] = bool) -> Vec:
         """Filter items by predicate, returning list of matches.
 
         Args:
@@ -256,13 +216,39 @@ class IterUtils(_UtilsBase):
         Returns:
             List of items matching predicate.
         """
-        return list(filter(pred, items))
+        return list(cls.predicate(items, pred))
+
+    @classmethod
+    def predicate[P](cls, items: Iterable[P], *preds: Pred[P]) -> Iterator[P]:
+        """Filter items by one or more predicates, yielding matches.
+
+        Args:
+            items: Iterable to filter.
+            *preds: Predicates to apply (value, iterable, or function).
+        """
+        fns = list(map(cls.normalize_predicate, preds))
+        yield from (item for item in items if all(cls.chain_map(fns, item)))
+
+    @classmethod
+    def normalize_predicate[P](cls, pred: Pred[P]) -> Callable[[P], bool]:
+        """Convert a predicate that may be a value, iterable, or function into a standard function.
+
+        Args:
+            pred: Predicate to normalize (value, iterable, or function).
+        """
+        match pred:
+            case Func():
+                return pred
+            case Iterable():
+                return set(pred).__contains__
+            case _:
+                return pred.__eq__
 
     @classmethod
     def map_condense[K: Hashable, V](
         cls,
         items: _Map[K, V],
-        pred: Callable[[V], bool] = bool,
+        pred: Pred[V] = bool,
     ) -> Iterator[tuple[K, V]]:
         """Filter a mapping by a predicate function on values.
 
@@ -272,34 +258,68 @@ class IterUtils(_UtilsBase):
         Yields:
             (key, value) tuples where value satisfies the predicate.
         """
-        yield from filter(lambda tup: pred(tup[1]), cls.map_items(items))
+        fn = cls.normalize_predicate(pred)
+        yield from ((k, v) for k, v in cls.map_items(items) if fn(v))
 
+    @overload
     @classmethod
-    def get_all[K: Hashable, V](
-        cls,
-        dictionary: dict[K, V],
-        *args: K,
-        mandatory: bool = False,
-    ) -> dict[K, V]:
-        """Extract multiple keys from dictionary.
+    def get_all[K: Hashable, V](cls, data: dict[K, V], *args: Pred[K]) -> dict[K, V]: ...
+    @overload
+    @classmethod
+    def get_all[K: Hashable, V](cls, data: Model, *args: Pred[K]) -> dict[str, Any]: ...
+    @classmethod
+    def get_all[K, V](cls, data: object, *args: Pred[K]) -> dict:
+        """Only returns ANY requested values if all supplied arguments are satisifed/present."""
+        ret = cls.get_any(data, *args)
+        return ret if len(ret) == len(args) else {}
+
+    @overload
+    @classmethod
+    def get_any[K: Hashable, V](cls, data: _Map[K, V], *args: Pred[K]) -> dict[K, V]: ...
+    @overload
+    @classmethod
+    def get_any[K: Hashable, V](cls, data: Model, *args: Pred[K]) -> dict[str, Any]: ...
+    @classmethod
+    def get_any(cls, data: Map | Model, *args: Pred) -> dict:
+        """Extract multiple keys from a dictionary or model.
+
+        Note:
+            Remember, a predicate is: {py}`V | Iterable[V] | Callable[[V], R]`.
+            In this case, `R` is locked to `bool`.
 
         Args:
-            dictionary: Dictionary to extract from.
-            *args: Keys to extract.
-            mandatory: If True, return empty dict unless all keys present (default: False).
+            data: sources of key-value pairs, to be extracted.
+            *args: Keys or , to extract.
         Returns:
-            Dict with requested keys that exist, or empty dict if mandatory and any missing.
+            Dict with requested keys that exist.
         """
-        ret = {key: dictionary[key] for key in args if key in dictionary}
-        if mandatory and len(ret) < len(args):
-            return {}
+        if ret := cls.ty.cast(data, dict):
+            fns = tuple(map(cls.normalize_predicate, args))
+            return dict(cls.map_condense(ret, lambda k: any(cls.chain_map(fns, k))))
         else:
-            return ret
+            return {}
 
+    @overload
     @classmethod
-    def get_any[K: Hashable, V](
+    def get_one[K: Hashable, V](
         cls,
-        dictionary: dict[K, V],
+        data: dict[K, V],
+        *args: K,
+        default: V,
+        unique: bool = False,
+    ) -> V:
+    @overload
+    @classmethod
+    def get_one[K: Hashable, V](
+        cls,
+        data: dict[K, V],
+        *args: K,
+        unique: bool = False,
+    ) -> V | None:
+    @classmethod
+    def get_one[K: Hashable, V](
+        cls,
+        data: dict[K, V],
         *args: K,
         default: V | None = None,
         unique: bool = False,
@@ -307,7 +327,7 @@ class IterUtils(_UtilsBase):
         """Get value for first matching key from dictionary.
 
         Args:
-            dictionary: Dictionary to search.
+            data: Dictionary to search.
             *args: Keys to try in order.
             default: Default value if no keys found (default: None).
             unique: If True, raise error if multiple keys found (default: False).
@@ -316,9 +336,7 @@ class IterUtils(_UtilsBase):
         Raises:
             ValueError: If unique=True and multiple keys match.
         """
-        ret: dict[K, V] = {
-            key: dictionary[key] for key in args if dictionary.get(key, default) != default
-        }
+        ret: dict[K, V] = {key: data[key] for key in args if data.get(key, default) != default}
         if len(ret) == 0:
             return default
         if len(ret) > 1 and unique:
@@ -361,7 +379,6 @@ class IterUtils(_UtilsBase):
         data: Mapping[K, T0] | Iterable[tuple[K, T0]],
         drop: bool = False,
     ) -> dict[K, T1]: ...
-
     @overload
     @classmethod
     def val_map[K: Hashable, T1](
@@ -370,7 +387,6 @@ class IterUtils(_UtilsBase):
         data: Iterable[K],
         drop: bool = False,
     ) -> dict[K, T1]: ...
-
     @classmethod
     def val_map[K: Hashable, T0, T1](
         cls,
@@ -389,7 +405,7 @@ class IterUtils(_UtilsBase):
         """
         if not data:
             return {}
-        elif cls.is_map(data):
+        elif cls.ty.is_map(data):
             ret = {key: func(val) for key, val in cls.map_items(data)}  # type: ignore
         else:
             ret = {key: func(key) for key in data}  # type:ignore
@@ -415,7 +431,7 @@ class IterUtils(_UtilsBase):
     @classmethod
     def chain_map[**P, R](
         cls,
-        functions: Iterable[Callable[P, R]],
+        functions: Callable[P, R] | Iterable[Callable[P, R]],
         *args: P.args,
         **kwargs: P.kwargs,
     ) -> Iterator[R]:
@@ -428,6 +444,9 @@ class IterUtils(_UtilsBase):
         Yields:
             Non-falsy results from function applications.
         """
+        if not isinstance(functions, Iterable):
+            functions = [functions]
+
         for func in functions:
             if ret := func(*args, **kwargs):
                 yield ret

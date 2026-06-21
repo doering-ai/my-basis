@@ -2,19 +2,20 @@
 ### HEAD ###
 ############
 ### STANDARD
+from __future__ import annotations
 from collections import Counter
 from typing import ClassVar, Any, Self
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Iterable, Iterator
 import regex as re
 import itertools as it
 import more_itertools as mi
+from copy import deepcopy
 
 ### EXTERNAL
 import pydantic as pyd
-import json
 
 ### INTERNAL
-from ..infra.types import Vec, Map, String, Atom, Struct
+from ..infra.types import Vec, Map, Atom, Struct, _Map, _Vec
 from ..utils import ut
 from ..typing import Typist, MyType, ty
 
@@ -67,6 +68,9 @@ class Predicate(pyd.BaseModel):
         **kwargs,
     ) -> Self:
         """Construct a new Predicate instance, flexibly coercing most mapping-like objects."""
+        if len(args) == 1 and isinstance(args[0], cls):
+            return args[0]
+
         ret = cls(duplicates=duplicates, overwrite=overwrite)
         for arg in (*args, kwargs):
             ret._process_arg(arg)
@@ -74,52 +78,9 @@ class Predicate(pyd.BaseModel):
         return ret
 
     @pyd.model_serializer
-    def serialize[T](
-        self,
-        fields: Iterable[str] | None = None,
-        tvar: type[T] | None = None,
-    ) -> T | dict:
-        """Cast data to one of a few supported types."""
-        fields = fields if fields is not None else self.keys()
-        source: dict[str, Any] = {field: self[field] for field in sorted(fields) if field in self}
-
-        # I. Handle the nocast and empty cases
-        if not source:
-            return source
-
-        # II. Handle trivial casting targets
-        if tvar is str:
-            return json.dumps(source, ensure_ascii=True).replace('\n', ' ')  # type:ignore
-        elif tvar == list[str]:
-            return [
-                f'"{field}": {json.dumps(val, ensure_ascii=True)}' for field, val in source.items()
-            ]  # type:ignore
-        elif tvar is Predicate:
-            return Predicate.new(source)  # type:ignore
-        elif tvar is None:
-            tvar = dict[str, Any]  # type:ignore
-
-        # III. Prepare to cast the data by parsing the tvar argument, if possible
-        target = typist.parse(tvar)
-        if not target:
-            return source
-        kvar, vvar = target.keys, target.vals
-
-        # IV. Expand nested structures into new dicts
-        if ut.any_has_any(source.keys(), '.') and (
-            vvar is None or typist.match(vvar, Mapping, intersect=True)
-        ):
-            ret = {}
-            leaves, nodes = mi.partition(lambda item: '.' in item[0], source.items())
-            ret |= dict(leaves)
-            if node_items := [(tuple(key.split('.')), values) for key, values in sorted(nodes)]:
-                ret |= self._deepen(node_items, kvar, vvar)
-        else:
-            ret = source
-
-        # V. Wrap the final product in the requested final type
-        _cast = typist.cast(ret, target)
-        return _cast if _cast is not None else source
+    def _serialize_predicate(self) -> dict[str, str | list[str] | dict]:
+        """Pydantic serializer method to convert the Predicate to its internal dict format."""
+        return self._abbreviate(self.data)
 
     # -------------------
     # `-` Private Methods
@@ -128,7 +89,7 @@ class Predicate(pyd.BaseModel):
         if not arg:
             return
         elif isinstance(arg, Predicate):
-            self += arg
+            self += deepcopy(arg.data)
         elif ty.is_model(arg):
             self += ty.cast(arg, dict, {})
         elif ty.is_map(arg):
@@ -144,16 +105,16 @@ class Predicate(pyd.BaseModel):
             raise TypeError(f'Cannot accept {type(arg)} argument to Predicate.new().')
 
     @classmethod
-    def _abbreviate(cls, data: Mapping[str, list[str] | dict]) -> dict[str, Any]:
-        """Find one-element arrays and simplify them to just be strings."""
+    def _abbreviate(cls, data: _Map[str, list[str] | dict]) -> dict[str, str | list[str] | dict]:
+        """Recursively simplify one-element arrays into strings."""
         ret: dict[str, Any] = {}
-        for field, values in data.items():
-            if isinstance(values, Mapping):
+        for field, values in dict(data).items():
+            if ty.is_map(values):
                 # I. Recursive case
-                ret[field] = cls._abbreviate(values)  # type: ignore
+                ret[field] = cls._abbreviate(dict(values))
             else:
                 # II. Decast simple, atomic types (i.e. int, float, and bool)
-                if ut.any_has_any(values, '\n'):  # type: ignore
+                if ut.any_has_any(values, '\n'):
                     values = list(map(cls._escape, values))
                 _vals = typist.flex_deserialize(values)
 
@@ -173,30 +134,31 @@ class Predicate(pyd.BaseModel):
         val: Any,
         duplicates: bool = False,
     ) -> Iterator[tuple[str, list[str]]]:
-        if isinstance(val, Mapping | Predicate):
-            prefix = f'{field}.' if field else ''
-            for c_field, c_val in val.items():
-                yield from cls._cast_arg(f'{prefix}{c_field}', c_val, duplicates)
-        else:
-            yield (field, cls._cast_to_list(val, duplicates))
-
-    @classmethod
-    def _cast_to_list(cls, val: Any, duplicates: bool = False) -> list[str]:
-        """Cast a value to a list of strings, optionally deduplicating entries.
+        """Cast an argument to a sequence of field-value pairs, handling nested structures.
 
         Args:
-            val: The value to cast.
-            duplicates: Whether to allow duplicate entries in the output list.
+            field: The base field name for this argument (used for recursion).
+            val: The value to cast, which may be a nested structure.
+            duplicates: Whether to allow duplicate values in the output lists.
         Returns:
-            A list of strings.
+            Map item iterator, where keys may include dot notation for nested structures.
         """
-        if isinstance(val, Vec) and len(val) > 0:
-            data = [(ty.cast(item, str) or '') for item in val]
-            return data if duplicates else list(mi.unique_everseen(data))
-        elif isinstance(val, Map):
-            data = [f'{k}: {v}' for k, v in ut.map_items(val)]
+        _map = ty.cast(val, dict[str, list[str]])
+        if _map is not None:
+            yield from _map.items()
+            return
+
+        if ty.is_model(val):
+            val = _map
+        if isinstance(val, Map):
+            prefix = f'{field}.' if field else ''
+            for c_field, c_val in dict(val).items():
+                yield from cls._cast_arg(f'{prefix}{c_field}', c_val, duplicates)
         else:
-            return [ty.cast(val, str) or '']
+            vec = val
+            if not duplicates:
+                vec = list(mi.unique_everseen(val))
+            yield (field, vec)
 
     @classmethod
     def _cast_to_str(cls, val: Any) -> str:
@@ -253,14 +215,14 @@ class Predicate(pyd.BaseModel):
     # -------------------
     def to_yaml(self, **kwargs) -> str:
         """Serialize the Predicate to a YAML string."""
-        return ut.to_yaml(self._abbreviate(self.serialize()), **kwargs)
+        return ut.to_yaml(self._abbreviate(self.data))
 
     @classmethod
-    def from_yaml(cls, text: str, **kwargs) -> 'Predicate':
+    def from_yaml(cls, text: str, **kwargs) -> Predicate:
         """Create a Predicate from a YAML string."""
         return cls.new(ut.from_yaml(text), **kwargs)
 
-    def write(self, field: str, value: Any, overwrite: bool | None = None):
+    def write(self, field: str, value: Atom | Struct, overwrite: bool | None = None):
         """Add a value to a field in this predicate, with custom overriding logic.
 
         Args:
@@ -374,15 +336,12 @@ class Predicate(pyd.BaseModel):
     def __ne__(self, other: object) -> bool:
         return not (self == other)
 
-    def __iadd__(self, other: Map | Self) -> Self:
+    def __iadd__(self, other: object) -> Self:
         """Add all values from another predicate into this one, appending to existing fields."""
         if not other:
             return self
-        if isinstance(other, Predicate):
-            other = other.data
-
-        if items := ut.map_items(other):
-            for key, value in items:
+        elif items := ty.cast(other, dict[str, list[str]]):
+            for key, value in items.items():
                 self.write(key, value, overwrite=False)
             return self
         else:
@@ -392,51 +351,37 @@ class Predicate(pyd.BaseModel):
         """Update this predicate with fields from another, leaving overwriting up to defaults."""
         if not other:
             return self
-        if isinstance(other, Predicate):
-            other = other.data
-
-        if items := ut.map_items(other):
+        elif items := ty.cast(other, dict[str, list[str]]):
             for key, value in items:
                 self.write(key, value)
             return self
         else:
             raise TypeError(f'Cannot merge {type(other)} into Predicate')
 
-    def __iand__(self, other: Map | _Series[str] | Self) -> Self:
+    def __iand__(self, other: Map | Vec | Self) -> Self:
         """Remove all values from this predicate that aren't present in the other."""
-        if isinstance(other, Predicate):
-            other = other.data
-
         if not other:
             self.data.clear()
-        elif isinstance(other, Series) and typist.all_are(other, str):
+        elif ty.check(other, _Vec[str]):
             for key in self.keyset - set(other):
                 del self.data[key]
         else:
-            if isinstance(other, Predicate):
-                pred = other
-            else:
-                pred = Predicate.new(other, duplicates=self.duplicates)
-
+            #     rhs = ty.cast(other, dict[str, list[str]])
+            pred = Predicate.new(other, duplicates=self.duplicates)
             shared_keys = self.keyset & pred.keyset
             self.data = {key: ut.common_elements(self[key], pred[key]) for key in shared_keys}
         return self
 
-    def __isub__(self, other: Map | _Series[str] | Self) -> Self:
+    def __isub__(self, other: Map | Vec | Self) -> Self:
         """Remove values from this predicate that are present in the other."""
-        if isinstance(other, Predicate):
-            other = other.data
-
         if not other:
-            pass
-        elif isinstance(other, Series) and typist.all_are(other, str):
+            return self
+        elif ty.check(other, _Vec[str]):
             for key in self.keyset & set(other):
                 del self.data[key]
-        else:
-            if not isinstance(other, Predicate):
-                other = Predicate.new(other, duplicates=self.duplicates)
-            for key in self.keyset & other.keyset:
-                self.data[key] = [v for v in self.data[key] if v not in other[key]]
+        elif items := ty.cast(other, dict[str, list[str]]):
+            for key in self.keyset & set(items.keys()):
+                self.data[key] = [v for v in self.data[key] if v not in items[key]]
                 if len(self.data[key]) == 0:
                     del self.data[key]
         return self
@@ -451,12 +396,12 @@ class Predicate(pyd.BaseModel):
         ret |= other
         return ret
 
-    def __and__(self, other: Map | _Series[str] | Self) -> Self:
+    def __and__(self, other: Map | Vec | Self) -> Self:
         ret = self.model_copy(deep=True)
         ret &= other
         return ret
 
-    def __sub__(self, other: Map | _Series[str] | Self) -> Self:
+    def __sub__(self, other: Map | Vec | Self) -> Self:
         ret = self.model_copy(deep=True)
         ret -= other
         return ret
@@ -536,11 +481,14 @@ class Predicate(pyd.BaseModel):
     # -------------
     # `*3` Mutators
     # -------------
-    def add_to_set(self, field: str, value: Any):
-        """Add a value to the set of values for a given field, creating it if necessary."""
-        _val = self._cast_to_list(value, duplicates=False)
-        if field not in self.data:
-            self.data[field] = _val
-        else:
-            target = self.data[field]
-            target.extend(it.filterfalse(target.__contains__, _val))
+    def add_to_set(self, field: str, value: Any) -> None:
+        """Add a value to the set of values for a given field, creating it if necessary.
+
+        Args:
+            field: The field to add the value to.
+            value: The value to add, which will be cast to a string and added if not present.
+        """
+        new = ty.cast(value, list[str])
+        if new is None:
+            raise TypeError(f'Cannot cast {value} to list[str] for field {field}.')
+        self.data[field] = list(mi.unique_everseen([*self.data.get(field, []), *new]))

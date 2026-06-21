@@ -32,7 +32,7 @@ from ..conftest import boolmap
 ############
 cls = MyType
 
-Expected = tuple[type, ...] | type | None
+Expected = type | tuple[type, ...] | None
 
 
 class BaseEnum(Enum):
@@ -53,19 +53,26 @@ class TestMyType:
     # ------------
     def check_inst(self, inst: MyType | None, exp: Expected):
         """Helper method for checking expectations against an instance."""
+        # I.i. Handle expectations of failure and invalid instances
         if exp is None:
-            assert not inst
+            assert inst is None
             return
-        assert inst is not None
+        else:
+            assert inst is not None
+
+        # I.ii. Normalize to a tuple of types
         if not isinstance(exp, tuple):
             exp = (exp,)
 
         if inst.is_split:
+            # II.i. For split types, the args should match the expected types
             assert len(exp) == 1
             found_args = {arg.root for arg in inst.args}
             exp_union_args = {arg.root for arg in cls.parse(exp[0]).args}
             assert found_args == exp_union_args
         elif len(exp) == 1:
+            # II.ii. For non-split types, the main should match the expected type and there should
+            # be no args
             assert inst.main is exp[0]
             assert not inst.vals
             assert not inst.keys
@@ -125,12 +132,14 @@ class TestMyType:
             (dict[str, list[str]], (dict, str, (list, str))),
             (dict[int, dict[str, float]], (dict, int, (dict, str, float))),
             (Mapping[str, int], (Mapping, str, int)),
-            # ---- Wrappers ----
-            (Annotated[list[int], 5], (list, int)),
-            (Annotated[list[int], dict[int, int]], (list, int)),
-            (Annotated[str, 'metadata'], str),
             (Counter[str], (Counter, str, int)),
             (Counter, (Counter, None, int)),
+            # ---- Wrappers ----
+            (Annotated[list[int], None], (list, int)),
+            (Annotated[list[int], 5], (list, int)),
+            (Annotated[list[int], dict[int, int], 5], (list, int)),
+            (Annotated[str, 'metadata'], str),
+            (Unpack[tuple[dict[str, int], int]], [(dict, str, int), int]),
             # ---- Nested generics ----
             (list[list[int]], (list, (list, int))),
             (dict[str, list[int]], (dict, str, (list, int))),
@@ -234,8 +243,6 @@ class TestMyType:
             # ---- Super new TypeTuples (idiomatically speaking) ----
             ((str, int, float), [str, int, float]),
             ((dict[str, int], int), [(dict, str, int), int]),
-            # ---- Unpack isn't technically split, but is handled the same ----
-            (Unpack[tuple[dict[str, int], int]], [(dict, str, int), int]),
             # ---- Complex unions with nested generics ----
             (Optional[str], [str, None]),  # noqa: UP045
             (Optional[list[int]], [(list, int), None]),  # noqa: UP045

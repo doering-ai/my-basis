@@ -40,7 +40,7 @@ from ..infra.types import (
     Model,
 )
 from ..utils import ut
-from .MyType import MyType
+from .MyType import MyType, TypeArg
 from .typematch import TypeMatch
 from .typecast import TypeCast, Transform
 from .typecheck import TypeCheck
@@ -48,9 +48,6 @@ from .typecheck import TypeCheck
 ############
 ### DATA ###
 ############
-# Type Aliases
-TypeArg = type | tuple[type, ...] | None | MyType
-
 # Misc aliases
 File = pyd.FilePath
 Directory = pyd.DirectoryPath
@@ -208,24 +205,36 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
     class Options(pyd.BaseModel):
         """Options for controlling the behavior of typecasting."""
 
-        #: Whether to flexibly cast all vecotrs to atoms, based on their first element.
-        firsts: bool = False
-        #: Whether to flexibly cast len=1 vecotrs to atoms.
-        atomics: bool = False
-        #: Whether to split up strings when casting them to vectors.
-        splits: bool = False
-        #: Whether to flexibly wrap atoms when casting them to vectors.
-        wraps: bool = False
+        #: `Vec -> Atom` Whether to flexibly cast all vectors to atom using their first element.
+        #: e.g. `[1, 2, 3] -> 1`; `['a', 'b'] -> 'a'`; `{'a': 1} -> 'a'`
+        headen: bool = False
+
+        #: `String -> Struct` Whether to split up strings when casting them to vectors.
+        #: e.g. `'1,2,3' -> ['1', '2', '3']`; `'a.b.c' -> ['a', 'b', 'c']`
+        split: bool = False
+
+        #: Whether to flexibly wrap atoms when casting them to vectors, and vis-versa.
+        #: e.g.
+        wrap: bool = False
+
+        #: `String -> Struct` Try out formats (e.g. .yaml, .csv, .env) when deserializing
+        #: e.g.
+        parse: bool = False
+
+        #: `Map[K, Struct | ...] <-/-> Map[K, ...]` Flatten & raze nested structs.
+        #: e.g. `{'map': {'key': 'val'}, 'vec': [['first', 'second'], 'outer']}`
+        #: `  -> {'map.key': 'val', 'vec.0.0: 'first', 'vec.0.1: 'second', 'vec.1': 'outer' }`
+        stack: bool = True
 
         @classmethod
         def preset(cls, level: Literal['strict', 'basic', 'flex'] = 'basic') -> Self:
             """Get a preset configuration for typecasting behavior."""
             if level == 'strict':
-                return cls(atomics=False, firsts=False, splits=False, wraps=False)
+                return cls(headen=False, split=False, wrap=False)
             elif level == 'basic':
-                return cls(atomics=True, firsts=False, splits=True, wraps=False)
+                return cls(headen=False, split=True, wrap=False)
             elif level == 'flex':
-                return cls(atomics=True, firsts=True, splits=True, wraps=True)
+                return cls(headen=True, split=True, wrap=True)
             else:
                 raise ValueError(f'Invalid preset level: {level}')
 

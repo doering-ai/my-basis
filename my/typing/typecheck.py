@@ -2,12 +2,11 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import overload, TypeIs, is_typeddict, Literal, Any, TypeGuard
+from typing import overload, TypeIs, Literal, Any, TypeGuard
 from collections.abc import Iterator
 from types import EllipsisType, NoneType
 from collections.abc import Iterable, Callable, Hashable
 from enum import Enum
-from dataclasses import is_dataclass
 import inspect
 import functools as ft
 
@@ -36,6 +35,7 @@ from .MyType import MyType, TypeArg
 from ._TypingBase import _TypingBase
 from ..utils import ut
 from .typematch import tym
+from .SpecialForm import SpecialForm
 
 
 ############
@@ -67,25 +67,29 @@ class TypeCheck[T0, T1](_TypingBase, pyd.BaseModel):
     # -------------------
     def __call__(self) -> bool:
         """Determine whether the given data is a valid instance of the given type."""
-        name = getattr(self.t0.origin, '__name__', '')
+        mtv, tv = self.t1, self.t1.main
+        if tv is None:
+            return True
 
-        # I. Special Forms
-        if name in MyType.FILTERS.universal:
-            return True
-        elif self.t0.origin and name in MyType.FILTERS.unhandled:
-            return False
-        if not self.t1:
-            return True
-        elif self.data is None:
-            return self.root is NoneType
-        elif self.data is Ellipsis:
-            return self.root is EllipsisType
+        print(mtv, tv)
 
         # II. Composite types
         if self.t1.is_split:
             return any(option.check(self.data) for option in self.t1.args)
         elif self.t1.literal_members:
             return self.is_literal(self.data, self.t1)
+
+        # I. Special Forms
+        match SpecialForm.match(self.t1):
+            case SpecialForm.UNIV:
+                return True
+            case SpecialForm.NONE:
+                return False
+            case SpecialForm.TYPE:
+                if self.data is None:
+                    return tvar is NoneType
+                elif self.data is Ellipsis:
+                    return tvar is EllipsisType
 
         # III. Main cases: normal types, probably nested
         if self.t1.main is None or not isinstance(self.data, self.t1.main):
@@ -108,91 +112,25 @@ class TypeCheck[T0, T1](_TypingBase, pyd.BaseModel):
     # ------------------
     # `*` Public Methods
     # ------------------
-    # ---- STREAM ----
-    @overload
-    @classmethod
-    def is_stream_type(cls, tvar: MyType) -> TypeIs[MyType[Stream]]: ...
-    @overload
-    @classmethod
-    def is_stream_type(cls, tvar: type) -> TypeIs[type[Stream]]: ...
-    @classmethod
-    def is_stream_type(cls, tvar: MyType | type) -> bool:
-        """Determine if a variable is a Stream type."""
-        return bool(main := MyType.new(tvar).main) and issubclass(main, Stream)
-
     @classmethod
     def is_stream(cls, data: object) -> TypeIs[Stream]:
         """Determine if a variable is a buff."""
         return isinstance(data, Stream)
-
-    # ---- STRING ----
-    @overload
-    @classmethod
-    def is_string_type(cls, tvar: MyType) -> TypeIs[MyType[String]]: ...
-    @overload
-    @classmethod
-    def is_string_type(cls, tvar: type) -> TypeIs[type[String]]: ...
-    @classmethod
-    def is_string_type(cls, tvar: MyType | type) -> bool:
-        """Determine if a variable is a String type."""
-        return bool(main := MyType.new(tvar).main) and issubclass(main, String)
 
     @classmethod
     def is_string(cls, data: object) -> TypeIs[String]:
         """Determine if a variable is a text."""
         return isinstance(data, String)
 
-    # ---- SCALAR ----
-    @overload
-    @classmethod
-    def is_scalar_type(cls, tvar: MyType) -> TypeIs[MyType[Scalar]]: ...
-    @overload
-    @classmethod
-    def is_scalar_type(cls, tvar: type) -> TypeIs[type[Scalar]]: ...
-    @classmethod
-    def is_scalar_type(cls, tvar: MyType | type) -> bool:
-        """Determine if a variable is a Scalar type."""
-        return bool(main := MyType.new(tvar).main) and issubclass(main, Scalar)
-
     @classmethod
     def is_scalar(cls, data: object) -> TypeIs[Scalar]:
         """Determine if a variable is a num."""
         return isinstance(data, Scalar)
 
-    # ---- TIME ----
-    @overload
-    @classmethod
-    def is_time_type(cls, tvar: MyType) -> TypeIs[MyType[Time]]: ...
-    @overload
-    @classmethod
-    def is_time_type(cls, tvar: type) -> TypeIs[type[Time]]: ...
-    @classmethod
-    def is_time_type(cls, tvar: MyType | type) -> bool:
-        """Determine if a variable is a Time type."""
-        return bool(main := MyType.new(tvar).main) and issubclass(main, Time)
-
     @classmethod
     def is_time(cls, data: object) -> TypeIs[Time]:
         """Determine if a variable is a time."""
         return isinstance(data, Time)
-
-    # ---- ATOM ----
-    @overload
-    @classmethod
-    def is_atom_type(cls, tvar: MyType) -> TypeIs[MyType[Atom]]: ...
-    @overload
-    @classmethod
-    def is_atom_type(cls, tvar: type) -> TypeIs[type[Atom]]: ...
-    @classmethod
-    def is_atom_type(cls, tvar: MyType | type) -> bool:
-        """Determine if a variable is a Atom type."""
-        tvar = MyType.new(tvar)
-        return bool(tvar.main) and (
-            cls.is_string_type(tvar)
-            or cls.is_scalar_type(tvar)
-            or cls.is_time_type(tvar)
-            or issubclass(tvar.main, Enum)
-        )
 
     @classmethod
     def is_atom(cls, data: object) -> TypeIs[Atom]:
@@ -204,41 +142,10 @@ class TypeCheck[T0, T1](_TypingBase, pyd.BaseModel):
             or isinstance(data, Enum)
         )
 
-    # ---- VEC ----
-    @overload
-    @classmethod
-    def is_vec_type(cls, tvar: MyType) -> TypeIs[MyType[Vec]]: ...
-    @overload
-    @classmethod
-    def is_vec_type(cls, tvar: type) -> TypeIs[type[Vec]]: ...
-    @classmethod
-    def is_vec_type(cls, tvar: MyType | type) -> bool:
-        """Determine if a variable is a Vec type."""
-        return bool(main := MyType.new(tvar).main) and issubclass(main, Vec)
-
     @classmethod
     def is_vec(cls, data: object) -> TypeIs[Vec]:
         """Determine if a variable is a vec."""
         return isinstance(data, Vec)
-
-    # ---- MAP ----
-    @overload
-    @classmethod
-    def is_map_type(cls, tvar: MyType) -> TypeIs[MyType[Map]]: ...
-    @overload
-    @classmethod
-    def is_map_type(cls, tvar: type) -> TypeIs[type[Map]]: ...
-    @classmethod
-    def is_map_type(cls, tvar: MyType | type) -> bool:
-        """Determine if a variable is a Map type."""
-        tvar = MyType.new(tvar)
-        return bool(
-            tvar.main
-            and (
-                issubclass(tvar.main, Map)
-                or (cls.is_iter_type(tvar.main) and tym.match(tvar.vals, tuple[Any, Any]))
-            )
-        )
 
     @classmethod
     def is_map(cls, data: object) -> TypeIs[Map]:
@@ -262,92 +169,27 @@ class TypeCheck[T0, T1](_TypingBase, pyd.BaseModel):
             data and isinstance(data, tuple) and len(data) == 2 and isinstance(data[0], Hashable)
         )
 
-    # ---- ITER ----
-    @overload
-    @classmethod
-    def is_iter_type(cls, tvar: MyType) -> TypeIs[MyType[Iter]]: ...
-    @overload
-    @classmethod
-    def is_iter_type(cls, tvar: type) -> TypeIs[type[Iter]]: ...
-    @classmethod
-    def is_iter_type(cls, tvar: MyType | type) -> bool:
-        """Determine if a variable is a non-struct, non-atomic Iterable type (mostly iterators)."""
-        return (
-            bool(main := MyType.new(tvar).main)
-            and issubclass(main, Iter)
-            and not (cls.is_string_type(main) or cls.is_vec_type(main) or cls.is_map_type(main))
-        )
-
     @classmethod
     def is_iter(cls, data: object) -> TypeIs[Iter]:
         """Determine if a variable is an iterable that is NOT of another known type.."""
-        return isinstance(data, Iterable) and not (
-            cls.is_string(data) or cls.is_vec(data) or cls.is_map(data)
-        )
-
-    # ---- STRUCT ----
-    @overload
-    @classmethod
-    def is_struct_type(cls, tvar: MyType) -> TypeIs[MyType[Struct]]: ...
-    @overload
-    @classmethod
-    def is_struct_type(cls, tvar: type) -> TypeIs[type[Struct]]: ...
-    @classmethod
-    def is_struct_type(cls, tvar: MyType | type) -> bool:
-        """Determine if a variable is a struct type."""
-        return bool(main := MyType.new(tvar).main) and (
-            issubclass(main, Iterable) or cls.is_model_type(tvar)
+        return isinstance(data, Iterable) and not any(
+            fn(data) for fn in (cls.is_string, cls.is_vec, cls.is_map)
         )
 
     @classmethod
     def is_struct(cls, data: object) -> TypeIs[Struct]:
         """Determine if a variable is a struct."""
-        return cls.is_vec(data) or cls.is_map(data) or cls.is_model(data)
-
-    # ---- FUNC ----
-    @overload
-    @classmethod
-    def is_func_type(cls, tvar: MyType) -> TypeIs[MyType[Func]]: ...
-    @overload
-    @classmethod
-    def is_func_type(cls, tvar: type) -> TypeIs[type[Func]]: ...
-    @classmethod
-    def is_func_type(cls, tvar: MyType | type) -> bool:
-        """Determine if a variable is a Func type."""
-        return bool(main := MyType.new(tvar).main) and issubclass(main, Funcs)
+        return isinstance(data, Iterable) or cls.is_model(data)
 
     @classmethod
     def is_func(cls, data: object) -> TypeIs[Func]:
         """Determine if a variable is a func."""
         return callable(data) or isinstance(data, Funcs)
 
-    # ---- MODEL ----
-    @overload
-    @classmethod
-    def is_model_type[M: Model](cls, tvar: MyType) -> TypeIs[MyType[M]]: ...
-    @overload
-    @classmethod
-    def is_model_type[M: Model](cls, tvar: type) -> TypeIs[type[M]]: ...
-    @classmethod
-    def is_model_type(cls, tvar: MyType | type) -> bool:
-        """Determine if a variable is a model type."""
-        tvar = MyType.new(tvar)
-        main = tvar.main
-        return (
-            bool(main)
-            and inspect.isclass(main)
-            and (
-                issubclass(main, pyd.BaseModel)
-                or is_typeddict(main)
-                or pyd.dataclasses.is_pydantic_dataclass(main)
-                or is_dataclass(main)
-            )
-        )
-
     @classmethod
     def is_model(cls, data: object) -> TypeIs[Model]:
         """Determine if a variable is a model."""
-        return data is not None and cls.is_model_type(type(data))
+        return data is not None and tym.is_model_type(type(data))
 
     @classmethod
     def is_literal[L](cls, data: Any, tvar: MyType[L]) -> TypeGuard[L]:

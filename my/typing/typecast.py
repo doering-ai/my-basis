@@ -29,9 +29,10 @@ from collections.abc import (
 from collections import Counter, defaultdict, deque
 from dataclasses import is_dataclass, Field
 from datetime import date, datetime, time, timedelta, UTC
-from enum import Enum, Flag
+from enum import Enum, Flag, auto
 from io import BytesIO
 from types import FunctionType, UnionType
+import functools as ft
 import asyncio as aio
 import contextlib as ctx
 import inspect
@@ -73,14 +74,23 @@ from .MyType import MyType
 from ._common import ABSTRACT_GENERICS
 from ._TypingBase import _TypingBase
 
-# from .typematch import tym
+from .typematch import tym
 from .typecheck import tyc
 
 if TYPE_CHECKING:
     from my import Typist  # noqa
 
-Empty = type[inspect.Parameter.empty]
-empty = inspect.Parameter.empty
+
+class Empty(Enum):
+    """Sentinel value for empty arguments."""
+
+    EMPTY = auto()
+
+
+empty = Empty.EMPTY
+
+# Empty = type[inspect.Parameter.empty]
+# empty = inspect.Parameter.empty
 
 ############
 ### DATA ###
@@ -196,32 +206,33 @@ class TypeCast(_TypingBase):
     # --------------
     @overload
     @staticmethod
-    def cast[Tt0, Tt1](
-        data: Tt0,
-        target: type[Tt1] | MyType[Tt1],
-        default: Tt1,
-    ) -> Tt1: ...
+    def cast[A, B](data: A, target: type[B] | MyType[B], default: B) -> B: ...
     @overload
     @staticmethod
-    def cast[Tt0, Tt1](
-        data: Tt0,
-        target: type[Tt1] | MyType[Tt1],
-    ) -> Tt1 | None: ...
+    def cast[A, B, C](data: A, target: type[B] | MyType[B], default: C) -> B | C: ...
     @overload
     @staticmethod
-    def cast[Tt0, Tt1](
-        data: Tt0,
+    def cast[A, B](data: A, target: type[B] | MyType[B]) -> B | None: ...
+    @overload
+    @staticmethod
+    def cast[A, B](data: A, *, source: AnyType[A], target: type[B] | MyType[B]) -> B | None: ...
+    @overload
+    @staticmethod
+    def cast[A, B](
+        data: A,
+        target: type[B] | MyType[B],
         *,
-        source: AnyType[Tt0],
-        target: type[Tt1] | MyType[Tt1],
-    ) -> Tt1 | None: ...
+        source: AnyType[A] | None = None,
+        flex: Literal[True],
+    ) -> B | A: ...
     @staticmethod
-    def cast[Tt0, Tt1](
-        data: Tt0,
-        target: type[Tt1] | MyType[Tt1],
-        default: Tt1 | None = None,
-        source: AnyType[Tt0] | None = None,
-    ) -> Tt1 | None:
+    def cast[A, B](
+        data: A,
+        target: type[B] | MyType[B],
+        default: B | None | Empty = empty,
+        source: AnyType[A] | None = None,
+        flex: bool = False,
+    ) -> B | A | None:
         """Internal casting implementation that routes to specialized conversion methods.
 
         Args:
@@ -229,43 +240,18 @@ class TypeCast(_TypingBase):
             source: The MyType of the source data.
             default: The default value to return if casting fails.
             target: The target MyType to cast to.
+            flex: Whether to use "flexcasting", which falls back to any remotely-similar input data
+                rather than returning None.
         Returns:
             Cast data if successful, None otherwise.
         """
-        tr = Transform(data, target, source)
-        ret = tr()
-        return default if ret is None else ret
-
-    def multicast[V](
-        self,
-        values: Iterable[Any],
-        tvar: type[V] | MyType[V] | Any,
-        skip: bool = False,
-    ) -> list[V] | list:
-        """Cast multiple values to a target type.
-
-        Args:
-            values: Iterable of values to cast.
-            tvar: The target type to cast to.
-            skip: If True, skip failed casts; if False, raise TypeError on failure.
-        Returns:
-            List of cast values (or original values if skip=True).
-        """
-        # I. Parse the type once
-        target = MyType.parse(tvar)
-
-        # II. Cast the contents iteratively, either skipping failures or throwing TypeError
-        ret = []
-        for value in values:
-            if value is None:
-                ret.append(None)
-            elif (result := self.cast(value, target)) is not None:
-                ret.append(result)
-            elif skip:
-                continue
-            else:
-                raise TypeError(f'Cannot cast value `{value}` to type `{tvar}`.')
-        return ret
+        res = Transform(data, target, source)()
+        if res is not None:
+            return res
+        elif not isinstance(default, Empty):
+            return default
+        elif flex:
+            return data
 
     @overload
     @classmethod
@@ -394,6 +380,14 @@ class Transform[T0, T1](_TypingBase, pyd.BaseModel):
         with ctx.suppress(Exception):
             return t1(data)  # type: ignore[bad-return]
 
+    @ft.cached_property
+    def map_items(self: Transform) -> list[tuple[Any, Any]] | None:
+        """An already-typecast list of key:val pairs, or None for any non-mapping type."""
+        if tyc.is_model(self.data):
+            return ut.map_items(self.to(dict) or {})
+        elif tyc.is_map(self.data):
+            return ut.map_items(self.data)
+
     # -------------------
     # `-` Private Methods
     # -------------------
@@ -449,35 +443,24 @@ class Transform[T0, T1](_TypingBase, pyd.BaseModel):
             val = val.decode()
         return val
 
-    def _to_str(self) -> str | None:
-        return tyt.cast(self.data, source=self.t0, target=str)
-
     @register
     def _string_to_scalar[S: String, T: Scalar](self: Transform[S, T]) -> Scalar | None:
-        if (text := self._to_str()) is None:
+        if (text := self.to(str)) is None:
             return
-        elif issubclass(self._t1, bool) and self.RGXS['bool'].fullmatch(text):
-            return self.RGXS['bool_true'].fullmatch(text) is not None
+        elif issubclass(self._t1, bool):
+            if self.RGXS['bool'].fullmatch(text):
+                return self.RGXS['bool_true'].fullmatch(text) is not None
         else:
-            return self._try_to_deserialize(text)
-
-    @register
-    def _object_to_int[S: Scalar, T: Scalar](self: Transform[S, T]) -> Scalar | None:
-        pass
+            return self.flex_deserialize(text)
 
     @register
     def _atom_to_scalar[S: Atom, T: Scalar](self: Transform[S, T]) -> Scalar | None:
-        if (val := self._to_str()) is None:
-            pass
-        elif issubclass(self._t1, bool) and self.RGXS['bool'].fullmatch(val):
-            return self.RGXS['bool_true'].fullmatch(val) is not None
-        else:
-            return self._try_to_deserialize(val)
+        return self.by(str)
 
     @register
     def _string_to_time[S: String, T: Time](self: Transform[S, T]) -> Time | None:
         # I. Normalize & analyze data
-        data = self._to_str()
+        data = self.to(str)
         if data is None:
             return None
         elif (ret := tyt.cast(data, float)) is not None:
@@ -522,19 +505,19 @@ class Transform[T0, T1](_TypingBase, pyd.BaseModel):
 
     @register
     def _string_to_map[S: String, T: Map](self: Transform[S, T]) -> Map | None:
-        data = tyt.cast(self.data, str)
-        if data:
+        if not (text := self.to(str)):
+            return
+        if text:
             with ctx.suppress(Exception):
-                return ut.from_yaml(data, dict)
+                return self.proxy(ut.from_yaml(text, dict))
 
     @register
     def _string_to_vec[S: String, T: Vec](self: Transform[S, T]) -> Vec | None:
-        text = self.to(str)
-        if not text:
+        if not (text := self.to(str)):
             return
 
         options = self.ty.options
-        if options.splits and options.wraps:
+        if options.split:
             if match := self.RGXS['brackets'].fullmatch(text.strip()):
                 # I. Split json/yaml-like flow sequences
                 with ctx.suppress(Exception):
@@ -549,12 +532,8 @@ class Transform[T0, T1](_TypingBase, pyd.BaseModel):
                 #     e.g. one.oneA:two splits on colons, but one.oneA splits on periods
                 return list(filter(bool, map(str.strip, text.split(char))))
 
-        if options.wraps:
+        if options.wrap:
             return [text]
-
-    @register
-    def _string_to_struct[S: String, T: Struct](self: Transform) -> T | None:
-        return None
 
     @register
     def _scalar_to_string[S: Scalar, T: String](self: Transform) -> T | None:
@@ -690,8 +669,7 @@ class Transform[T0, T1](_TypingBase, pyd.BaseModel):
 
     @register
     def _string_to_flag[S: String, T: Flag](self: Transform[S, T]) -> T | None:
-        text = self._to_str()
-        if text is None:
+        if not (text := self.to(str)):
             return
         elif match := self.RGXS['csv'].fullmatch(text.strip()):
             raw_members = match.captures('w')
@@ -709,9 +687,9 @@ class Transform[T0, T1](_TypingBase, pyd.BaseModel):
 
     @register
     def _string_to_enum[S: String, T: Enum](self: Transform[S, T]) -> str | Enum | None:
-        text = (self._to_str() or '').strip()
-        if not text:
+        if not (text := self.to(str)):
             return
+        text = text.strip()
         members = dict(self._t1.__members__)
         if (
             self.t1.vals
@@ -761,7 +739,7 @@ class Transform[T0, T1](_TypingBase, pyd.BaseModel):
 
         if not (d := list(self.data)):
             pass
-        elif len(d) == 1 and (_vt := self.t0.vals) and tyc.is_atom_type(_vt):
+        elif len(d) == 1 and (_vt := self.t0.vals) and tym.is_atom_type(_vt):
             # I. Unwrap monotomic lists
             return self.proxy(d[0])
         elif len(d) >= 3:
@@ -783,20 +761,20 @@ class Transform[T0, T1](_TypingBase, pyd.BaseModel):
 
     @register
     def _vec_to_vec[S: Vec, T: Vec](self: Transform[S, T]) -> list | None:
-        if self.t0.vals and self.t0.vals != self.t1.vals:
-            return self.ty.multicast(self.data, self.t1.vals, skip=False)
+        if self.t1.vals and self.t0.vals != self.t1.vals:
+            return tyt.cast(self.data, self.t1.vals)
         return self.to(list)
 
     @register
-    def _vec_to_map[S: Vec, T: Map](self: Transform[S, T]) -> dict | None:
+    def _vec_to_map[S: Vec, T: Map](self: Transform[S, T]) -> dict | Counter | None:
         if tyc.is_map(self.data):
             # I. Cast item lists (i.e. lists of 2-tuples)
             return dict(self.data)
 
         elif issubclass(self._t1, Counter):
             # II. Cast counters, the only map type that takes an iter of single items
-            if _kt := self.t1.keys:
-                return Counter(self.ty.multicast(self.data, _kt, skip=False))
+            if (kt := self.t1.keys) and (raw_kt := kt.main):
+                return self.ty.cast(self.data, Counter[raw_kt])
 
     @register
     def _vec_to_iter[S: Vec, T: Iter](self: Transform[S, T]) -> Iterator | AsyncIterator | None:
@@ -834,32 +812,40 @@ class Transform[T0, T1](_TypingBase, pyd.BaseModel):
         return None
 
     @register
-    def _map_to_vec[S: Map, T: Vec](self: Transform[S, T]) -> list | None:
-        items = ut.map_items(self.data)
-
-        if not self.t1.vals:
+    def _map_to_vec[S: Map, T: Vec](self: Transform[S, T]) -> list | T | None:
+        v0, v1 = self.t0.vals, self.t1.vals
+        if not self.map_items or not v1:
             # I. Without guidance, skip casting altogether
-            return items
-        elif self.t1.vals.match(self.t0):
+            return self.map_items
+        elif tym.is_string_type(v1):
+            return [f'{k}: {v}' for k, v in self.map_items]
+        elif tym.is_map_type(v1) and self.ty.options.wrap:
             # II. Wrap objects in lists
-            return [self.data]
-        elif self.ty.match(self.t1.vals, tuple[Any, Any]):
+            return [self.map_items]
+        elif tym.is_map_item_type(v1):
             # III. Cast items as tuples of (key, value) pairs
-            return self.ty.multicast(items, self.t1.vals, skip=False)
-        else:
-            # IV. Cast items as keys only, mimicing python default behavior
-            return self.ty.multicast((k for k, _ in items), self.t1.vals, skip=False)
+            return self.proxy(self.map_items)
+        elif tym.is_atom_type(v1):
+            # IV. Just take values or keys if either matches
+            if tym.match(v0, v1):
+                return [v for _, v in self.map_items]
+            elif tym.match(self.t0.keys, self.t1.vals):
+                return [k for k, _ in self.map_items]
+
+        return self.proxy(self.map_items)
 
     @register
     def _map_to_map[S: Map, T: Map](self: Transform[S, T]) -> Map | None:
         if not (items := ut.map_items(self.data)):
-            return
+            return None if items is None else dict()
 
-        keys, values = mi.unzip(items)
-        if self.t1.keys:
-            keys = self.ty.multicast(keys, self.t1.keys, skip=False)
-        if self.t1.vals:
-            values = self.ty.multicast(values, self.t1.vals, skip=False)
+        keys, values = map(list, mi.unzip(items))
+        k1 = self.t1.keys and self.t1.keys.rtype
+        v1 = self.t1.vals and self.t1.vals.rtype
+        if k1:
+            keys = tyt.cast(keys, list[k1])
+        if v1:
+            values = tyt.cast(keys, list[v1])
         data = dict(zip(keys, values, strict=True))
 
         # Handle special cases here
@@ -885,7 +871,7 @@ class Transform[T0, T1](_TypingBase, pyd.BaseModel):
             ret = list(data)
 
         if self.t1.vals:
-            return self.ty.multicast(ret, self.t1.vals, skip=False)
+            return self.ty.multicast(ret, self.t1.vals)
         return ret
 
     @register
@@ -926,11 +912,6 @@ class Transform[T0, T1](_TypingBase, pyd.BaseModel):
                 for f in self._model_fields(self._t1)
                 if (val := getattr(self.data, f, empty) is not empty)
             }
-
-        if not ret:
-            return {}
-        elif isinstance(ret, dict):
-            return self.proxy(ret)
 
         return self.proxy(ret)
 
@@ -1049,7 +1030,7 @@ class Transform[T0, T1](_TypingBase, pyd.BaseModel):
             return ret
 
     @classmethod
-    def _try_to_deserialize(cls, text: str) -> Scalar | None:
+    def flex_deserialize(cls, text: str) -> Scalar | None:
         for stype in Scalars:
             name = stype.__name__
             if name in cls.RGXS and cls.RGXS[name].fullmatch(text):
@@ -1168,11 +1149,11 @@ class Transform[T0, T1](_TypingBase, pyd.BaseModel):
 
         new_main = None
         if main in ABSTRACT_GENERICS['maps']:
-            new_main = _dt.main if tyc.is_map(data) and (_dt := MyType.parse(type(data))) else dict
+            new_main = _dt.main if tyc.is_map(data) and (_dt := MyType(type(data))) else dict
         elif main in ABSTRACT_GENERICS['sets']:
             new_main = set
         elif main in ABSTRACT_GENERICS['vecs']:
-            new_main = _dt.main if tyc.is_vec(data) and (_dt := MyType.parse(type(data))) else list
+            new_main = _dt.main if tyc.is_vec(data) and (_dt := MyType(type(data))) else list
 
         if new_main is not None:
             return cls._derive_container(target, new_main)
@@ -1187,7 +1168,7 @@ class Transform[T0, T1](_TypingBase, pyd.BaseModel):
             if (ret := cls._ty().invoke(read_method, data)) is not None:
                 return ret
 
-    def to[Tt1](self, t1: AnyType[Tt1]) -> Tt1 | None:
+    def to[B](self, t1: AnyType[B]) -> B | None:
         """Shorthand for casting our current data to an interim type."""
         return tyt.cast(self.data, source=self.t0, target=t1)
 

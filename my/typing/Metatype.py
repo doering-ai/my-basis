@@ -66,6 +66,8 @@ from datetime import date, datetime, time, timedelta
 from dataclasses import dataclass
 import itertools as it
 import functools as ft
+from inspect import isclass
+from io import BytesIO, StringIO
 import more_itertools as mi
 
 ### MODULAR
@@ -109,11 +111,57 @@ _ATOMS: tuple[Metatype, ...] = ()
 _OBJECTS: tuple[Metatype, ...] = ()
 _FORMS: tuple[Metatype, ...] = ()
 
+_idx_data: dict[str, Any] = {
+    '0': Object,
+    '1': Atom,
+    '11': String,
+    '111': str,
+    '112': bytes,
+    '113': Stream,
+    '1131': bytearray,
+    '1132': memoryview,
+    '1133': IO,
+    '11331': StringIO,
+    '11332': BytesIO,
+    '12': Scalar,
+    '121': int,
+    '122': float,
+    '123': complex,
+    '124': bool,
+    '13': Enum,
+    '131': Flag,
+    '14': Time,
+    '141': date,
+    '142': time,
+    '143': datetime,
+    '144': timedelta,
+    '2': Struct,
+    '21': Vec,
+    '211': list,
+    '212': tuple,
+    '213': Set,
+    '214': deque,
+    '22': Map,
+    '221': Mapping,
+    '222': ItemsView,
+    '23': Iter,
+    '231': Iterable,
+    '232': AsyncIterable,
+    '24': Model,
+    '241': BaseModel,
+    '242': Dataclass,
+    '3': Func,
+    '31': FunctionType,
+    '32': BuiltinFunctionType,
+    '33': Callable,
+}
+MyType.IDXS = ut.val_map(MyType, _idx_data)
+
 
 ############
 ### BODY ###
 ############
-class Metatype(Enum):
+class Metatype[T]:
     __match_args__ = ('value',)
 
     # ---- Atoms ----

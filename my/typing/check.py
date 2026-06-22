@@ -94,13 +94,11 @@ class TypeCheck[T0, T1](_TypingBase, pyd.BaseModel):
                 return _target is NoneType and _data is None
             case _data, _target, _ if _target is NoneType or _data is None:
                 return _target is EllipsisType and _data is Ellipsis
-            case None, _, meta:
-                return meta == Meta.NEVER
             case _, _, Meta.UNIV:
                 return True
             case _, _, Meta.NONE:
                 return False
-            case _, _target, Meta.TYPE:
+            case _data, _target, Meta.TYPE:
                 if _target is EllipsisType:
                     return self.data is Ellipsis
                 return False

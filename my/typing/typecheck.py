@@ -35,7 +35,7 @@ from .MyType import MyType, TypeArg
 from ._TypingBase import _TypingBase
 from ..utils import ut
 from .typematch import tym
-from .SpecialForm import SpecialForm
+from .Metatype import Metatype as Meta
 
 
 ############
@@ -66,32 +66,46 @@ class TypeCheck[T0, T1](_TypingBase, pyd.BaseModel):
     # `.` Initial Methods
     # -------------------
     def __call__(self) -> bool:
-        """Determine whether the given data is a valid instance of the given type."""
-        mtv, tv = self.t1, self.t1.main
-        if tv is None:
-            return True
+        """Determine whether the given data is a valid instance of the given type.
 
-        print(mtv, tv)
+        This serves as the primary interface for the vast majority of caller usecases.
+        """
+        # I. Setup, validate 
+        target, args = self.t1.main, self.t1.args
+        if target is None:
+            return True
 
         # II. Composite types
         if self.t1.is_split:
-            return any(option.check(self.data) for option in self.t1.args)
+            return any(option.check(self.data) for option in )
         elif self.t1.literal_members:
             return self.is_literal(self.data, self.t1)
 
-        # I. Special Forms
-        match SpecialForm.match(self.t1):
-            case SpecialForm.UNIV:
-                return True
-            case SpecialForm.NONE:
+        # III. Special Forms
+        match self.data, target, Meta(target):
+            # III.i. `None` shortcuts
+            case None, _target, _:
+                return target is NoneType
+            case _data, None, _:
                 return False
-            case SpecialForm.TYPE:
-                if self.data is None:
-                    return tvar is NoneType
-                elif self.data is Ellipsis:
-                    return tvar is EllipsisType
 
-        # III. Main cases: normal types, probably nested
+            # III.ii. `types` Shortcuts shortcuts
+            case _data, _target, _ if _target is NoneType or _data is None:
+                return _target is NoneType and _data is None
+            case _data, _target, _ if _target is NoneType or _data is None:
+                return _target is EllipsisType and _data is Ellipsis
+            case None, _, meta:
+                return meta == Meta.NEVER
+            case _, _, Meta.UNIV:
+                return True
+            case _, _, Meta.NONE:
+                return False
+            case _, _target, Meta.TYPE:
+                if _target is EllipsisType:
+                    return self.data is Ellipsis
+                return False
+
+        # IV. Main cases: normal types, probably nested
         if self.t1.main is None or not isinstance(self.data, self.t1.main):
             return False
         elif self.t1.keys and self.t1.vals and self.is_map(self.data):
@@ -100,6 +114,7 @@ class TypeCheck[T0, T1](_TypingBase, pyd.BaseModel):
                 return self.check_all(keys, self.t1.keys) and self.check_all(vals, self.t1.vals)
         elif self.t1.vals and isinstance(self.data, Iterable):
             return self.check_all(self.data, self.t1.vals)
+
         return False
 
     # -------------------
@@ -173,13 +188,13 @@ class TypeCheck[T0, T1](_TypingBase, pyd.BaseModel):
     def is_iter(cls, data: object) -> TypeIs[Iter]:
         """Determine if a variable is an iterable that is NOT of another known type.."""
         return isinstance(data, Iterable) and not any(
-            fn(data) for fn in (cls.is_string, cls.is_vec, cls.is_map)
+            ut.apply((cls.is_string, cls.is_vec, cls.is_map), data)
         )
 
     @classmethod
     def is_struct(cls, data: object) -> TypeIs[Struct]:
         """Determine if a variable is a struct."""
-        return isinstance(data, Iterable) or cls.is_model(data)
+        return any(ut.apply((cls.is_vec, cls.is_map, cls.is_model), data))
 
     @classmethod
     def is_func(cls, data: object) -> TypeIs[Func]:

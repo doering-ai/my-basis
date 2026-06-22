@@ -3,7 +3,7 @@
 ############
 ### STANDARD
 from __future__ import annotations
-from typing import Any, IO
+from typing import Any, IO, get_args, get_origin
 from collections.abc import (
     Callable,
     Hashable,
@@ -13,13 +13,16 @@ from collections.abc import (
     Set,
     AsyncIterable,
 )
-from types import BuiltinFunctionType, FunctionType
+from types import BuiltinFunctionType, FunctionType, NoneType
 from collections import deque
 from datetime import date, datetime, time, timedelta
-from enum import Enum, Flag, auto
+from enum import Enum
+from array import array
+import itertools as it
 
 ### EXTERNAL
 import pydantic as pyd
+import more_itertools as mi
 
 ### INTERNAL
 
@@ -44,8 +47,9 @@ Time = date | time | datetime | timedelta
 Atom = String | Scalar | Time | Enum
 
 # ---- Structs ----
-Vec = list | tuple | Set | deque
-type _Vec[V] = list[V] | tuple[V, ...] | Set[V] | deque[V]
+
+Vec = list | tuple | Set | deque | array | range
+type _Vec[V] = list[V] | tuple[V, ...] | Set[V] | deque[V] | array | range
 
 Map = Mapping[Hashable, Any] | Iterable[tuple[Hashable, Any]] | ItemsView
 type _Map[K: Hashable, V] = Mapping[K, V] | Iterable[tuple[K, V]] | ItemsView[K, V]
@@ -57,15 +61,14 @@ Model = pyd.BaseModel | Dataclass
 Iter = Iterable | AsyncIterable
 type _Iter[T] = Iterable[T] | AsyncIterable[T]
 
-Struct = Vec | Map | Iter | Model
-type _Struct[T0, T1 = Any] = _Vec[T0] | _Map[T0, T1] | _Iter[T0] | Model
+Struct = Vec | Map | Model
+type _Struct[V, K: Hashable = Any] = _Vec[V] | _Map[K, V] | _Iter[V] | Model
 
-# ---- Funcs ----
+# ---- Misc ----
 Func = FunctionType | BuiltinFunctionType
 type _Func[**PSpec, R = Any] = Callable[PSpec, R]
 
-# ---- Object ----
-type Object = Atom | Struct | Func
+Object = Atom | Struct | Func
 
 # ----------------
 # Type Collections
@@ -74,86 +77,42 @@ Streams = (bytearray, memoryview, IO)
 Strings = (str, bytes, *Streams)
 Scalars = (int, float, complex, bool)
 Times = (date, time, datetime, timedelta)
-Atoms = (*Strings, *Scalars, *Times, Enum)
+Enums = (Enum,)
+Atoms = (*Strings, *Scalars, *Times, *Enums)
 Vecs = (list, tuple, Set, deque)
 Maps = (Mapping, ItemsView)  #: NOTE: Does not cover lists of (key, val) pairs.
-Iters = (Iterable, AsyncIterable)
-Structs = (*Vecs, *Maps, *Iters, pyd.BaseModel)
+Models = (pyd.BaseModel,)  #: NOTE: Does not cover dataclasses
+Structs = (*Vecs, *Maps, *Models)
 Funcs = (FunctionType, BuiltinFunctionType, Callable)
+Iters = (Iterable, AsyncIterable)
 Objects = (*Atoms, *Structs, *Funcs)
 TYPESET = {*Atoms, *Structs, *Funcs}
 
 
 # -----------
-# Misc
+# Exploratory
 # -----------
-# -----------------
-# Type Enumerations
-# -----------------
-class KnownType(Flag):
-    """Enum of known types for type checking and error reporting."""
+# type Pair[K: Object, T2: Object = T1] = tuple[T1, T2]
+class Pair[T1: Object, T2: Object = T1](tuple[T1, T2]):
+    """A pair of objects, potentially of different types."""
 
-    # ---- Scalars ----
-    INT = auto()
-    FLOAT = auto()
-    COMPLEX = auto()
-    BOOL = auto()
-    SCALAR = INT | FLOAT | COMPLEX | BOOL
+    @classmethod
+    def __instancecheck__(cls, val: object) -> bool:
+        return bool(
+            (isinstance(val, tuple) and len(val) == 2)
+            and all(it.starmap(isinstance, zip(val, cls._args(), strict=False)))
+        )
 
-    DATE = auto()
-    TIME = auto()
-    DATETIME = auto()
-    TIMESPAN = auto()
-    TIMES = DATE | TIME | DATETIME | TIMESPAN
-
-    STR = auto()
-    BYTES = auto()
-
-    BYTEARRAY = auto()
-    MEMORYVIEW = auto()
-    IO = auto()
-    STREAM = BYTEARRAY | MEMORYVIEW | IO
-
-    STRING = STR | BYTES | STREAM
-
-    FLAG = auto()
-    STR_ENUM = auto()
-    INT_ENUM = auto()
-    ENUM = FLAG | STR_ENUM | INT_ENUM
-
-    # ---- Structs ----
-    LIST = auto()
-    TUPLE = auto()
-    SET = auto()
-    DEQUE = auto()
-    VEC = LIST | TUPLE | SET | DEQUE
-
-    MAPPING = auto()
-    ITEMSVIEW = auto()
-    MAP = MAPPING | ITEMSVIEW
-
-    BASEMODEL = auto()
-    DATACLASS = auto()
-    MODEL = BASEMODEL | DATACLASS
-
-    STRUCT = VEC | MAP | MODEL
-
-    ITERABLE = auto()
-    ASYNCITERABLE = auto()
-    ITER = ITERABLE | ASYNCITERABLE | STRUCT
-
-    # ---- Funcs ----
-    FUNC = auto()
-
-    OBJECT = SCALAR | TIMES | STRING | ENUM | STRUCT | FUNC
+    @classmethod
+    def _args(cls) -> tuple[type, type]:
+        if args := getattr(cls, '__args__', None):
+            a0, a1 = mi.padded(args, Object)
+        else:
+            a0, a1 = Object, Object
+        return (a0 if isinstance(a0, type) else NoneType), (
+            a1 if isinstance(a1, type) else NoneType
+        )
 
 
-Series = Vec | Iter
-type _Series[T] = _Vec[T] | _Iter[T]
-Serieses = (Vecs, Iters)
-
-Pair = tuple[Any, Any]
-type _Pair[T] = tuple[T, T]
-
-Quad = tuple[Pair, Pair]
-type _Quad[T] = tuple[tuple[T, T], tuple[T, T]]
+type Quad[T1, T2 = T1] = tuple[Pair[T1, T2], Pair[T1, T2]]
+type Oct[T1, T2 = T1] = tuple[Quad[T1, T2], Quad[T1, T2]]

@@ -164,14 +164,11 @@ class SpecialForm(Enum):
     )
 
     @classmethod
-    def __class_getitem__(cls, item: object) -> SpecialForm:
+    def __new__(cls, tvar: object | None = None) -> SpecialForm:
         """Return the filter that matches this name."""
-        return cls.classify(item)
-
-    @classmethod
-    def classify(cls, tvar: str | object | None) -> SpecialForm:
-        """Return the filter that matches this name."""
-        if isinstance(tvar, str):
+        if not tvar:
+            return cls.NULL
+        elif isinstance(tvar, str):
             name = tvar
         else:
             name = str(ut.get_one(tvar.__dict__, '__name__', 'name') or tvar)

@@ -30,6 +30,11 @@ class _TypingBase(pyd.BaseModel):
 
     @staticmethod
     def _ty() -> Typist:
+        """The static interface for MATCHING, CHECKING, and TRANSFORMING types.
+
+        This is a helper method to avoid circular imports between the type action files and the
+        Typist class.
+        """
         if not hasattr(_TypingBase, 'TY'):
             from .Typist import typist
 

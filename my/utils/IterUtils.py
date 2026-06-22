@@ -13,21 +13,31 @@ from collections.abc import (
     Mapping,
     Sequence,
     MutableSequence,
+    AsyncIterator,
 )
-from types import FunctionType
+from types import FunctionType, UnionType
 from collections import Counter, defaultdict
 import functools as ft
+from datetime import date, time, datetime, timedelta, UTC
+import itertools as it
+import asyncio as aio
 
 ### EXTERNAL
 import more_itertools as mi
 
 ### INTERNAL (NOTE: If adding new internal imports, update the comments in `__init__.py`)
 from ..infra.types import (
+    _Vec,
     Vec,
     Map,
     _Map,
     Func,
     Model,
+    String,
+    Iter,
+    _Iter,
+    Struct,
+    _Struct,
 )
 from ._UtilsBase import _UtilsBase
 
@@ -219,17 +229,6 @@ class IterUtils(_UtilsBase):
         return list(cls.predicate(items, pred))
 
     @classmethod
-    def predicate[P](cls, items: Iterable[P], *preds: Pred[P]) -> Iterator[P]:
-        """Filter items by one or more predicates, yielding matches.
-
-        Args:
-            items: Iterable to filter.
-            *preds: Predicates to apply (value, iterable, or function).
-        """
-        fns = list(map(cls.normalize_predicate, preds))
-        yield from (item for item in items if all(cls.chain_map(fns, item)))
-
-    @classmethod
     def normalize_predicate[P](cls, pred: Pred[P]) -> Callable[[P], bool]:
         """Convert a predicate that may be a value, iterable, or function into a standard function.
 
@@ -239,10 +238,23 @@ class IterUtils(_UtilsBase):
         match pred:
             case Func():
                 return pred
-            case Iterable():
-                return set(pred).__contains__
+            case Container():
+                return pred.__contains__
+            case Iterator():
+                return lambda v: any(cls.apply(pred, v))
             case _:
-                return pred.__eq__
+                return lambda v: pred == v or pred is v
+
+    @classmethod
+    def predicate[P](cls, items: Iterable[P], *preds: Pred[P]) -> Iterator[P]:
+        """Filter items by one or more predicates, yielding matches.
+
+        Args:
+            items: Iterable to filter.
+            *preds: Predicates to apply (value, iterable, or function).
+        """
+        fns = list(map(cls.normalize_predicate, preds))
+        yield from (item for item in items if all(cls.apply(fns, item)))
 
     @classmethod
     def map_condense[K: Hashable, V](
@@ -295,39 +307,33 @@ class IterUtils(_UtilsBase):
         """
         if ret := cls.ty.cast(data, dict):
             fns = tuple(map(cls.normalize_predicate, args))
-            return dict(cls.map_condense(ret, lambda k: any(cls.chain_map(fns, k))))
+            return dict(cls.map_condense(ret, lambda k: any(cls.apply(fns, k))))
         else:
             return {}
 
     @overload
     @classmethod
-    def get_one[K: Hashable, V](
-        cls,
-        data: dict[K, V],
-        *args: K,
-        default: V,
-        unique: bool = False,
-    ) -> V:
+    def get_first[K, V](cls, data: _Map[K, V], *args: K | Callable[[K], bool], default: V) -> V: ...
     @overload
     @classmethod
-    def get_one[K: Hashable, V](
-        cls,
-        data: dict[K, V],
-        *args: K,
-        unique: bool = False,
-    ) -> V | None:
+    def get_first[K, V](cls, data: _Map[K, V], *args: K | Callable[[K], bool]) -> V | None: ...
+    @overload
     @classmethod
-    def get_one[K: Hashable, V](
+    def get_first[V](cls, data: Iterable[V], *args: V | Callable[[V], bool], default: V) -> V: ...
+    @overload
+    @classmethod
+    def get_first[V](cls, data: Iterable[V], *args: V | Callable[[V], bool]) -> V | None: ...
+    @classmethod
+    def get_first(
         cls,
-        data: dict[K, V],
-        *args: K,
-        default: V | None = None,
-        unique: bool = False,
-    ) -> V | None:
-        """Get value for first matching key from dictionary.
+        data: Struct | Iterator,
+        *args: object,
+        default: object | None = None,
+    ) -> object | None:
+        """Get value for first matching value from the container.
 
         Args:
-            data: Dictionary to search.
+            data: Structure to search.
             *args: Keys to try in order.
             default: Default value if no keys found (default: None).
             unique: If True, raise error if multiple keys found (default: False).
@@ -336,13 +342,55 @@ class IterUtils(_UtilsBase):
         Raises:
             ValueError: If unique=True and multiple keys match.
         """
-        ret: dict[K, V] = {key: data[key] for key in args if data.get(key, default) != default}
-        if len(ret) == 0:
-            return default
-        if len(ret) > 1 and unique:
-            raise ValueError(f'Multiple keys found in dictionary: {ret.keys()}')
-        else:
-            return next(iter(ret.values()))
+        preds = tuple(map(cls.normalize_predicate, args))
+        if isinstance(data, AsyncIterator):
+            return aio.run(cls._async_exhaust(data, *preds))
+        elif isinstance(data, Iterator):
+            return next((item for item, pred in it.product(data, preds) if pred(item)), default)
+        elif cls.ty.is_map(data):
+            a = data
+            data = dict(data)
+            return
+
+    @classmethod
+    async def _async_exhaust(
+        cls, data: AsyncIterator, *preds: Callable[[object], bool]
+    ) -> object | None:
+        async for item in data:
+            if any(cls.apply(preds, item)):
+                return item
+        return default
+
+    @overload
+    @classmethod
+    def normalize(cls, data: String) -> str: ...
+    @overload
+    @classmethod
+    def normalize[K: Hashable, V](cls, data: _Map[K, V]) -> dict[K, V]: ...
+    @overload
+    @classmethod
+    def normalize[V](cls, data: Iterable[V] | _Struct[V]) -> list[V]: ...
+    @overload
+    @classmethod
+    def normalize[V](cls, data: V) -> V: ...
+    @classmethod
+    def normalize(cls, data: object) -> object:
+        """Normalize the input data into a more workable form for casting."""
+        match data:
+            case None | type() | UnionType():
+                return data
+            case String():
+                return cls.ty.cast(data, str)
+            case datetime(tzinfo=tz) if tz != UTC:
+                return data.astimezone(UTC)
+            case time(tzinfo=tz) if tz != UTC:
+                return data.replace(tzinfo=UTC)
+            case Map():
+                return cls.ty.cast(data, dict)
+            case Vec() | Iter():
+                return cls.ty.cast(data, list)
+            case _:
+                return data
 
     @classmethod
     def safe[K: Hashable = str, V = str](
@@ -429,7 +477,7 @@ class IterUtils(_UtilsBase):
         return cls.val_map(fn, {f: f for f in fields}, drop)
 
     @classmethod
-    def chain_map[**P, R](
+    def apply[**P, R](
         cls,
         functions: Callable[P, R] | Iterable[Callable[P, R]],
         *args: P.args,

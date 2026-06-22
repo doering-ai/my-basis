@@ -268,19 +268,7 @@ class TypeCast(_TypingBase):
     @classmethod
     def normalize(cls, data: object) -> object:
         """Normalize the input data into a more workable form for casting."""
-        if not (data is None or isinstance(data, (type, UnionType))):
-            match data:
-                case String():
-                    return cls.cast(data, str)
-                case Map():
-                    return cls.cast(data, dict)
-                case Vec() | Iter():
-                    return cls.cast(data, list)
-                case datetime(tzinfo=tz) if tz != UTC:
-                    return data.astimezone(UTC)
-                case time(tzinfo=tz) if tz != UTC:
-                    return data.replace(tzinfo=UTC)
-        return data
+        return ut.normalize(data)
 
     @overload
     @classmethod

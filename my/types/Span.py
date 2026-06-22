@@ -14,7 +14,7 @@ import more_itertools as mi
 ### INTERNAL
 from ..infra.types import String, Scalar
 from ..infra.constants import DELIM
-from ..typing import ty, TypeCast, MyType
+from ..typing import ty, MyType
 
 import inspect
 
@@ -95,7 +95,7 @@ class Span[T: Scalar](tuple[T, T]):
         if isinstance(data, String):
             # II. Handle string input with delimiters
             text = ty.normalize(data).strip()
-            nums = TypeCast.read_scalars(text, tvar)
+            nums = ty.read_scalars(text, tvar)
             match len(nums), nums:
                 case 1, (p0,):
                     return p0, p0

@@ -71,7 +71,7 @@ from ..infra.types import (
 from ..utils import ut
 from ..caches import Cache
 from ._TypingBase import _TypingBase
-from .SpecialForm import SpecialForm as Form
+from .Metatype import Metatype as Meta
 
 ############
 ### DATA ###
@@ -263,7 +263,7 @@ class MyType[T](_TypingBase, pyd.BaseModel):
         elif (
             isinstance(root, (type, MyType, UnionType))
             or (isinstance(root, tuple) and all(isinstance(t, type) for t in root))
-            or (Form.classify(root) != Form.NONE)
+            or Meta(root)
         ):
             return cls.parse(root)
         else:
@@ -383,24 +383,19 @@ class MyType[T](_TypingBase, pyd.BaseModel):
         elif (value := getattr(root, '__value__', None)) is not None:
             return cls._process_root(value)
 
-        match Form.classify(root):
-            case Form.UNIV:
+        match Meta(root):
+            case Meta.ALWAYS:
                 return Any
-            case Form.NONE:
+            case Meta.NEVER:
                 return NoneType
-            case Form.COND:
+            case Meta.COND:
                 return bool
-            case Form.COND:
-                return root
             case _:
-                return NoneType
-
-    @ft.cached_property
-    def special_form(self) -> Form:
-        return Form.classify(self.root)
+                return root
 
     @pyd.model_validator(mode='after')
     def _process_src(self) -> Self:
+        """Infer remaining instant attributes upon initialization."""
         # 0. Validate & parse the source type, but don't save the args yet
         if not self.root or not self.uid:
             return self
@@ -417,11 +412,11 @@ class MyType[T](_TypingBase, pyd.BaseModel):
             self.args = tuple(set(map(MyType.new, args)))
             return self
 
-        match Form.classify(self.root):
-            case Form.NONE:
+        match Meta(self.root):
+            case Meta.NEVER:
                 # II. Ignore unhandled types, not setting `main` at all
                 return self
-            case Form.MONO:
+            case Meta.MONO:
                 # III. Unwrap simple forms (e.g. `Annotated[str]`)
                 if contents := mi.first(filter(bool, self._process_args(args)), None):
                     # Overwrite all our pydantic vars with the `contents`'s versions
@@ -528,27 +523,9 @@ class MyType[T](_TypingBase, pyd.BaseModel):
         return head
 
     @classmethod
-    def _is_type(cls, tvar: Any) -> TypeGuard[type | GenericAlias]:
-        """Determine whether a value is a valid, handleable type."""
-        return bool(
-            tvar is not None
-            and (name := getattr(tvar, '__name__', ''))
-            and name not in Form.NONE.value
-        )
-
-    @classmethod
-    def _parseable(cls, tvar: Any) -> TypeGuard[type | tuple[type, ...]]:
-        """Determine whether a value or tuple of values are parseable types.
-
-        Args:
-            tvar: The value or tuple to check.
-        Returns:
-            True if tvar contains parseable types.
-        """
-        if isinstance(tvar, tuple):
-            return any(map(cls._parseable, tvar))
-        else:
-            return cls._is_type(tvar)
+    def get_name(cls, val: Any) -> str:
+        """Get the name of a type or a value's type if possible, or '' if not."""
+        return Meta._name(val)
 
     @classmethod
     def _0_read(cls, tvar: Any) -> tuple[str, type[Any] | None, tuple]:
@@ -596,7 +573,7 @@ class MyType[T](_TypingBase, pyd.BaseModel):
         n = len(args)
         if name == '' or n == 0:
             return args
-        elif name in Form.POLY.value or isinstance(origin, UnionType):
+        elif name in Meta.POLY.value or isinstance(origin, UnionType):
             return args
         else:
             return tuple()
@@ -632,9 +609,7 @@ class MyType[T](_TypingBase, pyd.BaseModel):
 
         return Any
 
-    # ------------------
-    # `*0` Magic Methods
-    # ------------------
+    #### `*M` #####################################################################################
     def __len__(self) -> int:
         return len(self.args)
 
@@ -717,9 +692,7 @@ class MyType[T](_TypingBase, pyd.BaseModel):
             return self.ty.match(other, self, True)
         return False
 
-    # -------------------
-    # `*1` Main Interface
-    # -------------------
+    #### `*A` #####################################################################################
     @classmethod
     @overload
     def _match[T1](cls, t0: None, t1: TypeArg[T1]) -> TypeIs[NoneType]: ...
@@ -823,6 +796,8 @@ class MyType[T](_TypingBase, pyd.BaseModel):
             lhs, rhs = lhs[len(pre) :], rhs[len(pre) :]
         # older, younger = sorted((lhs, rhs), key=lambda s: f'{len(s)}_{s}')
         return len(lhs) + len(rhs)
+
+    #### `*B` #####################################################################################
 
 
 ############

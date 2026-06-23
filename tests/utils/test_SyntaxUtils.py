@@ -3,6 +3,7 @@
 ############
 ### STANDARD
 from pathlib import Path
+from typing import ClassVar
 from collections import deque
 import functools as ft
 
@@ -46,7 +47,7 @@ class EmptyModel(pyd.BaseModel):
 
 # Test class for cached properties
 class CachedPropsClass:
-    CACHED_PROPERTIES = ['prop1', 'prop2']
+    CACHED_PROPERTIES: ClassVar[list[str]] = ['prop1', 'prop2']
 
     def __init__(self):
         self._value = 0

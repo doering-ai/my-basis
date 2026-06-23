@@ -8,7 +8,7 @@ from typing import Any
 import pydantic as pyd
 
 ### INTERNAL
-from .typecast import Transform
+from .cast import Transform
 from .Typist import typist
 
 

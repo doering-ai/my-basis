@@ -2,7 +2,8 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import Any, Iterable, Callable, Mapping, Sequence, Collection
+from typing import Any
+from collections.abc import Iterable, Callable, Mapping, Sequence, Collection
 from collections import deque, Counter
 
 ### EXTERNAL
@@ -28,7 +29,7 @@ class TestIterUtils:
             (5, [lambda x: x + 1], 6),
             (1, [lambda x: x * 2, lambda x: x + 3], 5),  # (1*2)+3 = 5
             ('hello', [str.upper, lambda s: s + '!'], 'HELLO!'),
-            ([1, 2], [lambda x: x + [3], lambda x: x * 2], [1, 2, 3, 1, 2, 3]),
+            ([1, 2], [lambda x: [*x, 3], lambda x: x * 2], [1, 2, 3, 1, 2, 3]),
         ],
     )
     def test_build(self, initial: Any, funcs: list[Callable], expected: Any):

@@ -12,7 +12,7 @@ from pydantic_core import core_schema as pyds
 import more_itertools as mi
 
 ### INTERNAL
-from ..infra.types import String, Scalar
+from ..infra.types import String, Scalar, Vec, Real
 from ..infra.constants import DELIM
 from ..typing import ty, MyType
 
@@ -25,7 +25,7 @@ empty = inspect.Parameter.empty
 ############
 ### BODY ###
 ############
-class Span[T: Scalar](tuple[T, T]):
+class Span[T: Real](tuple[T, T]):
     """An immutable half-open interval [start, end), typically representing a text range.
 
     Spans are a simple wrapper around `tuple[int, int]` built to support arithmetic (shifting by
@@ -45,19 +45,19 @@ class Span[T: Scalar](tuple[T, T]):
     @overload  # empty
     def __new__(cls) -> Span[int]: ...
     @overload  # basic
-    def __new__[S: Scalar = int](cls, arg0: S, arg1: S) -> Span[S]: ...
+    def __new__[S: Real = int](cls, arg0: S, arg1: S) -> Span[S]: ...
     @overload  # monoarg
-    def __new__[S: Scalar = int](cls, arg0: Span[S] | tuple[S, S]) -> Span[S]: ...
+    def __new__[S: Real = int](cls, arg0: Span[S] | tuple[S, S]) -> Span[S]: ...
     @overload
-    def __new__[S: Scalar](
+    def __new__[S: Real](
         cls,
         arg0: String | Scalar | tuple[Scalar, Scalar] | Span,
         arg1: String | Scalar,
         tvar: type[S] | MyType[S],
     ) -> Span[S]: ...
-    def __new__[S: Scalar](
+    def __new__[S: Real](
         cls,
-        arg0: String | Scalar | Span[S] | tuple[S, S] | Empty = empty,
+        arg0: String | Scalar | Span[S] | tuple[Scalar, Scalar] | Empty = empty,
         arg1: String | Scalar | Empty = empty,
         tvar: type[S] | MyType[S] = int,  # ty:ignore[invalid-parameter-default]
     ) -> Span[S]:
@@ -76,13 +76,13 @@ class Span[T: Scalar](tuple[T, T]):
         if main is None:
             raise ValueError(f'Invalid second argument for Span: {arg1}')
 
-        x0, x1 = cls._new_impl(arg0, main)
+        x0, x1 = cls._new_impl(arg0, main)  # type: ignore[bad-specialization]
         if isinstance(x0, (int, float)) and isinstance(x1, (int, float)):
             assert x0 <= x1, f'Invalid span: {x0} > {x1}'
         return super().__new__(cls, (x0, x1))  # type: ignore
 
     @classmethod
-    def _new_impl[S: Scalar](
+    def _new_impl[S: Real](
         cls,
         data: String | Scalar | Span[S] | Iterable[Scalar] | Empty | None,
         tvar: type[S],
@@ -168,7 +168,7 @@ class Span[T: Scalar](tuple[T, T]):
             return False
         elif isinstance(value, int):
             return self[0] <= value < self[1]
-        elif isinstance(value, Series):
+        elif isinstance(value, Vec):
             if len(value) == 2:
                 p0, p1 = sorted(value)
                 if isinstance(p0, int) and isinstance(p1, int):
@@ -191,7 +191,7 @@ class Span[T: Scalar](tuple[T, T]):
     @property
     def delta(self) -> T:
         """Return the length of this span."""
-        return self[1] - self[0]
+        return self[1] - self[0]  # type: ignore[bad-return]
 
     # ------------
     # `*2` Methods

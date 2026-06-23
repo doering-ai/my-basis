@@ -8,7 +8,6 @@ from collections.abc import (
     Container,
 )
 from collections import Counter, deque
-from enum import Enum
 
 ### EXTERNAL
 import pytest as pyt

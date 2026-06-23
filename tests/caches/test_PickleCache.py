@@ -2,10 +2,9 @@
 ### HEAD ###
 ############
 ### STANDARD
-from datetime import datetime, timedelta
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
-import tempfile
 import pickle as pkl
 
 ### EXTERNAL
@@ -127,7 +126,6 @@ class TestPickleCache:
 
         # Set file modification time to past TTL
         old_time = (ut.posix() - timedelta(days=2)).timestamp()
-        temp_cache_file.touch()
         import os
 
         os.utime(temp_cache_file, (old_time, old_time))

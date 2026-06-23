@@ -70,9 +70,9 @@ class TestSpan:
     def test_constructor_invalid(self, arg0: tuple | int | str, arg1: int):
         with pyt.raises((AssertionError, ValueError)):  # noqa: PT012
             if arg1 == -1:
-                Span(arg0)
+                Span(arg0)  # type: ignore[bad-argument-type]
             else:
-                Span(arg0, arg1)
+                Span(arg0, arg1)  # type: ignore[bad-specialization]
 
     # -------------------
     # `-` Private Methods

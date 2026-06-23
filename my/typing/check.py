@@ -34,7 +34,7 @@ from ..infra.types import (
 from .MyType import MyType, TypeArg
 from ._TypingBase import _TypingBase
 from ..utils import ut
-from .typematch import tym
+from .match import tym
 from .Metatype import Metatype as Meta
 
 
@@ -70,14 +70,14 @@ class TypeCheck[T0, T1](_TypingBase, pyd.BaseModel):
 
         This serves as the primary interface for the vast majority of caller usecases.
         """
-        # I. Setup, validate 
-        target, args = self.t1.main, self.t1.args
+        # I. Setup, validate
+        target = self.t1.main
         if target is None:
             return True
 
         # II. Composite types
         if self.t1.is_split:
-            return any(option.check(self.data) for option in )
+            return any(option.check(self.data) for option in self.t1.args)
         elif self.t1.literal_members:
             return self.is_literal(self.data, self.t1)
 

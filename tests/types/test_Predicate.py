@@ -2,7 +2,7 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import Any, ClassVar
+from typing import ClassVar
 from collections.abc import Mapping
 import more_itertools as mi
 from collections import deque, defaultdict

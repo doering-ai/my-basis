@@ -3,27 +3,25 @@
 ############
 ### STANDARD
 from __future__ import annotations
-from typing import ClassVar, Self
+from typing import ClassVar
 import argparse as ap
 import functools as ft
 import itertools as it
 
 ### EXTERNAL
 import pydantic as pyd
-import pandas as pd
 from pandas import DataFrame
-import more_itertools as mi
 
 ### INTERNAL
 from my import MyType, RegexStore, GoogleSheet, env
-from my.typing.typecast import TypeCast, Transform
+from my.typing.cast import TypeCast, Transform
 
 
 ############
 ### BODY ###
 ############
 class Matrix(pyd.BaseModel):
-    """Worker for calculating the coverage of `my.typing.typecheck`."""
+    """Worker for calculating the coverage of `my.typing.check`."""
 
     RGXS: ClassVar[RegexStore] = RegexStore.new(
         implicit=(
@@ -152,7 +150,7 @@ class Matrix(pyd.BaseModel):
 ############
 def _parse_args() -> ap.Namespace:
     parser = ap.ArgumentParser(
-        description='Generate and upload data describing the coverage of `my.typing.typecheck`.'
+        description='Generate and upload data describing the coverage of `my.typing.check`.'
     )
 
     parser.add_argument(
@@ -167,6 +165,7 @@ def _parse_args() -> ap.Namespace:
 
 
 def main() -> None:
+    """Render the type matrix and write it to the configured Google Sheet."""
     args = _parse_args()
     matrix = Matrix(**vars(args))
     matrix()

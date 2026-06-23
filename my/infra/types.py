@@ -3,7 +3,7 @@
 ############
 ### STANDARD
 from __future__ import annotations
-from typing import Any, IO, get_args, get_origin
+from typing import Any, IO
 from collections.abc import (
     Callable,
     Hashable,
@@ -41,6 +41,8 @@ Stream = bytearray | memoryview | IO
 String = str | bytes | Stream
 
 Scalar = int | float | complex | bool
+Real = int | float | bool
+#: The ordered subset of `Scalar` -- excludes `complex`, which has no `<`/`>`.
 
 Time = date | time | datetime | timedelta
 
@@ -76,6 +78,7 @@ Object = Atom | Struct | Func
 Streams = (bytearray, memoryview, IO)
 Strings = (str, bytes, *Streams)
 Scalars = (int, float, complex, bool)
+Reals = (int, float, bool)
 Times = (date, time, datetime, timedelta)
 Enums = (Enum,)
 Atoms = (*Strings, *Scalars, *Times, *Enums)

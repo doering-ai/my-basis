@@ -41,9 +41,9 @@ from ..infra.types import (
 )
 from ..utils import ut
 from .MyType import MyType, TypeArg
-from .typematch import TypeMatch
-from .typecast import TypeCast, Transform
-from .typecheck import TypeCheck
+from .match import TypeMatch
+from .cast import TypeCast, Transform
+from .check import TypeCheck
 
 ############
 ### DATA ###

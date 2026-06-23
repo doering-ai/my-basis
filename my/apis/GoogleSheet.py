@@ -280,8 +280,8 @@ class GoogleSheet:
         unnecessary work is performed. The credentials are automatically refreshed if necessary &
         possible.
 
-        See [Google's documentation](googleapis.dev/python/google-auth/latest/reference/google.oauth2.credentials.html)
-        on the flow for further guidance.
+        See Google's authentication flow documentation for further guidance:
+        googleapis.dev/python/google-auth/latest/reference/google.oauth2.credentials.html
         """
         assert self.SCOPES, 'Must provide at least one scope to authenticate with Google APIs.'
         did_change = False

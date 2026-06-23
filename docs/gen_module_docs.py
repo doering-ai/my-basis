@@ -121,7 +121,7 @@ def sync_package(pkg: str, *, dry_run: bool = False) -> bool:
             new_lines = new_content.splitlines()
             print(f'        {len(old_lines)} → {len(new_lines)} lines')
         else:
-            print(f'        (new file)')
+            print('        (new file)')
         return True
 
     doc_path.write_text(new_content, encoding='utf-8')

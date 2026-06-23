@@ -9,7 +9,7 @@ import regex as re
 import pytest as pyt
 
 ### INTERNAL
-from my.regex.meta import GroupKind, Atom, Regex, GroupAtom
+from my.regex.meta import Atom, Regex, GroupAtom
 from my.regex.RegexStore import RegexStore, RegexBuffer
 from my.regex import RegexDebugger
 from ..conftest import boolmap

@@ -3,7 +3,6 @@
 ############
 ### STANDARD
 from typing import Literal
-from pathlib import Path
 from importlib.resources import files
 
 ### EXTERNAL

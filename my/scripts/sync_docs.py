@@ -7,6 +7,7 @@ import ast
 import textwrap
 import argparse as ap
 from pathlib import Path
+from typing import ClassVar
 import more_itertools as mi
 
 ### EXTERNAL
@@ -15,6 +16,18 @@ import pydantic as pyd
 
 ### INTERNAL
 from my import ut, PATHS
+
+
+############
+### DATA ###
+############
+TOCTREE_STUB = """\
+```{toctree}
+---
+maxdepth: 2
+---
+```
+"""
 
 
 ############
@@ -35,6 +48,9 @@ class Tool(pyd.BaseModel):
         uv run sync-docs --check   # dry-run, print diff
         ```
     """
+
+    #: Subpackages that are internal infrastructure -- no public docs page.
+    SKIP: ClassVar[frozenset[str]] = frozenset({'scripts', 'templates', 'infra'})
 
     #: The directory containing a local python project.
     root: pyd.DirectoryPath
@@ -90,6 +106,7 @@ class Tool(pyd.BaseModel):
 
     def sync_readme(self, file: Path) -> bool:
         """Sync one (sub)package module with its README.md."""
+        pkg = file.parent.name
         if not (docstring := self.get_docstring(file)):
             return False
         elif match := re.match(r'^([^\s\n\#].*)\n+', docstring):
@@ -100,7 +117,7 @@ class Tool(pyd.BaseModel):
             body = docstring
         body = textwrap.dedent(body.strip('\n'))
 
-        doc_path = Path()
+        doc_path = self.root / 'docs' / f'{pkg}.md'
         preserved = self.get_preserved_section(doc_path)
         new_content = self.render_page(pkg, head, body, preserved)
 
@@ -108,7 +125,7 @@ class Tool(pyd.BaseModel):
             print(f'\tOK   {pkg}: up to date')
             return False
 
-        if dry_run:
+        if self.dry:
             print(f'\tDIFF {pkg}: would update docs/{pkg}.md')
             # Print a simple before/after summary
             z0 = doc_path.read_text().count('\n') if doc_path.exists() else 0
@@ -139,6 +156,7 @@ def _parse_args(*vargs: str) -> ap.Namespace:
     parser.add_argument(
         'root',
         type=Path,
+        nargs='?',
         default=PATHS.seek_project(),
         help='The directory containing a local python project.',
     )
@@ -146,6 +164,7 @@ def _parse_args(*vargs: str) -> ap.Namespace:
         '-n',
         '--dry',
         '--dry-run',
+        action='store_true',
         help="Don't actually change files, just print.",
     )
 
@@ -153,6 +172,7 @@ def _parse_args(*vargs: str) -> ap.Namespace:
 
 
 def main(*vargs: str) -> None:
+    """Sync docs/X.md intro sections from my/X/__init__.py module docstrings."""
     args = _parse_args(*vargs)
 
     tool = Tool(**vars(args))

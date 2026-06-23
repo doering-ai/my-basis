@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 from types import (
-    AsyncGenerator,
     BuiltinFunctionType,
     CapsuleType,
     EllipsisType,
@@ -14,10 +13,6 @@ from types import (
     GenericAlias,
     NoneType,
     NotImplementedType,
-    ParamSpec,
-    Self,
-    TypeVar,
-    TypeVarTuple,
     UnionType,
 )
 from typing import (
@@ -34,6 +29,7 @@ from typing import (
     NewType,
     NoReturn,
     NotRequired,
+    ParamSpec,
     ParamSpecArgs,
     ParamSpecKwargs,
     Protocol,
@@ -45,6 +41,8 @@ from typing import (
     TypeGuard,
     TypeIs,
     TypedDict,
+    TypeVar,
+    TypeVarTuple,
     Union,
     Unpack,
     Optional,
@@ -52,6 +50,7 @@ from typing import (
 )
 from collections import deque
 from collections.abc import (
+    AsyncGenerator,
     AsyncIterable,
     AsyncIterator,
     Callable,
@@ -67,7 +66,6 @@ from dataclasses import dataclass
 import itertools as it
 import functools as ft
 from inspect import isclass
-from io import BytesIO, StringIO
 import more_itertools as mi
 
 ### MODULAR
@@ -76,22 +74,11 @@ from pydantic import BaseModel
 ### LOCAL
 from ..infra.types import (
     Object,
-    Stream,
     String,
-    Scalar,
-    Time,
-    Atom,
-    Vec,
-    Iter,
-    Map,
-    Model,
-    Struct,
-    Func,
-    Dataclass,
 )
 from ..utils import ut
 
-from enum import Flag, Enum, auto
+from enum import Enum
 from ._TypingBase import _TypingBase
 
 from typing import TYPE_CHECKING
@@ -110,52 +97,6 @@ def _ty() -> Typist | None:
 _ATOMS: tuple[Metatype, ...] = ()
 _OBJECTS: tuple[Metatype, ...] = ()
 _FORMS: tuple[Metatype, ...] = ()
-
-_idx_data: dict[str, Any] = {
-    '0': Object,
-    '1': Atom,
-    '11': String,
-    '111': str,
-    '112': bytes,
-    '113': Stream,
-    '1131': bytearray,
-    '1132': memoryview,
-    '1133': IO,
-    '11331': StringIO,
-    '11332': BytesIO,
-    '12': Scalar,
-    '121': int,
-    '122': float,
-    '123': complex,
-    '124': bool,
-    '13': Enum,
-    '131': Flag,
-    '14': Time,
-    '141': date,
-    '142': time,
-    '143': datetime,
-    '144': timedelta,
-    '2': Struct,
-    '21': Vec,
-    '211': list,
-    '212': tuple,
-    '213': Set,
-    '214': deque,
-    '22': Map,
-    '221': Mapping,
-    '222': ItemsView,
-    '23': Iter,
-    '231': Iterable,
-    '232': AsyncIterable,
-    '24': Model,
-    '241': BaseModel,
-    '242': Dataclass,
-    '3': Func,
-    '31': FunctionType,
-    '32': BuiltinFunctionType,
-    '33': Callable,
-}
-MyType.IDXS = ut.val_map(MyType, _idx_data)
 
 
 ############

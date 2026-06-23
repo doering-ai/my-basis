@@ -213,7 +213,7 @@ class TestMarkdown:
         assert cls._digit_to_num(digit) == expected
 
     def test_digit_to_num__invalid(self):
-        with pyt.raises(ValueError):
+        with pyt.raises(ValueError, match='Invalid index digit'):
             cls._digit_to_num('!')
 
     def test_indent(self):
@@ -909,7 +909,7 @@ list:
         )
 
         count = 0
-        for n in node.walk():
+        for _n in node.walk():
             count += 1
             # Don't modify during iteration for this basic test
 

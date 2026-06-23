@@ -14,7 +14,7 @@ import more_itertools as mi
 import regex as re
 
 ### INTERNAL
-from my import RegexStore, ut, typist, Regex, Tree, GroupAtom, GroupKind, Atom
+from my import RegexStore, ut, Regex, GroupAtom, GroupKind, Atom
 
 type Action = Callable[[Storefront], Iterable[str]]
 _ACTIONS: dict[str, Action] = dict()

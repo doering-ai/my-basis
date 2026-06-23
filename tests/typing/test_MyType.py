@@ -8,7 +8,6 @@ import types
 from collections.abc import (
     Mapping,
     Callable,
-    Container,
     Coroutine,
     Sequence,
     Generator,

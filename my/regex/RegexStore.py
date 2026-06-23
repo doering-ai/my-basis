@@ -244,10 +244,11 @@ class RegexStore(pyd.BaseModel):
         if self.options.autostrip_commas:
             strip_string += ','
 
-        if strip_string:
-            fn = lambda text: text.strip(strip_string) or text  # noqa: E731
-        else:
-            fn = lambda text: text  # noqa: E731
+        fn = (
+            (lambda text: text.strip(strip_string) or text)
+            if strip_string
+            else (lambda text: text)
+        )
         self._strip = (fn,)
 
         # II. Modify all expressions to use invocations if requested

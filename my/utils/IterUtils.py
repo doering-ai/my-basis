@@ -18,7 +18,7 @@ from collections.abc import (
 from types import FunctionType, UnionType
 from collections import Counter, defaultdict
 import functools as ft
-from datetime import date, time, datetime, timedelta, UTC
+from datetime import time, datetime, UTC
 import itertools as it
 import asyncio as aio
 
@@ -27,7 +27,6 @@ import more_itertools as mi
 
 ### INTERNAL (NOTE: If adding new internal imports, update the comments in `__init__.py`)
 from ..infra.types import (
-    _Vec,
     Vec,
     Map,
     _Map,
@@ -35,7 +34,6 @@ from ..infra.types import (
     Model,
     String,
     Iter,
-    _Iter,
     Struct,
     _Struct,
 )
@@ -344,17 +342,19 @@ class IterUtils(_UtilsBase):
         """
         preds = tuple(map(cls.normalize_predicate, args))
         if isinstance(data, AsyncIterator):
-            return aio.run(cls._async_exhaust(data, *preds))
+            return aio.run(cls._async_exhaust(data, *preds, default=default))
         elif isinstance(data, Iterator):
             return next((item for item, pred in it.product(data, preds) if pred(item)), default)
         elif cls.ty.is_map(data):
-            a = data
             data = dict(data)
-            return
+            for key, pred in it.product(data, preds):
+                if pred(key):
+                    return data[key]
+            return default
 
     @classmethod
     async def _async_exhaust(
-        cls, data: AsyncIterator, *preds: Callable[[object], bool]
+        cls, data: AsyncIterator, *preds: Callable[[object], bool], default: object | None = None
     ) -> object | None:
         async for item in data:
             if any(cls.apply(preds, item)):

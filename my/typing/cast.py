@@ -31,11 +31,10 @@ from dataclasses import is_dataclass, Field
 from datetime import date, datetime, time, timedelta, UTC
 from enum import Enum, Flag, auto
 from io import BytesIO
-from types import FunctionType, UnionType
+from types import FunctionType
 import functools as ft
 import asyncio as aio
 import contextlib as ctx
-import inspect
 import itertools as it
 import logging
 
@@ -74,8 +73,8 @@ from .MyType import MyType
 from ._common import ABSTRACT_GENERICS
 from ._TypingBase import _TypingBase
 
-from .typematch import tym
-from .typecheck import tyc
+from .match import tym
+from .check import tyc
 
 if TYPE_CHECKING:
     from my import Typist  # noqa
@@ -1019,6 +1018,7 @@ class Transform[T0, T1](_TypingBase, pyd.BaseModel):
 
     @classmethod
     def flex_deserialize(cls, text: str) -> Scalar | None:
+        """Parse text as whichever scalar type's pattern it matches, or None if none match."""
         for stype in Scalars:
             name = stype.__name__
             if name in cls.RGXS and cls.RGXS[name].fullmatch(text):

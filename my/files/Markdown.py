@@ -15,7 +15,7 @@ from regex import Pattern
 import mdformat
 
 ### INTERNAL
-from ..infra import get_template
+from ..infra.constants import get_template
 from ..utils import ut
 from ..typing import typist
 from ..types import Buffer, Predicate

@@ -1,311 +1,138 @@
 ############
 ### HEAD ###
 ############
-# ruff: noqa F401
 ### STANDARD
 from __future__ import annotations
-
-from types import (
-    BuiltinFunctionType,
-    CapsuleType,
-    EllipsisType,
-    FunctionType,
-    GenericAlias,
-    NoneType,
-    NotImplementedType,
-    UnionType,
-)
-from typing import (
-    Annotated,
-    Any,
-    ClassVar,
-    Concatenate,
-    Final,
-    IO,
-    Literal,
-    LiteralString,
-    NamedTuple,
-    Never,
-    NewType,
-    NoReturn,
-    NotRequired,
-    ParamSpec,
-    ParamSpecArgs,
-    ParamSpecKwargs,
-    Protocol,
-    ReadOnly,
-    Required,
-    Self,
-    Type,
-    TypeAliasType,
-    TypeGuard,
-    TypeIs,
-    TypedDict,
-    TypeVar,
-    TypeVarTuple,
-    Union,
-    Unpack,
-    Optional,
-    TypeAlias,
-)
-from collections import deque
-from collections.abc import (
-    AsyncGenerator,
-    AsyncIterable,
-    AsyncIterator,
-    Callable,
-    Generator,
-    ItemsView,
-    Iterable,
-    Iterator,
-    Mapping,
-    Set,
-)
-from datetime import date, datetime, time, timedelta
-from dataclasses import dataclass
-import itertools as it
-import functools as ft
-from inspect import isclass
-import more_itertools as mi
-
-### MODULAR
-from pydantic import BaseModel
-
-### LOCAL
-from ..infra.types import (
-    Object,
-    String,
-)
-from ..utils import ut
-
+from typing import get_origin
 from enum import Enum
-from ._TypingBase import _TypingBase
+import functools as ft
 
-from typing import TYPE_CHECKING
+### EXTERNAL
 
-if TYPE_CHECKING:
-    from .Typist import Typist
-
-
-############
-### DATA ###
-############
-def _ty() -> Typist | None:
-    return getattr(_TypingBase, 'TY', None)
-
-
-_ATOMS: tuple[Metatype, ...] = ()
-_OBJECTS: tuple[Metatype, ...] = ()
-_FORMS: tuple[Metatype, ...] = ()
+### INTERNAL
 
 
 ############
 ### BODY ###
 ############
-class Metatype[T]:
-    __match_args__ = ('value',)
+class Metatype(Enum):
+    """A name-based classifier for the type annotations that aren't ordinary `type` instances.
 
-    # ---- Atoms ----
-    STREAM = (bytearray, memoryview, IO)
-    STRING = (str, bytes, *STREAM)
-    SCALAR = (int, float, complex, bool)
-    TIMES = (date, time, datetime, timedelta)
-    ENUM = (Enum,)
-    ATOM = (*STRING, *SCALAR, *TIMES, *ENUM)
+    Each member holds a `frozenset` of the *names* (i.e. `__name__`) of the special forms it
+    covers, so that `Metatype(value)` can categorize any annotation by looking up its name. Ordinary
+    types (e.g. `int`, `list`, `dict`) belong to no special form and resolve to the falsy `NULL`.
+    """
 
-    # ---- Structures ----
-    VEC = (list, tuple, Set, deque)
-    MAP = (Mapping, ItemsView)
-    MODEL = (BaseModel, dataclass)
-    STRUCT = (*VEC, *MAP, *MODEL)
-    ITER = (Iterable,)
-    FUNC = (FunctionType, Callable, BuiltinFunctionType)
-    OBJECT = (*ATOM, *STRUCT, *ITER, *FUNC)
+    #: Unrecognized / ordinary types -- the falsy fallback.
+    NULL = frozenset()
 
-    # ---- Special Forms ----
-    #: Simple wrapper types.
-    MONO = (Annotated, ClassVar, Final, NotRequired, Required, Unpack)
-    #: Wrappers of more than one type at once.
-    POLY = (Union, Optional, UnionType)
-    #: Types that resolve to bool at runtime.
-    COND = (TypeGuard, TypeIs)
-    #: Fundamental stdlib types from the `types` module.
-    TYPE = (Ellipsis, EllipsisType, TypeAlias, TypeAliasType, NoneType)
-    #: Iterable types (i.e. vectors, maps, and models).
-    ITER = (
-        AsyncGenerator,
-        AsyncIterable,
-        AsyncIterator,
-        Generator,
-        Iterator,
-        TypedDict,
-        NamedTuple,
-    )
-    #: Forms that always match.
-    ALWAYS = (Any, 'Unknown')
-    #: Forms that are treated as unmatchable.
-    NEVER = (
-        '',
-        CapsuleType,
-        Concatenate,
-        LiteralString,
-        Never,
-        NewType,
-        NoReturn,
-        NotImplementedType,
-        GenericAlias,
-        ParamSpec,
-        ParamSpecArgs,
-        ParamSpecKwargs,
-        Protocol,
-        ReadOnly,
-        Self,
-        Type,
-        TypeVar,
-        TypeVarTuple,
+    #: Forms that always match (e.g. `Any`).
+    ALWAYS = frozenset({'Any', 'Unknown'})
+
+    #: Forms that are treated as unmatchable or are not yet handled.
+    NEVER = frozenset(
+        {
+            '',
+            'None',
+            'NoneType',
+            'CapsuleType',
+            'Concatenate',
+            'LiteralString',
+            'Never',
+            'NewType',
+            'NoReturn',
+            'NotImplementedType',
+            'Protocol',
+            'ParamSpec',
+            'ParamSpecArgs',
+            'ParamSpecKwargs',
+            'ReadOnly',
+            'Self',
+            'Type',
+            'TypeVar',
+            'TypeVarTuple',
+            # Conditionals (resolve to bool, but unhandled at parse time)
+            'TypeGuard',
+            'TypeIs',
+            # Callables (unhandled as annotations)
+            'Callable',
+            'Coroutine',
+            # Iterator-likes (unhandled as annotations)
+            'AsyncGenerator',
+            'AsyncIterable',
+            'AsyncIterator',
+            'Generator',
+            'Iterator',
+            'TypedDict',
+            'NamedTuple',
+        }
     )
 
-    FORM = (*ALWAYS, *NEVER, *ITER, *MONO, *POLY, *COND, *TYPE)
+    #: Simple wrapper forms that unwrap to a single inner type (e.g. `Annotated[int, ...]`).
+    MONO = frozenset(
+        {
+            'Annotated',
+            'ClassVar',
+            'Final',
+            'NotRequired',
+            'Required',
+            'Unpack',
+        }
+    )
 
+    #: Forms that wrap more than one type at once (i.e. unions).
+    POLY = frozenset({'Union', 'Optional', 'UnionType'})
+
+    #: Fundamental stdlib forms from the `types` module.
+    TYPE = frozenset({'Ellipsis', 'ellipsis', 'EllipsisType', 'TypeAlias', 'TypeAliasType'})
+
+    #: The `Literal[...]` form, handled specially during parsing.
+    LITERAL = frozenset({'Literal'})
+
+    # -------------------
+    # `.` Initial Methods
+    # -------------------
     @classmethod
-    def __new_(cls, value: type | object | None = None) -> Metatype:
-        """Return the filter that matches this name."""
-        if cls._is_null(value):
-            return cls.NEVER
-        elif isinstance(value, Metatype):
-            return value
-        return next((item for item in cls if value in item), cls.NEVER)
+    def _missing_(cls, value: object) -> Metatype:
+        """Categorize an arbitrary annotation by its (form) name."""
+        name = cls._name(value)
+        return next((member for member in cls if name and name in member.value), cls.NULL)
 
+    # -------------------
+    # `-` Private Methods
+    # -------------------
+    @staticmethod
+    @ft.lru_cache(maxsize=2**12)
+    def _name(value: object) -> str:
+        """Best-effort extraction of the canonical name of a type or special form."""
+        if value is None:
+            return 'None'
+        if isinstance(value, str):
+            return value
+        name = getattr(value, '__name__', None) or getattr(value, '_name', None)
+        if not name:
+            origin = get_origin(value)
+            if origin is not None and origin is not value:
+                return Metatype._name(origin)
+            # Fallback: the last dotted component of the repr, sans any subscripts.
+            name = str(value).split('[', 1)[0].rsplit('.', 1)[-1]
+        return str(name)
+
+    # ------------------
+    # `*` Public Methods
+    # ------------------
     @property
-    def val(self) -> tuple[type | object, ...]:
-        """The types that this metatype matches."""
+    def val(self) -> frozenset[str]:
+        """The set of names associated with this metatype."""
         return self.value
 
-    @ft.lru_cache(2**10)
-    @staticmethod
-    def _nameset(arg: Metatype) -> set[str]:
-        """The set of names associated with this metatype."""
-        return set(map(Metatype._name, arg.val))
-
-    @property
-    def nameset(self) -> set[str]:
-        """The set of names associated with this metatype."""
-        return self._nameset(self)
-
-    @ft.lru_cache(2**10)
-    @staticmethod
-    def _match(child: Metatype, parent: Metatype) -> bool:
-        return any(name in child.nameset for name in parent.nameset)
-
-    def __contains__(self, arg: type | object | None) -> bool:
-        """Whether the proposed child is a compatible type, or an instance OF a compatible type."""
-        match arg, self:
-            # Validate
-            case (None, _) | (_, self.NEVER):
-                return False
-            case Metatype() as child, parent:
-                return Metatype._match(child, parent)
-            case type() as child, parent:
-                return
-
-        return any(self.compare(arg, item) for item in self.value)
-
     def __bool__(self) -> bool:
-        """Whether this metatype is parseable (i.e. not `NEVER`)."""
-        return self is not self.NEVER
+        """Whether this metatype is a recognized special form (i.e. not `NULL`)."""
+        return self is not Metatype.NULL
 
-    @classmethod
-    def parseable(cls, value: object | None = None) -> TypeIs[Object]:
-        """Whether a given type is parseable (i.e. not `NEVER`)."""
-        return cls(value) in cls.OBJECT
-
-    @classmethod
-    def values(cls) -> list[tuple[Metatype, tuple[type | object, ...]]]:
-        """Return a mapping of each member to its value."""
-        return [(member, member.val) for member in cls]
-
-    @staticmethod
-    def _name(val: Any) -> str:
-        if val is None:
-            return 'None'
-        elif isinstance(val, String):
-            return Metatype._ty().cast(val, str)
-        elif ut.get_first(val, '_name', '__name__'):
-            return str(val.__name__)
-        elif hasattr(val, '__class__'):
-            return str(val.__class__.__name__)
-        return ''
-
-    @classmethod
-    def _is_null(cls, t: type | object | None) -> TypeIs[None | NoneType]:
-        return t in (cls.NEVER, None, NoneType)
-
-    @classmethod
-    def _typy(cls, t: type | object | None) -> TypeIs[type]:
-        return isinstance(t, type)
-
-    @classmethod
-    def _compare(cls, t0: object, t1: object) -> bool:
-        if t0 is t1:
-            return True
-        elif any(falsy := (cls._is_null(t0), cls._is_null(t1))):
-            return all(falsy)
-        elif isinstance(t0, type) and isinstance(t1, type):
-            return issubclass(t0, t1) or issubclass(t1, t0)
-        elif isinstance(t0, type):
-            return isinstance(t1, t0)
-        elif isinstance(t1, type):
-            return isinstance(t0, t1)
-        return False
-
-    @classmethod
-    def compare(cls, *args: type | object | None) -> bool:
-        args = tuple(mi.padded(args, None, 2, next_multiple=True))
-        return any(it.starmap(cls._compare, it.pairwise(args)))
-
-    @classmethod
-    def is_form(
-        cls, t0: Metatype
-    ) -> TypeIs[
-        Literal[
-            Metatype.FORM,
-            Metatype.ALWAYS,
-            Metatype.NEVER,
-            Metatype.ITER,
-            Metatype.MONO,
-            Metatype.POLY,
-            Metatype.COND,
-            Metatype.TYPE,
-        ]
-    ]:
-        """Whether a type is a special form (i.e. not a normal class or instance)."""
-        return cls(t0) in cls.FORM
-
-    @classmethod
-    def is_object[*Tup](
-        cls, t0: Metatype
-    ) -> TypeIs[
-        Literal[
-            Metatype.STREAM,
-            Metatype.STRING,
-            Metatype.SCALAR,
-            Metatype.TIMES,
-            Metatype.ENUM,
-            Metatype.ATOM,
-            Metatype.VEC,
-            Metatype.MAP,
-            Metatype.MODEL,
-            Metatype.STRUCT,
-            Metatype.ITER,
-            Metatype.FUNC,
-            Metatype.OBJECT,
-        ]
-    ]:
-        return cls(t0) in cls.OBJECT
+    def __contains__(self, value: object) -> bool:
+        """Whether the given annotation is categorized as this metatype."""
+        return Metatype._name(value) in self.value
 
 
 _M = Metatype
-
-_ATOMS: tuple[Metatype, ...] = (_M.STRING, _M.SCALAR, _M.TIMES, _M.ENUM)
-_OBJECTS: tuple[Metatype, ...] = (_M.ATOM, _M.STRUCT, _M.ITER, _M.FUNC)
-_FORMS: tuple[Metatype, ...] = (_M.ALWAYS, _M.NEVER, _M.MONO, _M.POLY, _M.COND, _M.TYPE)

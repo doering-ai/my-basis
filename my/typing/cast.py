@@ -252,6 +252,18 @@ class TypeCast(_TypingBase):
         elif flex:
             return data
 
+    @classmethod
+    def multicast[B](cls, data: Iterable, target: AnyType[B]) -> list[B | None]:
+        """Cast each element of an iterable to `target`, preserving None elements.
+
+        Args:
+            data: The iterable whose elements to cast.
+            target: The type each (non-None) element is cast to.
+        Returns:
+            A list of cast elements, with None elements kept as-is.
+        """
+        return [None if v is None else cls.cast(v, target) for v in data]
+
     @overload
     @classmethod
     def normalize(cls, data: String) -> str: ...
@@ -319,24 +331,37 @@ tyt = typecast = TypeCast
 register = TypeCast.register
 
 
-class Transform[T0, T1](_TypingBase, pyd.BaseModel):
-    """An ephemeral class that represents a single attempted coercion."""
+class Transform[T0, T1]:
+    """An ephemeral class that represents a single attempted coercion.
+
+    Deliberately a **plain class -- not a pydantic model.** A `Transform` is constructed on
+    every single `cast()` call and never crosses a serialization boundary, so it wants none of
+    pydantic's per-construction validation. It previously *fought* that machinery anyway --
+    passing plain `MyType` instances to dodge the deep re-validation that recurses forever
+    through the self-referential `POS` sentinel. Construction is now just a few attribute
+    writes, which is all this object ever needed.
+    """
 
     RGXS: ClassVar[dict[str, re.Pattern]] = TypeCast.RGXS
 
-    t0: MyType[T0]
-    t1: MyType[T1]
+    t0: MyType
+    t1: MyType
     data: T0
 
     # -------------------
     # `.` Initial Methods
     # -------------------
-    def __init__(self, data: T0, target: AnyType[T1], source: AnyType[T0] | None = None, **kwargs):
+    def __init__(self, data: T0, target: AnyType[T1], source: AnyType[T0] | None = None) -> None:
         """Initialize the (highly-ephemeral) casting context."""
         normalized = tyt.normalize(data)
-        t0 = MyType.new(source) if source else MyType.typeof(normalized)
-        t1 = MyType.new(target)
-        super().__init__(data=normalized, t0=t0, t1=t1, **kwargs)
+        self.data = normalized
+        self.t0 = MyType.new(source) if source else MyType.typeof(normalized)
+        self.t1 = MyType.new(target)
+
+    @property
+    def ty(self) -> Typist:
+        """The shared `Typist` facade for match/check/cast (mirrors `_TypingBase.ty`)."""
+        return _TypingBase._ty()
 
     @property
     def _t0(self) -> type[T0]:
@@ -352,7 +377,10 @@ class Transform[T0, T1](_TypingBase, pyd.BaseModel):
 
     def _finalize(self, data: object) -> T1 | None:
         t1 = self.t1
-        if t1 is None:
+        if data is None or t1 is None:
+            # A transform that produced nothing is a non-match -- propagate None so the
+            # candidate loop tries the next transform, rather than coercing (e.g. str(None)
+            # -> the literal 'None') a failure into a bogus success.
             return None
         elif isinstance(data, str) and bytes in t1:
             data = data.encode()
@@ -364,8 +392,13 @@ class Transform[T0, T1](_TypingBase, pyd.BaseModel):
         if t0.keys and t1.keys and t0.keys != t1.keys:
             pass
 
+        # Construct the concrete target type from the (already element-coerced) `data`. NOTE: call
+        # `t1.main` -- the underlying type (e.g. `str`, `list`) -- NOT the `MyType` itself, which is
+        # not callable.
+        if t1.main is None:
+            return None
         with ctx.suppress(Exception):
-            return t1(data)  # type: ignore[bad-return]
+            return t1.main(data) if not isinstance(data, t1.main) else data  # type: ignore[bad-return]
 
     @ft.cached_property
     def map_items(self: Transform) -> list[tuple[Any, Any]] | None:
@@ -442,6 +475,10 @@ class Transform[T0, T1](_TypingBase, pyd.BaseModel):
 
     @register
     def _atom_to_scalar[S: Atom, T: Scalar](self: Transform[S, T]) -> Scalar | None:
+        # Strings are handled by the more-specific `_string_to_scalar`; recursing through
+        # `by(str)` here (str -> str -> scalar) would loop forever on non-numeric strings.
+        if isinstance(self.data, String):
+            return None
         return self.by(str)
 
     @register
@@ -523,16 +560,21 @@ class Transform[T0, T1](_TypingBase, pyd.BaseModel):
             return [text]
 
     @register
-    def _scalar_to_string[S: Scalar, T: String](self: Transform) -> T | None:
-        return None
+    def _scalar_to_string[S: Scalar, T: String](self: Transform) -> str | None:
+        """``5 -> '5'`` -- serialize a scalar into its plain string form."""
+        return str(self.data)
 
     @register
-    def _scalar_to_scalar[S: Scalar, T: Scalar](self: Transform) -> T | None:
-        return None
+    def _scalar_to_scalar[S: Scalar, T: Scalar](self: Transform) -> Scalar | None:
+        """``20.0 -> 20`` -- convert between numeric scalar types via the target constructor."""
+        with ctx.suppress(TypeError, ValueError):
+            return self._t1(self.data)
 
     @register
-    def _scalar_to_time[S: Scalar, T: Time](self: Transform) -> T | None:
-        return None
+    def _scalar_to_time[S: Scalar, T: Time](self: Transform) -> Time | None:
+        """``1700000000 -> datetime(...)`` -- treat a scalar as a POSIX timestamp / ordinal."""
+        with ctx.suppress(TypeError, ValueError, OverflowError, OSError):
+            return self._num_to_time(float(self.data), self._t1)
 
     @register
     def _time_to_string[S: Time, T: String](self: Transform[S, T]) -> String | None:
@@ -651,8 +693,30 @@ class Transform[T0, T1](_TypingBase, pyd.BaseModel):
 
     @register
     def _object_to_enum[S: Object, T: Enum](self: Transform[S, T]) -> T | None:
-        ret = self.ty.try_method(self._t1, 'read', self.data, _tvar=self._t1)
-        return ret if ret is not None else None
+        target, data = self._t1, self.data
+        # 0. Already a member of the target enum
+        if isinstance(data, target):
+            return data
+        # I. A custom `read` constructor takes precedence
+        if (ret := self.ty.try_method(target, 'read', data, _tvar=target)) is not None:
+            return ret
+        # II. By value (the enum's own lookup, e.g. Color(1) or Status('active'))
+        with ctx.suppress(ValueError):
+            return target(data)
+        # III. By name (exact, then case-insensitive)
+        if isinstance(data, str):
+            if data in target.__members__:
+                return target[data]
+            if member := next(
+                (m for n, m in target.__members__.items() if n.lower() == data.lower()), None
+            ):
+                return member
+        # IV. By coerced value (e.g. the string '1' -> the int value 1)
+        for member in target:
+            with ctx.suppress(TypeError, ValueError):
+                if member.value == data or type(member.value)(data) == member.value:
+                    return member
+        return None
 
     @register
     def _string_to_flag[S: String, T: Flag](self: Transform[S, T]) -> T | None:
@@ -742,15 +806,22 @@ class Transform[T0, T1](_TypingBase, pyd.BaseModel):
         return d
 
     @register
+    def _vec_to_string[S: Vec, T: String](self: Transform[S, T]) -> str | None:
+        """``[] -> '[]'`` -- serialize a sequence into its plain string form."""
+        return str(self.data)
+
+    @register
     def _vec_to_atom[S: Vec, T: Atom](self: Transform[S, T]) -> T | None:
         if self.data:
             return self.proxy(mi.first(self.data))
 
     @register
     def _vec_to_vec[S: Vec, T: Vec](self: Transform[S, T]) -> list | None:
-        if self.t1.vals and self.t0.vals != self.t1.vals:
-            return tyt.cast(self.data, self.t1.vals)
-        return self.to(list)
+        data = self.to(list)
+        if data is not None and self.t1.vals and self.t0.vals != self.t1.vals:
+            # Element types differ -> coerce each element, don't cast the whole list.
+            return self.ty.multicast(data, self.t1.vals)
+        return data
 
     @register
     def _vec_to_map[S: Vec, T: Map](self: Transform[S, T]) -> dict | Counter | None:
@@ -783,16 +854,23 @@ class Transform[T0, T1](_TypingBase, pyd.BaseModel):
         return None
 
     @register
-    def _map_to_string[S: Map, T: String](self: Transform[S, T]) -> T | None:
-        return None
+    def _map_to_string[S: Map, T: String](self: Transform[S, T]) -> str | None:
+        """``{} -> '{}'`` -- serialize a mapping into its plain string form."""
+        return str(self.to(dict) if not isinstance(self.data, dict) else self.data)
 
     @register
-    def _map_to_scalar[S: Map, T: Scalar](self: Transform[S, T]) -> T | None:
-        return None
+    def _map_to_scalar[S: Map, T: Scalar](self: Transform[S, T]) -> Scalar | None:
+        """A mapping coerces to a scalar only by its length (e.g. truthiness / count)."""
+        with ctx.suppress(TypeError, ValueError):
+            return self._t1(len(self.to(dict) or {}))
 
     @register
-    def _map_to_time[S: Map, T: Time](self: Transform[S, T]) -> T | None:
-        return None
+    def _map_to_time[S: Map, T: Time](self: Transform[S, T]) -> Time | None:
+        """Build a Time object from a mapping of its components (e.g. ``{'year': 2026, ...}``)."""
+        if not (items := self.map_items):
+            return None
+        with ctx.suppress(TypeError, ValueError):
+            return self._t1(**dict(items))
 
     @register
     def _map_to_enum[S: Map, T: Enum](self: Transform[S, T]) -> T | None:
@@ -863,11 +941,22 @@ class Transform[T0, T1](_TypingBase, pyd.BaseModel):
 
     @register
     def _iter_to_object[S: Iter, T: object](self: Transform[S, T]) -> T | None:
-        """Hailmary fallback for iterables that at least casts them to a list first."""
-        return self.by(list)
+        """Hailmary fallback that materializes a *lazy* iterator to a list first.
+
+        Restricted to genuine iterators: a str/bytes or an already-concrete sequence is
+        also `Iterable`, but re-listing it and re-casting to the same broad target would
+        recurse forever (and a string would be exploded into characters).
+        """
+        if isinstance(self.data, Iterator) and not isinstance(self.data, (str, bytes)):
+            return self.by(list)
+        return None
 
     @register
     def _object_to_iter[S: Map, T: Iter](self: Transform[S, T]) -> T | None:
+        # A Mapping is itself an Iterable, so this would fire for map->map targets and explode
+        # the dict into a list of keys (then loop). Leave map targets to the map transforms.
+        if tym.is_map_type(self.t1):
+            return None
         return self.by(list)
 
     def _model_fields(
@@ -929,7 +1018,7 @@ class Transform[T0, T1](_TypingBase, pyd.BaseModel):
         # I. First, try to use the semi-standard `new()` method if available
         if (ret := self.ty.try_method(self._t1, 'new', self.data, _tvar=self._t1)) is not None:
             return ret
-        elif ut.is_map(self.data):
+        elif tyc.is_map(self.data):
             kwargs = self._cast_members(ut.map_items(self.data), self._t1)
             return self.ty.invoke(self._t1, **kwargs)
         else:
@@ -969,6 +1058,24 @@ class Transform[T0, T1](_TypingBase, pyd.BaseModel):
     # -------------------
     # `+` Primary Methods
     # -------------------
+    def to_union(self) -> T1 | None:
+        """Cast data to a union (split) target.
+
+        Returns the data unchanged if it already satisfies any member of the union (a NOOP,
+        e.g. a str passed to `int | str`); otherwise coerces it to a member, trying the
+        last-listed first (later members are treated as higher-preference targets). Casting
+        to the NoneType member naturally yields None and is skipped over.
+
+        Returns:
+            The (possibly coerced) data, or None if no member could be satisfied.
+        """
+        if self.t1.check(self.data):
+            return self.data
+        for arg in reversed(self.t1.args):
+            if (ret := tyt.cast(self.data, arg)) is not None:
+                return ret
+        return None
+
     def to_literal(self) -> T1 | None:
         """Cast data to a literal type or literal tuple.
 
@@ -1165,10 +1272,15 @@ class Transform[T0, T1](_TypingBase, pyd.BaseModel):
         return tyt.cast(data, self.t1)
 
     def by(self, *args: AnyType) -> T1 | None:
-        """Shorthand casting to the target type through one or more intermediary types."""
+        """Shorthand casting to the target type through one or more intermediary types.
+
+        Each intermediate is an actual cast *target* in turn (the source of each hop is
+        inferred from the running value), so `by(list)` truly materializes a list before
+        casting onward -- which also stops hailmary fallbacks from re-selecting themselves.
+        """
         cur: Any = self.data
-        for t0, t1 in it.pairwise((*args, self._t1)):
-            cur = tyt.cast(cur, source=t0, target=t1)
+        for t1 in (*args, self._t1):
+            cur = tyt.cast(cur, target=t1)
             if cur is None:
                 break
         return cur
@@ -1182,16 +1294,30 @@ class Transform[T0, T1](_TypingBase, pyd.BaseModel):
         # II. Branch immediately for special cases
         if self.t1.literal_members:
             return self.to_literal()
-        elif self.t1.is_split or not self.t1.main or self.data is None:
+        elif self.t1.is_split:
+            return self.to_union()
+        elif not self.t1.main or self.data is None:
             return None
         elif self.t1.check(self.data):
             return self.data
 
-        # Get a list of relevant transformations, sorted from most- to least-specific.
-        candidates = [(k0, k1, tr) for k0, k1, tr in _TRANSFORMS if k0 in self.t0 and k1 in self.t1]
-        candidates.sort()
+        # Get a list of relevant transformations, sorted from most- to least-specific. Specificity
+        # is a *partial* order (subset of bounds), so a plain `.sort()` on `MyType.__lt__` scrambles
+        # it -- e.g. letting `object`-bound hailmary transforms beat `_scalar_to_string`. Use an
+        # explicit comparator that puts strictly-narrower (subset) bounds first instead.
+        def _by_specificity(a: TransformEntry, b: TransformEntry) -> int:
+            (a0, a1, _), (b0, b1, _) = a, b
+            a_sub = (a0 == b0 or a0 in b0) and (a1 == b1 or a1 in b1)  # a's bounds ⊆ b's bounds
+            b_sub = (b0 == a0 or b0 in a0) and (b1 == a1 or b1 in a1)  # b's bounds ⊆ a's bounds
+            return int(b_sub) - int(a_sub)  # the narrower (more-specific) entry sorts first
 
-        # Try each of the candidates in turn, returning the first successful cast (if any)
+        candidates = [(k0, k1, tr) for k0, k1, tr in _TRANSFORMS if self.t0 in k0 and self.t1 in k1]
+        candidates.sort(key=ft.cmp_to_key(_by_specificity))
+
+        # Try each of the candidates in turn, returning the first successful cast (if any). A
+        # transform that raises is treated as a non-match -- the next (more general) candidate is
+        # tried -- rather than aborting the whole cast.
         for *_, tr in candidates:
-            if (ret := self._finalize(tr(self))) is not None:
-                return ret
+            with ctx.suppress(Exception):
+                if (ret := self._finalize(tr(self))) is not None:
+                    return ret

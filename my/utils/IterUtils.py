@@ -233,8 +233,9 @@ class IterUtils(_UtilsBase):
         Args:
             pred: Predicate to normalize (value, iterable, or function).
         """
+        # NOTE: `Func` is a union alias, so it can't be a `match` class pattern; guard on callable.
         match pred:
-            case Func():
+            case _ if callable(pred) and not isinstance(pred, type):
                 return pred
             case Container():
                 return pred.__contains__
@@ -376,21 +377,28 @@ class IterUtils(_UtilsBase):
     @classmethod
     def normalize(cls, data: object) -> object:
         """Normalize the input data into a more workable form for casting."""
-        match data:
-            case None | type() | UnionType():
-                return data
-            case String():
-                return cls.ty.cast(data, str)
-            case datetime(tzinfo=tz) if tz != UTC:
-                return data.astimezone(UTC)
-            case time(tzinfo=tz) if tz != UTC:
-                return data.replace(tzinfo=UTC)
-            case Map():
-                return cls.ty.cast(data, dict)
-            case Vec() | Iter():
-                return cls.ty.cast(data, list)
-            case _:
-                return data
+        # NOTE: `String`/`Map`/`Vec`/`Iter` are union aliases, so they can't be `match` class
+        # patterns; dispatch with the equivalent `is_*` predicates instead. Conversions are done
+        # directly here (NOT via `cls.ty.cast`), since `cast` itself normalizes its input first --
+        # routing back through it would recurse forever.
+        if data is None or isinstance(data, (type, UnionType)):
+            return data
+        elif isinstance(data, str):
+            return data
+        elif isinstance(data, (bytes, bytearray)):
+            return data.decode()
+        elif isinstance(data, memoryview):
+            return data.tobytes().decode()
+        elif isinstance(data, datetime):
+            return data.astimezone(UTC) if data.tzinfo != UTC else data
+        elif isinstance(data, time):
+            return data.replace(tzinfo=UTC) if data.tzinfo != UTC else data
+        elif cls.ty.is_map(data):
+            return {cls.normalize(k): cls.normalize(v) for k, v in cls.map_items(data)}
+        elif cls.ty.is_vec(data) or cls.ty.is_iter(data):
+            return [cls.normalize(v) for v in data]
+        else:
+            return data
 
     @classmethod
     def safe[K: Hashable = str, V = str](

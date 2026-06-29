@@ -2,6 +2,7 @@
 ### HEAD ###
 ############
 ### STANDARD
+from __future__ import annotations
 from typing import overload, TypeIs, Literal, Any, TypeGuard
 from collections.abc import Iterator
 from types import EllipsisType, NoneType
@@ -26,6 +27,7 @@ from ..infra.types import (
     Vec,
     Iter,
     Map,
+    Maps,
     Model,
     Struct,
     Func,
@@ -94,9 +96,9 @@ class TypeCheck[T0, T1](_TypingBase, pyd.BaseModel):
                 return _target is NoneType and _data is None
             case _data, _target, _ if _target is NoneType or _data is None:
                 return _target is EllipsisType and _data is Ellipsis
-            case _, _, Meta.UNIV:
+            case _, _, Meta.ALWAYS:
                 return True
-            case _, _, Meta.NONE:
+            case _, _, Meta.NEVER:
                 return False
             case _data, _target, Meta.TYPE:
                 if _target is EllipsisType:
@@ -113,7 +115,9 @@ class TypeCheck[T0, T1](_TypingBase, pyd.BaseModel):
         elif self.t1.vals and isinstance(self.data, Iterable):
             return self.check_all(self.data, self.t1.vals)
 
-        return False
+        # `isinstance` already confirmed the main type with no (or vacuously-satisfied) element
+        # constraints left to check -- e.g. `check(5, int)` or `check({}, dict[str, int])`.
+        return True
 
     # -------------------
     # `-` Private Methods
@@ -165,11 +169,7 @@ class TypeCheck[T0, T1](_TypingBase, pyd.BaseModel):
         """Determine if a variable is a map."""
         if data is None or isinstance(data, type):
             return False
-        elif isinstance(data, Map):
-            return True
-        elif cls.is_iter(data):
-            pass
-        return False
+        return isinstance(data, Maps)
 
     @classmethod
     def is_map_item(cls, data: object) -> bool:

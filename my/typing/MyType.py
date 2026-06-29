@@ -36,6 +36,7 @@ from collections.abc import (
     AsyncIterable,
     ItemsView,
     Set,
+    Hashable,
 )
 from io import StringIO, BytesIO
 import inspect
@@ -192,11 +193,12 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
 
     #: The the type annotation for the contents of a generic collection.
     #: The vast majority of generics are monotyped so only use this field (e.g. vecs & iters).
-    vals: MyType = pyd.Field(default_factory=lambda: MyType.POS)
+    #: None when the contents are unconstrained (e.g. a bare `list` or an `Any` value type).
+    vals: MyType | None = None
 
     #: For mappings, the type annotation of the keys. For other types, None.
     #: Can sometimes be monotype, e.g. `Counter[str]` -> `dict[str, int]`
-    keys: MyType = pyd.Field(default_factory=lambda: MyType.POS)
+    keys: MyType | None = None
 
     # ---- Internal attributes ----
     #: The origin of the type, if it has one (e.g. `dict` for `dict[str, int]`); otherwise None.
@@ -254,6 +256,9 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
         """Create a new MyType instance by parsing a type OR inferring the full type of a value."""
         cls = MyType
         # 0. Handle edge & null cases, prep data
+        if not isinstance(root, Hashable):
+            # Unhashable roots (list, dict, set, ...) are always runtime values -- infer.
+            return cls.typeof(root)
         if root in {empty, Empty, Any}:
             return cls.POS
         elif root in {None, NoneType, Never}:
@@ -261,8 +266,11 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
         elif (
             isinstance(root, (type, MyType, UnionType))
             or (isinstance(root, tuple) and all(isinstance(t, type) for t in root))
+            or get_origin(root) is not None
             or Meta(root)
         ):
+            # NOTE: `get_origin` catches parameterized generics & special forms (e.g. `dict[str, int]`,
+            # `Literal[1]`), which are NOT `type` instances and so must be `parse`d, not `typeof`'d.
             return cls.parse(root)
         else:
             # II. Infer annotations for untyped data
@@ -348,12 +356,9 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
                 args = [cls._join(valtypes)]
         elif ty.is_map(data):
             d = dict(data)
-            cls._join(
-                [
-                    cls.typeof(mi.first(d.keys())),
-                    *(cls.typeof(_member) for _member in d.values()),
-                ]
-            )
+            keys = cls._join(cls.typeof(k) for k in d.keys())
+            vals = cls._join(cls.typeof(v) for v in d.values())
+            args = [keys, vals]
 
         return cls.parse(origin[*args] if args else origin)  # type: ignore
 
@@ -386,8 +391,6 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
                 return Any
             case Meta.NEVER:
                 return NoneType
-            case Meta.COND:
-                return bool
             case _:
                 return root
 
@@ -411,8 +414,9 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
             return self
 
         match Meta(self.root):
-            case Meta.NEVER:
-                # II. Ignore unhandled types, not setting `main` at all
+            case Meta.ALWAYS | Meta.NEVER:
+                # II. Ignore "always"/unhandled forms, not setting `main` at all (stays falsy).
+                # NOTE: `Any` is a `type` subclass in 3.11+, so it must be excluded here explicitly.
                 return self
             case Meta.MONO:
                 # III. Unwrap simple forms (e.g. `Annotated[str]`)
@@ -440,10 +444,14 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
                     if issubclass(self.root, Counter) and not self.vals:
                         self.vals = MyType.new(int)
                     elif issubclass(self.root, Enum):
-                        self.keys = MyType.new(str)
-                        if not self.vals:
-                            vals = list(self.root.__members__.values())
-                            self.vals = MyType.typeof(mi.first(vals, int))
+                        # Only a *populated* enum carries key/val constraints (names -> values);
+                        # the bare `Enum` base stays unconstrained so subclasses are subsets of it.
+                        if members := list(self.root.__members__.values()):
+                            self.keys = MyType.new(str)
+                            if not self.vals:
+                                # Infer from the members' underlying `.value`, NOT the members
+                                # themselves -- typeof(member) would re-parse this Enum and recurse.
+                                self.vals = MyType.typeof(mi.first(m.value for m in members))
         return self
 
     # -------------------
@@ -463,43 +471,39 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
             else:
                 yield arg
 
-    def _process_generic(
-        self, origin: type, args: tuple[MyType, ...]
-    ) -> tuple[MyType | None, MyType | None]:
-        """Process the type arguments for a generic origin and its arguments.
-
-        Returns:
-            A (key, val) type annotation 2-tuple.
-        """
+    def _process_generic(self, origin: type, args: tuple[MyType, ...]) -> None:
+        """Wire up `keys`/`vals` (and tuple literals) from a generic origin and its args."""
         n = len(args or [])
+        is_map = inspect.isclass(origin) and issubclass(origin, Mapping)
         if n == 0:
             # 0. No args -> just set the main type
             self.main = origin
-        elif issubclass(origin, tuple):
+        elif inspect.isclass(origin) and issubclass(origin, tuple):
             # I. Catch tuples (either monotyped or literal)
             if args[-1].root is EllipsisType:
                 if n > 1:
-                    self.vals = args[0]
+                    # `or None`: an `Any` arg parses to a falsy MyType -> unconstrained.
+                    self.vals = args[0] or None
                 else:
                     self.args = tuple()
             else:
                 self.literal_members = list(args)
         elif n == 1:
             arg = args[0]
-            if self.ty.is_map(origin):
+            if is_map:
                 # II. Catch mono-keyed maps (e.g. Counters)
+                self.keys = arg or None
                 if issubclass(origin, Counter):
-                    return arg, self.parse(int)
+                    self.vals = self.parse(int)
             else:
                 # III. Catch any generics with singular values -- the most common kind by far
-                return None, arg
-        elif n == 2 and self.ty.is_map(origin):
+                self.vals = arg or None
+        elif n == 2 and is_map:
             # IV. Catch double-keyed (key+val) maps
-            return args[0], args[1]
-        return None, None
+            self.keys, self.vals = args[0] or None, args[1] or None
 
     @classmethod
-    def _join(cls, *args: TypeArg) -> type | UnionType:
+    def _join(cls, args: Iterable[TypeArg]) -> type | UnionType:
         """Condense multiple type arguments into a single type or union.
 
         Args:
@@ -736,6 +740,30 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
         """
         return self.ty.check(data, self.root) if self else False
 
+    def check_iter(self, data: Iterable) -> Iterator[bool]:
+        """Yield a boolean for each element of `data` indicating if it matches this type.
+
+        Args:
+            data: The iterable of values to check. Ideally not an exhaustable iter.
+        Yields:
+            One boolean per element, True if that element matches this type.
+        """
+        return (self.check(v) for v in data)
+
+    def literal_check(self, val: object) -> bool:
+        """Determine whether a value satisfies this Literal or tuple-literal type."""
+        return self.ty.is_literal(val, self)
+
+    def is_map_item(self) -> bool:
+        """Whether this type is a map item: a bare `tuple` or a `tuple` of exactly two types."""
+        main = self.main
+        if main is None or not (inspect.isclass(main) and issubclass(main, tuple)):
+            return False
+        if not self.literal_members and not self.vals:
+            # Bare, unparameterized `tuple` -- a key/value pair of unknown types.
+            return True
+        return len(self.literal_members) == 2
+
     def members(self) -> Iterator[MyType]:
         """Yield all field types for Pydantic models or TypedDicts.
 
@@ -801,8 +829,11 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
 ### DATA ###
 ############
 
-MyType.POS = MyType.new(Any)
-MyType.NEG = MyType.new(None)
+# Bootstrap the two canonical singletons. We can't use `new()` here, since it short-circuits to
+# `cls.POS`/`cls.NEG` for `Any`/`None`; instead construct them directly and make `POS` self-referential.
+MyType.POS = MyType(root=Any)
+MyType.NEG = MyType(root=None)
+MyType.POS.vals = MyType.POS.keys = MyType.POS
 
 _idx_data: dict[str, Any] = {
     '0': Object,
@@ -848,4 +879,5 @@ _idx_data: dict[str, Any] = {
     '32': BuiltinFunctionType,
     '33': Callable,
 }
-MyType.IDXS = ut.val_map(MyType, _idx_data)
+# NOTE: built directly (not via `ut.val_map`) since `ut.ty` isn't wired up until Typist loads.
+MyType.IDXS = {key: MyType.new(val) for key, val in _idx_data.items()}

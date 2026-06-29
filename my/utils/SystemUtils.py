@@ -633,7 +633,6 @@ class SystemUtils(_UtilsBase):
             ret = srsly.read_yaml(file)
         else:
             # I.iii. Main Case: Attempt to parse in-memory YAML strings
-            cls.ty.cast()
             if isinstance(file, bytes):
                 file = file.decode()
             if file.strip().startswith('```yaml'):

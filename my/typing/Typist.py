@@ -38,6 +38,7 @@ from ..infra.types import (
     Iter,
     Map,
     Model,
+    Struct,
 )
 from ..utils import ut
 from .MyType import MyType, TypeArg
@@ -751,6 +752,55 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
     # ----------------
     # `*5` PERSISTENCE
     # ----------------
+    # NOTE: The actual file I/O lives in `SystemUtils` (import-order constraints); these are thin
+    # convenience wrappers so callers can reach it through the `typist` interface.
+    @overload
+    def from_file(self, file: FileParam) -> dict: ...
+    @overload
+    def from_file(self, file: FileParam, tvar: type[F], cast: bool = True) -> F: ...
+    def from_file(self, file: FileParam, tvar: type = dict, cast: bool = True) -> Any:
+        """Load & cast data from a local JSON/YAML/TOML/Pickle file. See `ut.from_file()`."""
+        return ut.from_file(file, tvar, cast)
+
+    @overload
+    def from_json(self, file: FileParam) -> dict: ...
+    @overload
+    def from_json(self, file: FileParam, tvar: type[F], cast: bool = True) -> F: ...
+    def from_json(self, file: FileParam, tvar: type = dict, cast: bool = True) -> Any:
+        """Load & cast data from a JSON file or string. See `ut.from_json()`."""
+        return ut.from_json(file, tvar, cast)
+
+    @overload
+    def from_yaml(self, file: FileParam) -> dict: ...
+    @overload
+    def from_yaml(self, file: FileParam, tvar: type[F], cast: bool = True) -> F: ...
+    def from_yaml(self, file: FileParam, tvar: type = dict, cast: bool = True) -> Any:
+        """Load & cast data from a YAML file or string. See `ut.from_yaml()`."""
+        return ut.from_yaml(file, tvar, cast)
+
+    @overload
+    def from_toml(self, file: FileParam) -> dict: ...
+    @overload
+    def from_toml(self, file: FileParam, tvar: type[F], cast: bool = True) -> F: ...
+    def from_toml(self, file: FileParam, tvar: type = dict, cast: bool = True) -> Any:
+        """Load & cast data from a TOML file or string. See `ut.from_toml()`."""
+        return ut.from_toml(file, tvar, cast)
+
+    def to_file(self, data: Atom | Struct, file: str | File) -> None:
+        """Save data to a local JSON/YAML/TOML/Pickle file. See `ut.to_file()`."""
+        return ut.to_file(data, file)
+
+    def to_yaml(self, data: Atom | Struct, wrap: bool = False, **kwargs) -> str:
+        """Serialize data to a YAML string. See `ut.to_yaml()`."""
+        return ut.to_yaml(data, wrap, **kwargs)
+
+    def to_json(self, data: Atom | Struct, wrap: bool = False, **kwargs) -> str:
+        """Serialize data to a JSON string. See `ut.to_json()`."""
+        return ut.to_json(data, wrap, **kwargs)
+
+    def to_toml(self, data: Atom | Struct, wrap: bool = False, **kwargs) -> str:
+        """Serialize data to a TOML string. See `ut.to_toml()`."""
+        return ut.to_toml(data, wrap, **kwargs)
 
     # ---------------
     # `*6` INVOCATION

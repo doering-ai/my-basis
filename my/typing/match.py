@@ -2,6 +2,7 @@
 ### HEAD ###
 ############
 ### STANDARD
+from __future__ import annotations
 from typing import overload, ClassVar, TypeIs, Literal, is_typeddict, Any
 from collections.abc import Hashable, Iterable
 from enum import Enum
@@ -65,7 +66,7 @@ class TypeMatch(_TypingBase):
         lit0, lit1 = t0.literal_members, t1.literal_members
         o0, o1 = t0.origin, t1.origin
 
-        _recur = ft.partial(cls.match, inter=inter)
+        _recur = ft.partial(cls.match, intersect=inter)
         if lit0 and lit1:
             assert o0 and o1, "Found literal without an origin, which doesn't make sense."
             if o0 is Literal and o1 is Literal:
@@ -120,29 +121,29 @@ class TypeMatch(_TypingBase):
     # ------------------
     @overload
     @classmethod
-    def match(cls, t0: None, t1: Any, inter: bool = False) -> Literal[False]: ...
+    def match(cls, t0: None, t1: Any, intersect: bool = False) -> Literal[False]: ...
     @overload
     @classmethod
-    def match(cls, t0: Any, t1: None, inter: bool = False) -> Literal[False]: ...
+    def match(cls, t0: Any, t1: None, intersect: bool = False) -> Literal[False]: ...
     @overload
     @classmethod
-    def match[T1](cls, t0: type, t1: TypeArg[T1], inter: bool = False) -> TypeIs[type[T1]]: ...
+    def match[T1](cls, t0: type, t1: TypeArg[T1], intersect: bool = False) -> TypeIs[type[T1]]: ...
     @overload
     @classmethod
-    def match[T1](cls, t0: MyType, t1: TypeArg[T1], inter: bool = False) -> TypeIs[MyType[T1]]: ...
+    def match[T1](cls, t0: MyType, t1: TypeArg[T1], intersect: bool = False) -> TypeIs[MyType[T1]]: ...
     @overload
     @classmethod
     def match[T1](
-        cls, t0: tuple[type, ...], t1: TypeArg[T1], inter: bool = False
+        cls, t0: tuple[type, ...], t1: TypeArg[T1], intersect: bool = False
     ) -> TypeIs[tuple[type, ...]]: ...
     @classmethod
-    def match(cls, t0: TypeArg, t1: TypeArg, inter: bool = False) -> bool:
+    def match(cls, t0: TypeArg, t1: TypeArg, intersect: bool = False) -> bool:
         """Check if the first type is valid subset of the second (or intersects, if so set).
 
         Args:
             t0: The source type.
             t1: The target type.
-            inter: If `True`, check for any overlap between the two types
+            intersect: If `True`, check for any overlap between the two types
                        rather than full subset coverage.
         """
         # I. Parse the types (if they're already parsed, no work is done)
@@ -152,22 +153,24 @@ class TypeMatch(_TypingBase):
         if t0 == t1:
             return True
 
-        # II.i. Any & None (i.e. unspecified) are true, but unhandled MyTypes are always false
-        if r0 is Any or r1 is Any:
+        # II.i. The POS/NEG sentinels (bare `Any` / `None`, i.e. unspecified) are wildcards that
+        # match anything in either direction. An *explicit* NoneType built via MyType.parse(NoneType)
+        # is a distinct concrete instance (not the NEG singleton) and falls through to real matching.
+        if r0 is Any or r1 is Any or t0 is MyType.NEG or t1 is MyType.NEG:
             return True
-        elif r0 is None or r1 is None or not (t0 and t1):
+        elif not (t0 and t1):
             return False
 
         # II.i. Check cache based on simple stringification
-        cache_key = str(r0), str(r1) + ('.I' if inter else '')
+        cache_key = str(r0), str(r1) + ('.I' if intersect else '')
         if (cached := TypeMatch.MATCH_CACHE[cache_key]) is not None:
             return cached
 
-        _recur = ft.partial(cls.match, inter=inter)
+        _recur = ft.partial(cls.match, intersect=intersect)
         ret = False
         if t0.literal_members or t1.literal_members:
             # III.i. Literal case
-            ret = cls._match_literals(t0, t1, inter)
+            ret = cls._match_literals(t0, t1, intersect)
         elif not (m0 and m1):
             # III.ii. Unhandled case
             pass
@@ -175,13 +178,25 @@ class TypeMatch(_TypingBase):
             # III.iii. Unions case
             lhs_options = t0.args if t0.is_split else [t0]
             rhs_options = t1.args if t1.is_split else [t1]
-            fn = any if inter else all
+            fn = any if intersect else all
             ret = fn(any(_recur(lo, ro) for ro in rhs_options) for lo in lhs_options)
         else:
             # IV. Main case: check for simple subclass coverage for the main type and any children
             with ctx.suppress(TypeError):
-                ret = issubclass(m0, m1) or (inter and issubclass(m1, m0))
-            ret = ret and _recur(t0.keys, t1.keys) and _recur(t0.vals, t1.vals)
+                ret = issubclass(m0, m1) or (intersect and issubclass(m1, m0))
+            # A `str`/`bytes` iterates into chars/ints -- never arbitrary elements -- so it must not
+            # be judged a subset of an element-constrained, non-string iterable (e.g. the
+            # `Iterable[tuple[...]]` member of `Map`), even though `issubclass(str, Iterable)` holds.
+            if ret and t1.vals and cls.is_string_type(t0) and not cls.is_string_type(t1):
+                ret = False
+            # An unconstrained parent element type (keys/vals is None) accepts any child, so only
+            # recurse when the parent actually constrains that part (e.g. Color is a subset of the
+            # bare Enum, and a bare Mapping is a subset of Mapping[str, ...]).
+            ret = (
+                ret
+                and (not t1.keys or _recur(t0.keys, t1.keys))
+                and (not t1.vals or _recur(t0.vals, t1.vals))
+            )
 
         # Cache & return
         TypeMatch.MATCH_CACHE[cache_key] = ret

@@ -15,7 +15,7 @@ from copy import deepcopy
 import pydantic as pyd
 
 ### INTERNAL
-from ..infra.types import Vec, Map, Atom, Struct, _Map, _Vec
+from ..infra.types import Vec, Map, Maps, Atom, Struct, _Map, _Vec
 from ..utils import ut
 from ..typing import Typist, MyType, ty
 
@@ -150,7 +150,7 @@ class Predicate(pyd.BaseModel):
 
         if ty.is_model(val):
             val = _map
-        if isinstance(val, Map):
+        if isinstance(val, Maps):
             prefix = f'{field}.' if field else ''
             for c_field, c_val in dict(val).items():
                 yield from cls._cast_arg(f'{prefix}{c_field}', c_val, duplicates)
@@ -284,7 +284,7 @@ class Predicate(pyd.BaseModel):
         elif isinstance(other, Iterable) and ty.all_are(other, str):
             # II. Check for a collection of keys
             return self.has_all(*other)
-        elif isinstance(other, (Vec, Map, Predicate)):
+        elif isinstance(other, (Vec, *Maps, Predicate)):
             # III. Check for key: value pairs (NOT paying attention to value ordering)
             _other = self.new(other, duplicates=self.duplicates)
             assert isinstance(_other, Predicate)  # no idea...

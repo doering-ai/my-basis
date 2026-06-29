@@ -33,13 +33,15 @@ repos:
           language: system
           ## types: [python]
           files: '(pyproject.toml|uv.lock)$'
+          pass_filenames: false
           entry: uv lock --check
 
-        - id: format 
+        - id: format
           name: Reformat changed py, yaml, toml, md, sublime-*, json, and other files
           language: system
           ## types: [python]
-          files: '.(?i:py|ya?ml|to?ml|md|sublime-\w+|jso?nc?)$'
+          files: '\.(?i:py|ya?ml|to?ml|md|sublime-\w+|jso?nc?)$'
+          pass_filenames: false
           entry: task eval:format
 
 

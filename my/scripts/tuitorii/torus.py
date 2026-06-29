@@ -1,11 +1,17 @@
+"""Torus showcase through PyRatatui.
+
+TODO: Writeup policy documents to enforce the style changes implied by the diff of this commit
+with the previous one, which was automated.
+"""
+
 ############
 ### HEAD ###
 ############
 ### STANDARD
 from __future__ import annotations
+from typing import NamedTuple
 
 from collections.abc import Iterable
-from dataclasses import dataclass
 from math import cos, pi, sin
 from time import monotonic
 import argparse as ap
@@ -15,50 +21,52 @@ import itertools as it
 from pydantic import BaseModel, Field
 
 ### INTERNAL
+from my import Scalar
 
 ############
 ### DATA ###
 ############
-type Point2 = tuple[float, float]
-type Point4 = tuple[float, float, float, float]
-type ProjectedPoint = tuple[float, float, float]
+type R2 = tuple[float, float]
+type R3 = tuple[float, float, float]
+type R4 = tuple[float, float, float, float]
 
 
 class TorusConfig(BaseModel):
-    """Configuration for the rotating 4D torus showcase.
+    """Configuration for the rotating 4D torus showcase."""
 
-    Args:
-        samples_u: Number of samples around the first circle.
-        samples_v: Number of samples around the second circle.
-        width: Logical canvas width used by PyRatatui's Canvas widget.
-        height: Logical canvas height used by PyRatatui's Canvas widget.
-        fps: Target frames per second for the event/render loop.
-        speed: Initial angular speed multiplier.
-        mesh_stride: Step size for drawing low-density guide rings.
-        snapshot: Whether to print one non-interactive ASCII frame and exit.
-    """
-
+    #: Number of samples around the first circle.
     samples_u: int = Field(default=56, ge=8, le=160)
+
+    #: Number of samples around the second circle.
     samples_v: int = Field(default=28, ge=8, le=120)
+
+    #: Logical canvas width used by PyRatatui's Canvas widget.
     width: int = Field(default=120, ge=20, le=240)
+
+    #: Logical canvas height used by PyRatatui's Canvas widget.
     height: int = Field(default=48, ge=12, le=120)
+
+    #: Target frames per second for the event/render loop.
     fps: float = Field(default=30.0, ge=1.0, le=120.0)
+
+    #: Initial angular speed multiplier.
     speed: float = Field(default=1.0, ge=0.05, le=8.0)
+
+    #: Step size for drawing low-density guide rings.
     mesh_stride: int = Field(default=7, ge=2, le=32)
+
+    #: Whether to print one non-interactive ASCII frame and exit.
     snapshot: bool = False
 
 
-@dataclass(frozen=True, slots=True)
-class TorusFrame:
-    """Projected geometry for a single animation instant.
+class TorusFrame(NamedTuple):
+    """Projected geometry for a single animation instant."""
 
-    Args:
-        points: Depth-sorted projected points in canvas coordinates.
-        rings: Projected guide rings in canvas coordinates.
-    """
+    #: Depth-sorted projected points in canvas coordinates.
+    points: list[R3]
 
-    points: list[ProjectedPoint]
-    rings: list[list[Point2]]
+    #: Projected guide rings in canvas coordinates.
+    rings: list[list[R2]]
 
 
 ############
@@ -83,7 +91,7 @@ class TorusApp:
     # -------------------
     # `-` Private Methods
     # -------------------
-    def _sample_clifford_torus(self) -> Iterable[Point4]:
+    def _sample_clifford_torus(self) -> Iterable[R4]:
         """Yield points from a Clifford torus embedded in four dimensions.
 
         Returns:
@@ -96,7 +104,7 @@ class TorusApp:
                 yield (cos(u), sin(u), cos(v), sin(v))
 
     @staticmethod
-    def _rotate_plane(point: Point4, a: int, b: int, angle: float) -> Point4:
+    def _rotate_plane(point: R4, a: int, b: int, angle: float) -> R4:
         """Rotate a 4D point in one coordinate plane.
 
         Args:
@@ -116,22 +124,22 @@ class TorusApp:
         coords[b] = xa * sa + xb * ca
         return (coords[0], coords[1], coords[2], coords[3])
 
-    def _rotate(self, point: Point4, elapsed: float) -> Point4:
+    def _rotate(self, point: R4, dur: float, *args: Scalar) -> R4:
         """Apply several coupled 4D rotations to a point.
 
         Args:
             point: Original 4D point.
-            elapsed: Animation time in seconds.
+            dur: Animation time in seconds.
         Returns:
             Rotated 4D point.
         """
-        t = elapsed * self.speed
+        t = dur * self.speed
         point = self._rotate_plane(point, 0, 3, 0.43 * t)
         point = self._rotate_plane(point, 1, 2, 0.37 * t)
         point = self._rotate_plane(point, 0, 2, 0.19 * t)
         return self._rotate_plane(point, 1, 3, 0.13 * t)
 
-    def _project(self, point: Point4) -> ProjectedPoint:
+    def _project(self, point: R4) -> R3:
         """Project a rotated 4D point to 2D canvas coordinates with depth.
 
         Args:
@@ -155,7 +163,7 @@ class TorusApp:
         depth = z3 + (0.45 * w)
         return (px, py, depth)
 
-    def _project_ring(self, fixed: str, index: int, elapsed: float) -> list[Point2]:
+    def _project_ring(self, fixed: str, index: int, elapsed: float) -> list[R2]:
         """Project one torus guide ring.
 
         Args:
@@ -165,7 +173,7 @@ class TorusApp:
         Returns:
             Ordered 2D ring points.
         """
-        ring: list[Point2] = []
+        ring: list[R2] = []
         n = self.config.samples_v if fixed == 'u' else self.config.samples_u
         fixed_n = self.config.samples_u if fixed == 'u' else self.config.samples_v
         for k in range(n + 1):
@@ -281,9 +289,7 @@ def _draw_canvas(app: TorusApp, frame: object) -> None:
         Block()
         .bordered()
         .title(' myBasis x PyRatatui — rotating 4D Clifford torus ')
-        .title_bottom(
-            f' q/Esc quit │ Space pause │ +/- speed {app.speed:0.2f}x │ r reset '
-        )
+        .title_bottom(f' q/Esc quit │ Space pause │ +/- speed {app.speed:0.2f}x │ r reset ')
         .border_style(Style().fg(Color.cyan()))
     )
     inner = block.inner(area)

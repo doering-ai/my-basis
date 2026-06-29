@@ -540,8 +540,7 @@ class Transform[T0, T1]:
         if not (text := self.to(str)):
             return
 
-        options = self.ty.options
-        if options.split:
+        if self.ty.splits:
             if match := self.RGXS['brackets'].fullmatch(text.strip()):
                 # I. Split json/yaml-like flow sequences
                 with ctx.suppress(Exception):
@@ -556,7 +555,7 @@ class Transform[T0, T1]:
                 #     e.g. one.oneA:two splits on colons, but one.oneA splits on periods
                 return list(filter(bool, map(str.strip, text.split(char))))
 
-        if options.wrap:
+        if self.ty.wraps:
             return [text]
 
     @register
@@ -757,7 +756,7 @@ class Transform[T0, T1]:
 
     @register
     def _atom_to_vec[S: Atom, T: Vec](self: Transform[S, T]) -> list | None:
-        if self.data and self.t1.vals:
+        if self.ty.wraps and self.data and self.t1.vals:
             with ctx.suppress(TypeError):
                 return [self.to(self.t1.vals)]
 
@@ -812,8 +811,13 @@ class Transform[T0, T1]:
 
     @register
     def _vec_to_atom[S: Vec, T: Atom](self: Transform[S, T]) -> T | None:
-        if self.data:
-            return self.proxy(mi.first(self.data))
+        if not self.data:
+            return None
+        # A multi-element series needs `firsts`; a single-element one needs `atomics`.
+        multi = len(self.data) > 1
+        if (multi and not self.ty.firsts) or (not multi and not self.ty.atomics):
+            return None
+        return self.proxy(mi.first(self.data))
 
     @register
     def _vec_to_vec[S: Vec, T: Vec](self: Transform[S, T]) -> list | None:
@@ -884,7 +888,7 @@ class Transform[T0, T1]:
             return self.map_items
         elif tym.is_string_type(v1):
             return [f'{k}: {v}' for k, v in self.map_items]
-        elif tym.is_map_type(v1) and self.ty.options.wrap:
+        elif tym.is_map_type(v1) and self.ty.wraps:
             # II. Wrap objects in lists
             return [self.map_items]
         elif tym.is_map_item_type(v1):

@@ -3,7 +3,7 @@
 ############
 ### STANDARD
 from __future__ import annotations
-from typing import Any, ClassVar, Literal, TypeGuard, TypeVar, overload, Self
+from typing import Any, ClassVar, Literal, TypeGuard, TypeVar, overload
 from collections.abc import (
     Callable,
     Iterable,
@@ -203,53 +203,61 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
     LOGGER: ClassVar[logging.Logger] = logger
     _INST: ClassVar[Typist]
 
-    class Options(pyd.BaseModel):
-        """Options for controlling the behavior of typecasting."""
+    #: Validate flag assignment so runtime toggles (e.g. `typist.splits = False`) stay type-checked.
+    model_config = pyd.ConfigDict(validate_assignment=True)
 
-        #: `Vec -> Atom` Whether to flexibly cast all vectors to atom using their first element.
-        #: e.g. `[1, 2, 3] -> 1`; `['a', 'b'] -> 'a'`; `{'a': 1} -> 'a'`
-        headen: bool = False
+    # ---- Cast configuration flags ----
+    # These gate the "loose" coercions in the cast chamber. `cast()` reads them live (results are
+    # not memoized), so they may be toggled at runtime. Casting dispatches through the global
+    # `typist` singleton, so these are effectively global config -- set them per-process or via a
+    # `preset()` bundle. The future per-call override seam is an `overrides=` argument on `cast()`,
+    # not more global state.
 
-        #: `String -> Struct` Whether to split up strings when casting them to vectors.
-        #: e.g. `'1,2,3' -> ['1', '2', '3']`; `'a.b.c' -> ['a', 'b', 'c']`
-        split: bool = False
+    #: `Vec -> Atom` Collapse a multi-element series to its first element (`[1, 2] -> 1`).
+    firsts: bool = True
 
-        #: Whether to flexibly wrap atoms when casting them to vectors, and vis-versa.
-        #: e.g.
-        wrap: bool = False
+    #: `Vec -> Atom` Unwrap a single-element series (`[1] -> 1`).
+    atomics: bool = True
 
-        #: `String -> Struct` Try out formats (e.g. .yaml, .csv, .env) when deserializing
-        #: e.g.
-        parse: bool = False
+    #: `String -> Struct` Split a string before casting it to a collection (`'a.b' -> ['a', 'b']`).
+    splits: bool = True
 
-        #: `Map[K, Struct | ...] <-/-> Map[K, ...]` Flatten & raze nested structs.
-        #: e.g. `{'map': {'key': 'val'}, 'vec': [['first', 'second'], 'outer']}`
-        #: `  -> {'map.key': 'val', 'vec.0.0: 'first', 'vec.0.1: 'second', 'vec.1': 'outer' }`
-        stack: bool = True
+    #: `Atom <-> Struct` Wrap an atom into a collection, and vice-versa (`'a' -> ['a']`).
+    wraps: bool = True
 
-        @classmethod
-        def preset(cls, level: Literal['strict', 'basic', 'flex'] = 'basic') -> Self:
-            """Get a preset configuration for typecasting behavior."""
-            if level == 'strict':
-                return cls(headen=False, split=False, wrap=False)
-            elif level == 'basic':
-                return cls(headen=False, split=True, wrap=False)
-            elif level == 'flex':
-                return cls(headen=True, split=True, wrap=True)
-            else:
-                raise ValueError(f'Invalid preset level: {level}')
+    @classmethod
+    def preset(cls, level: Literal['strict', 'basic', 'flex'] = 'basic') -> dict[str, bool]:
+        """Get a preset bundle of cast-flag values for a strictness tier.
 
-    #: Configuration options
-    options: Options = Options()
+        Args:
+            level: The strictness tier -- 'strict' disables every loose coercion, 'basic' enables
+                the everyday conveniences, and 'flex' additionally wraps atoms into collections.
+        Returns:
+            A mapping of cast-flag names to booleans, suitable for `Typist(**preset(...))` or for
+            assigning onto an existing instance.
+        """
+        if level == 'strict':
+            return dict(firsts=False, atomics=False, splits=False, wraps=False)
+        elif level == 'basic':
+            return dict(firsts=True, atomics=True, splits=True, wraps=False)
+        elif level == 'flex':
+            return dict(firsts=True, atomics=True, splits=True, wraps=True)
+        else:
+            raise ValueError(f'Invalid preset level: {level}')
 
     # -------------------
     # `.` Initial Methods
     # -------------------
     @classmethod
     def inst(cls) -> Typist:
-        """Get the global instance of Typist."""
+        """Get the global instance of Typist.
+
+        The global singleton defaults to the `flex` tier -- every loose coercion enabled -- in
+        keeping with the package's permissive "vibe typing" stance. Tighten it per-process by
+        assigning a stricter `preset()` bundle onto the returned instance.
+        """
         if not hasattr(cls, '_INST'):
-            cls._INST = cls(options=cls.Options.preset('basic'))
+            cls._INST = cls(**cls.preset('flex'))
         return cls._INST
 
     # -------------------

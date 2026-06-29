@@ -55,6 +55,21 @@ class TestTypist:
     # -------------------
     # `.` Initial Methods
     # -------------------
+    @pyt.fixture
+    def flex_typist(self) -> Typist:
+        """The global Typist singleton with every cast flag enabled, restored afterward.
+
+        Casting dispatches through the global singleton, so flag-mutation tests must drive that
+        instance (not a fresh one); the fixture saves and restores its flags for isolation.
+        """
+        inst = Typist.inst()
+        flags = ('firsts', 'atomics', 'splits', 'wraps')
+        saved = {flag: getattr(inst, flag) for flag in flags}
+        for flag in flags:
+            setattr(inst, flag, True)
+        yield inst
+        for flag, value in saved.items():
+            setattr(inst, flag, value)
 
     # -------------------
     # `-` Private Methods
@@ -554,7 +569,9 @@ class TestTypist:
     def test_cast__edge(self, data: list, target: type, expected: object):
         assert typist.cast(data, target) == expected
 
-    def test_cast__firsts_and_atomics(self):
+    def test_cast__firsts_and_atomics(self, flex_typist: Typist):
+        """Test that `firsts`/`atomics` gate collapsing a series down to a single atom."""
+        typist = flex_typist
         assert typist.cast([1, 2], int) == 1
         assert typist.cast([1], int) == 1
 
@@ -566,9 +583,9 @@ class TestTypist:
         assert typist.cast([1, 2], int) is None
         assert typist.cast([1], int) is None
 
-        typist.firsts = typist.atomics = True
-
-    def test_cast__splits_and_wraps(self):
+    def test_cast__splits_and_wraps(self, flex_typist: Typist):
+        """Test that `splits`/`wraps` gate string-splitting and atom-wrapping during casts."""
+        typist = flex_typist
         assert typist.cast('A.B', set[str]) == {'A', 'B'}
         assert typist.cast('A.B:C', set[str]) == {'A.B', 'C'}
         assert typist.cast('A.B:C, D', set[str]) == {'A.B:C', 'D'}
@@ -584,8 +601,6 @@ class TestTypist:
         typist.wraps = False
         assert typist.cast('A.B', set[str]) is None
         assert typist.cast(['A.B'], set[str]) == {'A.B'}
-
-        typist.splits = typist.wraps = True
 
     @pyt.mark.parametrize(
         'data, target, expected',

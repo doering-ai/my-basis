@@ -162,8 +162,10 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
 
     # Static Global Members
 
-    ### Regular Expressions (can't use RegexStore because it depends on this class)
-    RGXS: ClassVar[dict[str, Pattern]] = ut.regex_dict(
+    ### Regular Expressions (can't use RegexStore because it depends on this class). Merge the
+    ### inherited scalar patterns (int/float/bool/...) with these so methods like `flex_deserialize`
+    ### see both; defining `RGXS` here would otherwise shadow `TypeCast.RGXS` entirely.
+    RGXS: ClassVar[dict[str, Pattern]] = TypeCast.RGXS | ut.regex_dict(
         dict(
             ### Misc
             splitter=r' *(?:[,]|\/\/) *',

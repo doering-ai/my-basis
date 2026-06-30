@@ -250,31 +250,20 @@ class TestMatch:
         """Test `is_model_type`: pydantic models / dataclasses / TypedDicts."""
         assert cls.is_model_type(tvar) == expected
 
-    # --------------------------------
-    # `*` Deferred Predicates (to cast)
-    # --------------------------------
-    @pyt.mark.xfail(
-        reason='is_map_type does `issubclass(main, Map)` against a subscripted union (TypeError); '
-        'a working fix unmasks an infinite `_model_to_map` recursion -- fix in the cast chamber.',
-    )
     @pyt.mark.parametrize(
         'tvar, expected',
         boolmap(true=[dict, Counter, abc.Mapping], false=[list, str, int], base_type=tuple),
     )
     def test_is_map_type(self, tvar, expected: bool):
-        """Test `is_map_type`: Mapping / ItemsView / pair-iterable types (currently broken)."""
+        """Test `is_map_type`: Mapping / ItemsView / pair-iterable types."""
         assert cls.is_map_type(tvar) == expected
 
-    @pyt.mark.xfail(
-        reason='is_iter_type crashes via is_map_type (subscripted-union TypeError) -- '
-        'fix in the cast chamber with is_map_type.',
-    )
     @pyt.mark.parametrize(
         'tvar, expected',
         boolmap(true=[abc.Iterable, abc.Collection], false=[dict], base_type=tuple),
     )
     def test_is_iter_type(self, tvar, expected: bool):
-        """Test `is_iter_type`: a non-string, non-vec, non-map Iterable type (currently broken)."""
+        """Test `is_iter_type`: a non-string, non-vec, non-map Iterable type."""
         assert cls.is_iter_type(tvar) == expected
 
     # -----------------

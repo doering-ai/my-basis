@@ -25,6 +25,7 @@ from ..infra.types import (
     Vec,
     Iter,
     Map,
+    Maps,
     Model,
     Struct,
     Func,
@@ -289,15 +290,25 @@ class TypeMatch(_TypingBase):
     def is_map_type(cls, tvar: type) -> TypeIs[type[Map]]: ...
     @classmethod
     def is_map_type(cls, tvar: MyType | type) -> bool:
-        """Determine if a variable is a Map type."""
+        """Determine if a type is a Map: a `Mapping`/`ItemsView`, or an iterable of pairs."""
         tvar = MyType.new(tvar)
-        return bool(
-            tvar.main
-            and (
-                issubclass(tvar.main, Map)
-                or (cls.is_iter_type(tvar.main) and tym.match(tvar.vals, tuple[Any, Any]))
-            )
-        )
+        main = tvar.main
+        if not main:
+            return False
+        with ctx.suppress(TypeError):
+            if issubclass(main, Maps):
+                return True
+            # An iterable of `(key, value)` pairs (e.g. `Iterator[tuple[str, int]]`) is map-like.
+            # Tested inline rather than via `is_iter_type` to avoid mutual recursion on abstract
+            # iterables, and gated on `vals` so a bare iterable is not mistaken for a map.
+            if (
+                issubclass(main, Iterable)
+                and tvar.vals
+                and not (cls.is_string_type(main) or cls.is_vec_type(main))
+                and cls.match(tvar.vals, tuple[Any, Any])
+            ):
+                return True
+        return False
 
     # ---- ITER ----
     @overload

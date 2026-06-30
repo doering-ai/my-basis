@@ -981,6 +981,12 @@ class Transform[T0, T1]:
 
     @register
     def _model_to_map[S: Model, T: Map](self: Transform[S, T]) -> T | dict | None:
+        # Only genuine model sources convert here. A loose target like `MutableSet` matches the
+        # `Map` bound, so without this guard the dict produced below would `proxy()` straight back
+        # into this transform and recurse forever.
+        if not tym.is_model_type(self.t0):
+            return None
+
         ret: dict[str, Any]
         if isinstance(self.data, pyd.BaseModel):
             ret = self.data.model_dump()

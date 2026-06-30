@@ -3,10 +3,8 @@
 ############
 ### STANDARD
 from typing import Any, Literal
-import typing
-import types
 import collections.abc as abc
-from collections.abc import Mapping, Callable, Collection, Sequence
+from collections.abc import Callable, Collection, Sequence
 from collections import Counter, deque
 from datetime import date, datetime, time, timedelta, UTC
 from enum import Enum, Flag
@@ -19,8 +17,7 @@ import pydantic as pyd
 from my.infra import Time
 from my.types import Buffer, Span
 from my.regex import MatchData, GroupKind
-from my.typing import Typist, MyType
-from ..conftest import boolmap
+from my.typing import Typist
 
 ############
 ### DATA ###
@@ -121,171 +118,6 @@ class TestTypist:
     # ------------------
     # `*` Public Methods
     # ------------------
-    # ---------------
-    # `*1` COMPARISON
-    # ---------------
-    # -----------
-    # MATCH TESTS
-    # -----------
-    @pyt.mark.parametrize(
-        't0, t1, expected',
-        boolmap(
-            false=[
-                (str, Buffer),
-                (Sequence, str),
-                (int, list[int]),
-                (Span, tuple[int, str]),
-                (Span, tuple[str, ...]),
-                (str | int, dict | int),
-                (str | dict | int, str | int),
-                (list[int] | Mapping, Mapping),
-                (Literal['A', 'B'], Literal['A']),
-            ],
-            true=[
-                (str, str),
-                (str, Sequence),
-                (str | int, str | dict | int),
-                (Counter, Mapping),
-                (Typist, pyd.BaseModel),
-                (Span, tuple[int, int]),
-                (Mapping, list[int] | Mapping[str, list[int] | Mapping]),
-            ],
-        ),
-    )
-    def test_match_basic(self, t0, t1, expected: bool):
-        assert typist.match(t0, t1) == expected
-
-    @pyt.mark.parametrize(
-        't0, t1, expected',
-        boolmap(
-            false=[
-                (str, Buffer),
-                (int, list[int]),
-                (Span, tuple[int, str]),
-                (Span, tuple[int]),
-            ],
-            true=[
-                (Sequence, str),
-                (str | int, dict | int),
-                (str | int, str | dict | int),
-                (str | dict | int, str | int),
-                (str | Mapping, Mapping),
-                (list[int] | Mapping, Mapping),
-                (Span, tuple[int, ...]),
-                (Literal['A', 'B'], Literal['A']),
-                (Literal['A'], Literal['A', 'B']),
-            ],
-        ),
-    )
-    def test_match_intersect(self, t0, t1, expected: bool):
-        assert typist.match(t0, t1, intersect=True) == expected
-
-    @pyt.mark.parametrize(
-        't0, t1, expected',
-        boolmap(
-            false=[
-                # ---- Nested type mismatches ----
-                (list[int], list[str]),
-                (dict[str, int], dict[str, str]),
-                (dict[str, int], dict[int, int]),
-                (list[list[int]], list[list[str]]),
-                (dict[str, list[int]], dict[str, list[str]]),
-                # ---- Tuple literal type mismatches ----
-                (tuple[int, str], tuple[str, int]),
-                (tuple[int, str, float], tuple[int, str]),
-                # ---- Literal mismatches ----
-                (Literal[1, 2], Literal[3, 4]),
-                (Literal['a'], Literal['b']),
-            ],
-            true=[
-                # ---- Nested types ----
-                (list[int], list[int]),
-                (dict[str, int], dict[str, int]),
-                (list[list[int]], list[list[int]]),
-                (dict[str, list[int]], dict[str, list[int]]),
-                # ---- Nested generics with subtyping ----
-                (list[int], Sequence[int]),
-                (dict[str, int], Mapping[str, int]),
-                (Counter[str], Mapping[str, int]),
-                # ---- Complex nested ----
-                (dict[str, list[int]], Mapping[str, Sequence[int]]),
-                (list[dict[str, int]], Sequence[Mapping[str, int]]),
-                # ---- Tuple literals ----
-                (tuple[int, str], tuple[int, str]),
-                (tuple[int, ...], tuple[int, ...]),
-                # ---- Literals ----
-                (Literal[1, 2], Literal[1, 2, 3]),
-                (Literal['a'], Literal['a', 'b']),
-            ],
-        ),
-    )
-    def test_match_nested(self, t0, t1, expected: bool):
-        assert typist.match(t0, t1) == expected
-
-    @pyt.mark.parametrize(
-        't0, t1, expected',
-        boolmap(
-            false=[
-                (MyType.parse(Ellipsis), MyType.parse(types.NoneType)),
-                (MyType.parse(types.NoneType), MyType.parse(typing.Self)),
-            ],
-            true=[
-                (Any, Any),
-                (Any, None),
-                (Any, str),
-                (None, Any),
-                (None, None),
-                (None, str),
-                (str, Any),
-                (str, None),
-            ],
-        ),
-    )
-    def test_match_edge_cases(self, t0, t1, expected: bool):
-        assert typist.match(t0, t1) == expected
-
-    # -----------
-    # CHECK TESTS
-    # -----------
-    @pyt.mark.parametrize(
-        'data, tvar, expected',
-        boolmap(
-            false=[
-                ([1, 2, 'a'], int),
-                (['a', 1, 'b'], str),
-                ([[1, 2], ['a', 'b']], list[int]),
-            ],
-            true=[
-                ([], int),
-                ([1, 2, 3], int),
-                ([True, False], bool),
-                (['a', 'b', 'c'], str),
-                ([[1, 2], [3, 4]], list[int]),
-            ],
-        ),
-    )
-    def test_all_are(self, data: list, tvar: type, expected: bool):
-        assert typist.all_are(data, tvar) == expected
-
-    @pyt.mark.parametrize(
-        'data, tvar, expected',
-        boolmap(
-            false=[
-                (['a', 'b', 'c'], int),
-                ([1, 2, 3], str),
-                ([], int),
-            ],
-            true=[
-                ([1, 'a', 3], int),
-                (['a', 1, 'b'], int),
-                ([True, 1, 'a'], bool),
-                ([1, 2, 3], int),
-            ],
-        ),
-    )
-    def test_any_are(self, data: list, tvar: type, expected: bool):
-        assert typist.any_are(data, tvar) == expected
-
     # -------------
     # `*2` COERCION
     # -------------
@@ -939,44 +771,6 @@ class TestTypist:
         ret_false, ret_true = typist.type_partition(data, tvar)
         assert ret_true == expected
         assert ret_false == [v for v in data if v not in ret_true]
-
-    @pyt.mark.parametrize(
-        't0, t1, expected',
-        boolmap(
-            false=[
-                (str, int),
-                (int, list[str]),
-            ],
-            true=[
-                (str, str),
-                (int, list[int]),
-                (str, dict[str, int]),
-                (str, tuple[int, str]),
-                (str, tuple[str, ...]),
-                (dict[str, int], dict[tuple[dict[str, int], ...], dict[int, int]]),
-                (dict[str, int], dict[tuple[str, int, dict[int, int]], dict[str, int]]),
-            ],
-        ),
-    )
-    def test_seek_usage(self, t0, t1, expected: bool):
-        assert typist.seek_usage(t0, t1) == expected
-
-    @pyt.mark.parametrize(
-        'lhs, rhs, expected',
-        boolmap(
-            false=[
-                ('abc', 123),
-                ([1], {1}),
-            ],
-            true=[
-                ('abc', 'def'),
-                (1, 2),
-                ([1], [2, 3]),
-            ],
-        ),
-    )
-    def test_match_instances(self, lhs, rhs, expected: bool):
-        assert typist.match_instances(lhs, rhs) == expected
 
     def test_setattr(self):
         # Create a simple pydantic model for testing

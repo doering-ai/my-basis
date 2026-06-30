@@ -939,12 +939,15 @@ class Transform[T0, T1]:
             values = tyt.cast(values, list[v1])
         data = dict(zip(keys, values, strict=True))
 
-        # Construct the target mapping, handling a couple of special constructors.
-        if issubclass(self._t1, defaultdict):
-            return self._t1(self.t1.vals.main, data) if self.t1.vals else self._t1(None, data)
-        elif issubclass(self._t1, ItemsView):
+        # Construct the target mapping, handling a couple of special constructors. Use the
+        # concrete origin (`.main`, e.g. `dict`), not `._t1` -- a parametrized target like
+        # `dict[str, int]` has a generic-alias `root` that isn't a usable constructor/class.
+        cls = self.t1.main
+        if issubclass(cls, defaultdict):
+            return cls(self.t1.vals.main, data) if self.t1.vals else cls(None, data)
+        elif issubclass(cls, ItemsView):
             return data.items()
-        return self._t1(data)
+        return cls(data)
 
     @register
     def _iter_to_vec[S: Iter, T: Vec](self: Transform[S, T]) -> list | None:

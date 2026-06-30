@@ -264,6 +264,18 @@ class TypeCast(_TypingBase):
         """
         return [None if v is None else cls.cast(v, target) for v in data]
 
+    @classmethod
+    def flexcast[A, B](cls, data: A, target: type[B] | MyType[B]) -> B | A:
+        """Cast `data` to `target`, falling back to the original data when the cast fails.
+
+        Args:
+            data: The source data to cast.
+            target: The type to cast to.
+        Returns:
+            The cast value on success, otherwise the original `data` unchanged.
+        """
+        return cls.cast(data, target, flex=True)
+
     @overload
     @classmethod
     def normalize(cls, data: String) -> str: ...

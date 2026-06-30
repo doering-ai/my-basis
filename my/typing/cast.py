@@ -507,11 +507,11 @@ class Transform[T0, T1]:
             return None
         elif (ret := tyt.cast(data, float)) is not None:
             return tyt.cast(ret, source=float, target=self.t1)
-        elif self.RGXS['short_iso_date'].match(data):
+        elif self.ty.RGXS['short_iso_date'].match(data):
             data = f'20{data}'
 
         def _to_timedelta(_t: type[timedelta]) -> timedelta:
-            if matches := list(Typist.RGXS['timedelta'].finditer(data)):
+            if matches := list(self.ty.RGXS['timedelta'].finditer(data)):
                 return _t(
                     **{
                         key: float(val)

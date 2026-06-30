@@ -926,15 +926,15 @@ class Transform[T0, T1]:
         if k1:
             keys = tyt.cast(keys, list[k1])
         if v1:
-            values = tyt.cast(keys, list[v1])
+            values = tyt.cast(values, list[v1])
         data = dict(zip(keys, values, strict=True))
 
-        # Handle special cases here
+        # Construct the target mapping, handling a couple of special constructors.
         if issubclass(self._t1, defaultdict):
-            if self.t1.vals:
-                return self._t1(self.t1.vals.main, data)
+            return self._t1(self.t1.vals.main, data) if self.t1.vals else self._t1(None, data)
         elif issubclass(self._t1, ItemsView):
             return data.items()
+        return self._t1(data)
 
     @register
     def _iter_to_vec[S: Iter, T: Vec](self: Transform[S, T]) -> list | None:

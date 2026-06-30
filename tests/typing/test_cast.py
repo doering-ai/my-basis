@@ -98,19 +98,18 @@ class TestCast:
             # ---- Already clean ----
             ('test', 'test'),
             ([1, 2, 3], [1, 2, 3]),
-            # ---- Strings to clean ----
-            ('  test  ', 'test'),
-            (b'  test  ', 'test'),
+            # ---- Strings preserved verbatim (string->string never strips) ----
+            ('  test  ', '  test  '),
+            (b'  test  ', '  test  '),
             # ---- Iterators to lists ----
             (iter([1, 2, 3]), [1, 2, 3]),
             (iter(['a', 'b']), ['a', 'b']),
         ],
     )
     def test_clean_data(self, data: Any, expected: Any):
-        # This tests the _clean_data private method indirectly through cast
-        # Direct testing of private methods isn't ideal, but we can verify behavior
+        # Casting to `str` is a verbatim NOOP -- whitespace is data, not noise, so it is
+        # never stripped. Parsers (int/float/...) strip internally where they must.
         if isinstance(expected, str):
-            # For strings, test via cast to str (which calls _clean_data)
             result = typist.cast(data, str)
             assert result == expected
         elif isinstance(expected, list):
@@ -161,8 +160,8 @@ class TestCast:
             # ---- Failures ----
             ('abc', int, None),
             ('12.34.56', float, None),
-            # ---- NOOPs ----
-            ('   ', str, ''),
+            # ---- NOOPs (string->string preserves whitespace verbatim) ----
+            ('   ', str, '   '),
             ('hello', str, 'hello'),
             (5, int, 5),
         ],

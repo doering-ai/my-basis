@@ -17,6 +17,7 @@ from collections.abc import (
 )
 from types import FunctionType, UnionType
 from collections import Counter, defaultdict
+from enum import Enum
 import functools as ft
 from datetime import time, datetime, UTC
 import itertools as it
@@ -30,10 +31,8 @@ from ..infra.types import (
     Vec,
     Map,
     _Map,
-    Func,
     Model,
     String,
-    Iter,
     Struct,
     _Struct,
 )
@@ -393,6 +392,10 @@ class IterUtils(_UtilsBase):
             return data.astimezone(UTC) if data.tzinfo != UTC else data
         elif isinstance(data, time):
             return data.replace(tzinfo=UTC) if data.tzinfo != UTC else data
+        elif isinstance(data, Enum):
+            # An `Enum` (especially a single-member `Flag`) is atomic, but iterates to itself --
+            # so it must short-circuit before the `is_iter` branch or normalize recurses forever.
+            return data
         elif cls.ty.is_map(data):
             return {cls.normalize(k): cls.normalize(v) for k, v in cls.map_items(data)}
         elif cls.ty.is_vec(data) or cls.ty.is_iter(data):

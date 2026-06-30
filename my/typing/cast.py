@@ -1148,6 +1148,10 @@ class Transform[T0, T1]:
     @classmethod
     def flex_deserialize(cls, text: str) -> Scalar | None:
         """Parse text as whichever scalar type's pattern it matches, or None if none match."""
+        # Numeric parsers own their whitespace: surrounding pad is insignificant when the
+        # output is a number (`Scalars` is int/float/complex/bool -- never `str`), so strip
+        # before matching. This is the "parsers handle whitespace" half of the no-strip rule.
+        text = text.strip()
         for stype in Scalars:
             name = stype.__name__
             if name in cls.RGXS and cls.RGXS[name].fullmatch(text):

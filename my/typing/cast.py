@@ -595,10 +595,14 @@ class Transform[T0, T1]:
 
     @register
     def _time_to_string[S: Time, T: String](self: Transform[S, T]) -> String | None:
-        if isinstance(self.data, datetime | date | time):
+        if isinstance(self.data, datetime | time):
+            # All times are UTC unless stated otherwise, so the offset is implicit: serialize
+            # the bare wall-clock form (`...T10:20:30`, not `...T10:20:30+00:00`).
+            return self.data.replace(tzinfo=None).isoformat()
+        elif isinstance(self.data, date):
             return self.data.isoformat()
         elif isinstance(self.data, timedelta):
-            return str(self.data.total_seconds())
+            return str(self.data)
 
     @register
     def _time_to_scalar[S: Time, T: Scalar](self: Transform[S, T]) -> Time | Scalar | None:

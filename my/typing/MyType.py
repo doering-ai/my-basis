@@ -738,7 +738,11 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
         Returns:
             True if *all* aspects of this type are satisfied by this data, including nested types.
         """
-        return self.ty.check(data, self.root) if self else False
+        # `Any` (always-true wildcard) and `None`/`NoneType` (concrete null) are all falsy
+        # (`main is None`) yet still delegate; only a truly empty type short-circuits to `False`.
+        if self or Meta(self.root) is Meta.ALWAYS or self.root is NoneType or self.root is None:
+            return self.ty.check(data, self.root)
+        return False
 
     def check_iter(self, data: Iterable) -> Iterator[bool]:
         """Yield a boolean for each element of `data` indicating if it matches this type.

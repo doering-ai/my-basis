@@ -68,42 +68,41 @@ class TypeCheck[T0, T1](_TypingBase, pyd.BaseModel):
     # `.` Initial Methods
     # -------------------
     def __call__(self) -> bool:
-        """Determine whether the given data is a valid instance of the given type.
+        """Determine whether the data is a valid instance of the target type.
 
-        This serves as the primary interface for the vast majority of caller usecases.
+        Recurses into nested element types; this is the primary entry point for most callers.
+
+        Returns:
+            True if the data satisfies the target type, including any nested element constraints.
         """
-        # I. Setup, validate
-        target = self.t1.main
-        if target is None:
-            return True
-
-        # II. Composite types
+        # I. Composite types -- checked before the `None`-target wildcard so that a `Literal`
+        # (whose `main` is `None`) is matched against its members rather than short-circuiting.
         if self.t1.is_split:
             return any(option.check(self.data) for option in self.t1.args)
         elif self.t1.literal_members:
             return self.is_literal(self.data, self.t1)
 
-        # III. Special Forms
-        match self.data, target, Meta(target):
-            # III.i. `None` shortcuts
-            case None, _target, _:
-                return target is NoneType
-            case _data, None, _:
-                return False
+        # II. A `None`-main target. `None`/`NoneType` annotations are concrete and match only
+        # `None`; any other `None`-main form (e.g. `Any`) is an always-true wildcard.
+        target = self.t1.main
+        if target is None:
+            if self.t1.root is NoneType or self.t1.root is None:
+                return self.data is None
+            return True
 
-            # III.ii. `types` Shortcuts shortcuts
-            case _data, _target, _ if _target is NoneType or _data is None:
-                return _target is NoneType and _data is None
-            case _data, _target, _ if _target is NoneType or _data is None:
-                return _target is EllipsisType and _data is Ellipsis
+        # III. Special forms and `types`-module sentinels (the target is non-`None` here).
+        match self.data, target, Meta(target):
+            # `None` data only ever matches `NoneType`.
+            case None, _, _:
+                return target is NoneType
+            # `Any`/`Unknown` always match; `NoneType`/`Never`/unhandled forms never do.
             case _, _, Meta.ALWAYS:
                 return True
             case _, _, Meta.NEVER:
                 return False
-            case _data, _target, Meta.TYPE:
-                if _target is EllipsisType:
-                    return self.data is Ellipsis
-                return False
+            # `types`-module sentinels such as `Ellipsis`.
+            case _, _, Meta.TYPE:
+                return target is EllipsisType and self.data is Ellipsis
 
         # IV. Main cases: normal types, probably nested
         if self.t1.main is None or not isinstance(self.data, self.t1.main):

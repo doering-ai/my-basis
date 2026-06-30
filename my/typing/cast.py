@@ -1260,7 +1260,7 @@ class Transform[T0, T1]:
             _date=lambda d: d.fromordinal(int(data)),
             _time=lambda t: t.fromisoformat(
                 datetime.fromtimestamp(data, tz=UTC).time().isoformat()
-            ),
+            ).replace(tzinfo=UTC),
             _timedelta=lambda t: t(seconds=float(data)),
         )
 

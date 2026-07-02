@@ -517,11 +517,14 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
         if n == 0:
             return Empty
         if n == 1:
-            return types.pop().main or Empty
+            # `.root`, not `.main` -- `.main` collapses a nested generic like `list[int]` down to
+            # its bare origin `list`, losing the inner arg (e.g. joining two `list[int]` values
+            # would otherwise infer `list[list]` instead of `list[list[int]]`).
+            return types.pop().root or Empty
         else:
-            head = types.pop().main or Empty
+            head = types.pop().root or Empty
             for other in types:
-                head = head | (other.main or Empty)
+                head = head | (other.root or Empty)
         return head
 
     @classmethod

@@ -166,6 +166,7 @@ class SyntaxUtils(_UtilsBase):
                 if isinstance(obj, (list, deque)):
                     index = obj.index(old)
                     obj[index] = new
+                    return True
                 elif isinstance(obj, tuple):
                     index = obj.index(old)
                     obj = (*obj[:index], new, *obj[index + 1 :])

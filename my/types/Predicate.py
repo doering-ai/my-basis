@@ -6,6 +6,7 @@ from __future__ import annotations
 from collections import Counter
 from typing import ClassVar, Any, Self
 from collections.abc import Iterable, Iterator
+from datetime import datetime
 import regex as re
 import itertools as it
 import more_itertools as mi
@@ -21,6 +22,14 @@ from ..typing import Typist, MyType, ty
 
 # Create a local typist with the most permissive possible configuration.
 typist = Typist(firsts=True, atomics=True, splits=True, wraps=True)
+
+#: The atomic scalar types `Typist.flex_deserialize` may "decast" a captured string value into
+#: (mirrors `Typist.SCALAR_TYPES`, minus `enum` -- casting to the bare, abstract `Enum` class
+#: never succeeds, so that candidate never actually surfaces a value here). Used to keep
+#: `_serialize_predicate`'s declared return type honest: before this existed it claimed every
+#: leaf was `str`, so a decast int/float/bool/datetime value tripped a pydantic serializer
+#: warning on every `MatchData`/`Predicate` round-trip that decast a leaf.
+type PredicateLeaf = str | int | float | bool | datetime
 
 
 ############
@@ -75,7 +84,7 @@ class Predicate(pyd.BaseModel):
         return ret
 
     @pyd.model_serializer
-    def _serialize_predicate(self) -> dict[str, str | list[str] | dict]:
+    def _serialize_predicate(self) -> dict[str, PredicateLeaf | list[PredicateLeaf] | dict]:
         """Pydantic serializer method to convert the Predicate to its internal dict format."""
         return self._abbreviate(self.data)
 
@@ -105,7 +114,9 @@ class Predicate(pyd.BaseModel):
             raise TypeError(f'Cannot accept {type(arg)} argument to Predicate.new().')
 
     @classmethod
-    def _abbreviate(cls, data: _Map[str, list[str] | dict]) -> dict[str, str | list[str] | dict]:
+    def _abbreviate(
+        cls, data: _Map[str, list[str] | dict]
+    ) -> dict[str, PredicateLeaf | list[PredicateLeaf] | dict]:
         """Recursively simplify one-element arrays into strings."""
         ret: dict[str, Any] = {}
         for field, values in sorted(dict(data).items()):

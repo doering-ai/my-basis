@@ -7,11 +7,15 @@ pre-existing downstream imports (wikiparse, arch) keep working, emitting a `Depr
 to push migration toward the new paths. Remove once those consumers migrate off `my.text`.
 
 Symbols intentionally NOT aliased (no unambiguous modern equivalent):
-    atom: the old regex-snippet-builder helper has no modern counterpart; `RgxAtom` in
-        `my.regex` is an unrelated AST node class from the meta parser.
     debug_regex: the old free function `debug_regex(store, names, text, matched, ...)` became
         the instance method `RegexDebugger(...).debug(...)`, which needs a store instance at
         call time -- there is no drop-in function form.
+
+Note: the old free-function `atom` helper *does* have a modern counterpart --
+`RegexStore.atom` (added 2026-01-29) is the same implementation verbatim (the only diff is
+`(?P=name)` -> `(?P>name)`, which `RegexStore.clean()` normalizes anyway). Aliased below as
+`atom`. Don't confuse it with `RgxAtom` in `my.regex`, an unrelated AST node class from the
+meta parser.
 """
 
 import warnings
@@ -36,6 +40,7 @@ RgxTup = RegexTup
 RgxList = RegexList
 RgxDef = RegexDef
 format_url = RegexStore.format_url
+atom = RegexStore.atom
 
 __all__ = [
     *_regex.__all__,
@@ -48,4 +53,5 @@ __all__ = [
     'RgxList',
     'RgxDef',
     'format_url',
+    'atom',
 ]

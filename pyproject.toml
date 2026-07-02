@@ -153,12 +153,10 @@ project-includes = ["my/**/*.py*", "tests/**/*.py*"]
 # Idx/IdxSpec are an unintegrated, half-finished subpackage: not exported from
 # `my/types/__init__.py`, and they import a pre-rename package name (`myBasis`) and a
 # `.enums` module that doesn't exist. Their fate (finish or delete) is basis-08's call, not
-# this task's -- exclude them rather than gate on dead imports. SpecialForm.py is dead code
-# (grep confirms zero references anywhere) already slated for deletion in basis-04.
+# this task's -- exclude them rather than gate on dead imports.
 project-excludes = [
   "my/types/Idx.py",
   "my/types/IdxSpec.py",
-  "my/typing/SpecialForm.py",
 ]
 min-severity = 'warn'
 python-version = '3.13'

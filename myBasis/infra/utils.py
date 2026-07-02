@@ -218,14 +218,25 @@ class Utils(TypesMixin):
                 yield from (key, str(val))
 
     @staticmethod
-    def ex(*args: str | list[str], **kwargs: Any) -> str | None:
-        """Execute the given command as a shell-interpreted subprocess."""
+    def ex(
+        *args: str | list[str],
+        cwd: str | Path | None = None,
+        **kwargs: Any,
+    ) -> str | None:
+        """Execute the given command as a shell-interpreted subprocess.
+
+        Args:
+            *args: Command and arguments to execute. Can be multiple strings or lists of strings.
+            cwd: Optional working directory to execute the command in.
+            **kwargs: Additional keyword arguments that are parsed into command line options.
+        """
         with ctx.suppress(Exception):
             result = subprocess.run(
                 shlex.join(Utils._clean_shell_args(args, kwargs)),
                 shell=True,
                 capture_output=True,
                 text=True,
+                cwd=str(cwd) if cwd else None,
             )
             if result.returncode == 0:
                 return (result.stdout or result.stderr).strip("\n").rstrip(" ")
@@ -239,23 +250,22 @@ class Utils(TypesMixin):
     @staticmethod
     async def exa(
         *args: str | Iterable[str],
-        _cwd: str | Path | None = None,
+        cwd: str | Path | None = None,
         **kwargs: Any,
     ) -> str | None:
         """Execute the given command as a shell-interpreted subprocess.
 
         Args:
             *args: Command and arguments to execute. Can be multiple strings or lists of strings.
-            _cwd: Optional working directory to execute the command in.
+            cwd: Optional working directory to execute the command in.
             **kwargs: Additional keyword arguments that are parsed into command line options.
         """
-        kwargs.update(dict())
         with ctx.suppress(Exception):
             proc = await aio.create_subprocess_shell(
                 shlex.join(Utils._clean_shell_args(args, kwargs)),
                 stdout=aio.subprocess.PIPE,
                 stderr=aio.subprocess.PIPE,
-                shell=True,
+                cwd=str(cwd) if cwd else None,
             )
             stdout, stderr = await proc.communicate()
             if proc.returncode == 0:

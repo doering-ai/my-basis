@@ -21,8 +21,9 @@ def install() -> None:
     Idempotent — safe to call multiple times.
     Uses setdefault so that a real ST runtime (which would have already populated sys.modules) is
     never overwritten.
+    Installing mocks never flips `IS_LIVE`: it stays `True` only when the *real* ``sublime``
+    module was already present at import time (i.e. a live ST process).
     """
-    global IS_LIVE
     if IS_LIVE:
         return
     from . import _sublime, _sublime_plugin, _unittesting, _sublime_api
@@ -37,8 +38,6 @@ def install() -> None:
     sys.modules.setdefault('unittesting', _unittesting)
     sys.modules.setdefault('unittesting.core', _unittesting)
     sys.modules.setdefault('unittesting.helpers', _unittesting)
-
-    IS_LIVE = True
 
 
 if not IS_LIVE:

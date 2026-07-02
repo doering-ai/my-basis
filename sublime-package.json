@@ -1,0 +1,36 @@
+{
+    "contributions": {
+        "settings": [
+            {
+                "file_patterns": [
+                    "/myBasis.sublime-settings"
+                ],
+                "schema": {
+                    "properties": {
+                        "my.venv_priorities": {
+                            "type": "array",
+                            "default": [],
+                            "uniqueItems": true,
+                            "items": {
+                                "type": "string",
+                                "enum": [
+                                    "POETRY",
+                                    "HATCH",
+                                    "PDM",
+                                    "RYE",
+                                    "UV",
+                                    "PYENV",
+                                    "PIPENV",
+                                    "VENV",
+                                    "CONDA",
+                                    "SUBLIME"
+                                ]
+                            },
+                            "markdownDescription": "One or more venv search strategies that should be tried before all others."
+                        }
+                    }
+                }
+            }
+        ]
+    }
+}

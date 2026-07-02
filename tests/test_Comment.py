@@ -130,10 +130,11 @@ class TestCommentEq:
         c2 = _make_comment(lines=[_r(10, 15)])
         assert c1 != c2
 
-    def test_eq_raises_on_non_comment(self):
+    def test_eq_foreign_type_is_false(self):
+        """`__eq__` returns NotImplemented for foreign types, so `==` falls back to False."""
         c = _make_comment()
-        with pyt.raises(NotImplementedError):
-            _ = c == 'not a comment'
+        assert (c == 'not a comment') is False
+        assert c != 'not a comment'
 
 
 class TestCommentLt:
@@ -155,8 +156,9 @@ class TestCommentLt:
         assert not (c < 3)
 
     def test_lt_raises_on_non_comment_non_int(self):
+        """`__lt__` returns NotImplemented for foreign types, so `<` raises TypeError."""
         c = _make_comment()
-        with pyt.raises(NotImplementedError):
+        with pyt.raises(TypeError):
             _ = c < 'string'
 
     def test_le_total_ordering(self):
@@ -196,7 +198,7 @@ class TestCommentContains:
 
     def test_contains_raises_on_invalid_type(self):
         c = _make_comment()
-        with pyt.raises(NotImplementedError):
+        with pyt.raises(TypeError):
             _ = 'string' in c
 
 
@@ -218,8 +220,9 @@ class TestCommentAdd:
             _ = c1 + c2
 
     def test_add_wrong_type_raises(self):
+        """`__add__` returns NotImplemented for foreign types, so `+` raises TypeError."""
         c = _make_comment()
-        with pyt.raises(NotImplementedError):
+        with pyt.raises(TypeError):
             _ = c + 5
 
     def test_add_commutative_via_follows(self):

@@ -409,7 +409,7 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
         log_level: str | int = logging.INFO,
         **kwargs: Any,
     ) -> None:
-        if log_level == logging.DEBUG and cls.DEBUG:
+        if log_level == logging.DEBUG and not cls.DEBUG:
             return
 
         # I. Normalize a name identifying the caller.
@@ -728,7 +728,7 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
         if self.has_views():
             assert self._view in self.views, "Inferred view is not in views list."
 
-        return self.views[0]
+        return self._view
 
     @view.setter
     def view(self, new_view: View | None) -> None:
@@ -1084,7 +1084,7 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
                 self.line_comments.values(),
             )
         else:
-            yield from self.line_comments
+            yield from self.line_comments.values()
 
     @view_property
     def function_map(self) -> dict[str, sb.Region]:
@@ -1241,10 +1241,19 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
         command: str,
         /,
         _delay: int = 50,
+        _async: bool = False,
         _level: CommandLevel | None = None,
         **kwargs: Any,
     ) -> None:
-        """Invoke another command with the given arguments."""
+        """Invoke another command with the given arguments.
+
+        Args:
+            command: The name of the command to invoke.
+            _delay: Milliseconds to wait before running the command.
+            _async: If True, schedule via `sublime.set_timeout_async` (ST worker thread).
+            _level: Explicit command level to invoke at, overriding inference.
+            **kwargs: Arguments passed through to the invoked command.
+        """
         fn: Callable[[str, dict], None]
         if _level is not None:
             if _level == "buffer":
@@ -1262,7 +1271,8 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
         else:
             fn = sb.run_command
 
-        sb.set_timeout(lambda: fn(command, kwargs), _delay)
+        timer = sb.set_timeout_async if _async else sb.set_timeout
+        timer(lambda: fn(command, kwargs), _delay)
 
     async def invoke_async(
         self,
@@ -1360,7 +1370,7 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
         # III. Actually open the file and wait up to 3s for it to load
         view = window.open_file(pathstr, flags, group)
         count = 0
-        while not view.is_loading() and count < 30:
+        while view.is_loading() and count < 30:
             time.sleep(0.1)
             count += 1
         if count == 30:

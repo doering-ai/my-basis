@@ -21,6 +21,8 @@ from ..infra.utils import ut
 ### DATA ###
 ############
 _REGISTRY = dict()
+#: PKG names already claimed by a subclass definition (instances register in `_REGISTRY`).
+_DEFINED: set[str] = set()
 
 
 ############
@@ -40,8 +42,9 @@ class PackageSettings(pyd.BaseModel):
     def __init_subclass__(cls, *args, **kwargs) -> None:
         if not (pkg := getattr(cls, 'PKG', '')):
             raise TypeError(f'Settings model "{cls.__name__}" must define a `PKG` class variable.')
-        if pkg in _REGISTRY:
+        if pkg in _DEFINED:
             raise TypeError(f'Settings model for package "{pkg}" already registered.')
+        _DEFINED.add(pkg)
 
     @classmethod
     def new(cls, settings: sb.Settings | None = None) -> Self:

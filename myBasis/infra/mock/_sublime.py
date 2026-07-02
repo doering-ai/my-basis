@@ -79,7 +79,7 @@ def infer_paths() -> tuple[Directory, Directory, Directory]:
 
     def root() -> Directory:
         path = Path(os.getenv('ST_ROOT', '/opt/sublime_text')).expanduser().resolve()
-        if not path and path.exists() and path.is_dir():
+        if not (path and path.exists() and path.is_dir()):
             raise ValueError('Could not infer $ST_ROOT -- please set manually.')
         return path
 

@@ -3,6 +3,11 @@
 ############
 ### STANDARD
 from __future__ import annotations
+from typing import Any
+import asyncio
+import logging
+import time
+import warnings
 
 ### EXTERNAL
 import pytest as pyt
@@ -15,6 +20,7 @@ from myBasis import (
     _MyWindowCommand,
     _MyAppCommand,
     CommandArguments,
+    Comment,
 )
 from myBasis.plugins._MyBase import Meta, _CustomNamespace, LineComment, Indent
 
@@ -455,12 +461,14 @@ class TestLineComment:
         lc2 = LineComment(sb.Region(6, 10), 1, 1, 'b', '#')
         assert not lc1.split(lc2)
 
-    def test_split_false_different_col(self):
+    def test_split_true_different_col(self):
+        """Adjacent rows but different columns start a new block."""
         lc1 = LineComment(sb.Region(0, 5), 0, 1, 'a', '#')
         lc2 = LineComment(sb.Region(6, 10), 1, 2, 'b', '#')
         assert lc1.split(lc2)
 
-    def test_split_false_different_punct(self):
+    def test_split_true_different_punct(self):
+        """Adjacent rows but different punctuation start a new block."""
         lc1 = LineComment(sb.Region(0, 5), 0, 1, 'a', '#')
         lc2 = LineComment(sb.Region(6, 10), 1, 1, 'b', '//')
         assert lc1.split(lc2)
@@ -477,3 +485,167 @@ class TestIndent:
     def test_equality(self):
         assert Indent(1, 2) == Indent(1, 2)
         assert Indent(1, 2) != Indent(1, 3)
+
+
+class TestLogDebugGating:
+    """Debug messages are emitted exactly when the class has DEBUG enabled."""
+
+    def test_debug_suppressed_when_debug_off(self, capsys: pyt.CaptureFixture):
+        assert _TestViewCmd.DEBUG is False
+        _TestViewCmd._log('hidden-debug-msg', log_level=logging.DEBUG)
+        assert 'hidden-debug-msg' not in capsys.readouterr().out
+
+    def test_debug_emitted_when_debug_on(self, capsys: pyt.CaptureFixture):
+        class _DbgCmd(_MyViewCommand[_EmptyArgs], debug=True):
+            def main(self) -> None:
+                pass
+
+        assert _DbgCmd.DEBUG is True
+        _DbgCmd._log('visible-debug-msg', log_level=logging.DEBUG)
+        assert 'visible-debug-msg' in capsys.readouterr().out
+
+    def test_info_emitted_regardless(self, capsys: pyt.CaptureFixture):
+        _TestViewCmd._log('info-msg', log_level=logging.INFO)
+        assert 'info-msg' in capsys.readouterr().out
+
+
+class TestViewProperty:
+    """The `view` property must return the explicitly-set view, not `views[0]`."""
+
+    def test_view_returns_explicit_view_not_first(self):
+        window = sb.active_window()
+        cmd = _TestWindowCmd(window)
+        view1 = window.new_file()
+        view2 = window.new_file()
+        try:
+            cmd.views = [view1, view2]
+            cmd.view = view2
+            assert cmd.view is view2, 'view property must return _view, not views[0]'
+        finally:
+            for v in (view1, view2):
+                v.set_scratch(True)
+                v.close()
+
+
+class TestInvoke:
+    """Tests for ``invoke`` / ``invoke_async`` argument forwarding."""
+
+    @staticmethod
+    def _capture(view: sb.View) -> dict[str, Any]:
+        recorded: dict[str, Any] = {}
+
+        def fake_run_command(name: str, args: 'dict | None' = None) -> None:
+            recorded['name'] = name
+            recorded['args'] = args
+
+        view.run_command = fake_run_command  # type: ignore[method-assign]
+        return recorded
+
+    def test_invoke_does_not_leak_internal_kwargs(self, make_view: sb.View):
+        cmd = _TestViewCmd(make_view)
+        recorded = self._capture(make_view)
+        cmd.invoke('foo_cmd', bar=1)  # mock set_timeout runs synchronously
+        assert recorded['name'] == 'foo_cmd'
+        assert recorded['args'] == {'bar': 1}
+
+    def test_invoke_async_does_not_leak_async_flag(self, make_view: sb.View):
+        cmd = _TestViewCmd(make_view)
+        recorded = self._capture(make_view)
+        asyncio.run(cmd.invoke_async('foo_cmd', bar=1))
+        assert recorded['name'] == 'foo_cmd'
+        assert '_async' not in (recorded['args'] or {}), '_async must not reach the command args'
+        assert recorded['args'] == {'bar': 1}
+
+    def test_invoke_async_flag_routes_to_async_timeout(
+        self, make_view: sb.View, monkeypatch: pyt.MonkeyPatch
+    ):
+        used: list[int] = []
+
+        def fake_timeout_async(cb: Any, delay: int = 0) -> None:
+            used.append(delay)
+            cb()
+
+        monkeypatch.setattr(sb, 'set_timeout_async', fake_timeout_async)
+        cmd = _TestViewCmd(make_view)
+        recorded = self._capture(make_view)
+        cmd.invoke('foo_cmd', _async=True, bar=2)
+        assert used, '_async=True must schedule via sublime.set_timeout_async'
+        assert recorded['args'] == {'bar': 2}
+
+
+class TestFilterComments:
+    """``filter_comments`` must yield Comment objects on every branch."""
+
+    @staticmethod
+    def _comment(row: int, start: int, end: int) -> Comment:
+        return Comment(lines=[sb.Region(start, end)], texts=['text'], row=row, col=1)
+
+    def _make_cmd(self, view: sb.View) -> Any:
+        c0 = self._comment(0, 0, 5)
+        c2 = self._comment(2, 10, 15)
+        comments = {0: c0, 2: c2}
+
+        class _CommentsCmd(_MyViewCommand[_EmptyArgs]):
+            line_comments = property(lambda self: comments)
+
+            def main(self) -> None:
+                pass
+
+        return _CommentsCmd(view), c0, c2
+
+    def test_no_filters_yields_comments(self, make_view: sb.View):
+        cmd, c0, c2 = self._make_cmd(make_view)
+        result = list(cmd.filter_comments())
+        assert result == [c0, c2]
+        assert all(isinstance(c, Comment) for c in result)
+
+    def test_filtered_yields_comments(self, make_view: sb.View):
+        cmd, _c0, c2 = self._make_cmd(make_view)
+        result = list(cmd.filter_comments(lambda c: c.row == 2))
+        assert result == [c2]
+        assert all(isinstance(c, Comment) for c in result)
+
+
+class _FakeLoadingView:
+    """A view whose ``is_loading`` walks through a scripted sequence of states."""
+
+    def __init__(self, states: 'list[bool]') -> None:
+        self._states = list(states)
+        self.polls = 0
+
+    def is_loading(self) -> bool:
+        self.polls += 1
+        return self._states.pop(0) if self._states else False
+
+
+class _FakeWindow:
+    def __init__(self, view: _FakeLoadingView) -> None:
+        self._view = view
+        self.opened: 'tuple | None' = None
+
+    def open_file(self, path: str, flags: int = 0, group: int = -1) -> _FakeLoadingView:
+        self.opened = (path, group)
+        return self._view
+
+
+class TestOpen:
+    """``open`` must wait *while* the view is loading, and not block for loaded files."""
+
+    def test_loaded_file_returns_immediately(self, tmp_path):
+        cmd = _TestAppCmd()
+        fake_view = _FakeLoadingView([False])
+        fake_window = _FakeWindow(fake_view)
+        start = time.monotonic()
+        with warnings.catch_warnings():
+            warnings.simplefilter('error')  # the 3s-load warning must not fire
+            view = cmd.open(tmp_path / 'file.txt', window=fake_window)  # type: ignore[arg-type]
+        assert view is fake_view
+        assert time.monotonic() - start < 1.0, 'loaded files must not block ~3s'
+
+    def test_loading_file_is_polled_until_ready(self, tmp_path):
+        cmd = _TestAppCmd()
+        fake_view = _FakeLoadingView([True, True, False])
+        fake_window = _FakeWindow(fake_view)
+        view = cmd.open(tmp_path / 'file.txt', window=fake_window)  # type: ignore[arg-type]
+        assert view is fake_view
+        assert fake_view.polls >= 3, 'open() must poll is_loading() until it turns False'

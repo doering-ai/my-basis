@@ -27,23 +27,19 @@ class TestPackageSettingsConstruction:
                 pass
 
     def test_duplicate_pkg_raises(self):
-        """__init_subclass__ checks _REGISTRY for duplicates but doesn't register there itself.
-
-        Registration only happens in ``new()``, so defining two classes with the same PKG
-        does not raise unless ``new()`` was called for the first one.
-        """
+        """Defining two settings classes with the same PKG raises at class-definition time."""
 
         # The first class is fine
         class _Settings1(PackageSettings):
             PKG: ClassVar[str] = 'test_pkg_dup_check'
 
-        # Since __init_subclass__ doesn't add to _REGISTRY, a second class with the same
-        # PKG also succeeds at class-definition time
-        class _Settings2(PackageSettings):
-            PKG: ClassVar[str] = 'test_pkg_dup_check'
+        assert _Settings1.PKG == 'test_pkg_dup_check'
 
-        # Both can be defined without error
-        assert _Settings1.PKG == _Settings2.PKG
+        # A second class claiming the same PKG must be rejected immediately
+        with pyt.raises(TypeError, match='already registered'):
+
+            class _Settings2(PackageSettings):
+                PKG: ClassVar[str] = 'test_pkg_dup_check'
 
     def test_subclass_with_pkg(self):
         class _Settings(PackageSettings):

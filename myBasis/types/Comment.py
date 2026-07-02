@@ -82,7 +82,7 @@ class Comment(pyd.BaseModel):
         if isinstance(other, Comment):
             return self.lines == other.lines
         else:
-            raise NotImplementedError(f'Cannot compare Comment with {type(other)}.')
+            return NotImplemented
 
     def __lt__(self, other: object) -> bool:
         if isinstance(other, Comment):
@@ -90,7 +90,7 @@ class Comment(pyd.BaseModel):
         elif isinstance(other, int):
             return self.row < other
         else:
-            raise NotImplementedError(f'Cannot compare Comment with {type(other)}.')
+            return NotImplemented
 
     def __contains__(self, other: object) -> bool:
         if isinstance(other, Comment):
@@ -102,12 +102,12 @@ class Comment(pyd.BaseModel):
             assert isinstance(other[0], int) and isinstance(other[1], int)
             other = Region(other[0], other[1])
         elif not isinstance(other, int):
-            raise NotImplementedError(f'Cannot check if Comment contains {type(other)}.')
+            raise TypeError(f'Cannot check if Comment contains {type(other)}.')
         return other in self.region
 
     def __add__(self, other: object) -> Comment:
         if not isinstance(other, Comment):
-            raise NotImplementedError(f'Cannot add Comment with {type(other)}.')
+            return NotImplemented
         elif self.follows(other):
             return other + self
         elif not other.follows(self):

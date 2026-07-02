@@ -11,7 +11,7 @@ import asyncio
 import pytest as pyt
 
 ### INTERNAL
-from myBasis.types.Venv import Venv, Kind, Framework, FRAMEWORKS, RGXS, IS_WINDOWS
+from myBasis.types.Venv import Venv, Kind, Framework, FRAMEWORKS, RGXS, IS_WINDOWS, MAX_WALK_DEPTH
 
 
 ############
@@ -310,8 +310,64 @@ class TestCheckPath:
         assert venv.home == tmp_path
 
 
+class TestCheckPathBounds:
+    """The ancestor walk in ``check_path`` must be bounded and deterministic."""
+
+    @pyt.fixture(autouse=True)
+    def _no_cli_probes(self, monkeypatch: pyt.MonkeyPatch) -> None:
+        """Neutralize framework CLI probes so no external tool can answer."""
+        monkeypatch.setenv('PATH', '')
+
+    def test_walk_stops_before_home(self, tmp_path: Path, monkeypatch: pyt.MonkeyPatch):
+        """A .venv sitting in $HOME itself is never picked up from a project below it."""
+        home = tmp_path / 'home'
+        deep = home / 'projects' / 'app'
+        deep.mkdir(parents=True)
+        (home / '.venv').mkdir()
+        monkeypatch.setattr(Path, 'home', classmethod(lambda cls: home))
+        venv = _make_venv(deep)
+        assert _run(venv.check_path()) is None
+
+    def test_walk_outside_home_is_capped(self, tmp_path: Path, monkeypatch: pyt.MonkeyPatch):
+        """Origins outside $HOME probe at most MAX_WALK_DEPTH ancestors, never the anchor."""
+        monkeypatch.setattr(Path, 'home', classmethod(lambda cls: tmp_path / 'unrelated'))
+        deep = tmp_path.joinpath(*[f'd{i}' for i in range(MAX_WALK_DEPTH + 4)])
+        deep.mkdir(parents=True)
+
+        probed: list[Path] = []
+
+        async def spy(self: Venv, path: Path) -> None:
+            probed.append(path)
+            return None
+
+        monkeypatch.setattr(Venv, '_check_candidate', spy)
+        venv = _make_venv(deep)
+        assert _run(venv.check_path()) is None
+        assert 0 < len(probed) <= MAX_WALK_DEPTH
+        assert Path(deep.anchor) not in probed
+        assert probed[0] == deep
+
+
 class TestVenvFind:
     """Tests for ``Venv.find()`` and ``sync_find()``."""
+
+    @pyt.fixture(autouse=True)
+    def _isolate(self, tmp_path: Path, monkeypatch: pyt.MonkeyPatch) -> None:
+        """Confine discovery to ``tmp_path``, away from the developer's real environment.
+
+        Without this, ``check_env`` resolves the repo's own ``.venv`` via ``$VIRTUAL_ENV``
+        (which ``uv run`` exports), and ``check_path`` both walks ancestors outside the
+        sandbox and probes framework CLIs (``hatch``/``pyenv`` run even without marker
+        files) that could resolve environments elsewhere on the machine.
+        """
+        # `check_env` inspects these before any filesystem search happens.
+        monkeypatch.delenv('VIRTUAL_ENV', raising=False)
+        monkeypatch.delenv('CONDA_PREFIX', raising=False)
+        # `check_path` walks from the origin up to (but excluding) `Path.home()`;
+        # pinning home to the parent bounds the candidate list to `tmp_path` itself.
+        monkeypatch.setattr(Path, 'home', classmethod(lambda cls: tmp_path.parent))
+        # Neutralize framework CLI probes so no external tool can answer.
+        monkeypatch.setenv('PATH', '')
 
     def test_short_circuits_when_already_valid(self, tmp_path: Path):
         """A truthy venv returns itself immediately."""
@@ -338,6 +394,62 @@ class TestVenvFind:
         venv = Venv()
         result = _run(venv.find(tmp_path))
         assert not bool(result)
+
+    def test_origin_beats_ambient_env(self, tmp_path: Path, monkeypatch: pyt.MonkeyPatch):
+        """An explicitly-passed origin path wins over an ambient $VIRTUAL_ENV."""
+        ambient = tmp_path / 'ambient_env'
+        ambient.mkdir()
+        origin = tmp_path / 'proj'
+        (origin / '.venv').mkdir(parents=True)
+        monkeypatch.setenv('VIRTUAL_ENV', str(ambient))
+
+        result = _run(Venv().find(origin))
+        assert bool(result)
+        assert result.root == origin / '.venv'
+        assert result.home == origin
+        assert result.kind == Kind.VENV
+
+    def test_ambient_env_is_fallback(self, tmp_path: Path, monkeypatch: pyt.MonkeyPatch):
+        """$VIRTUAL_ENV is still honored when the origin path yields nothing."""
+        ambient = tmp_path / 'ambient_env'
+        ambient.mkdir()
+        origin = tmp_path / 'proj'
+        origin.mkdir()
+        monkeypatch.setenv('VIRTUAL_ENV', str(ambient))
+
+        result = _run(Venv().find(origin))
+        assert bool(result)
+        assert result.root == ambient
+        assert result.kind == Kind.VENV
+
+
+class TestFrameworkProbe:
+    """With `exa` fixed, the framework-CLI probing path is live: probe runs *in* the origin."""
+
+    def test_framework_cli_probe_runs_in_candidate_dir(
+        self, tmp_path: Path, monkeypatch: pyt.MonkeyPatch
+    ):
+        """A `hatch` on PATH is consulted with cwd set to the candidate directory."""
+        monkeypatch.delenv('VIRTUAL_ENV', raising=False)
+        monkeypatch.delenv('CONDA_PREFIX', raising=False)
+        monkeypatch.setattr(Path, 'home', classmethod(lambda cls: tmp_path.parent))
+
+        # A fake `hatch` that reports the cwd it was invoked from as the env location.
+        bin_dir = tmp_path / 'bin'
+        bin_dir.mkdir()
+        fake_hatch = bin_dir / 'hatch'
+        fake_hatch.write_text('#!/bin/sh\npwd\n')
+        fake_hatch.chmod(0o755)
+        monkeypatch.setenv('PATH', str(bin_dir))
+
+        origin = tmp_path / 'proj'
+        origin.mkdir()
+        venv = _make_venv(origin, kind=Kind.NONE)
+        result = _run(venv.check_path())
+        assert result is not None
+        assert Path(result).resolve() == origin.resolve(), 'probe must run with cwd=origin'
+        assert venv.kind == Kind.HATCH
+        assert venv.home == origin
 
 
 class TestExactMatch:

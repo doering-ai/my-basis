@@ -32,6 +32,8 @@ RGXS = ut.rgx_dict(
     venv_map_item=r"(?mi)^\s*venv\s*[:=]\s*(\S.*)$",
 )
 IS_WINDOWS = os.name == "nt"
+#: How many ancestors `check_path` may probe when the origin is *not* under `Path.home()`.
+MAX_WALK_DEPTH = 8
 
 
 class Kind(Flag):
@@ -190,16 +192,24 @@ class Venv(pyd.BaseModel):
             return None
 
     async def check_path(self) -> Path | None:
-        """Check the given path for virtual environments rooted in it or one of its ancestors."""
-        # I. List out all our ancestors, assuming no mad person out there dares to use a root below
-        #    their home directory.
+        """Check the given path for virtual environments rooted in it or one of its ancestors.
+
+        The ancestor walk is bounded: when the origin lies under `Path.home()` the walk stops
+        just *before* the home directory (assuming no mad person out there dares to use a root
+        below their home directory); otherwise it probes at most `MAX_WALK_DEPTH` ancestors and
+        never probes the filesystem anchor (e.g. ``/``) itself.
+        """
+        # I. List out all our bounded ancestors.
         assert self.origin and self.origin.is_dir(), (
             f"Origin path {self.origin} is not valid."
         )
         _home = Path.home()
-        candidates = list(
-            it.takewhile(lambda p: p != _home, (self.origin, *self.origin.parents))
-        )
+        chain = (self.origin, *self.origin.parents)
+        if _home in chain:
+            candidates = list(it.takewhile(lambda p: p != _home, chain))
+        else:
+            anchor = Path(self.origin.anchor)
+            candidates = [p for p in chain if p != anchor][:MAX_WALK_DEPTH]
         if not candidates:
             print(f"[DEBUG] No valid candidate paths found for {self.origin}.")
             return None
@@ -248,7 +258,7 @@ class Venv(pyd.BaseModel):
             # II.iii. Adjust for parents
             if fw.parent_index:
                 for _ in range(fw.parent_index):
-                    if not ret.parent:
+                    if ret.parent == ret:  # `Path.parent` of a root is itself
                         print(
                             f"[WARN] Command `{fw.cmd} {fw.args}` returned path `{_ret}` which is "
                             f"not deep enough for parent index {fw.parent_index}"
@@ -308,11 +318,13 @@ class Venv(pyd.BaseModel):
         """Resolve the virtual environment by running each registered finder in order.
 
         Short-circuits immediately if the instance is already valid (i.e. `bool(self)` is True).
-        On the first finder that returns a usable path, `setup_root()` is called to populate the
-        remaining fields
+        The explicitly-passed `origin` path is the primary authority: its directory tree (and
+        the framework CLIs run inside it) is searched first via `check_path()`. Only when that
+        yields nothing do we fall back to ambient indicators (``$VIRTUAL_ENV``/``$CONDA_PREFIX``
+        and project settings) via `check_env()`.
 
         Returns:
-            `True` if a match was found, `False` otherwise.
+            This instance, valid (truthy) if a match was found.
         """
         if self:
             return self
@@ -322,10 +334,11 @@ class Venv(pyd.BaseModel):
             origin = origin.parent
         self.origin = origin
 
-        # I. First check the shell environment, then for individual subfiles & PATH commands
-        if root := await self.check_env():
+        # I. First check the origin path itself (subdirs, marker files & framework CLIs), then
+        #    fall back to the ambient shell environment / project settings.
+        if root := await self.check_path():
             self.root = root
-        elif root := await self.check_path():
+        elif root := await self.check_env():
             self.root = root
         else:
             print(f"No virtual environment found for {self.origin}.")

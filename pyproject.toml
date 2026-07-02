@@ -74,7 +74,7 @@ sublime-aio = { url = "https://github.com/packagecontrol/sublime_aio/releases/do
 sublime-test = { path = "../test", editable = true }
 
 [project.scripts]
-setup-sublime = "myBasis.setup_sublime:main"
+setup-sublime = "myBasis.infra.setup_sublime:main"
 
 #############################
 ### IV. DEVELOPMENT TOOLS ###
@@ -82,7 +82,7 @@ setup-sublime = "myBasis.setup_sublime:main"
 # -------
 # Testing
 # -------
-[tool.pytest]
+[tool.pytest.ini_options]
 testpaths = ["tests"]
 
 [tool.coverage.report]

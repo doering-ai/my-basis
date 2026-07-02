@@ -191,7 +191,9 @@ class DynamicPrompt(StaticPrompt):
 
 #         self.listener = DynamicListHandler._InputListener(self.generator)
 #         self.listener.attach(self.view.buffer())
-#         print(f'Attached listener to View[{self.view.id()}] of Buffer[{self.view.buffer().id()}].')
+#         print(
+#             f'Attached listener to View[{self.view.id()}] of Buffer[{self.view.buffer().id()}].'
+#         )
 
 #     def _debug_window(self, window: sb.Window) -> dict:
 #         group = window.active_group()

@@ -15,9 +15,12 @@ import pydantic as pyd
 ### BODY ###
 ############
 class Worker(pyd.BaseModel):
+    """Placeholder worker that starts Sublime Text and waits for it to be set up."""
+
     xxx: str = ""
 
     def __call__(self) -> None:
+        """Run the worker."""
         print("Worker()")
 
 
@@ -39,6 +42,7 @@ def _cli(*vargs: str) -> ap.Namespace:
 
 
 def main(*vargs: str) -> None:
+    """Entry point: parse CLI arguments and run the `Worker`."""
     args = _cli(*vargs)
 
     worker = Worker(**vars(args))

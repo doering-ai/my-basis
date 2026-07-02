@@ -469,8 +469,10 @@ class IterUtils(_UtilsBase):
         """
         if not data:
             return {}
-        elif cls.ty.is_map(data):
-            ret = {key: func(val) for key, val in cls.map_items(data)}  # type: ignore
+        elif items := cls.map_items(data):
+            # `map_items` also recognizes a plain iterable of 2-tuples as key-value pairs (not
+            # just true `Mapping`s), which `is_map` alone would miss.
+            ret = {key: func(val) for key, val in items}  # type: ignore
         else:
             ret = {key: func(key) for key in data}  # type:ignore
 

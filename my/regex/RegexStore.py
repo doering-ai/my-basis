@@ -115,12 +115,20 @@ class RegexStore(pyd.BaseModel):
 
     #: Expression-specific parsers of match data
     parsers: dict[str, RegexParser] = {}
-    routers: dict[str, list[str]] = {}
 
     #: Function used to clean matched strings
     _strip: tuple[Callable[[str], str]] = pyd.PrivateAttr(default=(str,))
     _lazy_queue: deque[Callable[[], None]] = pyd.PrivateAttr(default_factory=deque)
     _is_loaded: bool = pyd.PrivateAttr(default=True)
+    #: Router-tree names to their category lists (see `define_router_tree`) -- private so that
+    #: external access is forced through the `routers` property below, which triggers a load
+    #: first. `.patterns`/`.definitions` get the same guarantee indirectly: every public method
+    #: that touches them (`get`, `get_def`, `keys`, `__getitem__`, ...) calls `_ = self.load`
+    #: before reading. `routers` has no such wrapper method -- callers (e.g. wikiparse's
+    #: `Template.setup_handlers`) read the dict directly -- so without this property a
+    #: lazily-loaded store whose `define_router_tree` call is still queued would expose an
+    #: empty dict instead of loading first.
+    _routers: dict[str, list[str]] = pyd.PrivateAttr(default_factory=dict)
     #: Per-instance load guard -- *not* a ClassVar. A store's `initial_load()` recurses into any
     #: imported stores' own `.load` (to pull their patterns) before returning; a lock shared by
     #: every instance would self-deadlock the moment that recursion re-entered the same
@@ -237,6 +245,17 @@ class RegexStore(pyd.BaseModel):
                     fn = self._lazy_queue.popleft()
                     fn()
         return True
+
+    @property
+    def routers(self) -> dict[str, list[str]]:
+        """Router-tree names mapped to their ordered category lists.
+
+        Triggers a full lazy load first (see `.load`), so a store whose `define_router_tree`
+        call was itself queued behind the lazy-load queue still exposes a fully-populated dict
+        rather than the empty one it would start with.
+        """
+        _ = self.load
+        return self._routers
 
     @pyd.model_validator(mode='after')
     def _process_options(self) -> Self:
@@ -1127,9 +1146,9 @@ class RegexStore(pyd.BaseModel):
             self._lazy_queue.append(ft.partial(self.define_router_tree, router, items, **kwargs))
             return
 
-        assert router not in self.routers, f'Duplicate router name: {router}'
+        assert router not in self._routers, f'Duplicate router name: {router}'
         items = {k: v for k, v in items.items() if v}
-        self.routers[router] = list(items.keys())
+        self._routers[router] = list(items.keys())
 
         if prefix := kwargs.pop('prefix', ''):
             p0 = p1 = prefix
@@ -1163,14 +1182,14 @@ class RegexStore(pyd.BaseModel):
             AssertionError: If router name is not found.
         """
         _ = self.load
-        assert router in self.routers, f'Unknown router: {router}'
+        assert router in self._routers, f'Unknown router: {router}'
         if isinstance(text, MatchData):
             text = text.text
 
         data = self.fullmatch(f'{router}_router', text)
         if raw_idx := next((name[3:] for name in data.keys() if name.startswith('rt_')), ''):
             assert raw_idx.isdigit(), f'Invalid router index: {raw_idx}'
-            return self.routers[router][int(raw_idx)]
+            return self._routers[router][int(raw_idx)]
         return ''
 
     def expand_match(self, router: str, text: str | MatchData) -> str:
@@ -1185,14 +1204,14 @@ class RegexStore(pyd.BaseModel):
             AssertionError: If router name is not found or match object is invalid.
         """
         _ = self.load
-        assert router in self.routers, f'Unknown router: {router}'
+        assert router in self._routers, f'Unknown router: {router}'
         if isinstance(text, MatchData):
             text = text.text
 
         data = self.fullmatch(f'{router}_router', text)
         if raw_idx := next((name[3:] for name in data.keys() if name.startswith('rt_')), ''):
             assert raw_idx.isdigit(), f'Invalid router index: {raw_idx}'
-            fmt = self.routers[router][int(raw_idx)]
+            fmt = self._routers[router][int(raw_idx)]
 
             assert data.match is not None, 'Invalid match object'
             return data.match.expandf(fmt)

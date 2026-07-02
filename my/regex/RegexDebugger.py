@@ -46,6 +46,11 @@ class RegexDebugger(RegexStore):
         """
         new = cls.model_construct(**store.model_dump())
         new.options = store.options.model_copy()
+        # `routers` moved to a private attr (RegexStore.routers is now a load-triggering
+        # property) so `model_dump()`/`model_construct()` no longer round-trip it the way they
+        # still do for the public `patterns`/`definitions` fields -- copy it explicitly to match
+        # the prior behavior of carrying over whatever router state the source store had.
+        new._routers = dict(store._routers)
         return new
 
     # -------------------

@@ -785,6 +785,49 @@ class TestRegexStore:
         assert 'wrapped' in store.routers
         assert store.match('wrapped', 'abc')
 
+    @pyt.mark.parametrize(
+        'lazy_load, expect_queued',
+        [
+            (True, True),
+            (False, False),
+        ],
+        ids=['lazy_store', 'already_loaded_store'],
+    )
+    def test_routers_property__triggers_load(self, lazy_load: bool, expect_queued: bool):
+        """`.routers` is a load-triggering property, not a plain field access.
+
+        A lazy store's `define_router_tree` call is itself queued behind the lazy-load queue
+        (see `define_router_tree`'s own `if not self._is_loaded: ...; return` guard), so the
+        backing `_routers` dict stays empty until something forces a load -- bare access to a
+        plain field would silently see the empty dict. An already-loaded (or eagerly-loaded)
+        store has nothing queued, so `.routers` must return the same data whether or not it's
+        accessed via the property.
+        """
+        store = RegexStore.new(dict(lazy_load=lazy_load))
+        store.define_router_tree('handler', dict(alpha=r'[[:alpha:]]+', nums=r'\d+'))
+
+        # The raw private dict reflects whether the definition is still queued.
+        assert (store._routers == {}) is expect_queued
+
+        # The public property must trigger any pending load either way.
+        assert 'handler' in store.routers
+        assert store.routers['handler'] == ['alpha', 'nums']
+        assert store._is_loaded
+
+    def test_routers_property__already_loaded_store_unaffected(self):
+        """An eagerly-loaded store's `.routers` behaves identically before/after the property
+        access -- the load-triggering property must not mutate or re-derive already-populated
+        router data.
+        """
+        store = RegexStore.new(dict(lazy_load=False))
+        store.define_router_tree('router', dict(alpha=r'[[:alpha:]]+'))
+
+        before = dict(store._routers)
+        first_access = store.routers
+        second_access = store.routers
+
+        assert before == first_access == second_access == {'router': ['alpha']}
+
     def test_route_match__no_match(self):
         store = RegexStore.new(dict(lazy_load=False))
         store.define_router_tree('router', dict(alpha=r'[[:alpha:]]+'))

@@ -8,6 +8,7 @@ from collections import Counter, deque
 from datetime import date, datetime, time, timedelta, UTC
 from enum import Enum, Flag
 import collections.abc as abc
+import logging
 
 ### EXTERNAL
 import pytest as pyt
@@ -406,6 +407,42 @@ class TestCast:
     )
     def test_cast__edge(self, data: list, target: type, expected: object):
         assert typist.cast(data, target) == expected
+
+    @pyt.mark.parametrize(
+        'data, target',
+        [
+            # A regression net for the Decline migration: each pair used to make a candidate
+            # transform *crash* (and be silently rescued by the loop's blanket suppress) rather
+            # than cleanly decline. A `decline-valve:` log record on any of them means a transform
+            # is crashing again -- the exact bug class the Decline channel exists to kill.
+            # -- parametrized-container source/target hitting the model transforms (_t0/_t1) --
+            (['a', 'b'], dict),
+            ({'a': [1]}, list[int]),
+            ([1, 2, 3], dict),
+            # -- single-word flag string (was recursing to RecursionError in _string_to_flag) --
+            ('READ', Permission),
+            ('plain', GroupKind),
+            # -- non-date string (was an unguarded dateutil ParserError in _string_to_time) --
+            ('not-a-date', datetime),
+            ('hello world', date),
+            # -- builtin target with no introspectable signature (Typist.invocable) --
+            ('x', int),
+            (5, dict),
+            # -- model target matching the broad Map bound (was cls(data) in _map_to_map) --
+            (dict(a=1, child=dict(b=2, c=3)), MatchData),
+        ],
+    )
+    def test_cast__no_latent_crash(self, data: Any, target: type, caplog: pyt.LogCaptureFixture):
+        """A transform must *decline* (not crash) on inputs it can't handle.
+
+        The cast loop's transitional safety valve logs a `decline-valve:` record whenever a
+        transform raises something other than `Decline`. Asserting the log stays empty locks in
+        the latent-crash fixes and guards against any future transform regressing into a crash.
+        """
+        with caplog.at_level(logging.ERROR):
+            typist.cast(data, target)
+        valve = [r.getMessage() for r in caplog.records if 'decline-valve' in r.getMessage()]
+        assert not valve, f'transform crashed instead of declining: {valve}'
 
     def test_cast__firsts_and_atomics(self, flex_typist: Typist):
         """Test that `firsts`/`atomics` gate collapsing a series down to a single atom."""

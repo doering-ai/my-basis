@@ -341,7 +341,13 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
         args = []
         # 0. Return immediately for null args and non-generics
         if not data or not hasattr(origin, '__class_getitem__'):
-            return cls.parse(origin)
+            inst = cls.parse(origin)
+            if isinstance(data, Enum):
+                # `parse(EnumClass)` carries the class's name->value constraints (needed when
+                # casting *to* that enum), but the type of one *instance* is just the enum
+                # itself -- strip them so a scalar member reads as atomic, like any other scalar.
+                inst = inst.model_copy(update={'vals': None, 'keys': None})
+            return inst
 
         if ty.is_vec(data):
             valtypes = ut.condense(map(cls.typeof, data))

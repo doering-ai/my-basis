@@ -387,6 +387,7 @@ class View:
         self._scratch = False
         self._read_only = False
         self._window = window
+        self._change_count = 0
 
     # --------
     # Identity
@@ -484,17 +485,24 @@ class View:
 
         if command := MOCK_COMMANDS.get(name):
             command(self, args)
+            self._change_count += 1
             return
 
         if name == 'insert':
             self._cmd_insert(args.get('characters', ''))
+            self._change_count += 1
         elif name == 'select_all':
             self._cmd_select_all()
         elif name == 'right_delete':
             self._cmd_right_delete()
+            self._change_count += 1
         elif name == 'append':
             self._buf.insert(self._buf.size(), args.get('characters', ''))
+            self._change_count += 1
         # Unknown commands are silently ignored.
+
+    def change_count(self) -> int:
+        return self._change_count
 
     def _cmd_insert(self, chars: str) -> None:
         sel = sorted(self.selection, key=lambda r: r.begin(), reverse=True)
@@ -886,19 +894,19 @@ def platform() -> Literal['osx', 'linux', 'windows']:
 
 
 def packages_path() -> str:
-    return str(PATHS.home / 'Packages')
+    return str(ST_HOME / 'Packages')
 
 
 def installed_packages_path() -> str:
-    return str(PATHS.home / 'Installed Packages')
+    return str(ST_HOME / 'Installed Packages')
 
 
 def cache_path() -> str:
-    return str(PATHS.cache)
+    return str(ST_CACHE)
 
 
 def executable_path() -> str:
-    return str(PATHS.root / 'sublime_text')
+    return str(ST_ROOT / 'sublime_text')
 
 
 def load_settings(base_name: str) -> Settings:
@@ -920,11 +928,32 @@ def decode_value(data: str) -> Any:
 def load_resource(name: str) -> str:
     """Attempt to read from disk; raise FileNotFoundError if not found."""
     # Strip leading "Packages/" and try to resolve relative to packages_path()
-    stripped = name.removeprefix('Packages/')
+    prefix = 'Packages/'
+    stripped = name[len(prefix):] if name.startswith(prefix) else name
     candidate = Path(packages_path()) / stripped
     if candidate.exists():
         return candidate.read_text(encoding='utf-8')
     raise FileNotFoundError(f'Resource not found (offline mock): {name!r}')
+
+
+def find_resources(pattern: str = '') -> list[str]:
+    """Return resource paths under Packages, optionally filtered by a glob pattern.
+
+    Walks the Packages directory (following symlinks) and returns every file as
+    a ``Packages/<rel/path>`` string, mirroring the real ``sublime.find_resources``.
+    """
+    import fnmatch
+
+    results: list[str] = []
+    pkgs = Path(packages_path())
+    if pkgs.is_dir():
+        for root, _dirs, files in os.walk(pkgs, followlinks=True):
+            for fname in files:
+                rel = Path(root, fname).relative_to(pkgs)
+                res = f'Packages/{rel}'
+                if not pattern or fnmatch.fnmatch(res, pattern):
+                    results.append(res)
+    return sorted(results)
 
 
 def set_timeout(callback: 'Callable[[], Any]', delay: int = 0) -> None:

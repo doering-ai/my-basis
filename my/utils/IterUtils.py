@@ -310,7 +310,9 @@ class IterUtils(_UtilsBase):
         """
         if ret := cls.ty.cast(data, dict):
             fns = tuple(map(cls.normalize_predicate, args))
-            return dict(cls.map_condense(ret, lambda k: any(cls.apply(fns, k))))
+            # NOTE: not `map_condense` -- its predicate is applied to each *value*, but here we
+            # need to match against each *key*.
+            return {k: v for k, v in ret.items() if any(cls.apply(fns, k))}
         else:
             return {}
 

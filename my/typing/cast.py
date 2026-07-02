@@ -851,14 +851,27 @@ class Transform[T0, T1]:
 
     @register
     def _vec_to_map[S: Vec, T: Map](self: Transform[S, T]) -> dict | Counter | None:
-        if tyc.is_map(self.data):
-            # I. Cast item lists (i.e. lists of 2-tuples)
-            return dict(self.data)
+        data = self.data
+        if (
+            self.ty.is_map_type(self.t1)
+            and data
+            and all(not isinstance(p, String) and tyc.is_vec(p) and len(p) == 2 for p in data)
+        ):
+            # I. A list of 2-element pairs -> map items. `normalize` listifies tuples, so
+            #    `is_map` (which wants tuple pairs) misses these -- detect them structurally.
+            #    Re-cast as a dict so the map->map path coerces keys/values to the target types.
+            #    Gated on `is_map_type(t1)` -- a `Model` also iterates to pairs (pydantic's
+            #    dict-like `__iter__`) but isn't itself map-shaped; without the gate, recasting
+            #    a model instance recurses through `_object_to_model` -> `try_method('new', ...)`
+            #    -> `normalize` -> pairs -> here, forever.
+            return self.proxy(dict(map(tuple, data)))
 
-        elif issubclass(self._t1, Counter):
-            # II. Cast counters, the only map type that takes an iter of single items
-            if (kt := self.t1.keys) and (raw_kt := kt.main):
-                return self.ty.cast(self.data, Counter[raw_kt])
+        elif issubclass(self.t1.main, Counter):
+            # II. Cast counters, the only map type that takes an iter of single items: coerce
+            #     each item to the key type (e.g. 'a.b.c' -> ('a', 'b', 'c')), then count.
+            if (kt := self.t1.keys) and kt.main:
+                return Counter(self.ty.multicast(self.data, kt))
+            return Counter(self.data)
 
     @register
     def _vec_to_iter[S: Vec, T: Iter](self: Transform[S, T]) -> Iterator | AsyncIterator | None:
@@ -931,12 +944,12 @@ class Transform[T0, T1]:
             return None if items is None else dict()
 
         keys, values = map(list, mi.unzip(items))
-        k1 = self.t1.keys and self.t1.keys.rtype
-        v1 = self.t1.vals and self.t1.vals.rtype
-        if k1:
-            keys = tyt.cast(keys, list[k1])
-        if v1:
-            values = tyt.cast(values, list[v1])
+        # Coerce against the *full* key/value MyType (not `.rtype`, which flattens a nested
+        # container type like `dict[str, int]` down to its first arg) so nested maps recurse.
+        if self.t1.keys:
+            keys = self.ty.multicast(keys, self.t1.keys)
+        if self.t1.vals:
+            values = self.ty.multicast(values, self.t1.vals)
         data = dict(zip(keys, values, strict=True))
 
         # Construct the target mapping, handling a couple of special constructors. Use the

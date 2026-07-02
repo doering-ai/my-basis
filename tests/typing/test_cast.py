@@ -484,7 +484,12 @@ class TestCast:
             # -- single-word flag string (was recursing to RecursionError in _string_to_flag) --
             ('READ', Permission),
             ('plain', GroupKind),
-            # -- non-date string (was an unguarded dateutil ParserError in _string_to_time) --
+            # -- non-date string (was an unguarded dateutil ParserError in _string_to_time).
+            # Also covers basis-12 item 5: `_string_to_time` probes `cast(data, float)` to rule
+            # out a numeric string before trying date parsing; that probe dispatches through
+            # `_object_to_model` -> `Typist.invoke(float, data)`, which used to log the routine
+            # failure at ERROR (`Failed to invoke float with args=...`) instead of debug -- a
+            # declined candidate reported as a crash. --
             ('not-a-date', datetime),
             ('hello world', date),
             # -- builtin target with no introspectable signature (Typist.invocable) --
@@ -500,11 +505,15 @@ class TestCast:
         The cast loop's transitional safety valve logs a `decline-valve:` record whenever a
         transform raises something other than `Decline`. Asserting the log stays empty locks in
         the latent-crash fixes and guards against any future transform regressing into a crash.
+
+        More generally, a *successful* cast should never emit an ERROR-level record at all: any
+        exception caught along the way (by the decline-valve, by `Typist.invoke`, ...) represents
+        a declined candidate, not a real failure, and should be logged no louder than debug.
         """
-        with caplog.at_level(logging.ERROR):
+        with caplog.at_level(logging.DEBUG):
             typist.cast(data, target)
-        valve = [r.getMessage() for r in caplog.records if 'decline-valve' in r.getMessage()]
-        assert not valve, f'transform crashed instead of declining: {valve}'
+        errors = [r.getMessage() for r in caplog.records if r.levelno >= logging.ERROR]
+        assert not errors, f'benign cast dispatch logged at ERROR level: {errors}'
 
     def test_cast__firsts_and_atomics(self, flex_typist: Typist):
         """Test that `firsts`/`atomics` gate collapsing a series down to a single atom."""

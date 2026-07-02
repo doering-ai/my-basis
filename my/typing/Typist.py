@@ -1045,8 +1045,17 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
                 # II. Unpack the validated arguments and call the function
                 return func(*bound.args, **bound.kwargs)
             except Exception as e:
+                # A failed invocation is a *declined* attempt, not an application error --
+                # invoke() exists precisely to try a call and gracefully report `None` on
+                # failure (see `_strict` for the one case where a caller wants an exception
+                # instead). Cast candidates probe this speculatively (e.g. `_object_to_model`
+                # trying `float(data)` on a non-numeric string while dispatching a date/time
+                # cast) and are expected to fail routinely during normal, successful casts --
+                # logging that at ERROR made every such probe look like a crash. See the
+                # `decline-valve:` mechanism in `cast.py` for the analogous, cast-specific
+                # signal used when a transform genuinely crashes rather than declines.
                 name = getattr(func, '__name__', '[ANONYMOUS_FUNCTION]')
-                cls.LOGGER.error(
+                cls.LOGGER.debug(
                     f'Failed to invoke {name} with args={bound.args}, kwargs={bound.kwargs}: {e}'
                 )
         if _strict:

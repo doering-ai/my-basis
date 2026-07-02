@@ -244,11 +244,11 @@ m.group(0, 1, 2) # -> ('kayak', 'k', None)
 
 # By number
 regex.match(r'(["\'])(\w+)(\g<1>)', '"abc\' "def"') # -> "def"
-regex.match(r'(?P<quote>["\'])(\w+)(\g<1>)', "'abc\" 'def'") # -> 'def' 
+regex.match(r'(?P<quote>["\'])(\w+)(\g<1>)', "'abc\" 'def'") # -> 'def'
 
 # By name
-regex.match(r'(?P<quote>["\'])(\w+)(\g<quote>)', '"abc\' "def"') # -> "def" 
-regex.match(r'(?P<quote>["\'])(\w+)(?P=quote)', "'abc\" 'def'") # -> 'def' 
+regex.match(r'(?P<quote>["\'])(\w+)(\g<quote>)', '"abc\' "def"') # -> "def"
+regex.match(r'(?P<quote>["\'])(\w+)(?P=quote)', "'abc\" 'def'") # -> 'def'
 ```
 
 #### Predefined Subroutines (`(?(DEFINE)...)`)
@@ -372,8 +372,8 @@ regex.findall(r"\w{2}", "abcd ef") # -> ['ab', 'cd', 'ef'], vs.
 regex.findall(r"\G\w{2}", "abcd ef") # -> ['ab', 'cd']
 
 # Or in negative variable-length lookbehinds to limit how far back the lookbehind goes
-regex.findall(r"(?<!X.*)\w+", "aXa bXb") # -> ['aXa'] 
-regex.findall(r"(?<!\G.*X.*)\w+", "aXa bXb") # -> ['aXa', 'bXb'] 
+regex.findall(r"(?<!X.*)\w+", "aXa bXb") # -> ['aXa']
+regex.findall(r"(?<!\G.*X.*)\w+", "aXa bXb") # -> ['aXa', 'bXb']
 ```
 
 ### Word boundaries (`\m\M\b\B`)

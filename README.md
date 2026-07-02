@@ -19,4 +19,3 @@
 > An extensive utility library for python, focusing especially on iterables and a Regex "Store".
 
 ---
-

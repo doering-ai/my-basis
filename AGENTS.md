@@ -98,7 +98,7 @@ Almost all Python files in the project contain one or more of the following sect
 ############
 ### HEAD ###
 ############
-""" 
+"""
 This is where imports are defined in three subsections: `STANDARD` (the python stdlib), `EXTERNAL` (dependencies installed via `uv` and controlled by `pyproject.toml`), and `INTERNAL` (other files in this project or an imported library that we wrote).
 """
 

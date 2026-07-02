@@ -5,7 +5,7 @@ const tr_sheet = _sheet.getSheetByName("transforms");
 const idxs = tc_sheet.getSheetValues(3, 2, 42, 1).map(row => `${row[0]}`);
 
 /**
- * Renders the impacts of a given transform on a per-type basis. 
+ * Renders the impacts of a given transform on a per-type basis.
  *
  * @param {String[][]} sources List of idxs for the source of each transform.
  * @param {String[][]} targets List of idxs for the target of each transform.
@@ -24,7 +24,7 @@ const _DEFAULTS = [
   RegExp("^{i0}-{i0}.*$"),
   // Scalar -> Scalar is handled by each type
   RegExp('^12\d*-12\d*.*$'),
-  // str|byte -> str|byte is handled by internal machinery 
+  // str|byte -> str|byte is handled by internal machinery
   RegExp('^11[12]-11[12]$'),
   // Vec and Map types handle intra-family conversions
   RegExp('^21\d*-21\d*$'),
@@ -34,14 +34,14 @@ const _DEFAULTS = [
 /**
  * Determine whether the given transformation is covered implicitly, aka done "by default".
  *
- * @param {String} idx0 
- * @param {String} idx1 
+ * @param {String} idx0
+ * @param {String} idx1
  */
 function is_def(idx0, idx1) {
   return _DEFAULTS.some(rgx => rgx.exec(`${idx0}-${idx1}`));
 }
 
-/** 
+/**
  * Constructs a matrix of transform results for the given transforms, describing which cases are
  * covered.
  *
@@ -76,9 +76,9 @@ function TYPECAST_RENDER(transforms) {
 }
 
 /**
- * 
- * @param {String} source 
- * @param {String} target 
+ *
+ * @param {String} source
+ * @param {String} target
  * @return {String[]}
  * @customfunction
  */

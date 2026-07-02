@@ -132,7 +132,7 @@ yarn.lock
 *.sublime-project
 *.sublime-workspace
 
-# Operating Systems 
+# Operating Systems
 .DS_Store
 
 # Test Artifacts

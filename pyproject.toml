@@ -304,8 +304,8 @@ ignore = [
 
   # PyDocStyle
   "D100", # docstrings for modules
-  "D104", # docstrings for packages 
-  "D105", # docstrings for magic methods 
+  "D104", # docstrings for packages
+  "D105", # docstrings for magic methods
   "D410", # blank line after docstring sections
   "D411", # blank line before docstring sections
 

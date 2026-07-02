@@ -15,10 +15,19 @@ hooks = [
 repo = "local"
 
 [[repos.hooks]]
+id = "lint"
+name="Run the ruff linter on the filesystem."
+language="system"
+files=".*\\.py$"
+pass_filenames=false
+entry="task eval:lint"
+
+[[repos.hooks]]
 id = "format"
 name="Run the ruff formatter on the filesystem."
 language="system"
 files=".*\\.py$"
+pass_filenames=false
 entry="task format"
 
 [[repos.hooks]]
@@ -26,4 +35,5 @@ id = "check-sync"
 name="Check that uv is synced and locked."
 language="system"
 files="(pyproject.toml|uv.lock)$"
+pass_filenames=false
 entry="uv lock --check"

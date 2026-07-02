@@ -245,9 +245,7 @@ class RegexStore(pyd.BaseModel):
             strip_string += ','
 
         fn = (
-            (lambda text: text.strip(strip_string) or text)
-            if strip_string
-            else (lambda text: text)
+            (lambda text: text.strip(strip_string) or text) if strip_string else (lambda text: text)
         )
         self._strip = (fn,)
 

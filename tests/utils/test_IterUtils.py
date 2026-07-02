@@ -240,8 +240,8 @@ class TestIterUtils:
             ([], 5, []),  # No functions
         ],
     )
-    def test_chain_map(self, funcs: list[Callable], item: Any, expected: list):
-        assert list(cls.chain_map(funcs, item)) == expected
+    def test_apply(self, funcs: list[Callable], item: Any, expected: list):
+        assert list(cls.apply(funcs, item)) == expected
 
     # -------------
     # `3` EXECUTION

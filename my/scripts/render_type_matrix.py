@@ -14,7 +14,7 @@ from pandas import DataFrame
 
 ### INTERNAL
 from my import MyType, RegexStore, GoogleSheet, env
-from my.typing.cast import TypeCast, Transform
+from my.typing.cast import Transform, _TRANSFORMS
 
 
 ############
@@ -120,7 +120,7 @@ class Matrix(pyd.BaseModel):
                 'target_idx',
                 *(map(str, MyType.IDXS.keys())),
             ],
-            *it.starmap(self._render_transform, TypeCast.TRANSFORMS),
+            *it.starmap(self._render_transform, _TRANSFORMS),
         ]
 
     def render_typecasts(self) -> list[list[str]]:
@@ -135,7 +135,7 @@ class Matrix(pyd.BaseModel):
                 'is_native',
                 *(map(str, MyType.IDXS.keys())),
             ],
-            *it.starmap(self._render_transform, TypeCast.TRANSFORMS),
+            *it.starmap(self._render_transform, _TRANSFORMS),
         ]
 
     # ------------------

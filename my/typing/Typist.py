@@ -319,7 +319,7 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
         elif c0 and c1:
             # III.ii. Compare the nested values of collection generics
             score += 2
-            if ut.is_map(data) and issubclass(tvar, Mapping):
+            if cls.is_map(data) and issubclass(tvar, Mapping):
                 score += 2
                 if option.keys is None:
                     score += 1
@@ -352,7 +352,7 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
         elif not file:
             return ''
         else:
-            return str(file)
+            return file
 
     @classmethod
     def _param_is_positional(cls, param: inspect.Parameter) -> bool:
@@ -581,9 +581,13 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
     # `*4` TRANSFORMATION
     # -------------------
     @overload
-    def serialize(self, data: Scalar, full: bool = False, cases: dict[CaseKey, CaseVal] | None = None) -> Scalar: ...
+    def serialize(
+        self, data: Scalar, full: bool = False, cases: dict[CaseKey, CaseVal] | None = None
+    ) -> Scalar: ...
     @overload
-    def serialize(self, data: Atom, full: bool = False, cases: dict[CaseKey, CaseVal] | None = None) -> str: ...
+    def serialize(
+        self, data: Atom, full: bool = False, cases: dict[CaseKey, CaseVal] | None = None
+    ) -> str: ...
     @overload
     def serialize(
         self, data: Map | Model, full: bool = False, cases: dict[CaseKey, CaseVal] | None = None
@@ -596,7 +600,9 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
     def serialize(
         self, data: object, full: bool = False, cases: dict[CaseKey, CaseVal] | None = None
     ) -> object: ...
-    def serialize(self, data: object, full: bool = False, cases: dict[CaseKey, CaseVal] | None = None) -> Any:
+    def serialize(
+        self, data: object, full: bool = False, cases: dict[CaseKey, CaseVal] | None = None
+    ) -> Any:
         """Recursively simplify the given object into serialization-ready, standardized types.
 
         This method is undeniably an opinionated way of preparing data for export, but it should

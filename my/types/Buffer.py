@@ -719,11 +719,11 @@ class Buffer(pyd.BaseModel):
         test, char = self.WRITE_MAP[spacing]
         n = len(char)
         x0, x1 = span
+        pre, post = '', ''
         if n == 1:
             pre = char if (x0 > 0 and not test.fullmatch(self[x0 - 1 : x0])) else ''
             post = char if (x1 < len(self) and not test.fullmatch(self[x1 : x1 + 1])) else ''
         elif n > 1:
-            pre, post = '', ''
             if x0 > 0:
                 _text = self[max(x0 - n, 0) : x0]
                 pre = char[len(ut.shared_suffix(char, _text)) :]

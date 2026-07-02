@@ -139,6 +139,12 @@ class Markdown(pyd.BaseModel):
             text = str(source)
             if '\n' in text or len(text) > 256:
                 kwargs['prose'] = cls.BUFFER_FACTORY(text)
+            return cls(**kwargs)
+        else:
+            # A bare `Iterable[str]` of lines (not already str/bytes/Path/Buffer): unambiguous
+            # prose content, so always wrap it rather than applying the single-string heuristic.
+            kwargs['prose'] = cls.BUFFER_FACTORY(list(source))
+            return cls(**kwargs)
 
     @classmethod
     def _build_tree(
@@ -538,7 +544,7 @@ class Markdown(pyd.BaseModel):
     def prefix(self) -> str:
         """The bactic-escaped prefix for this node's title, or emptystring if there is none."""
         if self.idx or self.tags:
-            return '`' + ' '.join(filter(bool, [self.idx, *self.tags])) + '`'
+            return '`' + ' '.join(s for s in [self.idx, *self.tags] if s) + '`'
         return ''
 
     @property

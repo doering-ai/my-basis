@@ -77,7 +77,7 @@ from .match import tym
 from .check import tyc
 
 if TYPE_CHECKING:
-    from my import Typist  # noqa
+    from my import Typist
 
 
 class Empty(Enum):
@@ -481,8 +481,11 @@ class Transform[T0, T1]:
 
     @register
     def _string_to_bytes[S: String, T: bytes](self: Transform[S, T]) -> bytes | None:
-        """``'hi' -> b'hi'`` -- encode a string to bytes. `bytes` is in `String` but not
-        `Stream`, so neither `_string_to_stream` nor `_stream_to_bytes` covers this edge."""
+        """``'hi' -> b'hi'`` -- encode a string to bytes.
+
+        `bytes` is in `String` but not `Stream`, so neither `_string_to_stream` nor
+        `_stream_to_bytes` covers this edge.
+        """
         return text.encode() if (text := self.to(str)) is not None else None
 
     @register
@@ -1348,8 +1351,8 @@ class Transform[T0, T1]:
     # ------------------
     @classmethod
     def _try_read_enum[T: Enum](cls, data: object, target: type[T]) -> object | None:
-        if read_method := cls._ty().get_method(target, 'read'):
-            if (ret := cls._ty().invoke(read_method, data)) is not None:
+        if read_method := _TypingBase._ty().get_method(target, 'read'):
+            if (ret := _TypingBase._ty().invoke(read_method, data)) is not None:
                 return ret
 
     def to[B](self, t1: AnyType[B]) -> B | None:

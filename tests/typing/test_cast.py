@@ -60,7 +60,7 @@ class TestCast:
     """Test suite for the `cast` chamber: the `TypeCast` (`tyt`) coercion layer + `Transform`."""
 
     @pyt.fixture
-    def flex_typist(self) -> Typist:
+    def flex_typist(self) -> abc.Iterator[Typist]:
         """The global Typist singleton with every cast flag enabled, restored afterward.
 
         Casting dispatches through the global singleton, so flag-mutation tests must drive that

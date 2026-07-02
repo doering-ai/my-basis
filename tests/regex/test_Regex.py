@@ -7,7 +7,7 @@
 import pytest as pyt
 
 ### INTERNAL
-from my.regex import Atom, Regex
+from my.regex import RgxAtom as Atom, Regex
 from ..conftest import boolmap
 
 cls = Regex

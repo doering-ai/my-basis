@@ -9,7 +9,7 @@ import pytest as pyt
 
 ### INTERNAL
 from ..conftest import boolmap
-from my.regex import Atom, Regex, Tree
+from my.regex import RgxAtom as Atom, Regex, Tree
 
 cls = Tree
 

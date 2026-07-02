@@ -968,6 +968,11 @@ class Transform[T0, T1]:
 
     @register
     def _iter_to_vec[S: Iter, T: Vec](self: Transform[S, T]) -> list | None:
+        if isinstance(self.data, (str, bytes)):
+            # A string/bytes has its own dedicated `_string_to_vec` transform, gated by the
+            # `splits`/`wraps` flags -- don't let this generic iterable fallback explode it
+            # into characters when that transform declines to match (mirrors `_iter_to_object`).
+            return None
         data: Iterable | AsyncIterable = self.data
         if isinstance(data, AsyncIterable):
 

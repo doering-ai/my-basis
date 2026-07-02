@@ -278,15 +278,28 @@ class IterUtils(_UtilsBase):
 
     @overload
     @classmethod
-    def get_all[K: Hashable, V](cls, data: dict[K, V], *args: Pred[K]) -> dict[K, V]: ...
+    def get_all[K: Hashable, V](
+        cls, data: dict[K, V], *args: Pred[K], mandatory: bool = True
+    ) -> dict[K, V]: ...
     @overload
     @classmethod
-    def get_all[K: Hashable, V](cls, data: Model, *args: Pred[K]) -> dict[str, Any]: ...
+    def get_all[K: Hashable, V](
+        cls, data: Model, *args: Pred[K], mandatory: bool = True
+    ) -> dict[str, Any]: ...
     @classmethod
-    def get_all[K, V](cls, data: object, *args: Pred[K]) -> dict:
-        """Only returns ANY requested values if all supplied arguments are satisifed/present."""
+    def get_all[K, V](cls, data: object, *args: Pred[K], mandatory: bool = True) -> dict:
+        """Extract multiple keys from a dictionary or model.
+
+        Args:
+            data: Source of key-value pairs, to be extracted.
+            *args: Keys or predicates to extract.
+            mandatory: If True, only return values if all supplied arguments are satisfied/present;
+                otherwise return whatever partial matches were found (default: True).
+        Returns:
+            Dict with requested keys that exist, or {} if `mandatory` and any key is missing.
+        """
         ret = cls.get_any(data, *args)
-        return ret if len(ret) == len(args) else {}
+        return ret if not mandatory or len(ret) == len(args) else {}
 
     @overload
     @classmethod

@@ -233,8 +233,11 @@ class IterUtils(_UtilsBase):
             pred: Predicate to normalize (value, iterable, or function).
         """
         # NOTE: `Func` is a union alias, so it can't be a `match` class pattern; guard on callable.
+        # A bare class (e.g. the default `pred=bool`) is itself callable, and is meant to be
+        # invoked as a coercion/truthiness check -- not treated as a literal value to compare
+        # against.
         match pred:
-            case _ if callable(pred) and not isinstance(pred, type):
+            case _ if callable(pred):
                 return pred
             case Container():
                 return pred.__contains__
@@ -252,7 +255,9 @@ class IterUtils(_UtilsBase):
             *preds: Predicates to apply (value, iterable, or function).
         """
         fns = list(map(cls.normalize_predicate, preds))
-        yield from (item for item in items if all(cls.apply(fns, item)))
+        # NOTE: not `all(cls.apply(fns, item))` -- `apply` already drops falsy results before
+        # `all` sees them, so that stream is truthy vacuously and never actually filters.
+        yield from (item for item in items if all(fn(item) for fn in fns))
 
     @classmethod
     def map_condense[K: Hashable, V](

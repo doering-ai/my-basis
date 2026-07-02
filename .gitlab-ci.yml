@@ -4,65 +4,56 @@
 ############
 # These will be executed in turn, corresponding to one or more jobs below
 stages:
-    - build
-    - eval
-    - test
-    - release
-
+  - build
+  - eval
+  - test
+  - release
 # Import static analysis tools
 include:
-    - template: Security/Secret-Detection.gitlab-ci.yml
-    - component: gitlab.com/gitlab-org/professional-services-automation/tools/utilities/pipeintel/pipeintel@main
-      inputs:
-        stage: eval
-
+  - template: Security/Secret-Detection.gitlab-ci.yml
+  - component: gitlab.com/gitlab-org/professional-services-automation/tools/utilities/pipeintel/pipeintel@main
+    inputs:
+      stage: eval
 # Determine when this pipeline should run
 workflow:
-    rules:
-        # Never run for draft commits
-        - if: '$CI_COMMIT_TITLE =~ /-draft$/ || $CI_MERGE_REQUEST_DRAFT == "true"'
-          when: never
-        # Run for merge requests and pushes to the main branch
-        - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-        - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-
+  rules:
+    # Never run for draft commits
+    - if: '$CI_COMMIT_TITLE =~ /-draft$/ || $CI_MERGE_REQUEST_DRAFT == "true"'
+      when: never
+    # Run for merge requests and pushes to the main branch
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 ############
 ### DATA ###
 ############
 variables:
-    PACKAGE: my
-    MAIN_POD: ' own '
-
-    # Enable GitLabs free secret detection -- see `secret_detection` job
-    SECRET_DETECTION_ENABLED: 'true'
-
-
+  PACKAGE: my
+  MAIN_POD: ' own '
+  # Enable GitLabs free secret detection -- see `secret_detection` job
+  SECRET_DETECTION_ENABLED: 'true'
 ############
 ### BODY ###
 ############
 default:
-    image: $MAIN_POD
-
+  image: $MAIN_POD
 secret_detection:
-    stage: eval
-
-
+  stage: eval
 Evaluate Python:
-    stage: eval
-    interruptible: true
-    before_script:
-        - cd $CI_PROJECT_DIR
-        - ruff --version
-    script:
-        - ruff check --output-format=gitlab --output-file=code-quality-report.json
-        - ruff format --diff
-    artifacts:
-        reports:
-            codequality: $CI_PROJECT_DIR/code-quality-report.json
-
+  stage: eval
+  interruptible: true
+  before_script:
+    - cd $CI_PROJECT_DIR
+    - ruff --version
+    - pyrefly --version
+  script:
+    - ruff check --output-format=gitlab --output-file=code-quality-report.json
+    - ruff format --diff
+    - pyrefly check
+  artifacts:
+    reports:
+      codequality: $CI_PROJECT_DIR/code-quality-report.json
 Test Python:
-    stage: test
-    script:
-        - task test:cov
-    coverage: '/TOTAL.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
- 
+  stage: test
+  script:
+    - task test:cov
+  coverage: '/TOTAL.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'

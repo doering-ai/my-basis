@@ -39,10 +39,10 @@ For details of various commands, consult `/Taskfile`. Here's a lit of the main c
 task test
 
 # Run Specific Test File
-task test -- -v test/apis/test_Environment.py
+task test -- -v tests/apis/test_Environment.py
 
 # Run Specific Test
-task test -- -v test/apis/test_Environment.py::TestEnvironment::test_get__basic
+task test -- -v tests/apis/test_Environment.py::TestEnvironment::test_get__basic
 
 # Calculate Coverage
 task test:cov
@@ -70,7 +70,7 @@ For a full list of dependencies, see `pyproject.toml`
 
 - `ruff`: linting and code formatting
 
-- `ty`: static type checking
+- `pyrefly`: static type checking (`task eval:typecheck`, or `uv run pyrefly check`)
 
 - `uv build` & `uv publish`: package building & publishing
 
@@ -88,7 +88,7 @@ For a full list of dependencies, see `pyproject.toml`
 
 ### Testing Guide
 
-Whenevery you're making siginifant changes to test files, be sure to read and apply `test/README.md`.
+Whenevery you're making siginifant changes to test files, be sure to read and apply `tests/README.md`.
 
 ### File Structure
 

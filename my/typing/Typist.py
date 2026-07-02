@@ -1070,7 +1070,9 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
             if ret is None:
                 if _strict:
                     raise ValueError(f'typist.invoke({fn}) returned None unexpectedly.')
-            elif _tvar is not None:
+            elif _tvar is None:
+                return ret
+            else:
                 if isinstance(_tvar, type) and isinstance(ret, _tvar):
                     # Already the right type -- casting it again would re-normalize a structured
                     # instance (e.g. a Model) into an intermediate list-of-pairs/dict form, which

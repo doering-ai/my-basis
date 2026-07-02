@@ -69,7 +69,9 @@ class Predicate(pyd.BaseModel):
     ) -> Self:
         """Construct a new Predicate instance, flexibly coercing most mapping-like objects."""
         if len(args) == 1 and isinstance(args[0], cls):
-            return args[0]
+            # A copy, not the same instance -- otherwise a caller mutating the result (e.g. via
+            # __setitem__) would silently corrupt whatever Predicate they passed in.
+            return args[0].model_copy(deep=True)
 
         ret = cls(duplicates=duplicates, overwrite=overwrite)
         for arg in (*args, kwargs):
@@ -281,8 +283,10 @@ class Predicate(pyd.BaseModel):
         if isinstance(other, str):
             # I. Basic key check
             return other in self.data
-        elif isinstance(other, Iterable) and ty.all_are(other, str):
-            # II. Check for a collection of keys
+        elif not isinstance(other, Maps) and isinstance(other, Iterable) and ty.all_are(other, str):
+            # II. Check for a collection of keys -- excludes Maps, since iterating a dict yields
+            # its (string) keys too, which would otherwise steal every dict `other` away from the
+            # key:value comparison in branch III below.
             return self.has_all(*other)
         elif isinstance(other, (Vec, *Maps, Predicate)):
             # III. Check for key: value pairs (NOT paying attention to value ordering)

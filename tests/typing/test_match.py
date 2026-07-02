@@ -144,10 +144,7 @@ class TestMatch:
     # ------------------
     @pyt.mark.parametrize('t0, t1, expected', MATCH_SUBSET)
     def test_match(self, t0, t1, expected: bool):
-        """Test `tym.match` subset coverage: is `t0` a subset of `t1`?
-
-        NOTE: the two `Span` cases are a known-deferred edge (needs `Real`->`int` resolution).
-        """
+        """Test `tym.match` subset coverage: is `t0` a subset of `t1`?"""
         assert cls.match(t0, t1) == expected
 
     @pyt.mark.parametrize('t0, t1, expected', MATCH_INTERSECT)

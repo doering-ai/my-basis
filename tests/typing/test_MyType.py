@@ -24,6 +24,7 @@ import pydantic as pyd
 from my.types import Buffer, Span
 from my.typing import MyType
 from my.regex import GroupKind
+from my.infra.types import Real, Pair
 from ..conftest import boolmap
 
 ############
@@ -303,6 +304,37 @@ class TestMyType:
         inst = cls.parse(data)
         assert not inst
         assert inst.main is None
+
+    @pyt.mark.parametrize(
+        'tvar, expected',
+        [
+            # ---- Bound ----
+            (typing.TypeVar('T', bound=int), int),
+            (typing.TypeVar('T', bound=Real), int),  # union bound -> first member
+            # ---- Constrained ----
+            (typing.TypeVar('T', str, bytes), str),
+            # ---- Defaulted (PEP 696) ----
+            (typing.TypeVar('T', bound=Real, default=float), float),  # default beats bound
+            # ---- Unconstrained ----
+            (typing.TypeVar('T'), Any),
+        ],
+    )
+    def test_parse__typevar(self, tvar: typing.TypeVar, expected: Expected):
+        assert cls.parse(tvar).root == expected
+
+    def test_parse__typevar_self_referential_default(self):
+        """A TypeVar's PEP 696 default may itself be another TypeVar -- resolve recursively."""
+        T1 = typing.TypeVar('T1', bound=Real)
+        T2 = typing.TypeVar('T2', default=T1)
+        assert cls.parse(T2).root is cls.parse(T1).root is int
+
+    def test_parse__pair(self):
+        """`Pair[T1: Object, T2: Object = T1]`: a second parameter defaults to the first,
+        exercising `_resolve_typevar` outside of `Span`'s single-parameter case.
+        """
+        inst = cls.parse(Pair)
+        assert inst.main is Pair
+        assert [arg.root for arg in inst.literal_members] == [str, str]
 
     @pyt.mark.parametrize(
         'data, expected',

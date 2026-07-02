@@ -14,12 +14,15 @@ from types import (
 from typing import (
     Any,
     ClassVar,
+    Generic,
     IO,
     Literal,
     ParamSpec,
     ParamSpecArgs,
     ParamSpecKwargs,
+    Protocol,
     Self,
+    TypeVar,
     TypeVarTuple,
     Unpack,
     overload,
@@ -323,7 +326,12 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
             # (e.g. `NoneType`), since `self.root` no longer reflects the original annotation.
             return root
         try:
-            uid = hash(str(root))
+            # `str()`/`repr()` on a TypeVar only ever shows the parameter's own name (e.g. `~T`),
+            # not its bound/constraints/default -- two unrelated `TypeVar('T', ...)` declarations
+            # would otherwise collide onto the same cache entry despite `_resolve_typevar` giving
+            # them different results. Key by identity instead, since each declaration is its own
+            # distinct object.
+            uid = id(root) if isinstance(root, TypeVar) else hash(str(root))
             if cached := cls.PARSE_CACHE[uid]:
                 return cached
 
@@ -392,6 +400,10 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
     def _process_root(cls, root: Any) -> Any:
         if isinstance(root, MyType):
             return root.root
+        elif isinstance(root, TypeVar):
+            # A bare TypeVar carries no cast-able shape of its own -- concretize it to whatever
+            # it stands in for (default/bound/constraint), rather than leaving it unresolved.
+            return cls._resolve_typevar(root)
         elif isinstance(root, (TypeVarTuple, ParamSpec, ParamSpecArgs, ParamSpecKwargs)):
             # Unlike `TypeVar`, these have no single stand-in type to resolve to -- treat them as
             # unmatchable, same as `Callable`/`Protocol`/etc. NOTE: must check before `Meta(root)`
@@ -553,6 +565,29 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
         return Meta._name(val)
 
     @classmethod
+    def _resolve_typevar(cls, tvar: TypeVar) -> Any:
+        """Concretize a bare (unsubstituted) TypeVar into a sensible stand-in type.
+
+        Precedence -- most-specific signal first -- is: an explicit PEP 696 default (may itself be
+        another TypeVar, e.g. a second parameter defaulting to the first, so resolve recursively),
+        then the bound (its first union member, if the bound itself is a union), then the first
+        constraint, then `Any` as the last resort for a fully unconstrained TypeVar.
+
+        Args:
+            tvar: The TypeVar to concretize.
+        Returns:
+            A concrete type (or union) standing in for the TypeVar.
+        """
+        if tvar.has_default():
+            default = tvar.__default__
+            return cls._resolve_typevar(default) if isinstance(default, TypeVar) else default
+        elif bound := tvar.__bound__:
+            return mi.first(get_args(bound), bound) if isinstance(bound, UnionType) else bound
+        elif constraints := tvar.__constraints__:
+            return constraints[0]
+        return Any
+
+    @classmethod
     def _0_read(cls, tvar: Any) -> tuple[str, type[Any] | None, tuple]:
         """Get the immediate basic values of this type, without any recursion.
 
@@ -574,11 +609,16 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
 
         if not (origin or args):
             with ctx.suppress(Exception):
-                # Handle user defined generics that don't register origin/args properly
-                if inspect.isclass(tvar) and len(orig_bases := get_original_bases(tvar)) == 1:
-                    base = orig_bases[0]
-                    _args = get_args(base)
-                    if _args:
+                # Handle user defined generics that don't register origin/args properly. PEP 695
+                # classes (`class Span[T](tuple[T, T])`) carry an implicit `Generic[T]` alongside
+                # their real base, so filter it out before counting -- but if `Generic`/`Protocol`
+                # is the *only* base (old-style `class Foo(Generic[T])`), it's the sole source of
+                # type params and must be kept.
+                if inspect.isclass(tvar):
+                    orig_bases = get_original_bases(tvar)
+                    bases = [b for b in orig_bases if get_origin(b) not in (Generic, Protocol)]
+                    bases = bases or list(orig_bases)
+                    if len(bases) == 1 and (_args := get_args(bases[0])):
                         origin = tvar
                         args = _args
 

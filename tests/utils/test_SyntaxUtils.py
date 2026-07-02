@@ -169,9 +169,9 @@ class TestSyntaxUtils:
         'model_cls, expected',
         [
             (SimpleModel, {'name': str, 'age': int}),
-            (ModelWithAliases, {'user_name': str, 'user_age': int}),
-            (ModelWithAliasChoices, {'email': str}),
-            (ModelWithAliasPath, {'data': str}),
+            (ModelWithAliases, {'username': str, 'age': int}),
+            (ModelWithAliasChoices, {'e': str}),
+            (ModelWithAliasPath, {'nested': str}),
             (EmptyModel, {}),
         ],
     )

@@ -7,6 +7,7 @@
 
 ### INTERNAL
 from .RegexStore import RegexStore
+from .meta import META_RGXS
 
 
 ############
@@ -149,6 +150,12 @@ COMMON_RGXS = RegexStore.new(
         ],
         r'(?:\/.+)?',
     ),
+    # -----------------
+    # Detritus patterns
+    # -----------------
+    #: Re-exported from `META_RGXS` (single source of truth) so downstream consumers can reach
+    #: it via the public `COMMON_RGXS` surface, not just the internal meta parser.
+    url_detritus=META_RGXS['url_detritus'],
     # --------------
     # Prose patterns
     # --------------

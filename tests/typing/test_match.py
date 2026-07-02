@@ -16,6 +16,7 @@ import pydantic as pyd
 
 ### INTERNAL
 from my.types import Buffer, Span
+from my.infra.types import Real
 from my.typing import MyType, TypeMatch, typist
 from ..conftest import boolmap
 
@@ -40,6 +41,9 @@ MATCH_SUBSET = boolmap(
         (int, list[int]),
         (Span, tuple[int, str]),
         (Span, tuple[str, ...]),
+        # `Span[T: Real]`'s members resolve to the full `Real` union -- a Span may hold
+        # floats, so it is no longer a subset of `tuple[int, int]`.
+        (Span, tuple[int, int]),
         (str | int, dict | int),
         (str | dict | int, str | int),
         (list[int] | Mapping, Mapping),
@@ -50,7 +54,7 @@ MATCH_SUBSET = boolmap(
         (str, Sequence),
         (str | int, str | dict | int),
         (Counter, Mapping),
-        (Span, tuple[int, int]),
+        (Span, tuple[Real, Real]),
         (Mapping, list[int] | Mapping[str, list[int] | Mapping]),
     ],
 )

@@ -24,7 +24,7 @@ import pydantic as pyd
 from my.types import Buffer, Span
 from my.typing import MyType
 from my.regex import GroupKind
-from my.infra.types import Real, Pair
+from my.infra.types import Real, Object, Pair
 from ..conftest import boolmap
 
 ############
@@ -229,7 +229,8 @@ class TestMyType:
             ),
             (
                 Span,
-                [int, int],
+                # `Span[T: Real]` -- the union bound resolves to the union itself.
+                [Real, Real],
                 dict(true=[Span(1, 5), Span(0, 0)], false=[(1, 5), (1,), ()]),
             ),
         ],
@@ -325,9 +326,9 @@ class TestMyType:
         [
             # ---- Bound ----
             (typing.TypeVar('T', bound=int), int),
-            (typing.TypeVar('T', bound=Real), int),  # union bound -> first member
+            (typing.TypeVar('T', bound=Real), Real),  # union bound -> the union itself
             # ---- Constrained ----
-            (typing.TypeVar('T', str, bytes), str),
+            (typing.TypeVar('T', str, bytes), str | bytes),  # constraints -> union of all
             # ---- Defaulted (PEP 696) ----
             (typing.TypeVar('T', bound=Real, default=float), float),  # default beats bound
             # ---- Unconstrained ----
@@ -337,19 +338,40 @@ class TestMyType:
     def test_parse__typevar(self, tvar: typing.TypeVar, expected: Expected):
         assert cls.parse(tvar).root == expected
 
+    @pyt.mark.parametrize(
+        'tvar, accepted, rejected',
+        [
+            # Constrained: the union of ALL constraints -- no member silently discarded.
+            (typing.TypeVar('T', str, bytes), ['x', b'x'], [1, 1.5]),
+            # Union bound: the full union -- a bound is a ceiling, not a menu.
+            (typing.TypeVar('T', bound=Real), [3, 3.5, True], ['x', b'x']),
+        ],
+    )
+    def test_parse__typevar_union_members_survive(
+        self, tvar: typing.TypeVar, accepted: list, rejected: list
+    ):
+        """Every member of a constraint set / union bound survives resolution."""
+        inst = cls.parse(tvar)
+        assert inst.is_split
+        for val in accepted:
+            assert inst.check(val)
+        for val in rejected:
+            assert not inst.check(val)
+
     def test_parse__typevar_self_referential_default(self):
         """A TypeVar's PEP 696 default may itself be another TypeVar -- resolve recursively."""
         T1 = typing.TypeVar('T1', bound=Real)
         T2 = typing.TypeVar('T2', default=T1)
-        assert cls.parse(T2).root is cls.parse(T1).root is int
+        assert cls.parse(T2).root == cls.parse(T1).root == Real
 
     def test_parse__pair(self):
         """`Pair[T1: Object, T2: Object = T1]`: a second parameter defaults to the first,
-        exercising `_resolve_typevar` outside of `Span`'s single-parameter case.
+        exercising `_resolve_typevar` outside of `Span`'s single-parameter case. Both
+        parameters resolve to the full `Object` union bound (not its first member).
         """
         inst = cls.parse(Pair)
         assert inst.main is Pair
-        assert [arg.root for arg in inst.literal_members] == [str, str]
+        assert [arg.root for arg in inst.literal_members] == [Object, Object]
 
     @pyt.mark.parametrize(
         'data, expected',

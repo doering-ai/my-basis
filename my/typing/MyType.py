@@ -576,8 +576,11 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
 
         Precedence -- most-specific signal first -- is: an explicit PEP 696 default (may itself be
         another TypeVar, e.g. a second parameter defaulting to the first, so resolve recursively),
-        then the bound (its first union member, if the bound itself is a union), then the first
-        constraint, then `Any` as the last resort for a fully unconstrained TypeVar.
+        then the bound (the union itself, if the bound is a union -- a bound is a ceiling, not a
+        menu, so the full union is exactly the information available and no member is more
+        "correct" than another), then the union of all constraints (rather than only the first --
+        constraints are an explicit closed menu of equally-valid choices, so discarding any of
+        them is silently lossy), then `Any` as the last resort for a fully unconstrained TypeVar.
 
         Args:
             tvar: The TypeVar to concretize.
@@ -588,9 +591,12 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
             default = tvar.__default__
             return cls._resolve_typevar(default) if isinstance(default, TypeVar) else default
         elif bound := tvar.__bound__:
-            return mi.first(get_args(bound), bound) if isinstance(bound, UnionType) else bound
+            return bound
         elif constraints := tvar.__constraints__:
-            return constraints[0]
+            union: Any = constraints[0]
+            for constraint in constraints[1:]:
+                union = union | constraint
+            return union
         return Any
 
     @classmethod

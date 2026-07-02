@@ -357,7 +357,7 @@ class Predicate(pyd.BaseModel):
         if not other:
             return self
         elif items := ty.cast(other, dict[str, list[str]]):
-            for key, value in items:
+            for key, value in items.items():
                 self.write(key, value)
             return self
         else:

@@ -183,7 +183,9 @@ unannotated-attribute = 'error'
 #   `DEFAULT_VERSION` as a `Literal` constant even though runtime treats it as assignable).
 # - missing-attribute: dynamically-typed 3rd-party surfaces (googleapiclient's `Resource`
 #   built at runtime, pyratatui's still-incomplete stubs, `importlib.resources.abc.Traversable`
-#   missing `exists()` in typeshed) plus Flag/Enum multi-class dispatch in MyEnum.
+#   missing `exists()` in typeshed) plus Flag/Enum multi-class dispatch in MyEnum; also
+#   `tests/types/test_Predicate.py`'s `pred.serialize(...)` xfail spec (basis-06), restored on
+#   purpose for a method that doesn't exist yet -- self-clears once `Predicate.serialize` lands.
 # - bad-return, invalid-argument, not-iterable: `Self`-typed classmethods colliding with
 #   `Flag`'s multiple inheritance in MyEnum, and `type(self)` iteration over Flag members (a
 #   real stdlib idiom that isn't statically typed as iterable).

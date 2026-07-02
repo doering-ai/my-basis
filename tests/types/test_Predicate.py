@@ -3,13 +3,15 @@
 ############
 ### STANDARD
 from typing import ClassVar
+from collections.abc import Mapping
 import more_itertools as mi
+from collections import deque, defaultdict
 
 ### EXTERNAL
 import pytest as pyt
 
 ### INTERNAL
-from my.types import Predicate
+from my.types import Predicate, Buffer
 
 cls = Predicate
 
@@ -122,6 +124,66 @@ class TestPredicate:
     def test_new(self, args: list | None, kwargs: dict | None, expected: dict[str, list[str]]):
         result = cls.new(*(args or []), **(kwargs or {}))
         assert result.data == expected
+
+    @pyt.mark.xfail(reason='Predicate.serialize not yet implemented')
+    @pyt.mark.parametrize(
+        'data, typevar, expected',
+        [
+            ({}, None, {}),
+            (SAMPLES['basic'], None, dict(k1=['A', 'B'], k2=['C'])),
+            (SAMPLES['basic'], dict[str, str], dict(k1='A', k2='C')),
+            (SAMPLES['basic'], dict[str, set[str]], dict(k1={'A', 'B'}, k2={'C'})),
+            (SAMPLES['basic'], dict[str, list[set[str]]], dict(k1=[{'A'}, {'B'}], k2=[{'C'}])),
+            (
+                SAMPLES['basic'],
+                dict[str, list[Buffer]],
+                dict(k1=[Buffer.new('A'), Buffer.new('B')], k2=[Buffer.new('C')]),
+            ),
+            (SAMPLES['basic'], list[str], ['"k1": ["A", "B"]', '"k2": ["C"]']),
+            (SAMPLES['basic'], str, '{"k1": ["A", "B"], "k2": ["C"]}'),
+            (SAMPLES['basic'], list, [('k1', ['A', 'B']), ('k2', ['C'])]),
+            # Known Classes
+            (dict(k1=['1', '2']), dict[str, deque[int]], dict(k1=deque([1, 2]))),
+            (
+                dict(k1=['1', '2', '3'], k2=['4', '5', '6']),
+                defaultdict[str, list[int]],
+                defaultdict(list, dict(k1=[1, 2, 3], k2=[4, 5, 6])),
+            ),
+            # Complex nests
+            (
+                {'a.b.c': ['55'], 'aa': ['66']},
+                None,
+                dict(a=dict(b=dict(c=['55'])), aa=['66']),
+            ),
+            (
+                {'a.b.c': ['55'], 'aa': ['66']},
+                Mapping[str, list[int] | Mapping],
+                dict(a=dict(b=dict(c=[55])), aa=[66]),
+            ),
+            (
+                {'a.b.c': ['55'], 'aa': ['66']},
+                Mapping[str, list[int] | Mapping[str, list[int] | Mapping]],
+                dict(a=dict(b=dict(c=[55])), aa=[66]),
+            ),
+            (
+                {'a.b.c': ['55'], 'aa': ['66']},
+                Mapping[str, int],
+                {'a.b.c': 55, 'aa': 66},
+            ),
+            (
+                {'a.b.c': ['55'], 'aa': ['66']},
+                Mapping[tuple[str, ...], list[int]],
+                {('a', 'b', 'c'): [55], ('aa',): [66]},
+            ),
+        ],
+    )
+    def test_serialize(self, data: dict[str, list[str]], typevar: type | None, expected):
+        """Spec for `Predicate.serialize(tvar=...)` -- restored as xfail (commit 4e6a4ed dropped it
+        as dead spec for a never-implemented method); self-activates the moment the method lands.
+        """
+        pred = cls.new(data)
+        result = pred.serialize(tvar=typevar)
+        assert result == expected
 
     # -------------------
     # `-` Private Methods

@@ -95,7 +95,11 @@ class Span[T: Real](tuple[T, T]):
         if isinstance(data, String):
             # II. Handle string input with delimiters
             text = ty.normalize(data).strip()
-            nums = ty.read_scalars(text, tvar)
+            segments = [s for s in cls.DELIM_RGX.split(text) if s]
+            nums = [v for s in segments if (v := ty.cast(s, tvar)) is not None]
+            if len(nums) != len(segments):
+                # A segment that didn't cast cleanly (e.g. 'a-b') can't be a valid Span.
+                nums = []
             match len(nums), nums:
                 case 1, (p0,):
                     return p0, p0

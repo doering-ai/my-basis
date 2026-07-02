@@ -3,7 +3,7 @@
 ###################
 [project]
 name = "my-basis"
-version = "0.1.0"
+version = "0.2.0"
 description = "An extensive utility library for python, focusing especially on iterables and a Regex 'Store'."
 readme = "README.md"
 authors = [{ name = "Robb Doering", email = "robb@doering.ai" }]

@@ -1194,16 +1194,19 @@ class Transform[T0, T1]:
         """Cast data to a union (split) target.
 
         Returns the data unchanged if it already satisfies any member of the union (a NOOP,
-        e.g. a str passed to `int | str`); otherwise coerces it to a member, trying the
-        last-listed first (later members are treated as higher-preference targets). Casting
-        to the NoneType member naturally yields None and is skipped over.
+        e.g. a str passed to `int | str`); otherwise coerces it to a best-fit member: members
+        are ranked by `Typist.sort_options` fitness, with score ties broken by declaration
+        order (earlier members preferred -- for constraint/bound unions from TypeVars the
+        first-listed member is the canonical choice, and hailmary coercions like `bool(...)`
+        truthiness must not beat an exact numeric parse just because `bool` was listed last).
+        Casting to the NoneType member naturally yields None and is skipped over.
 
         Returns:
             The (possibly coerced) data, or None if no member could be satisfied.
         """
         if self.t1.check(self.data):
             return self.data
-        for arg in reversed(self.t1.args):
+        for arg in self.ty.sort_options(self.data, *self.t1.args):
             if (ret := tyt.cast(self.data, arg)) is not None:
                 return ret
         return None

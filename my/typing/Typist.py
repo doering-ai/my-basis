@@ -273,7 +273,13 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
         Returns:
             List of MyType options sorted by fitness score (best first).
         """
-        fn = ft.partial(self._score_option, data=data)
+        # NOTE: `data` must bind positionally -- a `ft.partial(..., data=data)` keyword bind
+        # collides with the option that `sorted` passes positionally (it lands in the `data`
+        # slot) and raises `TypeError: got multiple values for argument 'data'`.
+        fn = ft.partial(self._score_option, data)
+        # `sorted` is stable and `reverse=True` preserves source order among equal scores, so
+        # score ties fall back to declaration order -- meaningful for unions (e.g. a constrained
+        # TypeVar's first constraint is the canonical choice).
         return list(sorted(options, key=fn, reverse=True))
 
     @classmethod
@@ -316,6 +322,14 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
             # III.i. Particularly apt atomic casts
             if isinstance(data, int) and issubclass(tvar, bool):  # type: ignore
                 score += 1 if data in {0, 1} else -1
+            elif isinstance(data, str) and tvar in Scalars:
+                # The scalar type the text *literally parses as* (per the `flex_deserialize`
+                # priority) fits better than a sibling that would truncate ('-1.5' -> int) or
+                # truthify ('123' -> bool) it -- matters for union targets, where members are
+                # tried best-fit-first.
+                flexed = Transform.flex_deserialize(data)
+                if flexed is not None and type(flexed) is tvar:
+                    score += 1
         elif c0 and c1:
             # III.ii. Compare the nested values of collection generics
             score += 2

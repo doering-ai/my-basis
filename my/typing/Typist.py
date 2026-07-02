@@ -63,7 +63,6 @@ F = TypeVar('F', bound=FileData)
 
 type CaseKey = type | Callable[[object], bool]  #:
 type CaseVal = Callable[[object], Any]
-type Case = tuple[CaseKey, CaseVal]
 
 logger = logging.getLogger()
 
@@ -582,16 +581,22 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
     # `*4` TRANSFORMATION
     # -------------------
     @overload
-    def serialize(self, data: Scalar, full: bool = False, **cases: Case) -> Scalar: ...
+    def serialize(self, data: Scalar, full: bool = False, cases: dict[CaseKey, CaseVal] | None = None) -> Scalar: ...
     @overload
-    def serialize(self, data: Atom, full: bool = False, **cases: Case) -> str: ...
+    def serialize(self, data: Atom, full: bool = False, cases: dict[CaseKey, CaseVal] | None = None) -> str: ...
     @overload
-    def serialize(self, data: Map | Model, full: bool = False, **cases: Case) -> dict: ...
+    def serialize(
+        self, data: Map | Model, full: bool = False, cases: dict[CaseKey, CaseVal] | None = None
+    ) -> dict: ...
     @overload
-    def serialize(self, data: Vec | Iter, full: bool = False, **cases: Case) -> list: ...
+    def serialize(
+        self, data: Vec | Iter, full: bool = False, cases: dict[CaseKey, CaseVal] | None = None
+    ) -> list: ...
     @overload
-    def serialize(self, data: object, full: bool = False, **cases: Case) -> object: ...
-    def serialize(self, data: object, full: bool = False, **cases: Case) -> Any:
+    def serialize(
+        self, data: object, full: bool = False, cases: dict[CaseKey, CaseVal] | None = None
+    ) -> object: ...
+    def serialize(self, data: object, full: bool = False, cases: dict[CaseKey, CaseVal] | None = None) -> Any:
         """Recursively simplify the given object into serialization-ready, standardized types.
 
         This method is undeniably an opinionated way of preparing data for export, but it should
@@ -608,14 +613,15 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
         Args:
             data: The source data to serialize. Passing more than one obviously creates a list.
             full: If True, include unset/default fields for pydantic models.
-            **cases: Optional special-case handlers for specific types, that trigger at all depths.
+            cases: Optional special-case handlers, keyed by type or predicate, that trigger at
+                all depths.
         """
         # 0. If the caller specified a special handler, call that instead
-        _is_special = lambda _c: (
-            (isinstance(_c, type) and isinstance(data, _c)) or (inspect.isfunction(_c) and _c(data))
-        )
-        if handler := next(filter(_is_special, cases.values()), (None, None))[1]:
-            return handler(data)
+        for key, handler in (cases or {}).items():
+            if (isinstance(key, type) and isinstance(data, key)) or (
+                not isinstance(key, type) and key(data)
+            ):
+                return handler(data)
 
         # I. Cast special atomics to strings, and return others as-is
         if self.is_atom(data):
@@ -636,7 +642,7 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
 
         # III. Recurse into collections
         if self.is_struct(data):
-            _recur = ft.partial(self.serialize, cases=dict(cases), full=full)
+            _recur = ft.partial(self.serialize, cases=cases, full=full)
             if self.is_map(data):
                 return ut.val_map(_recur, data)
             else:

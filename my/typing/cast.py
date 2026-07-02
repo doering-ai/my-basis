@@ -879,7 +879,14 @@ class Transform[T0, T1]:
 
     @register
     def _vec_to_iter[S: Vec, T: Iter](self: Transform[S, T]) -> Iterator | AsyncIterator | None:
-        if isinstance(self.data, AsyncIterable):
+        # A `Mapping` is itself structurally `Iterable`, so a `Map` target (e.g. dict[str,
+        # list[str]]) falls within this transform's bound too. Left unguarded, `_finalize` would
+        # blindly do `dict(iter(self.data))` on the resulting iterator -- which for e.g.
+        # `['AB', 'CD']` silently "succeeds" via Python's 2-char-string dict gotcha (`{'A':
+        # 'B', 'C': 'D'}`) instead of leaving map-shaped targets to the map transforms.
+        if tym.is_map_type(self.t1):
+            return None
+        elif isinstance(self.data, AsyncIterable):
 
             async def _gen() -> AsyncGenerator:
                 async for item in self.data:

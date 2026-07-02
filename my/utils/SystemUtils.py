@@ -518,15 +518,21 @@ class SystemUtils(_UtilsBase):
         """
         if not file:
             raise ValueError('No file provided.')
-        text = cls.ty.cast(file, str)
-        file = cls.path(text)
-        if not file or not file.is_file():
-            raise ValueError(f'No/Invalid file provided: {text}')
-        elif match := cls.RGXS['filetype'].fullmatch(file.suffix):
-            group = next(filter(None, match.groupdict().keys()))
+        # NOTE: don't round-trip through `cls.ty.cast(file, str)` here -- the generic type-cast
+        # machinery has no registered `Path -> str` transform (only `String`-family sources), so
+        # it silently returns `None` for `Path`/`Traversable` inputs. `cls.path()` already
+        # accepts `str | Path | None` directly (mirroring the `isinstance(file, Path)` branches
+        # in the sibling `from_json`/`from_yaml` loaders), so hand it the raw value instead.
+        resolved = cls.path(file)  # type: ignore[arg-type]
+        if not resolved or not resolved.is_file():
+            raise ValueError(f'No/Invalid file provided: {file}')
+        elif match := cls.RGXS['filetype'].fullmatch(resolved.suffix):
+            # `groupdict()` maps every named alternative to `None` except the one that matched --
+            # filter on the *values* to find which key matched, not the (always-truthy) key names.
+            group = next(k for k, v in match.groupdict().items() if v)
             if fn := getattr(cls, f'from_{group}', None):
-                return fn(file, tvar, cast)
-        raise ValueError(f'Unsupported file type: {file}')
+                return fn(resolved, tvar, cast)
+        raise ValueError(f'Unsupported file type: {resolved}')
 
     @classmethod
     def to_file(cls, data: Atom | Struct, file: str | File) -> None:

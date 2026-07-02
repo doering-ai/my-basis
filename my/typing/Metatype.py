@@ -30,6 +30,10 @@ class Metatype(Enum):
     ALWAYS = frozenset({'Any', 'Unknown'})
 
     #: Forms that are treated as unmatchable or are not yet handled.
+    #: NOTE: `TypeVar`/`TypeVarTuple`/`ParamSpec` (and its `.args`/`.kwargs` accessors) are
+    #: deliberately absent here -- each per-declaration instance reports its own parameter name
+    #: (e.g. `'T'`) as `__name__`, not the special form's name, so they can never be matched by
+    #: name. `MyType._process_root` detects them via `isinstance` instead.
     NEVER = frozenset(
         {
             '',
@@ -43,14 +47,9 @@ class Metatype(Enum):
             'NoReturn',
             'NotImplementedType',
             'Protocol',
-            'ParamSpec',
-            'ParamSpecArgs',
-            'ParamSpecKwargs',
             'ReadOnly',
             'Self',
             'Type',
-            'TypeVar',
-            'TypeVarTuple',
             # Conditionals (resolve to bool, but unhandled at parse time)
             'TypeGuard',
             'TypeIs',

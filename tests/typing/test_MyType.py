@@ -292,6 +292,11 @@ class TestMyType:
             Literal,
             Generator,
             Generator[int, None, float],
+            # ---- Exotic type params: no single stand-in type, stay inert ----
+            typing.TypeVarTuple('Ts'),
+            typing.ParamSpec('P'),
+            typing.ParamSpec('P').args,
+            typing.ParamSpec('P').kwargs,
         ],
     )
     def test_parse__unhandled(self, data):

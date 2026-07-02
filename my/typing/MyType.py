@@ -16,7 +16,11 @@ from typing import (
     ClassVar,
     IO,
     Literal,
+    ParamSpec,
+    ParamSpecArgs,
+    ParamSpecKwargs,
     Self,
+    TypeVarTuple,
     Unpack,
     overload,
     TypeIs,
@@ -388,6 +392,11 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
     def _process_root(cls, root: Any) -> Any:
         if isinstance(root, MyType):
             return root.root
+        elif isinstance(root, (TypeVarTuple, ParamSpec, ParamSpecArgs, ParamSpecKwargs)):
+            # Unlike `TypeVar`, these have no single stand-in type to resolve to -- treat them as
+            # unmatchable, same as `Callable`/`Protocol`/etc. NOTE: must check before `Meta(root)`
+            # below, since `ParamSpecArgs`/`ParamSpecKwargs` instances are unhashable.
+            return NoneType
 
         # I. Exit early for type builtins, and stop to recurse into any aliases
         if root in (Ellipsis, EllipsisType):

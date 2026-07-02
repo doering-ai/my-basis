@@ -149,15 +149,17 @@ class Predicate(pyd.BaseModel):
             return
 
         if ty.is_model(val):
-            val = _map
+            val = ty.cast(val, dict)
         if isinstance(val, Maps):
             prefix = f'{field}.' if field else ''
             for c_field, c_val in dict(val).items():
                 yield from cls._cast_arg(f'{prefix}{c_field}', c_val, duplicates)
         else:
-            vec = val
+            # Cast to list[str] first -- val may be a bare scalar (e.g. 'val'), which
+            # unique_everseen() would otherwise iterate character-by-character.
+            vec = ty.cast(val, list[str]) or []
             if not duplicates:
-                vec = list(mi.unique_everseen(val))
+                vec = list(mi.unique_everseen(vec))
             yield (field, vec)
 
     @classmethod

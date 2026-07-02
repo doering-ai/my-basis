@@ -2,7 +2,7 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import Any, Literal
+from typing import Any, Literal, cast as type_cast
 from collections.abc import Sequence, Collection
 from collections import Counter, deque
 from datetime import date, datetime, time, timedelta, UTC
@@ -11,13 +11,15 @@ import collections.abc as abc
 import logging
 
 ### EXTERNAL
+import pydantic as pyd
 import pytest as pyt
 
 ### INTERNAL
 from my.infra import Time
 from my.types import Buffer, Span
 from my.regex import MatchData, GroupKind
-from my.typing import TypeCast, Typist
+from my.typing import CastFlags, TypeCast, Typist
+from my.typing.cast import CastPreset, Transform
 from ..conftest import type_ids
 
 ############
@@ -547,6 +549,100 @@ class TestCast:
         typist.wraps = False
         assert typist.cast('A.B', set[str]) is None
         assert typist.cast(['A.B'], set[str]) == {'A.B'}
+
+    @pyt.mark.parametrize(
+        'level, expected',
+        [
+            ('strict', CastFlags(firsts=False, atomics=False, splits=False, wraps=False)),
+            ('basic', CastFlags(firsts=True, atomics=True, splits=True, wraps=False)),
+            ('flex', CastFlags(firsts=True, atomics=True, splits=True, wraps=True)),
+        ],
+    )
+    def test_cast_flags__preset(self, level: CastPreset, expected: CastFlags):
+        """`CastFlags.preset` builds the same bundles `Typist.preset` used to hand-roll."""
+        assert CastFlags.preset(level) == expected
+        # `Typist.preset` now delegates to `CastFlags.preset`; the dict-bundle contract it
+        # promises callers (e.g. `Typist(**preset(...))`) must keep matching exactly.
+        assert Typist.preset(level) == expected.model_dump()
+
+    def test_cast_flags__preset_invalid(self):
+        # A bare `str` (not one of `CastPreset`'s literals) reaching `preset()` is exactly the
+        # runtime misuse under test -- `type_cast` (stdlib `typing.cast`, a static-only no-op)
+        # documents that intent instead of silencing the checker with a blanket `# type: ignore`.
+        bogus = type_cast('CastPreset', 'bogus')
+        with pyt.raises(ValueError, match='Invalid preset level'):
+            CastFlags.preset(bogus)
+
+    def test_cast_flags__frozen_and_hashable(self):
+        """A `CastFlags` instance must reject mutation and be usable as a dict/set key."""
+        flags = CastFlags.preset('flex')
+        with pyt.raises(pyd.ValidationError):
+            # `setattr` (rather than a static `flags.splits = False` assignment) keeps this a
+            # runtime-only violation -- pydantic's frozen `__setattr__` still rejects it.
+            setattr(flags, 'splits', False)  # noqa: B010
+
+        # Hashable, and equal instances hash the same -- required for the memoization key
+        # (`(t0, t1, flags)`) that commit 2 builds on top of this.
+        assert hash(flags) == hash(CastFlags.preset('flex'))
+        assert flags in {CastFlags.preset('flex'): 'cached'}
+
+    @pyt.mark.parametrize(
+        'flags, expected',
+        [
+            (CastFlags.preset('strict'), None),
+            (CastFlags.preset('flex'), {'A', 'B'}),
+            ('strict', None),
+            ('flex', {'A', 'B'}),
+        ],
+    )
+    def test_cast_flags__explicit_arg_wins(
+        self, flex_typist: Typist, flags: CastFlags | CastPreset, expected: set[str] | None
+    ):
+        """An explicit `flags=` argument overrides the ambient singleton, regardless of it."""
+        # The singleton is `flex` here (via the fixture), which would otherwise let 'A.B' split.
+        flex_typist.splits = True
+        flex_typist.wraps = True
+        assert typist.cast('A.B', set[str], flags=flags) == expected
+
+    def test_cast_flags__singleton_snapshot_default(self, flex_typist: Typist):
+        """`flags=None` (the default) snapshots the live singleton's fields exactly once."""
+        flex_typist.firsts = True
+        flex_typist.atomics = False
+        flex_typist.splits = False
+        flex_typist.wraps = True
+        resolved = CastFlags.resolve(None)
+        assert resolved == CastFlags(firsts=True, atomics=False, splits=False, wraps=True)
+
+        # And that snapshot is what an unflagged `cast()` call actually dispatches with.
+        assert typist.cast('A.B', set[str]) == {'A.B'}  # splits=False -> no split
+        assert typist.cast(['A.B'], set[str]) == {'A.B'}  # wraps=True -> wrap-preserved
+
+    def test_cast_flags__resolve_explicit_instance_identity(self, flex_typist: Typist):
+        """An explicit `CastFlags` instance passes through `resolve` unchanged (no copy)."""
+        flex_typist.splits = True
+        explicit = CastFlags(firsts=False, atomics=False, splits=False, wraps=False)
+        assert CastFlags.resolve(explicit) is explicit
+
+    def test_cast_flags__mid_cast_singleton_mutation_does_not_affect_inflight_cast(
+        self, flex_typist: Typist
+    ):
+        """The new guarantee: once a `Transform`'s flags are snapshotted, a later mutation of the
+        global `Typist` singleton (e.g. another thread/agent toggling `ty.splits`) cannot change
+        the outcome of a cast already in flight -- unlike the old live `self.ty.X` reads this
+        replaces (`cast.py` used to read `self.ty.splits`/`.wraps`/`.firsts`/`.atomics` at the
+        moment each candidate transform ran, not just once at the start).
+        """
+        flex_typist.splits = True
+        transform = Transform('A.B', set[str], flags=CastFlags.resolve(None))
+
+        # Mutate the singleton *after* the snapshot was taken, simulating a concurrent cast (or a
+        # nested transform) flipping the ambient default mid-flight.
+        flex_typist.splits = False
+
+        # The transform still splits -- its own captured `flags.splits` is untouched.
+        assert transform() == {'A', 'B'}
+        # Meanwhile, a brand-new cast (which resolves a fresh snapshot) correctly sees the change.
+        assert typist.cast('A.B', set[str]) == {'A.B'}
 
     @pyt.mark.parametrize(
         'data, target, expected',

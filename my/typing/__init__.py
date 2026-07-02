@@ -16,7 +16,7 @@ in a system diffuse with these tools (secret, Free, open-source, or otherwise).
 from .MyType import MyType, TypeArg
 from .match import tym, TypeMatch
 from .check import tyc, TypeCheck
-from .cast import tyt, TypeCast as TypeCast
+from .cast import tyt, TypeCast as TypeCast, CastFlags
 from .Typist import Typist, typist, ty
 from .AutocastModel import AutocastModel
 
@@ -24,6 +24,7 @@ TypeCast.setup()
 
 __all__ = [
     'AutocastModel',
+    'CastFlags',
     'MyType',
     'ty',
     'tyc',

@@ -43,7 +43,7 @@ from ..infra.types import (
 from ..utils import ut
 from .MyType import MyType, TypeArg
 from .match import TypeMatch
-from .cast import TypeCast, Transform
+from .cast import TypeCast, Transform, CastFlags, CastPreset
 from .check import TypeCheck
 
 ############
@@ -208,11 +208,13 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
     model_config = pyd.ConfigDict(validate_assignment=True)
 
     # ---- Cast configuration flags ----
-    # These gate the "loose" coercions in the cast chamber. `cast()` reads them live (results are
-    # not memoized), so they may be toggled at runtime. Casting dispatches through the global
-    # `typist` singleton, so these are effectively global config -- set them per-process or via a
-    # `preset()` bundle. The future per-call override seam is an `overrides=` argument on `cast()`,
-    # not more global state.
+    # These gate the "loose" coercions in the cast chamber. They remain the process-wide default
+    # source: `TypeCast.cast()` (and the `upper_cast`/`multicast`/`flexcast` facades) snapshot
+    # them into a frozen `CastFlags` exactly once per call -- an explicit `flags=` argument wins,
+    # otherwise these fields are read at that single entry point -- so toggling them at runtime
+    # (directly, or via a `preset()` bundle) still changes every subsequent cast's default, while
+    # a cast already in flight is no longer disturbed by a mid-cast mutation. See
+    # `docs/DESIGN-cast-flags.md` and `cast.CastFlags`.
 
     #: `Vec -> Atom` Collapse a multi-element series to its first element (`[1, 2] -> 1`).
     firsts: bool = True
@@ -227,8 +229,11 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
     wraps: bool = True
 
     @classmethod
-    def preset(cls, level: Literal['strict', 'basic', 'flex'] = 'basic') -> dict[str, bool]:
+    def preset(cls, level: CastPreset = 'basic') -> dict[str, bool]:
         """Get a preset bundle of cast-flag values for a strictness tier.
+
+        Delegates to `CastFlags.preset`, the canonical per-call value-object equivalent of this
+        bundle (see `docs/DESIGN-cast-flags.md`).
 
         Args:
             level: The strictness tier -- 'strict' disables every loose coercion, 'basic' enables
@@ -237,14 +242,7 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
             A mapping of cast-flag names to booleans, suitable for `Typist(**preset(...))` or for
             assigning onto an existing instance.
         """
-        if level == 'strict':
-            return dict(firsts=False, atomics=False, splits=False, wraps=False)
-        elif level == 'basic':
-            return dict(firsts=True, atomics=True, splits=True, wraps=False)
-        elif level == 'flex':
-            return dict(firsts=True, atomics=True, splits=True, wraps=True)
-        else:
-            raise ValueError(f'Invalid preset level: {level}')
+        return CastFlags.preset(level).model_dump()
 
     # -------------------
     # `.` Initial Methods
@@ -973,13 +971,26 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
         return None
 
     @overload
-    def upper_cast[V](self, data: object, tvar: type[V]) -> V | None: ...
+    def upper_cast[V](
+        self, data: object, tvar: type[V], flags: CastFlags | CastPreset | None = None
+    ) -> V | None: ...
 
     @overload
-    def upper_cast(self, data: object, tvar: Any) -> Any | None: ...
+    def upper_cast(
+        self, data: object, tvar: Any, flags: CastFlags | CastPreset | None = None
+    ) -> Any | None: ...
 
-    def upper_cast[V](self, data: object, tvar: type[V] | Any) -> V | Any | None:
-        """Attempt to cast/coerce the  data to the given type, returning None if unsuccessful."""
+    def upper_cast[V](
+        self, data: object, tvar: type[V] | Any, flags: CastFlags | CastPreset | None = None
+    ) -> V | Any | None:
+        """Attempt to cast/coerce the  data to the given type, returning None if unsuccessful.
+
+        Args:
+            data: The source data to cast.
+            tvar: The target type to cast to.
+            flags: An explicit `CastFlags` snapshot (or preset-level name); resolved once here so
+                every option attempted below shares the same flag set. See `TypeCast.cast`.
+        """
         # I. Return null if the target is invalid
         if data is None or tvar in {None, Any}:
             return None
@@ -998,8 +1009,9 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
 
         # IV.ii. Perform the actual casting
         t0 = MyType.typeof(data)
+        resolved = CastFlags.resolve(flags)
         return next(
-            filter(bool, (self.cast(data, target=t1, source=t0) for t1 in options)),
+            filter(bool, (self.cast(data, target=t1, source=t0, flags=resolved) for t1 in options)),
             None,
         )
 

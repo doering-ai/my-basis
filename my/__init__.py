@@ -79,6 +79,7 @@ from .utils import (
 from .caches import Cache, NestedCache, PickleCache, FileCache
 from .typing import (
     AutocastModel,
+    CastFlags,
     MyType,
     ty,
     tyc,
@@ -173,6 +174,7 @@ __all__ = [
     'PATHS',
     # /typing/
     'AutocastModel',
+    'CastFlags',
     'MyType',
     'ty',
     'tyc',

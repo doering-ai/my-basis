@@ -110,6 +110,10 @@ type AnyType[T] = type[T] | MyType[T]
 type TypeParam = TypeVar | TypeVarTuple | ParamSpec
 TypeParams = (TypeVar, TypeVarTuple, ParamSpec)
 
+#: A `CastFlags.preset()` tier name, accepted anywhere a per-call `flags=` argument is -- see
+#: `CastFlags.resolve`.
+type CastPreset = Literal['strict', 'basic', 'flex']
+
 
 _TRQUE: deque = deque()
 
@@ -205,16 +209,36 @@ class TypeCast(_TypingBase):
     # --------------
     @overload
     @staticmethod
-    def cast[A, B](data: A, target: type[B] | MyType[B], default: B) -> B: ...
+    def cast[A, B](
+        data: A,
+        target: type[B] | MyType[B],
+        default: B,
+        *,
+        flags: CastFlags | CastPreset | None = None,
+    ) -> B: ...
     @overload
     @staticmethod
-    def cast[A, B, C](data: A, target: type[B] | MyType[B], default: C) -> B | C: ...
+    def cast[A, B, C](
+        data: A,
+        target: type[B] | MyType[B],
+        default: C,
+        *,
+        flags: CastFlags | CastPreset | None = None,
+    ) -> B | C: ...
     @overload
     @staticmethod
-    def cast[A, B](data: A, target: type[B] | MyType[B]) -> B | None: ...
+    def cast[A, B](
+        data: A, target: type[B] | MyType[B], *, flags: CastFlags | CastPreset | None = None
+    ) -> B | None: ...
     @overload
     @staticmethod
-    def cast[A, B](data: A, *, source: AnyType[A], target: type[B] | MyType[B]) -> B | None: ...
+    def cast[A, B](
+        data: A,
+        *,
+        source: AnyType[A],
+        target: type[B] | MyType[B],
+        flags: CastFlags | CastPreset | None = None,
+    ) -> B | None: ...
     @overload
     @staticmethod
     def cast[A, B](
@@ -223,6 +247,7 @@ class TypeCast(_TypingBase):
         *,
         source: AnyType[A] | None = None,
         flex: Literal[True],
+        flags: CastFlags | CastPreset | None = None,
     ) -> B | A: ...
     @staticmethod
     def cast[A, B](
@@ -231,6 +256,7 @@ class TypeCast(_TypingBase):
         default: B | None | Empty = empty,
         source: AnyType[A] | None = None,
         flex: bool = False,
+        flags: CastFlags | CastPreset | None = None,
     ) -> B | A | None:
         """Internal casting implementation that routes to specialized conversion methods.
 
@@ -241,10 +267,15 @@ class TypeCast(_TypingBase):
             target: The target MyType to cast to.
             flex: Whether to use "flexcasting", which falls back to any remotely-similar input data
                 rather than returning None.
+            flags: An explicit `CastFlags` snapshot (or preset-level name) to use for this cast;
+                `None` (the default) snapshots the global `Typist` singleton's current flags once,
+                at this entry point, so the whole cast (and any nested casts it triggers) sees one
+                consistent flag set even if the singleton is mutated mid-flight.
         Returns:
             Cast data if successful, None otherwise.
         """
-        res = Transform(data, target, source)()
+        resolved = CastFlags.resolve(flags)
+        res = Transform(data, target, source, flags=resolved)()
         if res is not None:
             return res
         elif not isinstance(default, Empty):
@@ -253,28 +284,36 @@ class TypeCast(_TypingBase):
             return data
 
     @classmethod
-    def multicast[B](cls, data: Iterable, target: AnyType[B]) -> list[B | None]:
+    def multicast[B](
+        cls, data: Iterable, target: AnyType[B], flags: CastFlags | CastPreset | None = None
+    ) -> list[B | None]:
         """Cast each element of an iterable to `target`, preserving None elements.
 
         Args:
             data: The iterable whose elements to cast.
             target: The type each (non-None) element is cast to.
+            flags: An explicit `CastFlags` snapshot (or preset-level name); resolved once here so
+                every element casts against the same flag set. See `TypeCast.cast`.
         Returns:
             A list of cast elements, with None elements kept as-is.
         """
-        return [None if v is None else cls.cast(v, target) for v in data]
+        resolved = CastFlags.resolve(flags)
+        return [None if v is None else cls.cast(v, target, flags=resolved) for v in data]
 
     @classmethod
-    def flexcast[A, B](cls, data: A, target: type[B] | MyType[B]) -> B | A:
+    def flexcast[A, B](
+        cls, data: A, target: type[B] | MyType[B], flags: CastFlags | CastPreset | None = None
+    ) -> B | A:
         """Cast `data` to `target`, falling back to the original data when the cast fails.
 
         Args:
             data: The source data to cast.
             target: The type to cast to.
+            flags: An explicit `CastFlags` snapshot (or preset-level name). See `TypeCast.cast`.
         Returns:
             The cast value on success, otherwise the original `data` unchanged.
         """
-        return cls.cast(data, target, flex=True)
+        return cls.cast(data, target, flex=True, flags=flags)
 
     @overload
     @classmethod
@@ -343,6 +382,66 @@ tyt = typecast = TypeCast
 register = TypeCast.register
 
 
+class CastFlags(pyd.BaseModel):
+    """Frozen, hashable snapshot of the cast chamber's four leniency flags.
+
+    Mirrors `Typist`'s `firsts`/`atomics`/`splits`/`wraps` fields, but as a value object that
+    is resolved *once* per public `cast()` entry point and threaded through the `Transform`
+    recursion, instead of being read live off the mutable global `Typist` singleton mid-cast.
+    See `docs/DESIGN-cast-flags.md` for the full rationale.
+    """
+
+    model_config = pyd.ConfigDict(frozen=True)
+
+    #: `Vec -> Atom` Collapse a multi-element series to its first element (`[1, 2] -> 1`).
+    firsts: bool = True
+
+    #: `Vec -> Atom` Unwrap a single-element series (`[1] -> 1`).
+    atomics: bool = True
+
+    #: `String -> Struct` Split a string before casting it to a collection (`'a.b' -> ['a', 'b']`).
+    splits: bool = True
+
+    #: `Atom <-> Struct` Wrap an atom into a collection, and vice-versa (`'a' -> ['a']`).
+    wraps: bool = True
+
+    @classmethod
+    def preset(cls, level: CastPreset = 'basic') -> CastFlags:
+        """Build a `CastFlags` bundle for a strictness tier.
+
+        Args:
+            level: The strictness tier -- 'strict' disables every loose coercion, 'basic'
+                enables the everyday conveniences, and 'flex' additionally wraps atoms into
+                collections.
+        Returns:
+            A `CastFlags` instance for the given tier.
+        """
+        if level == 'strict':
+            return cls(firsts=False, atomics=False, splits=False, wraps=False)
+        elif level == 'basic':
+            return cls(firsts=True, atomics=True, splits=True, wraps=False)
+        elif level == 'flex':
+            return cls(firsts=True, atomics=True, splits=True, wraps=True)
+        else:
+            raise ValueError(f'Invalid preset level: {level}')
+
+    @classmethod
+    def resolve(cls, flags: CastFlags | CastPreset | None) -> CastFlags:
+        """Resolve a per-call `flags=` argument to a concrete snapshot.
+
+        An explicit `CastFlags` instance or preset-level string wins outright; `None` snapshots
+        the live `Typist` singleton's current fields -- the compatibility seam that keeps direct
+        `ty.splits = ...` mutation (and friends) working as the process-wide default source,
+        while still giving each cast one consistent flag set from start to finish.
+        """
+        if isinstance(flags, CastFlags):
+            return flags
+        elif isinstance(flags, str):
+            return cls.preset(flags)
+        ty = _TypingBase._ty()
+        return cls(firsts=ty.firsts, atomics=ty.atomics, splits=ty.splits, wraps=ty.wraps)
+
+
 class Transform[T0, T1]:
     """An ephemeral class that represents a single attempted coercion.
 
@@ -359,12 +458,29 @@ class Transform[T0, T1]:
     t0: MyType
     t1: MyType
     data: T0
+    flags: CastFlags
 
     # -------------------
     # `.` Initial Methods
     # -------------------
-    def __init__(self, data: T0, target: AnyType[T1], source: AnyType[T0] | None = None) -> None:
-        """Initialize the (highly-ephemeral) casting context."""
+    def __init__(
+        self,
+        data: T0,
+        target: AnyType[T1],
+        source: AnyType[T0] | None = None,
+        flags: CastFlags | None = None,
+    ) -> None:
+        """Initialize the (highly-ephemeral) casting context.
+
+        Args:
+            data: The source data to cast.
+            target: The target type to cast to.
+            source: An explicit MyType for the source data, if known.
+            flags: The resolved cast-flag snapshot for this cast. Callers (`TypeCast.cast`)
+                resolve this exactly once at the public entry point; `None` here falls back to
+                resolving it fresh (against the live `Typist` singleton), for callers that
+                construct a `Transform` directly.
+        """
         self._src_type = type(data)
         normalized = tyt.normalize(data)
         self.data = normalized
@@ -373,6 +489,7 @@ class Transform[T0, T1]:
         # (and other non-list Vecs) down to a plain `list`, which would otherwise make an
         # abstract target like `Collection[int]` concretize to `list` instead of `set`.
         self.t1 = self.concretize(MyType.new(target), data)
+        self.flags = flags if flags is not None else CastFlags.resolve(None)
 
     @property
     def ty(self) -> Typist:
@@ -441,17 +558,29 @@ class Transform[T0, T1]:
     # `-` Private Methods
     # -------------------
     @classmethod
-    def _cast_members(cls, items: Iterable[tuple[str, Any]], target: type) -> dict[str, Any]:
+    def _cast_members(
+        cls,
+        items: Iterable[tuple[str, Any]],
+        target: type,
+        flags: CastFlags | CastPreset | None = None,
+    ) -> dict[str, Any]:
         """Cast a mapping's members to match a target class's field types.
+
+        `AutocastModel` calls this directly as its own public entry point (outside a
+        `Transform`), so `flags` is resolved here rather than assumed pre-resolved.
 
         Args:
             items: Key-value pairs to cast.
             target: The target class type with type annotations.
+            flags: An explicit `CastFlags` snapshot (or preset-level name) to forward to each
+                member's cast; `None` resolves against the live `Typist` singleton. See
+                `TypeCast.cast`.
         Returns:
             Dictionary with cast values matching target's field types.
         """
+        resolved = CastFlags.resolve(flags)
         annotations = ut.instance_aliases(target)
-        return {key: tyt.cast(val, annotations.get(key, Any)) for key, val in items}
+        return {key: tyt.cast(val, annotations.get(key, Any), flags=resolved) for key, val in items}
 
     # ---------------
     # `-1` Transforms
@@ -481,9 +610,9 @@ class Transform[T0, T1]:
     @register
     def _string_to_stream[S: String, T: Stream](self: Transform) -> str | bytes | None:
         if issubclass(self._t1, (bytearray, memoryview, BytesIO)):
-            return tyt.cast(self.data, bytes)
+            return tyt.cast(self.data, bytes, flags=self.flags)
         else:
-            return tyt.cast(self.data, str)
+            return tyt.cast(self.data, str, flags=self.flags)
 
     @register
     def _string_to_str[S: String, T: str](self: Transform) -> str | None:
@@ -525,8 +654,8 @@ class Transform[T0, T1]:
         data = self.to(str)
         if data is None:
             return None
-        elif (ret := tyt.cast(data, float)) is not None:
-            return tyt.cast(ret, source=float, target=self.t1)
+        elif (ret := tyt.cast(data, float, flags=self.flags)) is not None:
+            return tyt.cast(ret, source=float, target=self.t1, flags=self.flags)
         elif self.ty.RGXS['short_iso_date'].match(data):
             data = f'20{data}'
 
@@ -588,7 +717,7 @@ class Transform[T0, T1]:
         if not (text := self.to(str)):
             return
 
-        if self.ty.splits:
+        if self.flags.splits:
             if match := self.RGXS['brackets'].fullmatch(text.strip()):
                 # I. Split json/yaml-like flow sequences. A `ValueError`/`TypeError` from
                 #    `from_yaml` (unparseable / not a list) means this bracketed text isn't a flow
@@ -605,9 +734,13 @@ class Transform[T0, T1]:
                 # II. Split on common delimiters in order of preference
                 #     e.g. one.oneA:two splits on colons, but one.oneA splits on periods
                 parts = list(filter(bool, map(str.strip, text.split(char))))
-                return self.ty.multicast(parts, self.t1.vals) if self.t1.vals else parts
+                return (
+                    self.ty.multicast(parts, self.t1.vals, flags=self.flags)
+                    if self.t1.vals
+                    else parts
+                )
 
-        if self.ty.wraps:
+        if self.flags.wraps:
             return [text]
 
     @register
@@ -662,7 +795,7 @@ class Transform[T0, T1]:
         elif issubclass(self._t1, date):
             return self.data.date()
         elif issubclass(self._t1, timedelta):
-            return tyt.cast(self.data.timestamp(), source=float, target=self._t1)
+            return tyt.cast(self.data.timestamp(), source=float, target=self._t1, flags=self.flags)
         return self.data
 
     @register
@@ -673,7 +806,7 @@ class Transform[T0, T1]:
         elif issubclass(self._t1, datetime):
             return datetime.combine(self.data, time(0, 0), tzinfo=UTC)
         elif issubclass(self._t1, timedelta):
-            return tyt.cast(self.data.toordinal(), source=int, target=self._t1)
+            return tyt.cast(self.data.toordinal(), source=int, target=self._t1, flags=self.flags)
         return ret
 
     @register
@@ -701,13 +834,13 @@ class Transform[T0, T1]:
     def _enum_to_scalar[S: Enum, T: Scalar](self: Transform[S, T]) -> T | None:
         value = self.data.value
         if value and isinstance(value, (String, Scalar)):
-            return tyt.cast(value, self._t1)
+            return tyt.cast(value, self._t1, flags=self.flags)
 
     @register
     def _enum_to_time[S: Enum, T: Time](self: Transform[S, T]) -> T | None:
         value = self.data.value
         if value and isinstance(value, (String, Scalar)):
-            return tyt.cast(value, self._t1)
+            return tyt.cast(value, self._t1, flags=self.flags)
 
     @register
     def _enum_to_enum[S: Enum, T: Enum](self: Transform[S, T]) -> T | None:
@@ -808,7 +941,7 @@ class Transform[T0, T1]:
         members = dict(self._t1.__members__)
         if (
             self.t1.vals
-            and (val := tyt.cast(text, self.t1.vals)) is not None
+            and (val := tyt.cast(text, self.t1.vals, flags=self.flags)) is not None
             and (ret := ut.find_key(members, val))
         ):
             # Get by value
@@ -821,7 +954,7 @@ class Transform[T0, T1]:
 
     @register
     def _atom_to_vec[S: Atom, T: Vec](self: Transform[S, T]) -> list | None:
-        if self.ty.wraps and self.data and self.t1.vals:
+        if self.flags.wraps and self.data and self.t1.vals:
             with ctx.suppress(TypeError):
                 return [self.to(self.t1.vals)]
 
@@ -845,7 +978,7 @@ class Transform[T0, T1]:
     def _vec_to_flag[S: Vec, T: Flag](self: Transform[S, T]) -> T | None:
         ret = self._t1(0)
         for member in self.data:
-            if (_new := tyt.cast(member, self._t1)) is not None:
+            if (_new := tyt.cast(member, self._t1, flags=self.flags)) is not None:
                 ret |= _new
         return ret
 
@@ -886,7 +1019,7 @@ class Transform[T0, T1]:
             return None
         # A multi-element series needs `firsts`; a single-element one needs `atomics`.
         multi = len(self.data) > 1
-        if (multi and not self.ty.firsts) or (not multi and not self.ty.atomics):
+        if (multi and not self.flags.firsts) or (not multi and not self.flags.atomics):
             return None
         return self.proxy(mi.first(self.data))
 
@@ -895,7 +1028,7 @@ class Transform[T0, T1]:
         data = self.to(list)
         if data is not None and self.t1.vals and self.t0.vals != self.t1.vals:
             # Element types differ -> coerce each element, don't cast the whole list.
-            return self.ty.multicast(data, self.t1.vals)
+            return self.ty.multicast(data, self.t1.vals, flags=self.flags)
         return data
 
     @register
@@ -919,7 +1052,7 @@ class Transform[T0, T1]:
             # II. Cast counters, the only map type that takes an iter of single items: coerce
             #     each item to the key type (e.g. 'a.b.c' -> ('a', 'b', 'c')), then count.
             if (kt := self.t1.keys) and kt.main:
-                return Counter(self.ty.multicast(self.data, kt))
+                return Counter(self.ty.multicast(self.data, kt, flags=self.flags))
             return Counter(self.data)
 
     @register
@@ -979,7 +1112,7 @@ class Transform[T0, T1]:
             return self.map_items
         elif tym.is_string_type(v1):
             return [f'{k}: {v}' for k, v in self.map_items]
-        elif tym.is_map_type(v1) and self.ty.wraps:
+        elif tym.is_map_type(v1) and self.flags.wraps:
             # II. Wrap objects in lists
             return [self.map_items]
         elif tym.is_map_item_type(v1):
@@ -1013,9 +1146,9 @@ class Transform[T0, T1]:
         # Coerce against the *full* key/value MyType (not `.rtype`, which flattens a nested
         # container type like `dict[str, int]` down to its first arg) so nested maps recurse.
         if self.t1.keys:
-            keys = self.ty.multicast(keys, self.t1.keys)
+            keys = self.ty.multicast(keys, self.t1.keys, flags=self.flags)
         if self.t1.vals:
-            values = self.ty.multicast(values, self.t1.vals)
+            values = self.ty.multicast(values, self.t1.vals, flags=self.flags)
         data = dict(zip(keys, values, strict=True))
 
         # Construct the target mapping, handling a couple of special constructors. Use the
@@ -1049,7 +1182,7 @@ class Transform[T0, T1]:
             ret = list(data)
 
         if self.t1.vals:
-            cast_ret = self.ty.multicast(ret, self.t1.vals)
+            cast_ret = self.ty.multicast(ret, self.t1.vals, flags=self.flags)
             if ret and all(v is not None and c is None for v, c in zip(ret, cast_ret)):
                 # Every element had a real value but failed to cast -- this isn't a partial
                 # cast (which legitimately keeps `None` placeholders for already-`None`
@@ -1151,7 +1284,7 @@ class Transform[T0, T1]:
         if (ret := self.ty.try_method(self._t1, 'new', self.data, _tvar=self._t1)) is not None:
             return ret
         elif tyc.is_map(self.data):
-            kwargs = self._cast_members(ut.map_items(self.data), self._t1)
+            kwargs = self._cast_members(ut.map_items(self.data), self._t1, self.flags)
             return self.ty.invoke(self._t1, **kwargs)
         else:
             return self.ty.invoke(self._t1, self.data)
@@ -1207,7 +1340,7 @@ class Transform[T0, T1]:
         if self.t1.check(self.data):
             return self.data
         for arg in self.ty.sort_options(self.data, *self.t1.args):
-            if (ret := tyt.cast(self.data, arg)) is not None:
+            if (ret := tyt.cast(self.data, arg, flags=self.flags)) is not None:
                 return ret
         return None
 
@@ -1238,17 +1371,19 @@ class Transform[T0, T1]:
                     (
                         ret
                         for vals in self.t1.args
-                        if (ret := tyt.cast(data, vals)) is not None and tyc.check(ret, self.t1)
+                        if (ret := tyt.cast(data, vals, flags=self.flags)) is not None
+                        and tyc.check(ret, self.t1)
                     ),
                     None,
                 )
 
         elif isinstance(origin, type) and issubclass(origin, tuple):
             # II. Cast literally-positioned tuples
-            data = tyt.cast(data, list)
+            data = tyt.cast(data, list, flags=self.flags)
             if data is None or len(data) != len(self.t1.args):
                 return
-            cast_values = tuple(it.starmap(tyt.cast, zip(data, self.t1.args, strict=True)))
+            _cast_fn = ft.partial(tyt.cast, flags=self.flags)
+            cast_values = tuple(it.starmap(_cast_fn, zip(data, self.t1.args, strict=True)))
             ret = origin(cast_values)
 
         else:
@@ -1448,11 +1583,11 @@ class Transform[T0, T1]:
 
     def to[B](self, t1: AnyType[B]) -> B | None:
         """Shorthand for casting our current data to an interim type."""
-        return tyt.cast(self.data, source=self.t0, target=t1)
+        return tyt.cast(self.data, source=self.t0, target=t1, flags=self.flags)
 
     def proxy(self, data: Any) -> T1 | None:
         """Shorthand for casting new data to our target type."""
-        return tyt.cast(data, self.t1)
+        return tyt.cast(data, self.t1, flags=self.flags)
 
     def by(self, *args: AnyType) -> T1 | None:
         """Shorthand casting to the target type through one or more intermediary types.
@@ -1463,7 +1598,7 @@ class Transform[T0, T1]:
         """
         cur: Any = self.data
         for t1 in (*args, self._t1):
-            cur = tyt.cast(cur, target=t1)
+            cur = tyt.cast(cur, target=t1, flags=self.flags)
             if cur is None:
                 break
         return cur

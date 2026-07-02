@@ -336,7 +336,7 @@ class TypeCast(_TypingBase):
         if name == 'bool':
             return [(cls.RGXS['bool_true'].fullmatch(m)) for m in matches]
 
-        return []
+        return [v for m in matches if (v := cls.cast(m, target)) is not None]
 
 
 tyt = typecast = TypeCast

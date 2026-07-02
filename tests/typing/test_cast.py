@@ -18,6 +18,7 @@ from my.infra import Time
 from my.types import Buffer, Span
 from my.regex import MatchData, GroupKind
 from my.typing import TypeCast, Typist
+from ..conftest import type_ids
 
 ############
 ### DATA ###
@@ -52,6 +53,284 @@ class Permission(Flag):
     WRITE = 2
     EXECUTE = 4
     ADMIN = 8
+
+
+#: `data, target, expected` matrices for `test_cast__*`, hoisted to module scope so `ids=` (via
+#: `type_ids`) can be derived from the same list object the parametrize decorator consumes.
+CAST_ATOMICS_CASES = [
+    # ---- Numeric ----
+    (20.0, int, 20),
+    (20, float, 20.0),
+    # ---- Deserialization ----
+    ('-123', int, -123),
+    ('-45.67', float, -45.67),
+    ('true', bool, True),
+    ('On', bool, True),
+    ('EnAbLeD', bool, True),
+    ('t', bool, True),
+    ('y', bool, True),
+    ('yes', bool, True),
+    ('FALSE', bool, False),
+    ('F', bool, False),
+    ('no', bool, False),
+    ('n', bool, False),
+    ('Disabled', bool, False),
+    ('   42   ', int, 42),
+    # ---- Bytes/Buffer ----
+    ('hello', bytes, b'hello'),
+    (b'world', str, 'world'),
+    (b'   3.14   ', float, 3.14),
+    # ---- Edge Cases ----
+    ([], str, '[]'),
+    ({}, str, '{}'),
+    (set(), str, 'set()'),
+    ('maybe', bool, True),  # matches the rest of python
+    # ---- Failures ----
+    ('abc', int, None),
+    ('12.34.56', float, None),
+    # ---- NOOPs (string->string preserves whitespace verbatim) ----
+    ('   ', str, '   '),
+    ('hello', str, 'hello'),
+    (5, int, 5),
+]
+
+CAST_SERIES_CASES = [
+    # ---- Basic ----
+    ([1, 2, 3], list[str], ['1', '2', '3']),
+    ({1, 2, 3}, list[int], [1, 2, 3]),
+    (['a', 'b', 'c'], set[str], {'a', 'b', 'c'}),
+    (['abc'], set[str], {'abc'}),
+    ('abc', set[str], {'abc'}),
+    # ---- Deques ----
+    (deque(['1', '5.5', '10']), set[float], {1.0, 5.5, 10.0}),
+    ((1, 2, 3), deque[int], deque([1, 2, 3])),
+    # ---- Splits ----
+    (['1,2,3', '4,5,6'], list[list[int]], [[1, 2, 3], [4, 5, 6]]),
+    # ---- Tuples ----
+    (['1', '2', '3'], tuple[int, ...], (1, 2, 3)),
+    (['1', '5', '10'], tuple[int, ...], (1, 5, 10)),
+    (['1', '5', '10'], tuple[int, int, int], (1, 5, 10)),
+    (['a', '1', 'b', '2'], tuple[str, int, str, int], ('a', 1, 'b', 2)),
+    (['123', '456'], Span, Span(123, 456)),
+    # ---- Generics ----
+    (['1', '5', '10'], Sequence[int], [1, 5, 10]),
+    ({'1', '5', '10'}, Collection[int], {1, 5, 10}),
+    (['1', '5', '10'], Sequence[str], ['1', '5', '10']),
+    (['1', '5', '10'], abc.Sequence, ['1', '5', '10']),
+    (['1', '5', '10'], abc.MutableSequence, ['1', '5', '10']),
+    (['1', '5', '10'], abc.MutableSet, {'1', '5', '10'}),
+    # ---- Class Children ----
+    (['a', 'b'], list[Buffer], [Buffer.new('a'), Buffer.new('b')]),
+]
+
+CAST_MAPS_CASES = [
+    # ---- dict ----
+    (dict(x=20.0), dict[str, int], dict(x=20)),
+    ({'1': '2', '3': '4'}, dict[int, int], {1: 2, 3: 4}),
+    ({'a': 1.5, 'b': 2.7}, dict[str, int], {'a': 1, 'b': 2}),
+    ({'a': {'b': '1'}}, dict[str, dict[str, int]], {'a': {'b': 1}}),
+    ('{"a": 1, "b": 2}', dict[str, int], {'a': 1, 'b': 2}),
+    (
+        [('a', '1'), ('b', '5'), ('c', '10')],
+        dict[str, int],
+        dict(a=1, b=5, c=10),
+    ),
+    # ---- Counter ----
+    (['a', 'b', 'b'], Counter, Counter(a=1, b=2)),
+    (['x', 'y', 'x', 'z'], Counter[str], Counter({'x': 2, 'y': 1, 'z': 1})),
+    ([('a', '1'), ('b', '2')], Counter[str], Counter(a=1, b=2)),
+    (Counter(z=15), dict[str, int], dict(z=15)),
+    (
+        ['a.b.c', 'x.y.z', 'a.b.c'],
+        Counter[tuple[str, ...]],
+        Counter({('a', 'b', 'c'): 2, ('x', 'y', 'z'): 1}),
+    ),
+]
+
+CAST_MODELS_CASES = [
+    ('a', Buffer, Buffer.new('a')),
+    (
+        dict(a=1, child=dict(b=2, c=3)),
+        MatchData,
+        MatchData.new({'a': ['1'], 'child.b': ['2'], 'child.c': ['3']}),
+    ),
+]
+
+CAST_ENUMS_CASES = [
+    # ---- Int enums - from int ----
+    (1, Color, Color.RED),
+    (2, Color, Color.GREEN),
+    (3, Color, Color.BLUE),
+    # ---- Int enums - from string name ----
+    ('RED', Color, Color.RED),
+    ('red', Color, Color.RED),
+    ('GREEN', Color, Color.GREEN),
+    # ---- Int enums - from string digit ----
+    ('1', Color, Color.RED),
+    ('2', Color, Color.GREEN),
+    # ---- String enums ----
+    ('active', Status, Status.ACTIVE),  # value
+    ('ACTIVE', Status, Status.ACTIVE),  # name
+    ('inactive', Status, Status.INACTIVE),
+    ('pending', Status, Status.PENDING),
+    # ---- Enum to string ----
+    (Color.RED, str, 'red'),
+    (Status.ACTIVE, str, 'active'),
+    # ---- Enum to int ----
+    (Color.RED, int, 1),
+    (Color.BLUE, int, 3),
+    # ---- GroupKind (MyEnum & Flag) ----
+    ('plain', GroupKind, GroupKind.PLAIN),
+    ('PLAIN', GroupKind, GroupKind.PLAIN),
+]
+
+CAST_FLAGS_CASES = [
+    # ---- Single flags from int ----
+    (1, Permission, Permission.READ),
+    (2, Permission, Permission.WRITE),
+    (4, Permission, Permission.EXECUTE),
+    (8, Permission, Permission.ADMIN),
+    # ---- Combined flags from int ----
+    (3, Permission, Permission.READ | Permission.WRITE),
+    (5, Permission, Permission.READ | Permission.EXECUTE),
+    (
+        15,
+        Permission,
+        Permission.READ | Permission.WRITE | Permission.EXECUTE | Permission.ADMIN,
+    ),
+    # ---- Flags from string name ----
+    ('READ', Permission, Permission.READ),
+    ('WRITE', Permission, Permission.WRITE),
+    # ---- Flags from list (series to flag) ----
+    (['READ', 'WRITE'], Permission, Permission.READ | Permission.WRITE),
+    (['READ', 'EXECUTE'], Permission, Permission.READ | Permission.EXECUTE),
+    # ---- Flags from pipe-separated string ----
+    ('READ|WRITE', Permission, Permission.READ | Permission.WRITE),
+    (
+        'READ | WRITE|EXECUTE',
+        Permission,
+        Permission.READ | Permission.WRITE | Permission.EXECUTE,
+    ),
+    # ---- Flag to int ----
+    (Permission.READ, int, 1),
+    (Permission.READ | Permission.WRITE, int, 3),
+    # ---- Flag to string ----
+    (Permission.READ, str, 'read'),
+]
+
+CAST_TIMES_CASES = [
+    # ---- Strings ----
+    (date(1970, 2, 1), str, '1970-02-01'),
+    (datetime(1970, 2, 1, 10, 20, 30, tzinfo=UTC), str, '1970-02-01T10:20:30'),
+    (time(hour=10, minute=20, second=30, tzinfo=UTC), str, '10:20:30'),
+    (timedelta(days=1, hours=1, minutes=1), str, '1 day, 1:01:00'),
+    # ---- Integers ----
+    (date(1970, 2, 1), int, 719194),
+    (datetime(1970, 2, 1, 10, 20, 30, tzinfo=UTC), int, 2715630),
+    (time(hour=10, minute=20, second=30, tzinfo=UTC), int, 37230),
+    (timedelta(hours=10, minutes=20, seconds=30), int, 37230),
+]
+
+CAST_LITERALS_CASES = [
+    # Literal strings
+    ('one', Literal['one', 'two'], 'one'),
+    ('two', Literal['one', 'two'], 'two'),
+    # Literal ints
+    (1, Literal[1, 2, 3], 1),
+    (2, Literal[1, 2, 3], 2),
+    # Casting to literals (coercion)
+    ('1', Literal[1, 2, 3], 1),
+    ('2', Literal[1, 2, 3], 2),
+    (1, Literal['1', '2', '3'], '1'),
+    # Literal tuples (positional)
+    ([1, 'a'], tuple[int, str], (1, 'a')),
+    (['1', 2], tuple[int, str], (1, '2')),
+]
+
+CAST_UNIONS_CASES = [
+    # ---- Catching NOOPs ----
+    ('1', int | float | bool | str, '1'),
+    ('1', list[str] | str, '1'),  # avoid wrapping
+    (['1'], str | list[str], ['1']),  # avoid unwrapping
+    ((1, 2), tuple[str, ...] | tuple[int, int], (1, 2)),
+    # ---- Avoiding problematic clauses ----
+    ('1', None | int, 1),
+    # ---- Arbitrary Preferences ----
+    (1, str | bool, True),
+    (2, bool | str, '2'),
+    ('-1', float | int, -1),
+    ('-1.5', int | float, -1.5),
+    (['1', '2'], str | list[int], [1, 2]),
+    (['1.0', '2.0'], str | list[int] | list[float], [1.0, 2.0]),
+    (['enabled', 'OFF'], str | list[bool], [True, False]),
+]
+
+CAST_EDGE_CASES = [
+    # Container <-.-> Atomic
+    ('1', tuple[int], (1,)),
+    (['1'], int, 1),
+    (['1', '2'], int, 1),
+    ('abc, cde. efg!', list[str], ['abc', 'cde. efg!']),
+    ('transformers, safetensors', set[str], {'transformers', 'safetensors'}),
+    # Malformed times
+    ('25-07-02', datetime, datetime(2025, 7, 2, tzinfo=UTC)),
+    (
+        '25-07-02T10:20:30',
+        datetime,
+        datetime(2025, 7, 2, 10, 20, 30, tzinfo=UTC),
+    ),
+]
+
+#: `data, target` pairs for `test_serialize_cast_roundtrip`: representative values across the type
+#: lattice that must survive `serialize()` -> `cast()` and come back equal to the original.
+ROUND_TRIP_CASES = [
+    # ---- Atomics ----
+    (5, int),
+    ('hello', str),
+    (3.14, float),
+    (True, bool),
+    (b'hello', bytes),
+    (None, int),
+    # ---- Vecs ----
+    ([1, 2, 3], list[int]),
+    ({'a', 'b'}, set[str]),
+    ((1, 2, 3), tuple[int, ...]),
+    (deque([1, 2, 3]), deque[int]),
+    # ---- Maps (incl. nested) ----
+    ({'a': 1, 'b': 2}, dict[str, int]),
+    ({'a': {'b': 1}}, dict[str, dict[str, int]]),
+    (Counter(a=1, b=2), Counter[str]),
+    # ---- Enums / Flags ----
+    (Color.RED, Color),
+    (Status.ACTIVE, Status),
+    (Permission.READ | Permission.WRITE, Permission),
+    (GroupKind.PLAIN, GroupKind),
+    # ---- Times -- timezone-AWARE only; see the exclusion note below ----
+    (date(2024, 1, 1), date),
+    (datetime(2024, 1, 1, 10, 20, 30, tzinfo=UTC), datetime),
+    (time(10, 20, 30, tzinfo=UTC), time),
+    (timedelta(days=1, hours=1, minutes=1), timedelta),
+    # ---- Pydantic model / Struct ----
+    (Buffer.new('hello'), Buffer),
+    (MatchData.new({'a': ['1'], 'child.b': ['2']}), MatchData),
+    (Span(1, 5), Span),
+]
+
+# ---- Legitimate one-way exclusions -- deliberately NOT in `ROUND_TRIP_CASES` ----
+# `serialize -> cast` is lossy (not a bug) for these; the string form genuinely cannot carry the
+# information needed to recover the original value, so a round-trip equality assertion would be
+# wrong to make, not merely inconvenient:
+#
+#   - Naive `datetime`/`time` (no `tzinfo`): `serialize` renders the object's own local wall-clock
+#     fields into an ISO string, but `cast` back always interprets that string as UTC -- there was
+#     never a timezone opinion to preserve. On a UTC-5 machine,
+#     `datetime(2024, 1, 1, 10, 20, 30)` (naive) serializes to `'2024-01-01T15:20:30'` (localized
+#     to UTC) and casts back to `datetime(2024, 1, 1, 15, 20, 30, tzinfo=UTC)` -- a different
+#     instant, not just a different repr. Machine-dependent besides.
+#   - Negative `timedelta` (e.g. `timedelta(days=-1, hours=1)`): stdlib `timedelta` always
+#     normalizes to a signed `days` plus non-negative `seconds`/`microseconds`, and `str()` on a
+#     negative one renders as e.g. `'-1 day, 1:00:00'` -- `cast(str, timedelta)` has no rule for
+#     recovering that leading sign, so it always comes back positive.
 
 
 ############
@@ -90,7 +369,8 @@ class TestCast:
         ],
     )
     def test_flex_deserialize(self, data: list[str], expected: list):
-        # Most of this testing is done in test_to_atomic
+        # `flex_deserialize` guesses a scalar type per-value then delegates to `cast` -- most of
+        # the underlying string->atom coercion is exercised by `test_cast__atomics` below.
         assert typist.flex_deserialize(data) == expected
 
     @pyt.mark.parametrize(
@@ -129,212 +409,43 @@ class TestCast:
     # `*2` COERCION
     # -------------
     @pyt.mark.parametrize(
-        'data, target, expected',
-        [
-            # ---- Numeric ----
-            (20.0, int, 20),
-            (20, float, 20.0),
-            # ---- Deserialization ----
-            ('-123', int, -123),
-            ('-45.67', float, -45.67),
-            ('true', bool, True),
-            ('On', bool, True),
-            ('EnAbLeD', bool, True),
-            ('t', bool, True),
-            ('y', bool, True),
-            ('yes', bool, True),
-            ('FALSE', bool, False),
-            ('F', bool, False),
-            ('no', bool, False),
-            ('n', bool, False),
-            ('Disabled', bool, False),
-            ('   42   ', int, 42),
-            # ---- Bytes/Buffer ----
-            ('hello', bytes, b'hello'),
-            (b'world', str, 'world'),
-            (b'   3.14   ', float, 3.14),
-            # ---- Edge Cases ----
-            ([], str, '[]'),
-            ({}, str, '{}'),
-            (set(), str, 'set()'),
-            ('maybe', bool, True),  # matches the rest of python
-            # ---- Failures ----
-            ('abc', int, None),
-            ('12.34.56', float, None),
-            # ---- NOOPs (string->string preserves whitespace verbatim) ----
-            ('   ', str, '   '),
-            ('hello', str, 'hello'),
-            (5, int, 5),
-        ],
+        'data, target, expected', CAST_ATOMICS_CASES, ids=type_ids(CAST_ATOMICS_CASES)
     )
     def test_cast__atomics(self, data: Any, target: type, expected: object):
         assert typist.cast(data, target) == expected
 
     @pyt.mark.parametrize(
-        'data, target, expected',
-        [
-            # ---- Basic ----
-            ([1, 2, 3], list[str], ['1', '2', '3']),
-            ({1, 2, 3}, list[int], [1, 2, 3]),
-            (['a', 'b', 'c'], set[str], {'a', 'b', 'c'}),
-            (['abc'], set[str], {'abc'}),
-            ('abc', set[str], {'abc'}),
-            # ---- Deques ----
-            (deque(['1', '5.5', '10']), set[float], {1.0, 5.5, 10.0}),
-            ((1, 2, 3), deque[int], deque([1, 2, 3])),
-            # ---- Splits ----
-            (['1,2,3', '4,5,6'], list[list[int]], [[1, 2, 3], [4, 5, 6]]),
-            # ---- Tuples ----
-            (['1', '2', '3'], tuple[int, ...], (1, 2, 3)),
-            (['1', '5', '10'], tuple[int, ...], (1, 5, 10)),
-            (['1', '5', '10'], tuple[int, int, int], (1, 5, 10)),
-            (['a', '1', 'b', '2'], tuple[str, int, str, int], ('a', 1, 'b', 2)),
-            (['123', '456'], Span, Span(123, 456)),
-            # ---- Generics ----
-            (['1', '5', '10'], Sequence[int], [1, 5, 10]),
-            ({'1', '5', '10'}, Collection[int], {1, 5, 10}),
-            (['1', '5', '10'], Sequence[str], ['1', '5', '10']),
-            (['1', '5', '10'], abc.Sequence, ['1', '5', '10']),
-            (['1', '5', '10'], abc.MutableSequence, ['1', '5', '10']),
-            (['1', '5', '10'], abc.MutableSet, {'1', '5', '10'}),
-            # ---- Class Children ----
-            (['a', 'b'], list[Buffer], [Buffer.new('a'), Buffer.new('b')]),
-        ],
+        'data, target, expected', CAST_SERIES_CASES, ids=type_ids(CAST_SERIES_CASES)
     )
     def test_cast__series(self, data: Any, target: type, expected: object):
         assert typist.cast(data, target) == expected
 
-    @pyt.mark.parametrize(
-        'data, target, expected',
-        [
-            # ---- dict ----
-            (dict(x=20.0), dict[str, int], dict(x=20)),
-            ({'1': '2', '3': '4'}, dict[int, int], {1: 2, 3: 4}),
-            ({'a': 1.5, 'b': 2.7}, dict[str, int], {'a': 1, 'b': 2}),
-            ({'a': {'b': '1'}}, dict[str, dict[str, int]], {'a': {'b': 1}}),
-            ('{"a": 1, "b": 2}', dict[str, int], {'a': 1, 'b': 2}),
-            (
-                [('a', '1'), ('b', '5'), ('c', '10')],
-                dict[str, int],
-                dict(a=1, b=5, c=10),
-            ),
-            # ---- Counter ----
-            (['a', 'b', 'b'], Counter, Counter(a=1, b=2)),
-            (['x', 'y', 'x', 'z'], Counter[str], Counter({'x': 2, 'y': 1, 'z': 1})),
-            ([('a', '1'), ('b', '2')], Counter[str], Counter(a=1, b=2)),
-            (Counter(z=15), dict[str, int], dict(z=15)),
-            (
-                ['a.b.c', 'x.y.z', 'a.b.c'],
-                Counter[tuple[str, ...]],
-                Counter({('a', 'b', 'c'): 2, ('x', 'y', 'z'): 1}),
-            ),
-        ],
-    )
+    @pyt.mark.parametrize('data, target, expected', CAST_MAPS_CASES, ids=type_ids(CAST_MAPS_CASES))
     def test_cast__maps(self, data: Any, target: type, expected: object):
         assert typist.cast(data, target) == expected
 
     @pyt.mark.parametrize(
-        'data, target, expected',
-        [
-            ('a', Buffer, Buffer.new('a')),
-            (
-                dict(a=1, child=dict(b=2, c=3)),
-                MatchData,
-                MatchData.new({'a': ['1'], 'child.b': ['2'], 'child.c': ['3']}),
-            ),
-        ],
+        'data, target, expected', CAST_MODELS_CASES, ids=type_ids(CAST_MODELS_CASES)
     )
     def test_cast__models(self, data: Any, target: type, expected: object):
         assert typist.cast(data, target) == expected
 
     @pyt.mark.parametrize(
-        'data, target, expected',
-        [
-            # ---- Int enums - from int ----
-            (1, Color, Color.RED),
-            (2, Color, Color.GREEN),
-            (3, Color, Color.BLUE),
-            # ---- Int enums - from string name ----
-            ('RED', Color, Color.RED),
-            ('red', Color, Color.RED),
-            ('GREEN', Color, Color.GREEN),
-            # ---- Int enums - from string digit ----
-            ('1', Color, Color.RED),
-            ('2', Color, Color.GREEN),
-            # ---- String enums ----
-            ('active', Status, Status.ACTIVE),  # value
-            ('ACTIVE', Status, Status.ACTIVE),  # name
-            ('inactive', Status, Status.INACTIVE),
-            ('pending', Status, Status.PENDING),
-            # ---- Enum to string ----
-            (Color.RED, str, 'red'),
-            (Status.ACTIVE, str, 'active'),
-            # ---- Enum to int ----
-            (Color.RED, int, 1),
-            (Color.BLUE, int, 3),
-            # ---- GroupKind (MyEnum & Flag) ----
-            ('plain', GroupKind, GroupKind.PLAIN),
-            ('PLAIN', GroupKind, GroupKind.PLAIN),
-        ],
+        'data, target, expected', CAST_ENUMS_CASES, ids=type_ids(CAST_ENUMS_CASES)
     )
     def test_cast__enums(self, data: Any, target: type, expected: object):
         result = typist.cast(data, target)
         assert result == expected
 
     @pyt.mark.parametrize(
-        'data, target, expected',
-        [
-            # ---- Single flags from int ----
-            (1, Permission, Permission.READ),
-            (2, Permission, Permission.WRITE),
-            (4, Permission, Permission.EXECUTE),
-            (8, Permission, Permission.ADMIN),
-            # ---- Combined flags from int ----
-            (3, Permission, Permission.READ | Permission.WRITE),
-            (5, Permission, Permission.READ | Permission.EXECUTE),
-            (
-                15,
-                Permission,
-                Permission.READ | Permission.WRITE | Permission.EXECUTE | Permission.ADMIN,
-            ),
-            # ---- Flags from string name ----
-            ('READ', Permission, Permission.READ),
-            ('WRITE', Permission, Permission.WRITE),
-            # ---- Flags from list (series to flag) ----
-            (['READ', 'WRITE'], Permission, Permission.READ | Permission.WRITE),
-            (['READ', 'EXECUTE'], Permission, Permission.READ | Permission.EXECUTE),
-            # ---- Flags from pipe-separated string ----
-            ('READ|WRITE', Permission, Permission.READ | Permission.WRITE),
-            (
-                'READ | WRITE|EXECUTE',
-                Permission,
-                Permission.READ | Permission.WRITE | Permission.EXECUTE,
-            ),
-            # ---- Flag to int ----
-            (Permission.READ, int, 1),
-            (Permission.READ | Permission.WRITE, int, 3),
-            # ---- Flag to string ----
-            (Permission.READ, str, 'read'),
-        ],
+        'data, target, expected', CAST_FLAGS_CASES, ids=type_ids(CAST_FLAGS_CASES)
     )
     def test_cast__flags(self, data: Any, target: type, expected: object):
         result = typist.cast(data, target)
         assert result == expected
 
     @pyt.mark.parametrize(
-        'data, target, expected',
-        [
-            # ---- Strings ----
-            (date(1970, 2, 1), str, '1970-02-01'),
-            (datetime(1970, 2, 1, 10, 20, 30, tzinfo=UTC), str, '1970-02-01T10:20:30'),
-            (time(hour=10, minute=20, second=30, tzinfo=UTC), str, '10:20:30'),
-            (timedelta(days=1, hours=1, minutes=1), str, '1 day, 1:01:00'),
-            # ---- Integers ----
-            (date(1970, 2, 1), int, 719194),
-            (datetime(1970, 2, 1, 10, 20, 30, tzinfo=UTC), int, 2715630),
-            (time(hour=10, minute=20, second=30, tzinfo=UTC), int, 37230),
-            (timedelta(hours=10, minutes=20, seconds=30), int, 37230),
-        ],
+        'data, target, expected', CAST_TIMES_CASES, ids=type_ids(CAST_TIMES_CASES)
     )
     def test_cast__times(self, data: Time, target: type, expected: object):
         result = typist.cast(data, target)
@@ -343,68 +454,19 @@ class TestCast:
         assert reverse == data
 
     @pyt.mark.parametrize(
-        'data, target, expected',
-        [
-            # Literal strings
-            ('one', Literal['one', 'two'], 'one'),
-            ('two', Literal['one', 'two'], 'two'),
-            # Literal ints
-            (1, Literal[1, 2, 3], 1),
-            (2, Literal[1, 2, 3], 2),
-            # Casting to literals (coercion)
-            ('1', Literal[1, 2, 3], 1),
-            ('2', Literal[1, 2, 3], 2),
-            (1, Literal['1', '2', '3'], '1'),
-            # Literal tuples (positional)
-            ([1, 'a'], tuple[int, str], (1, 'a')),
-            (['1', 2], tuple[int, str], (1, '2')),
-        ],
+        'data, target, expected', CAST_LITERALS_CASES, ids=type_ids(CAST_LITERALS_CASES)
     )
     def test_cast__literals(self, data: Any, target: type, expected: object):
         result = typist.cast(data, target)
         assert result == expected
 
     @pyt.mark.parametrize(
-        'data, target, expected',
-        [
-            # ---- Catching NOOPs ----
-            ('1', int | float | bool | str, '1'),
-            ('1', list[str] | str, '1'),  # avoid wrapping
-            (['1'], str | list[str], ['1']),  # avoid unwrapping
-            ((1, 2), tuple[str, ...] | tuple[int, int], (1, 2)),
-            # ---- Avoiding problematic clauses ----
-            ('1', None | int, 1),
-            # ---- Arbitrary Preferences ----
-            (1, str | bool, True),
-            (2, bool | str, '2'),
-            ('-1', float | int, -1),
-            ('-1.5', int | float, -1.5),
-            (['1', '2'], str | list[int], [1, 2]),
-            (['1.0', '2.0'], str | list[int] | list[float], [1.0, 2.0]),
-            (['enabled', 'OFF'], str | list[bool], [True, False]),
-        ],
+        'data, target, expected', CAST_UNIONS_CASES, ids=type_ids(CAST_UNIONS_CASES)
     )
     def test_cast__unions(self, data: list, target: type, expected: object):
         assert typist.cast(data, target) == expected
 
-    @pyt.mark.parametrize(
-        'data, target, expected',
-        [
-            # Container <-.-> Atomic
-            ('1', tuple[int], (1,)),
-            (['1'], int, 1),
-            (['1', '2'], int, 1),
-            ('abc, cde. efg!', list[str], ['abc', 'cde. efg!']),
-            ('transformers, safetensors', set[str], {'transformers', 'safetensors'}),
-            # Malformed times
-            ('25-07-02', datetime, datetime(2025, 7, 2, tzinfo=UTC)),
-            (
-                '25-07-02T10:20:30',
-                datetime,
-                datetime(2025, 7, 2, 10, 20, 30, tzinfo=UTC),
-            ),
-        ],
-    )
+    @pyt.mark.parametrize('data, target, expected', CAST_EDGE_CASES, ids=type_ids(CAST_EDGE_CASES))
     def test_cast__edge(self, data: list, target: type, expected: object):
         assert typist.cast(data, target) == expected
 
@@ -556,3 +618,20 @@ class TestCast:
     )
     def test_serialize__cases(self, data: object, cases: dict, expected: Any):
         assert typist.serialize(data, cases=cases) == expected
+
+    @pyt.mark.parametrize(
+        'data, target', ROUND_TRIP_CASES, ids=type_ids(ROUND_TRIP_CASES, index=-1)
+    )
+    def test_serialize_cast_roundtrip(self, data: object, target: type):
+        """`serialize() -> cast()` must recover the original value across the type lattice.
+
+        This is the highest-value missing test for a coercion engine: round-trips previously
+        existed only in corners (times in `test_cast__times`, pickle in `test_Typist.py`, YAML in
+        `test_Predicate.py`) with nothing exercising the general `serialize`/`cast` pair together.
+        See the comment above `ROUND_TRIP_CASES` for the legitimate one-way cases (naive times,
+        negative timedeltas) intentionally excluded from this matrix -- do not weaken this
+        assertion to accommodate them.
+        """
+        serialized = typist.serialize(data)
+        result = typist.cast(serialized, target)
+        assert result == data

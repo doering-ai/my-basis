@@ -181,17 +181,16 @@ class TestTypist:
         assert result == expected
 
     @pyt.mark.parametrize(
-        'data, expected_lines',
+        'data, expected',
         [
-            (dict(a=1, b=2), ['a = 1', 'b = 2']),
-            (dict(section=dict(x=1, y=2)), ['[section]', 'x = 1', 'y = 2']),
-            (dict(list=[1, 2, 3]), ['list = [', '    1,', '    2,', '    3,', ']']),
+            (dict(a=1, b=2), 'a = 1\nb = 2\n'),
+            (dict(section=dict(x=1, y=2)), '[section]\nx = 1\ny = 2\n'),
+            (dict(list=[1, 2, 3]), 'list = [\n    1,\n    2,\n    3,\n]\n'),
         ],
     )
-    def test_to_toml(self, data: dict, expected_lines: list[str]):
+    def test_to_toml(self, data: dict, expected: str):
         result = typist.to_toml(data)
-        for line in expected_lines:
-            assert line in result
+        assert result == expected
 
     @pyt.mark.parametrize(
         'toml_str, expected',

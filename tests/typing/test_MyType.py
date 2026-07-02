@@ -59,7 +59,15 @@ class TestMyType:
         else:
             assert inst is not None
 
-        # I.ii. Normalize to a tuple of types
+        # I.ii. A list denotes literal tuple/Unpack members -- check each positionally.
+        if isinstance(exp, list):
+            assert inst.main is tuple
+            assert len(inst.literal_members) == len(exp)
+            for member, sub_exp in zip(inst.literal_members, exp):
+                self.check_inst(member, sub_exp)
+            return
+
+        # I.iii. Normalize to a tuple of types
         if not isinstance(exp, tuple):
             exp = (exp,)
 

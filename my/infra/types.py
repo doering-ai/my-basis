@@ -101,9 +101,8 @@ class Pair[T1: Object, T2: Object = T1](tuple[T1, T2]):
 
     @classmethod
     def __instancecheck__(cls, val: object) -> bool:
-        return bool(
-            (isinstance(val, tuple) and len(val) == 2)
-            and all(it.starmap(isinstance, zip(val, cls._args(), strict=False)))
+        return (isinstance(val, tuple) and len(val) == 2) and all(
+            it.starmap(isinstance, zip(val, cls._args(), strict=False))
         )
 
     @classmethod

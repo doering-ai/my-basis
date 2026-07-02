@@ -222,7 +222,7 @@ class TestRegexDebugger:
         assert isinstance(result, list)
         assert len(result) > 0
         # Should contain some diagnostic information
-        assert any('atom' in str(s).lower() for s in result)
+        assert any('atom' in s.lower() for s in result)
 
     def test_debug_failed_match__partial_match(self, debugger: RegexDebugger):
         text = RegexBuffer('hello there')
@@ -230,20 +230,20 @@ class TestRegexDebugger:
         assert isinstance(result, list)
         assert len(result) > 0
         # Should identify the successful part and the failure
-        assert any('match' in str(s).lower() for s in result)
+        assert any('match' in s.lower() for s in result)
 
     def test_debug_failed_match__all_atoms_failed(self, debugger: RegexDebugger):
         text = RegexBuffer('xyz123')
         result = debugger.debug_failed_match('simple', text)
         assert isinstance(result, list)
-        assert any('All atoms' in str(s) or 'first atom' in str(s) for s in result)
+        assert any('All atoms' in s or 'first atom' in s for s in result)
 
     def test_debug_failed_match__all_atoms_succeeded(self, debugger: RegexDebugger):
         text = RegexBuffer('hello world extra text')
         result = debugger.debug_failed_match('compound', text)
         assert isinstance(result, list)
         # Should indicate all atoms matched
-        assert any('success' in str(s).lower() or 'matched' in str(s).lower() for s in result)
+        assert any('success' in s.lower() or 'matched' in s.lower() for s in result)
 
     # ------------------
     # `*` Public Methods
@@ -338,7 +338,7 @@ class TestRegexDebugger:
         assert isinstance(result, list)
         assert len(result) > 0
         # Should provide diagnostic information
-        diagnostic_text = ' '.join(str(s) for s in result)
+        diagnostic_text = ' '.join(result)
         assert len(diagnostic_text) > 0
 
     def test_integration__optional_atoms_debugging(self, debugger: RegexDebugger):

@@ -39,7 +39,7 @@ class Atom(pyd.BaseModel):
         if isinstance(data, Atom):
             kwargs = data.model_dump() | kwargs
         else:
-            kwargs['data'] = str(data)
+            kwargs['data'] = data
         super().__init__(*args, **kwargs)
 
     @classmethod

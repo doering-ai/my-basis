@@ -130,6 +130,7 @@ class TorusApp:
         Args:
             point: Original 4D point.
             dur: Animation time in seconds.
+            *args: Unused; reserved for future per-call rotation overrides.
         Returns:
             Rotated 4D point.
         """

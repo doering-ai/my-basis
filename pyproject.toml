@@ -56,9 +56,7 @@ google = [
   "google-auth-oauthlib>=1.2.2",
   "pandas>=2.3.2",
 ]
-terminal = [
-    "pyratatui>=0.2.9",
-]
+terminal = ["pyratatui>=0.2.9"]
 
 [dependency-groups]
 dev = [
@@ -254,6 +252,10 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 'test_*.py' = ['D']
 '*_test.py' = ['D']
+# Deprecation shims re-export their target subpackage's `__all__` by reference
+# (`[*_typing.__all__]`), which ruff can't statically prove is all-strings.
+'my/text/__init__.py' = ['PLE0604']
+'my/type/__init__.py' = ['PLE0604']
 
 [tool.ruff.lint.flake8-pytest-style]
 parametrize-names-type = "csv"

@@ -145,7 +145,11 @@ class Predicate(pyd.BaseModel):
         """
         if ty.is_model(val):
             val = ty.cast(val, dict)
-        elif not isinstance(val, Maps) and ty.is_vec(val) and (mapped := ty.cast(val, dict)) is not None:
+        elif (
+            not isinstance(val, Maps)
+            and ty.is_vec(val)
+            and (mapped := ty.cast(val, dict)) is not None
+        ):
             # A vec of (key, value) pairs, e.g. [('child', 'val')].
             val = mapped
 

@@ -373,7 +373,9 @@ class IterUtils(_UtilsBase):
         if isinstance(data, AsyncIterator):
             return aio.run(cls._async_exhaust(data, *preds, default=default))
         elif isinstance(data, Iterator):
-            matches = list(dict.fromkeys(item for item, pred in it.product(data, preds) if pred(item)))
+            matches = list(
+                dict.fromkeys(item for item, pred in it.product(data, preds) if pred(item))
+            )
             if unique and len(matches) > 1:
                 raise ValueError(f'Multiple keys found: {matches}')
             return matches[0] if matches else default

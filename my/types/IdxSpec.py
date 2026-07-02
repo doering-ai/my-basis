@@ -6,7 +6,7 @@
 # --------
 from __future__ import annotations
 from typing import ClassVar, Literal
-from typing_extensions import Self
+from typing import Self
 from collections import deque
 from collections.abc import Iterator, Sequence
 import functools as ft

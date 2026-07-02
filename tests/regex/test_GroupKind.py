@@ -71,4 +71,4 @@ class TestGroupKind:
         ],
     )
     def test_combined_flags(self, kind: cls, mask: cls, expected: bool):
-        assert bool(kind in mask) == expected
+        assert (kind in mask) == expected

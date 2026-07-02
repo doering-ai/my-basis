@@ -367,7 +367,7 @@ class RegexDebugger(RegexStore):
         else:
             # II.i. Cast to string and verify that any sort of match occurs
             func = 'match'
-            text = str(case)
+            text = case
             expected = {}
 
         assert isinstance(text, str)

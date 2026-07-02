@@ -271,7 +271,7 @@ class Quantifier:
     @ft.cached_property
     def is_basic(self) -> bool:
         """Check if the quantifier is "basic" (i.e. empty, `?`, `*`, or `+`)."""
-        return bool(not self.data or self.data[0] in '?*+')
+        return not self.data or self.data[0] in '?*+'
 
     @ft.cached_property
     def is_ranged(self) -> bool:

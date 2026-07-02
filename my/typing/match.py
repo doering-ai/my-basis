@@ -131,7 +131,9 @@ class TypeMatch(_TypingBase):
     def match[T1](cls, t0: type, t1: TypeArg[T1], intersect: bool = False) -> TypeIs[type[T1]]: ...
     @overload
     @classmethod
-    def match[T1](cls, t0: MyType, t1: TypeArg[T1], intersect: bool = False) -> TypeIs[MyType[T1]]: ...
+    def match[T1](
+        cls, t0: MyType, t1: TypeArg[T1], intersect: bool = False
+    ) -> TypeIs[MyType[T1]]: ...
     @overload
     @classmethod
     def match[T1](
@@ -154,9 +156,10 @@ class TypeMatch(_TypingBase):
         if t0 == t1:
             return True
 
-        # II.i. The POS/NEG sentinels (bare `Any` / `None`, i.e. unspecified) are wildcards that
-        # match anything in either direction. An *explicit* NoneType built via MyType.parse(NoneType)
-        # is a distinct concrete instance (not the NEG singleton) and falls through to real matching.
+        # II.i. The POS/NEG sentinels (bare `Any` / `None`, i.e. unspecified) are wildcards
+        # that match anything in either direction. An *explicit* NoneType built via
+        # MyType.parse(NoneType) is a distinct concrete instance (not the NEG singleton) and
+        # falls through to real matching.
         if r0 is Any or r1 is Any or t0 is MyType.NEG or t1 is MyType.NEG:
             return True
         elif not (t0 and t1):
@@ -185,9 +188,10 @@ class TypeMatch(_TypingBase):
             # IV. Main case: check for simple subclass coverage for the main type and any children
             with ctx.suppress(TypeError):
                 ret = issubclass(m0, m1) or (intersect and issubclass(m1, m0))
-            # A `str`/`bytes` iterates into chars/ints -- never arbitrary elements -- so it must not
-            # be judged a subset of an element-constrained, non-string iterable (e.g. the
-            # `Iterable[tuple[...]]` member of `Map`), even though `issubclass(str, Iterable)` holds.
+            # A `str`/`bytes` iterates into chars/ints -- never arbitrary elements -- so it must
+            # not be judged a subset of an element-constrained, non-string iterable (e.g. the
+            # `Iterable[tuple[...]]` member of `Map`), even though `issubclass(str, Iterable)`
+            # holds.
             if ret and t1.vals and cls.is_string_type(t0) and not cls.is_string_type(t1):
                 ret = False
             # An unconstrained parent element type (keys/vals is None) accepts any child, so only

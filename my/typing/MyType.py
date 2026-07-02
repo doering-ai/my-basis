@@ -276,8 +276,9 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
             or get_origin(root) is not None
             or Meta(root)
         ):
-            # NOTE: `get_origin` catches parameterized generics & special forms (e.g. `dict[str, int]`,
-            # `Literal[1]`), which are NOT `type` instances and so must be `parse`d, not `typeof`'d.
+            # NOTE: `get_origin` catches parameterized generics & special forms
+            # (e.g. `dict[str, int]`, `Literal[1]`), which are NOT `type` instances
+            # and so must be `parse`d, not `typeof`'d.
             return cls.parse(root)
         else:
             # II. Infer annotations for untyped data
@@ -896,8 +897,9 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
 ### DATA ###
 ############
 
-# Bootstrap the two canonical singletons. We can't use `new()` here, since it short-circuits to
-# `cls.POS`/`cls.NEG` for `Any`/`None`; instead construct them directly and make `POS` self-referential.
+# Bootstrap the two canonical singletons. We can't use `new()` here, since it short-circuits
+# to `cls.POS`/`cls.NEG` for `Any`/`None`; instead construct them directly and make `POS`
+# self-referential.
 MyType.POS = MyType(root=Any)
 MyType.NEG = MyType(root=None)
 MyType.POS.vals = MyType.POS.keys = MyType.POS

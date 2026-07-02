@@ -346,7 +346,7 @@ class MetricUtils(_UtilsBase):
 
             @ft.wraps(func)
             async def async_wrapper(*args: Ps.args, **kwargs: Ps.kwargs) -> R:
-                start = int(perf_counter_ns())
+                start = perf_counter_ns()
                 ret = await func(*args, **kwargs)
                 cls._measure(getattr(func, '__name__', 'unknown'), counter, start)
 
@@ -356,7 +356,7 @@ class MetricUtils(_UtilsBase):
 
         @ft.wraps(func)
         def wrapper(*args: Ps.args, **kwargs: Ps.kwargs) -> R:
-            start = int(perf_counter_ns())
+            start = perf_counter_ns()
             ret = func(*args, **kwargs)
             cls._measure(getattr(func, '__name__', 'unknown'), counter, start)
 

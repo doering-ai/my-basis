@@ -203,7 +203,7 @@ class TestRegex:
         ),
     )
     def test_is_split(self, expr: str | Regex, expected: bool):
-        assert cls.is_split(expr) == bool(expected)
+        assert cls.is_split(expr) == expected
 
     @pyt.mark.parametrize(
         'expr, expected',
@@ -213,7 +213,7 @@ class TestRegex:
         ),
     )
     def test_is_atomic(self, expr: str | Atom | Regex, expected: bool):
-        assert cls.is_atomic(expr) == bool(expected)
+        assert cls.is_atomic(expr) == expected
 
     @pyt.mark.parametrize(
         'expr, expected',

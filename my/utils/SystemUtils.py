@@ -433,7 +433,7 @@ class SystemUtils(_UtilsBase):
         if not width or width <= 0:
             width = SystemUtils.get_terminal_width()
 
-        mark = str(mark).strip()
+        mark = mark.strip()
         if not mark:
             mark = '-'
         delim = (mark * (width // len(mark) + 1))[:width]
@@ -545,7 +545,7 @@ class SystemUtils(_UtilsBase):
         if not file:
             return
         elif not isinstance(file, Path):
-            file = Path(str(file)).expanduser()
+            file = Path(file).expanduser()
 
         file.parent.mkdir(parents=True, exist_ok=True)
         if file.suffix in ['.yml', '.yaml']:

@@ -6,7 +6,7 @@
 # --------
 from __future__ import annotations
 from typing import ClassVar, overload
-from typing_extensions import Self
+from typing import Self
 import functools as ft
 import itertools as it
 from collections import deque

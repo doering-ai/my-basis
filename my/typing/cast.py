@@ -368,7 +368,10 @@ class Transform[T0, T1]:
         normalized = tyt.normalize(data)
         self.data = normalized
         self.t0 = MyType.new(source) if source else MyType.typeof(normalized)
-        self.t1 = MyType.new(target)
+        # Inform concretization with the *pre-normalize* `data` -- `normalize` collapses a `set`
+        # (and other non-list Vecs) down to a plain `list`, which would otherwise make an
+        # abstract target like `Collection[int]` concretize to `list` instead of `set`.
+        self.t1 = self.concretize(MyType.new(target), data)
 
     @property
     def ty(self) -> Typist:

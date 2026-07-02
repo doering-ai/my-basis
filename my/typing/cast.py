@@ -365,6 +365,7 @@ class Transform[T0, T1]:
     # -------------------
     def __init__(self, data: T0, target: AnyType[T1], source: AnyType[T0] | None = None) -> None:
         """Initialize the (highly-ephemeral) casting context."""
+        self._src_type = type(data)
         normalized = tyt.normalize(data)
         self.data = normalized
         self.t0 = MyType.new(source) if source else MyType.typeof(normalized)
@@ -833,6 +834,10 @@ class Transform[T0, T1]:
     @register
     def _vec_to_string[S: Vec, T: String](self: Transform[S, T]) -> str | None:
         """``[] -> '[]'`` -- serialize a sequence into its plain string form."""
+        if issubclass(self._src_type, (set, frozenset)):
+            # `normalize` collapses sets to plain lists (see `__init__`), which would otherwise
+            # lose the `set()`/`frozenset(...)` repr in favor of a `[]`-style one.
+            return str(self._src_type(self.data))
         return str(self.data)
 
     @register

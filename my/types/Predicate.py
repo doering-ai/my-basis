@@ -143,13 +143,12 @@ class Predicate(pyd.BaseModel):
         Returns:
             Map item iterator, where keys may include dot notation for nested structures.
         """
-        _map = ty.cast(val, dict[str, list[str]])
-        if _map is not None:
-            yield from _map.items()
-            return
-
         if ty.is_model(val):
             val = ty.cast(val, dict)
+        elif not isinstance(val, Maps) and ty.is_vec(val) and (mapped := ty.cast(val, dict)) is not None:
+            # A vec of (key, value) pairs, e.g. [('child', 'val')].
+            val = mapped
+
         if isinstance(val, Maps):
             prefix = f'{field}.' if field else ''
             for c_field, c_val in dict(val).items():
@@ -344,7 +343,7 @@ class Predicate(pyd.BaseModel):
         """Add all values from another predicate into this one, appending to existing fields."""
         if not other:
             return self
-        elif items := ty.cast(other, dict[str, list[str]]):
+        elif (items := ty.cast(other, dict)) is not None:
             for key, value in items.items():
                 self.write(key, value, overwrite=False)
             return self
@@ -355,7 +354,7 @@ class Predicate(pyd.BaseModel):
         """Update this predicate with fields from another, leaving overwriting up to defaults."""
         if not other:
             return self
-        elif items := ty.cast(other, dict[str, list[str]]):
+        elif (items := ty.cast(other, dict)) is not None:
             for key, value in items.items():
                 self.write(key, value)
             return self

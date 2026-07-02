@@ -428,6 +428,14 @@ class IterUtils(_UtilsBase):
             # An `Enum` (especially a single-member `Flag`) is atomic, but iterates to itself --
             # so it must short-circuit before the `is_iter` branch or normalize recurses forever.
             return data
+        elif cls.ty.is_model(data):
+            # A `pydantic.BaseModel` also defines `__iter__` (yielding raw `(field, value)`
+            # pairs, for `dict(model)` support), so it would otherwise fall into the `is_iter`
+            # branch below and get exploded into its internal field tuples before any cast
+            # transform -- including a custom `@model_serializer` -- ever sees it. Leave models
+            # untouched; `_model_to_*` transforms already normalize them correctly (e.g. via
+            # `model_dump()`, which respects a custom serializer).
+            return data
         elif cls.ty.is_map(data):
             return {cls.normalize(k): cls.normalize(v) for k, v in cls.map_items(data)}
         elif cls.ty.is_vec(data) or cls.ty.is_iter(data):

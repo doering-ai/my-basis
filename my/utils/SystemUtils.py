@@ -846,5 +846,9 @@ class SystemUtils(_UtilsBase):
         return cls.ty.serialize(data, full=full)
 
 
+# `_configure_yaml()` was never invoked, so `YAML_CONFIG` sat at ruamel's own defaults
+# (alphabetically-sorted keys, 2-space indent) instead of this project's intended ones.
+SystemUtils._configure_yaml()
+
 system_utils = SystemUtils
 """An alias of `SystemUtils`, cased so as to imply static usage."""

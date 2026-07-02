@@ -95,6 +95,9 @@ class Predicate(pyd.BaseModel):
             arg = arg.strip()
             if self.RGXS['jsonesque'].fullmatch(arg) and (_casted := typist.cast(arg, dict)):
                 self += _casted
+        elif ty.is_vec(arg) and (mapped := ty.cast(arg, dict)) is not None:
+            # A vec of (key, value) pairs, e.g. [('k1', ['A', 'B'])].
+            self += mapped
         elif ty.is_iter(arg):
             for sub_arg in arg:
                 self._process_arg(sub_arg)

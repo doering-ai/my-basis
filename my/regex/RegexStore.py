@@ -103,7 +103,6 @@ class RegexStore(pyd.BaseModel):
     # ----------------
     #: A dictionary of useful patterns for decomposing expressions
     META_RGXS: ClassVar[dict[str, re.Pattern]] = META_RGXS
-    LOAD_LOCK: ClassVar[Lock] = Lock()
 
     # -------
     # Members
@@ -122,6 +121,13 @@ class RegexStore(pyd.BaseModel):
     _strip: tuple[Callable[[str], str]] = pyd.PrivateAttr(default=(str,))
     _lazy_queue: deque[Callable[[], None]] = pyd.PrivateAttr(default_factory=deque)
     _is_loaded: bool = pyd.PrivateAttr(default=True)
+    #: Per-instance load guard -- *not* a ClassVar. A store's `initial_load()` recurses into any
+    #: imported stores' own `.load` (to pull their patterns) before returning; a lock shared by
+    #: every instance would self-deadlock the moment that recursion re-entered the same
+    #: (non-reentrant) lock on the current thread. Scoping the lock per-instance keeps concurrent
+    #: access to *one* store's lazy queue safe without serializing unrelated stores against
+    #: each other, and without masking a real same-instance re-entrancy bug behind an `RLock`.
+    _load_lock: Lock = pyd.PrivateAttr(default_factory=Lock)
 
     # -------------
     # Store Options
@@ -225,7 +231,7 @@ class RegexStore(pyd.BaseModel):
     def load(self) -> bool:
         """Load all lazy definitions into the store now."""
         if not self._is_loaded:
-            with RegexStore.LOAD_LOCK:
+            with self._load_lock:
                 self._is_loaded = True
                 while self._lazy_queue:
                     fn = self._lazy_queue.popleft()

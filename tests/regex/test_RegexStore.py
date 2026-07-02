@@ -83,6 +83,22 @@ class TestRegexStore:
         assert 'alpha' in store2.definitions
         assert 'numeric' not in store2.definitions
 
+    def test_new__with_imports_lazy_load_no_deadlock(self):
+        # basis-12 item 1 regression: `initial_load()` recurses into an imported store's own
+        # `.load` while still inside its own `.load`. Both stores default to `lazy_load=True`
+        # here (unlike `test_new__with_imports`, which sidesteps the lock by loading eagerly),
+        # so `store2.match(...)` is what actually drives both `.load` calls through the lock.
+        # A regression to a single shared (non-reentrant) lock hangs forever; the suite's global
+        # 15s pytest-timeout turns that hang into a test failure rather than a stuck run.
+        store1 = RegexStore.new(alpha=r'[[:alpha:]]+', numeric=r'\d+')
+        store2 = RegexStore.new(
+            imports=[(store1, ['alpha'])],
+            test=[r'(?P>alpha)', r' test'],
+        )
+
+        data = store2.match('test', 'hello test')
+        assert data.get('alpha') == ['hello']
+
     def test_new__init_formatter(self):
         def formatter(val: Any):
             return val.upper() if isinstance(val, str) else val

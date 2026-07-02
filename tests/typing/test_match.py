@@ -118,7 +118,7 @@ MATCH_NESTED = boolmap(
 MATCH_EDGE = boolmap(
     false=[
         (MyType.parse(Ellipsis), MyType.parse(NoneType)),
-        (MyType.parse(NoneType), MyType.parse(Self)),  # DEFERRED: NoneType-vs-Self edge.
+        (MyType.parse(NoneType), MyType.parse(Self)),
     ],
     true=[
         (Any, Any),
@@ -162,10 +162,7 @@ class TestMatch:
 
     @pyt.mark.parametrize('t0, t1, expected', MATCH_EDGE)
     def test_match__edge(self, t0, t1, expected: bool):
-        """Test `tym.match` wildcard semantics for `Any`/`None`.
-
-        NOTE: `(NoneType, Self)` is a known-deferred edge (currently matches True).
-        """
+        """Test `tym.match` wildcard semantics for `Any`/`None`."""
         assert cls.match(t0, t1) == expected
 
     def test_is_map_item_type(self):

@@ -313,6 +313,11 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
             A MyType instance with the root set to the original type, and the other fields
             populated according to the structure of that type.
         """
+        if isinstance(root, MyType):
+            # Already parsed -- re-deriving a uid from `str(root)` here would collapse an
+            # unhandled/collapsed form (e.g. `Self`, `TypeVar`) onto whatever it collapsed to
+            # (e.g. `NoneType`), since `self.root` no longer reflects the original annotation.
+            return root
         try:
             uid = hash(str(root))
             if cached := cls.PARSE_CACHE[uid]:

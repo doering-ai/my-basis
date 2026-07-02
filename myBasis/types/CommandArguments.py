@@ -43,7 +43,7 @@ class CommandArguments(pyd.BaseModel):
                     if data[key].isdigit():
                         data[key] = int(data[key])
             elif isinstance(value, dict):
-                data[key] = cls._interpolate(value)
+                cls._interpolate(value)
             elif isinstance(value, MutableSequence):
                 for i in mi.locate(value, lambda v: isinstance(v, str) and '<character>' in v):
                     value[i] = value[i].replace('<character>', data['character'])

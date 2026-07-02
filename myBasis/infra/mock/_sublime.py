@@ -23,7 +23,6 @@ from typing import Any, Callable, Iterator, Literal, ClassVar
 from pathlib import Path
 from unittest.mock import MagicMock
 from dataclasses import dataclass
-import functools as ft
 import itertools as it
 import json
 import os
@@ -388,6 +387,7 @@ class View:
         self._read_only = False
         self._window = window
         self._change_count = 0
+        self._syntax_path: str = ''
 
     # --------
     # Identity
@@ -437,13 +437,17 @@ class View:
         return self._buf.substr(x, x + 1)
 
     def insert(self, edit: Edit, point: int, text: str) -> int:
-        return self._buf.insert(point, text)
+        ret = self._buf.insert(point, text)
+        self._change_count += 1
+        return ret
 
     def replace(self, edit: Edit, region: Region, text: str) -> None:
         self._buf.replace(region.begin(), region.end(), text)
+        self._change_count += 1
 
     def erase(self, edit: Edit, region: Region) -> None:
         self._buf.replace(region.begin(), region.end(), '')
+        self._change_count += 1
 
     # ------------------
     # Coordinate queries
@@ -462,6 +466,99 @@ class View:
             a, b = self._buf.line_extent(x)
         return Region(a, b)
 
+    def lines(self, region: Region) -> list:
+        """Return a list of Regions for each line within the given region."""
+        result: list[Region] = []
+        pos = region.begin()
+        end = region.end()
+        while pos <= end:
+            a, b = self._buf.line_extent(pos)
+            if a >= end:
+                break
+            result.append(Region(a, min(b, end)))
+            pos = b + 1
+        return result
+
+    # ----------------------
+    # Syntax & scope queries
+    # ----------------------
+    _SYNTAX_SCOPES: ClassVar[dict[str, str]] = {
+        'YAML': 'source.yaml',
+        'Python': 'source.python',
+        'JSON': 'source.json',
+    }
+
+    _COMMENT_PUNCT: ClassVar[dict[str, str]] = {
+        'source.yaml': '#',
+        'source.python': '#',
+        'source.json': '//',
+    }
+
+    def syntax(self) -> 'Syntax | None':
+        """Return a Syntax object based on the assigned syntax path."""
+        if not self._syntax_path:
+            return None
+        # Extract syntax name from path like 'Packages/YAML/YAML.sublime-syntax'
+        name = Path(self._syntax_path).stem
+        scope = self._SYNTAX_SCOPES.get(name, f'source.{name.lower()}')
+        return Syntax(path=self._syntax_path, name=name, scope=scope)
+
+    def find_by_selector(self, selector: str) -> list:
+        """Return regions matching the given selector.
+
+        Supports ``comment.line`` and ``comment.line - punctuation.definition.comment``
+        by detecting lines that start with the comment punctuation for the current syntax.
+        All other selectors return an empty list.
+        """
+        syn = self.syntax()
+        if syn is None:
+            return []
+        punct = self._COMMENT_PUNCT.get(syn.scope, '#')
+
+        # Determine whether to return the full line or just the content after punctuation
+        want_content = 'punctuation.definition.comment' in selector
+        is_comment_sel = selector.startswith('comment.line')
+
+        if not is_comment_sel:
+            return []
+
+        text = self._buf.text
+        lines = text.split('\n')
+        offset = 0
+        regions: list[Region] = []
+        for line_text in lines:
+            stripped = line_text.lstrip()
+            indent_len = len(line_text) - len(stripped)
+            if stripped.startswith(punct):
+                if want_content:
+                    # Region starts right after the punctuation character(s)
+                    punct_end = indent_len + len(punct)
+                    regions.append(Region(offset + punct_end, offset + len(line_text)))
+                else:
+                    regions.append(Region(offset + indent_len, offset + len(line_text)))
+            offset += len(line_text) + 1  # +1 for the newline
+        return regions
+
+    def meta_info(self, key: str, pt: int = 0, prefix: str = '') -> Any:
+        """Return syntax meta information (shell variables, etc.)."""
+        syn = self.syntax()
+        if syn is None:
+            return []
+        punct = self._COMMENT_PUNCT.get(syn.scope, '#')
+        if key == 'shellVariables':
+            return [{'name': 'TM_COMMENT_START', 'value': f'{punct} '}]
+        return []
+
+    def visible_region(self) -> Region:
+        """Return the visible region (entire buffer in mock)."""
+        return Region(0, self._buf.size())
+
+    def show(self, region: 'Region | int', **kwargs: Any) -> None:
+        """No-op in mock."""
+
+    def show_at_center(self, region: 'Region | int', **kwargs: Any) -> None:
+        """No-op in mock."""
+
     # ---------
     # Selection
     # ---------
@@ -475,7 +572,7 @@ class View:
         return self.settings_object or _GLOBAL_SETTINGS
 
     def assign_syntax(self, syntax: str) -> None:
-        pass
+        self._syntax_path = syntax
 
     # --------
     # Commands
@@ -554,7 +651,7 @@ class View:
 class Window:
     _ID_COUNTER: ClassVar[Iterator[int]] = it.count(1)
 
-    def __init__(self, id: int | None = None) -> None:  # noqa: A002
+    def __init__(self, id: int | None = None) -> None:
         self.window_id = id if id is not None else next(self._ID_COUNTER)
         self._views: list = []
         self._active_view: 'View | None' = None
@@ -929,7 +1026,7 @@ def load_resource(name: str) -> str:
     """Attempt to read from disk; raise FileNotFoundError if not found."""
     # Strip leading "Packages/" and try to resolve relative to packages_path()
     prefix = 'Packages/'
-    stripped = name[len(prefix):] if name.startswith(prefix) else name
+    stripped = name[len(prefix) :] if name.startswith(prefix) else name
     candidate = Path(packages_path()) / stripped
     if candidate.exists():
         return candidate.read_text(encoding='utf-8')

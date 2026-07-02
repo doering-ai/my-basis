@@ -3,78 +3,161 @@
 ############
 ### STANDARD
 from __future__ import annotations
-import asyncio
 from pathlib import Path
 from typing import Any
+import asyncio
 
 ### EXTERNAL
 import pytest as pyt
 
 ### INTERNAL
-from myBasis.types.Venv import Venv, _FINDERS
-
-
-Patch = pyt.MonkeyPatch
+from myBasis.types.Venv import Venv, Kind, Framework, FRAMEWORKS, RGXS, IS_WINDOWS
 
 
 ############
 ### DATA ###
 ############
 def _run(coro: Any) -> Any:
-    """Run a coroutine synchronously for use in non-async test methods."""
+    """Run a coroutine synchronously."""
     return asyncio.run(coro)
 
 
-def _make_venv(tmp_path: Path, python_version: str = '3.8.12') -> Venv:
-    """Construct a fully valid Venv pointing at *tmp_path*."""
-    venv = Venv.model_construct(
+def _make_venv(tmp_path: Path, **kwargs: Any) -> Venv:
+    """Construct a Venv with sensible defaults for testing."""
+    defaults: dict[str, Any] = dict(
         raw=str(tmp_path),
-        path=tmp_path,
+        origin=tmp_path,
+        home=tmp_path,
         root=tmp_path,
-        kind='venv',
-        finder='directory',
+        kind=Kind.VENV,
         prompt=tmp_path.name,
-        python_version=python_version,
+        python_version='3.8.12',
         data={},
         window=None,
     )
-    # PrivateAttr must be set separately after model_construct
-    object.__setattr__(venv, '_recursed', False)
-    return venv
+    defaults.update(kwargs)
+    return Venv(**defaults)
 
 
 ############
 ### BODY ###
 ############
+class TestKind:
+    """Tests for the ``Kind`` flag enum."""
+
+    def test_is_flag(self):
+        from enum import Flag
+
+        assert issubclass(Kind, Flag)
+
+    def test_none_is_zero(self):
+        assert Kind.NONE.value == 0
+
+    def test_members_distinct(self):
+        members = [
+            Kind.POETRY,
+            Kind.HATCH,
+            Kind.PDM,
+            Kind.RYE,
+            Kind.UV,
+            Kind.PYENV,
+            Kind.PIPENV,
+            Kind.VENV,
+            Kind.CONDA,
+            Kind.IDE,
+        ]
+        assert len(members) == len(set(members))
+
+    def test_combinable(self):
+        combined = Kind.VENV | Kind.CONDA
+        assert Kind.VENV in combined
+        assert Kind.CONDA in combined
+
+    @pyt.mark.parametrize(
+        'name',
+        ['POETRY', 'HATCH', 'PDM', 'RYE', 'UV', 'PYENV', 'PIPENV', 'VENV', 'CONDA', 'IDE'],
+    )
+    def test_member_exists(self, name: str):
+        assert hasattr(Kind, name)
+
+
+class TestFramework:
+    """Tests for the ``Framework`` NamedTuple."""
+
+    def test_defaults(self):
+        fw = Framework()
+        assert fw.cmd == ''
+        assert fw.args == ''
+        assert fw.file == ''
+        assert fw.parent_index == 0
+        assert fw.parser is None
+
+    def test_kind_property(self):
+        fw = Framework(cmd='hatch')
+        assert fw.kind == Kind.HATCH
+
+    def test_kind_property_unknown(self):
+        fw = Framework(cmd='unknown_tool')
+        assert fw.kind == Kind.NONE
+
+    def test_kind_property_empty(self):
+        fw = Framework()
+        assert fw.kind == Kind.NONE
+
+    def test_seek_map_item(self):
+        result = Framework._seek_map_item('some output\nvenv: /path/to/venv')
+        assert result == '/path/to/venv'
+
+    def test_seek_map_item_no_match(self):
+        result = Framework._seek_map_item('no venv here')
+        assert result == ''
+
+
+class TestFrameworks:
+    """Tests for the ``FRAMEWORKS`` list."""
+
+    def test_nonempty(self):
+        assert len(FRAMEWORKS) >= 5
+
+    def test_all_are_framework_instances(self):
+        for fw in FRAMEWORKS:
+            assert isinstance(fw, Framework)
+
+    def test_contains_hatch(self):
+        assert any(fw.cmd == 'hatch' for fw in FRAMEWORKS)
+
+    def test_contains_pdm(self):
+        assert any(fw.cmd == 'pdm' for fw in FRAMEWORKS)
+
+    def test_contains_poetry(self):
+        assert any(fw.cmd == 'poetry' for fw in FRAMEWORKS)
+
+    def test_contains_pipenv(self):
+        assert any(fw.cmd == 'pipenv' for fw in FRAMEWORKS)
+
+
 class TestVenvBool:
-    """Tests for `Venv.__bool__`."""
+    """Tests for ``Venv.__bool__``."""
 
-    def test_false_when_default(self):
-        """An empty Venv (no root, no kind) is falsy."""
-        venv = Venv.model_construct(root=Path('/'), kind='', python_version='')
-        object.__setattr__(venv, '_recursed', False)
+    def test_false_when_none_kind(self, tmp_path: Path):
+        venv = _make_venv(tmp_path, kind=Kind.NONE)
         assert not venv
 
-    def test_false_when_missing_kind(self, tmp_path: Path):
-        """A Venv with a valid root but no kind is falsy."""
-        venv = Venv.model_construct(root=tmp_path, kind='')
-        object.__setattr__(venv, '_recursed', False)
-        assert not venv
-
-    def test_false_when_root_nonexistent(self, tmp_path: Path):
-        """A Venv whose root directory does not exist is falsy."""
-        venv = Venv.model_construct(root=tmp_path / 'nonexistent', kind='venv')
-        object.__setattr__(venv, '_recursed', False)
+    def test_false_when_nonexistent_root(self, tmp_path: Path):
+        venv = Venv.model_construct(root=tmp_path / 'nonexistent', kind=Kind.VENV)
         assert not venv
 
     def test_true_when_valid(self, tmp_path: Path):
-        """A Venv with an existing root and a non-empty kind is truthy."""
         venv = _make_venv(tmp_path)
-        assert venv
+        assert bool(venv)
+
+    def test_false_when_empty_root(self):
+        venv = Venv()
+        assert not venv
 
 
-class TestVenvCleanVersion:
-    """Tests for `Venv.clean_version`."""
+class TestCleanVersion:
+    """Tests for ``Venv.clean_version``."""
 
     @pyt.mark.parametrize(
         'version, expected',
@@ -83,7 +166,6 @@ class TestVenvCleanVersion:
             ('3.8', ('3', '8', '')),
             ('3', ('3', '', '')),
             ('10.20.300', ('10', '20', '300')),
-            # Version embedded in a longer string (e.g. from pyvenv.cfg)
             ('Python 3.9.7', ('3', '9', '7')),
             ('version = 3.8.12', ('3', '8', '12')),
         ],
@@ -97,44 +179,41 @@ class TestVenvCleanVersion:
         with pyt.raises(ValueError, match='Invalid Python version'):
             _ = venv.clean_version
 
+    def test_default_version(self, tmp_path: Path):
+        venv = _make_venv(tmp_path, python_version='3.8.12')
+        assert venv.clean_version == ('3', '8', '12')
+
 
 class TestVenvPaths:
-    """Tests for the cached path properties: `bin`, `lib`, `python_executable`, `site_packages`."""
+    """Tests for cached path properties."""
 
     def test_bin(self, tmp_path: Path):
         venv = _make_venv(tmp_path)
-        assert venv.bin == tmp_path / 'bin'
+        expected = tmp_path / ('Scripts' if IS_WINDOWS else 'bin')
+        assert venv.bin == expected
 
     def test_lib(self, tmp_path: Path):
         venv = _make_venv(tmp_path)
-        assert venv.lib == tmp_path / 'lib'
-
-    def test_python_executable(self, tmp_path: Path):
-        venv = _make_venv(tmp_path)
-        assert venv.python_executable == tmp_path / 'bin' / 'python'
+        expected = tmp_path / ('Lib' if IS_WINDOWS else 'lib')
+        assert venv.lib == expected
 
     @pyt.mark.parametrize(
-        'python_version, expected_rel',
+        'version, expected_rel',
         [
             ('3.8.12', 'lib/python3.8/site-packages'),
             ('3.10.0', 'lib/python3.10/site-packages'),
             ('3.11', 'lib/python3.11/site-packages'),
         ],
     )
-    def test_site_packages(self, tmp_path: Path, python_version: str, expected_rel: str):
-        venv = _make_venv(tmp_path, python_version=python_version)
+    def test_site_packages(self, tmp_path: Path, version: str, expected_rel: str):
+        if IS_WINDOWS:
+            expected_rel = 'Lib/site-packages'
+        venv = _make_venv(tmp_path, python_version=version)
         assert venv.site_packages == tmp_path / expected_rel
-
-    def test_validate_raises_for_invalid_root(self, tmp_path: Path):
-        """Path properties raise ValueError when the root does not exist."""
-        venv = _make_venv(tmp_path / 'missing')
-        # `_validate` is called inside `bin`
-        with pyt.raises(ValueError):
-            _ = venv.bin
 
 
 class TestGetPyvenvInfo:
-    """Tests for `Venv.get_pyvenv_info()`."""
+    """Tests for ``Venv.get_pyvenv_info()``."""
 
     def test_returns_none_when_no_file(self, tmp_path: Path):
         venv = _make_venv(tmp_path)
@@ -157,7 +236,6 @@ class TestGetPyvenvInfo:
         assert result[key] == expected
 
     def test_returns_all_keys(self, tmp_path: Path):
-        """All key-value pairs from pyvenv.cfg are present in the returned dict."""
         (tmp_path / 'pyvenv.cfg').write_text('home = /usr/bin\nversion = 3.8.12\nprompt = test')
         venv = _make_venv(tmp_path)
         result = _run(venv.get_pyvenv_info())
@@ -166,134 +244,132 @@ class TestGetPyvenvInfo:
 
 
 class TestGetCondaInfo:
-    """Tests for `Venv.get_conda_info()`."""
+    """Tests for ``Venv.get_conda_info()``."""
 
     def test_returns_none_when_no_conda_meta(self, tmp_path: Path):
-        """No conda-meta directory → None, regardless of conda installation."""
         venv = _make_venv(tmp_path)
         result = _run(venv.get_conda_info())
         assert result is None
 
-    def test_returns_none_when_conda_fails(self, tmp_path: Path, patch: Patch):
-        """conda-meta present but `conda info --json` fails → None."""
-        (tmp_path / 'conda-meta').mkdir()
-        import myBasis.infra.utils as utils_module
 
-        patch.setattr(utils_module.Utils, 'exa', staticmethod(lambda *a, **kw: _async(None)))
+class TestCheckEnv:
+    """Tests for ``Venv.check_env()``."""
+
+    def test_returns_none_when_no_envvars(self, tmp_path: Path, monkeypatch: pyt.MonkeyPatch):
+        monkeypatch.delenv('VIRTUAL_ENV', raising=False)
+        monkeypatch.delenv('CONDA_PREFIX', raising=False)
         venv = _make_venv(tmp_path)
-        venv.path = tmp_path
-        result = _run(venv.get_conda_info())
+        result = _run(venv.check_env())
         assert result is None
 
-
-class TestFinders:
-    """Tests for the registered finder methods."""
-
-    # ---- find__envvar ----
-    def test_envvar_returns_path(self, tmp_path: Path, patch: Patch):
-        patch.setenv('VIRTUAL_ENV', str(tmp_path))
+    def test_virtual_env(self, tmp_path: Path, monkeypatch: pyt.MonkeyPatch):
+        monkeypatch.setenv('VIRTUAL_ENV', str(tmp_path))
         venv = _make_venv(tmp_path)
-        result = _run(_FINDERS['envvar'](venv))
+        result = _run(venv.check_env())
         assert result is not None
-        assert Path(result).resolve() == tmp_path.resolve()
+        assert venv.kind == Kind.VENV
 
-    def test_envvar_returns_none_when_unset(self, tmp_path: Path, patch: Patch):
-        patch.delenv('VIRTUAL_ENV', raising=False)
+    def test_conda_prefix(self, tmp_path: Path, monkeypatch: pyt.MonkeyPatch):
+        monkeypatch.setenv('CONDA_PREFIX', str(tmp_path))
         venv = _make_venv(tmp_path)
-        result = _run(_FINDERS['envvar'](venv))
-        assert result is None
-
-    # ---- find__conda_envvar ----
-    def test_conda_envvar_returns_path(self, tmp_path: Path, patch: Patch):
-        patch.setenv('CONDA_PREFIX', str(tmp_path))
-        venv = _make_venv(tmp_path)
-        result = _run(_FINDERS['conda_envvar'](venv))
+        result = _run(venv.check_env())
         assert result is not None
+        assert venv.kind == Kind.CONDA
 
-    def test_conda_envvar_returns_none_when_unset(self, tmp_path: Path, patch: Patch):
-        patch.delenv('CONDA_PREFIX', raising=False)
+
+class TestCheckPath:
+    """Tests for ``Venv.check_path()``."""
+
+    def test_finds_venv_directory(self, tmp_path: Path):
+        (tmp_path / '.venv').mkdir()
         venv = _make_venv(tmp_path)
-        result = _run(_FINDERS['conda_envvar'](venv))
+        result = _run(venv.check_path())
+        assert result == tmp_path / '.venv'
+        assert venv.kind == Kind.VENV
+        assert venv.home == tmp_path
+
+    def test_finds_venv_named_dir(self, tmp_path: Path):
+        (tmp_path / 'venv').mkdir()
+        venv = _make_venv(tmp_path)
+        result = _run(venv.check_path())
+        assert result == tmp_path / 'venv'
+
+    def test_returns_none_when_no_venv(self, tmp_path: Path):
+        venv = _make_venv(tmp_path)
+        result = _run(venv.check_path())
         assert result is None
 
-    # ---- find__directory ----
-    @pyt.mark.parametrize('name', ['.venv', 'venv'])
-    def test_directory_finds_named_venv(self, tmp_path: Path, name: str):
-        (tmp_path / name).mkdir()
-        venv = _make_venv(tmp_path)
-        venv.path = tmp_path
-        result = _run(_FINDERS['directory'](venv))
-        assert result == tmp_path / name
-
-    def test_directory_returns_none_when_absent(self, tmp_path: Path):
-        venv = _make_venv(tmp_path)
-        venv.path = tmp_path
-        result = _run(_FINDERS['directory'](venv))
-        assert result is None
-
-    # ---- find__recursive ----
-    def test_recursive_skips_hidden_dirs(self, tmp_path: Path):
-        (tmp_path / '.hidden').mkdir()
-        (tmp_path / '_internal').mkdir()
-        venv = _make_venv(tmp_path)
-        venv.path = tmp_path
-        # Neither child triggers concretize, so None is returned
-        result = _run(_FINDERS['recursive'](venv))
-        assert result is None
-
-    def test_recursive_respects_guard(self, tmp_path: Path):
-        """Re-entrant calls (when `_recursed` is True) return None immediately."""
-        venv = _make_venv(tmp_path)
-        venv.path = tmp_path
-        object.__setattr__(venv, '_recursed', True)
-        result = _run(_FINDERS['recursive'](venv))
-        assert result is None
+    def test_walks_up_to_find_venv(self, tmp_path: Path):
+        """check_path walks up parent directories to find a .venv."""
+        (tmp_path / '.venv').mkdir()
+        sub = tmp_path / 'sub' / 'deep'
+        sub.mkdir(parents=True)
+        venv = _make_venv(sub)
+        result = _run(venv.check_path())
+        assert result == tmp_path / '.venv'
+        assert venv.home == tmp_path
 
 
-class TestConcretize:
-    """Tests for `Venv.concretize()`."""
+class TestVenvFind:
+    """Tests for ``Venv.find()`` and ``sync_find()``."""
 
     def test_short_circuits_when_already_valid(self, tmp_path: Path):
-        """A truthy venv returns True immediately without calling any finder."""
+        """A truthy venv returns itself immediately."""
         venv = _make_venv(tmp_path)
         assert bool(venv)
-        result = _run(venv.concretize())
-        assert result is True
+        result = _run(venv.find(tmp_path))
+        assert result is venv
 
-    def test_returns_false_when_no_finder_matches(self, tmp_path: Path, patch: Patch):
-        """Returns False and leaves the venv invalid when all finders return None."""
-        import myBasis.types.Venv as venv_module  # noqa
+    def test_finds_venv_via_find(self, tmp_path: Path):
+        (tmp_path / '.venv').mkdir()
+        venv = Venv()
+        result = _run(venv.find(tmp_path))
+        assert bool(result)
+        assert result.root == tmp_path / '.venv'
 
-        async def _null_finder(self: Venv) -> None:
-            return None
+    def test_sync_find(self, tmp_path: Path):
+        (tmp_path / '.venv').mkdir()
+        venv = Venv()
+        result = venv.sync_find(tmp_path)
+        assert bool(result)
+        assert result.root == tmp_path / '.venv'
 
-        patch.setattr(venv_module, '_FINDERS', {'null': _null_finder})
-        venv = Venv.model_construct(raw='', path=tmp_path, root=Path('/'), kind='', data={})
-        object.__setattr__(venv, '_recursed', False)
-        result = _run(venv.concretize())
-        assert result is False
-        assert not venv
-
-    def test_sets_finder_name_on_success(self, tmp_path: Path, patch: Patch):
-        """After a successful concretize, `finder` holds the name of the winning finder."""
-        import myBasis.types.Venv as venv_module  # noqa
-
-        (tmp_path / 'pyvenv.cfg').write_text('home = /usr/bin\nversion = 3.8.12\nprompt = test')
-
-        async def _win_finder(self: Venv) -> Path:
-            return tmp_path
-
-        patch.setattr(venv_module, '_FINDERS', {'winning': _win_finder})
-        venv = Venv.model_construct(raw='', path=tmp_path, root=Path('/'), kind='', data={})
-        object.__setattr__(venv, '_recursed', False)
-        result = _run(venv.concretize())
-        assert result is True
-        assert venv.finder == 'winning'
+    def test_find_no_venv(self, tmp_path: Path):
+        venv = Venv()
+        result = _run(venv.find(tmp_path))
+        assert not bool(result)
 
 
-############
-### UTIL ###
-############
-async def _async(val: Any) -> Any:
-    """Return *val* as a coroutine result, for use with patch."""
-    return val
+class TestExactMatch:
+    """Tests for ``Venv.exact_match``."""
+
+    def test_true_when_home_equals_origin(self, tmp_path: Path):
+        venv = _make_venv(tmp_path, home=tmp_path, origin=tmp_path)
+        assert venv.exact_match
+
+    def test_false_when_home_differs_from_origin(self, tmp_path: Path):
+        other = tmp_path / 'other'
+        other.mkdir()
+        venv = _make_venv(tmp_path, home=other, origin=tmp_path)
+        assert not venv.exact_match
+
+
+class TestVenvRegexes:
+    """Tests for the RGXS dict in Venv."""
+
+    def test_has_finder_detritus(self):
+        assert 'finder_detritus' in RGXS
+
+    def test_has_version(self):
+        assert 'version' in RGXS
+
+    def test_has_venv_map_item(self):
+        assert 'venv_map_item' in RGXS
+
+    def test_version_matches_standard(self):
+        assert RGXS['version'].search('3.8.12')
+        assert RGXS['version'].search('Python 3.9.7')
+
+    def test_venv_map_item_matches(self):
+        assert RGXS['venv_map_item'].search('venv: /path/to/venv')
+        assert RGXS['venv_map_item'].search('venv = /path/to/venv')

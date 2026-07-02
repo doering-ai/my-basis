@@ -1,7 +1,8 @@
 # DESIGN: Per-call cast-flag context
 
-> **Status:** proposal only — no implementation. Written as the design-note deliverable of
-> basis-09; awaiting author green-light.
+> **Status:** implemented, per the recommendation below, across two staged commits (basis-13):
+> `d924116` (`CastFlags` + threading, behavior-identical) and the dispatch-scan memoization
+> that follows it. Direct singleton mutation remains the default source; nothing is deprecated.
 
 ## Problem
 

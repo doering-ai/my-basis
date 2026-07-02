@@ -644,6 +644,41 @@ class TestCast:
         # Meanwhile, a brand-new cast (which resolves a fresh snapshot) correctly sees the change.
         assert typist.cast('A.B', set[str]) == {'A.B'}
 
+    @pyt.fixture
+    def clear_dispatch_cache(self) -> abc.Iterator[None]:
+        """A clean `Transform._dispatch_candidates` memo, so hit/miss counts are deterministic."""
+        Transform._dispatch_candidates.cache_clear()
+        yield
+        Transform._dispatch_candidates.cache_clear()
+
+    def test_cast_flags__dispatch_memoization_hits_on_repeat(self, clear_dispatch_cache: None):
+        """The dispatch-scan memo (keyed on `(t0, t1, flags)`) hits on a repeated cast.
+
+        `'a'/'b' -> str` would be a same-type NOOP that never reaches the dispatch scan at all
+        (`Transform.__call__` short-circuits on `self.t1.check(self.data)`), so this uses
+        `str -> int`, which must actually walk `_TRANSFORMS`.
+        """
+        assert typist.cast('123', int) == 123
+        assert typist.cast('123', int) == 123
+        assert typist.cast('456', int) == 456  # same (t0, t1, flags) key as above
+
+        info = Transform._dispatch_candidates.cache_info()
+        assert info.misses == 1  # one distinct (t0, t1, flags) key was ever computed
+        assert info.hits == 2  # the second and third calls reused it
+
+    def test_cast_flags__dispatch_memoization_distinct_flags_distinct_entries(
+        self, clear_dispatch_cache: None
+    ):
+        """Distinct `flags` produce distinct memo entries, even for the same `(t0, t1)` pair."""
+        assert typist.cast('123', int, flags='flex') == 123
+        assert typist.cast('123', int, flags='strict') == 123
+        assert typist.cast('123', int, flags='flex') == 123  # repeats the first key
+
+        info = Transform._dispatch_candidates.cache_info()
+        assert info.misses == 2  # 'flex' and 'strict' are separate keys
+        assert info.hits == 1  # only the repeated 'flex' call reused its entry
+        assert info.currsize == 2
+
     @pyt.mark.parametrize(
         'data, target, expected',
         [

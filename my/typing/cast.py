@@ -1603,6 +1603,46 @@ class Transform[T0, T1]:
                 break
         return cur
 
+    @staticmethod
+    @ft.lru_cache(maxsize=2**11)
+    def _dispatch_candidates(
+        t0: MyType, t1: MyType, flags: CastFlags
+    ) -> tuple[TransformEntry, ...]:
+        """Filter and specificity-sort `_TRANSFORMS` for a `(t0, t1, flags)` triple.
+
+        This is the expensive part of every cast -- scanning the full registered-transform
+        table and re-sorting it by specificity -- and it is a pure function of its three
+        arguments: `_TRANSFORMS` is populated once at import time (`TypeCast.setup()`) and never
+        mutated afterward, and `CastFlags` is frozen/hashable (see `docs/DESIGN-cast-flags.md`).
+        `flags` is part of the key even though no transform's *bound* is flag-dependent today --
+        that keeps a future flag-sensitive registration from silently sharing a stale entry
+        across flag tiers, at the cost of one extra (harmless) cache-key dimension now. Returns a
+        `tuple`, not the `list` the un-memoized code built, so a cached entry can never be
+        mutated by a caller holding a reference to it.
+
+        Specificity is a *partial* order (subset of bounds), so a plain `.sort()` on
+        `MyType.__lt__` scrambles it -- e.g. letting `object`-bound hailmary transforms beat
+        `_scalar_to_string`. Use an explicit comparator that puts strictly-narrower (subset)
+        bounds first instead.
+
+        Args:
+            t0: The source MyType.
+            t1: The target MyType.
+            flags: The resolved cast-flag snapshot for this cast.
+        Returns:
+            Candidate `(source_bound, target_bound, fn)` entries, most- to least-specific.
+        """
+
+        def _by_specificity(a: TransformEntry, b: TransformEntry) -> int:
+            (a0, a1, _), (b0, b1, _) = a, b
+            a_sub = (a0 == b0 or a0 in b0) and (a1 == b1 or a1 in b1)  # a's bounds ⊆ b's bounds
+            b_sub = (b0 == a0 or b0 in a0) and (b1 == a1 or b1 in a1)  # b's bounds ⊆ a's bounds
+            return int(b_sub) - int(a_sub)  # the narrower (more-specific) entry sorts first
+
+        candidates = [(k0, k1, tr) for k0, k1, tr in _TRANSFORMS if t0 in k0 and t1 in k1]
+        candidates.sort(key=ft.cmp_to_key(_by_specificity))
+        return tuple(candidates)
+
     def __call__(self, new_data: T0 | None = None) -> T1 | None:
         """Main entrypoint for casting a value to a new type."""
         # I. Normalize data
@@ -1619,18 +1659,9 @@ class Transform[T0, T1]:
         elif self.t1.check(self.data):
             return self.data
 
-        # Get a list of relevant transformations, sorted from most- to least-specific. Specificity
-        # is a *partial* order (subset of bounds), so a plain `.sort()` on `MyType.__lt__` scrambles
-        # it -- e.g. letting `object`-bound hailmary transforms beat `_scalar_to_string`. Use an
-        # explicit comparator that puts strictly-narrower (subset) bounds first instead.
-        def _by_specificity(a: TransformEntry, b: TransformEntry) -> int:
-            (a0, a1, _), (b0, b1, _) = a, b
-            a_sub = (a0 == b0 or a0 in b0) and (a1 == b1 or a1 in b1)  # a's bounds ⊆ b's bounds
-            b_sub = (b0 == a0 or b0 in a0) and (b1 == a1 or b1 in a1)  # b's bounds ⊆ a's bounds
-            return int(b_sub) - int(a_sub)  # the narrower (more-specific) entry sorts first
-
-        candidates = [(k0, k1, tr) for k0, k1, tr in _TRANSFORMS if self.t0 in k0 and self.t1 in k1]
-        candidates.sort(key=ft.cmp_to_key(_by_specificity))
+        # Get a list of relevant transformations, sorted from most- to least-specific; memoized
+        # per `(t0, t1, flags)` -- see `_dispatch_candidates`.
+        candidates = self._dispatch_candidates(self.t0, self.t1, self.flags)
 
         # Try each of the candidates in turn, returning the first successful cast (if any). A
         # transform signals "not my pair" by raising `Decline` (or returning the `None` sentinel,

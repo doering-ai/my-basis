@@ -70,7 +70,7 @@ from ..infra.types import (
 )
 from ..utils import ut
 from .MyType import MyType
-from ._common import ABSTRACT_GENERICS
+from ._common import ABSTRACT_GENERICS, Decline
 from ._TypingBase import _TypingBase
 
 from .match import tym
@@ -1451,9 +1451,27 @@ class Transform[T0, T1]:
         candidates.sort(key=ft.cmp_to_key(_by_specificity))
 
         # Try each of the candidates in turn, returning the first successful cast (if any). A
-        # transform that raises is treated as a non-match -- the next (more general) candidate is
-        # tried -- rather than aborting the whole cast.
+        # transform signals "not my pair" by raising `Decline` (or returning the `None` sentinel,
+        # still honored) -- the next (more general) candidate is then tried, rather than aborting
+        # the whole cast.
         for *_, tr in candidates:
-            with ctx.suppress(Exception):
+            try:
                 if (ret := self._finalize(tr(self))) is not None:
                     return ret
+            except Decline:
+                continue
+            except Exception:
+                # Transitional safety valve. Until every transform that *crashes* (rather than
+                # deliberately declines) has been converted to `raise Decline`, a stray crash is
+                # logged loudly (distinctive `decline-valve:` prefix so the latent-bug tail can be
+                # grepped out of a green run) and re-declined, so nothing user-facing breaks.
+                # TODO(decline): once the latent-crash tail is flushed, drop this valve and let
+                # non-Decline exceptions propagate instead of silently re-declining.
+                logger.error(
+                    'decline-valve: transform %s crashed casting %s -> %s',
+                    getattr(tr, '__name__', tr),
+                    self.t0,
+                    self.t1,
+                    exc_info=True,
+                )
+                continue

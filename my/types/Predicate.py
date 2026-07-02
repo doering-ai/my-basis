@@ -108,7 +108,7 @@ class Predicate(pyd.BaseModel):
     def _abbreviate(cls, data: _Map[str, list[str] | dict]) -> dict[str, str | list[str] | dict]:
         """Recursively simplify one-element arrays into strings."""
         ret: dict[str, Any] = {}
-        for field, values in dict(data).items():
+        for field, values in sorted(dict(data).items()):
             if ty.is_map(values):
                 # I. Recursive case
                 ret[field] = cls._abbreviate(dict(values))
@@ -216,7 +216,9 @@ class Predicate(pyd.BaseModel):
     # -------------------
     def to_yaml(self, **kwargs) -> str:
         """Serialize the Predicate to a YAML string."""
-        return ut.to_yaml(self._abbreviate(self.data))
+        node_items = [(tuple(key.split('.')), val) for key, val in self.data.items()]
+        tree = self._deepen(node_items, None, None)
+        return ut.to_yaml(self._abbreviate(tree))
 
     @classmethod
     def from_yaml(cls, text: str, **kwargs) -> Predicate:

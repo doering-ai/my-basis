@@ -640,7 +640,10 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
             if self.is_map(data):
                 return ut.val_map(_recur, data)
             else:
-                return list(map(_recur, self.cast(data, list) or []))
+                # Plain `list(data)`, not `self.cast(data, list)` -- casting would normalize
+                # each element (e.g. flattening a nested Model into pairs) before `_recur` gets
+                # a chance to serialize it via its own `serialize()`/`model_dump()` logic.
+                return list(map(_recur, data))
 
         return data
 

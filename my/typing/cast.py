@@ -1224,6 +1224,54 @@ class Transform[T0, T1]:
                 return stype(text)
 
     @classmethod
+    def _branch[T](
+        cls,
+        x: object,
+        pred: Callable[[object, type], bool],
+        *,
+        _datetime: Callable[[Any], T] | None = None,
+        _time: Callable[[Any], T] | None = None,
+        _timedelta: Callable[[Any], T] | None = None,
+        _date: Callable[[Any], T] | None = None,
+        _str: Callable[[Any], T] | None = None,
+        _bytes: Callable[[Any], T] | None = None,
+        _int: Callable[[Any], T] | None = None,
+        _float: Callable[[Any], T] | None = None,
+        _bool: Callable[[Any], T] | None = None,
+        _enum: Callable[[Any], T] | None = None,
+        _vec: Callable[[Any], T] | None = None,
+        _map: Callable[[Any], T] | None = None,
+        **kwargs: Callable[[type], T],
+    ) -> T | None:
+        """Shared dispatch core for `_cast_branch`/`_type_branch`.
+
+        Walks the (type, handler) table in a fixed, order-sensitive sequence and returns the
+        first handler whose type matches `x` under `pred` -- `isinstance` for cast-branch callers,
+        `issubclass` for type-branch callers. `pred` is the only behavioral difference between the
+        two public dispatchers; everything else (table contents, table order, matching loop) was
+        byte-for-byte duplicated between them and now lives here once.
+        """
+        pairs = [
+            (datetime, _datetime),
+            (time, _time),
+            (timedelta, _timedelta),
+            (date, _date),
+            (str, _str),
+            (bytes, _bytes),
+            (int, _int),
+            (float, _float),
+            (bool, _bool),
+            (Enum, _enum),
+            (Vecs, _vec),
+            (Maps, _map),
+        ]
+
+        for tvar, handler in pairs:
+            if handler and pred(x, tvar):
+                return handler(x)  # type: ignore
+        return None
+
+    @classmethod
     def _cast_branch[T](
         cls,
         data: object,
@@ -1242,25 +1290,23 @@ class Transform[T0, T1]:
         _map: Callable[[Map], T] | None = None,
         **kwargs: Callable[[type], T],
     ) -> T | None:
-        pairs = [
-            (datetime, _datetime),
-            (time, _time),
-            (timedelta, _timedelta),
-            (date, _date),
-            (str, _str),
-            (bytes, _bytes),
-            (int, _int),
-            (float, _float),
-            (bool, _bool),
-            (Enum, _enum),
-            (Vecs, _vec),
-            (Maps, _map),
-        ]
-
-        for tvar, handler in pairs:
-            if handler and isinstance(data, tvar):
-                return handler(data)  # type: ignore
-        return None
+        return cls._branch(
+            data,
+            isinstance,
+            _datetime=_datetime,
+            _time=_time,
+            _timedelta=_timedelta,
+            _date=_date,
+            _str=_str,
+            _bytes=_bytes,
+            _int=_int,
+            _float=_float,
+            _bool=_bool,
+            _enum=_enum,
+            _vec=_vec,
+            _map=_map,
+            **kwargs,
+        )
 
     @classmethod
     def _type_branch[T](
@@ -1281,25 +1327,23 @@ class Transform[T0, T1]:
         _map: Callable[[type[Map]], Map] | None = None,
         **kwargs: Callable[[type], T],
     ) -> T | None:
-        pairs = [
-            (datetime, _datetime),
-            (time, _time),
-            (timedelta, _timedelta),
-            (date, _date),
-            (str, _str),
-            (bytes, _bytes),
-            (int, _int),
-            (float, _float),
-            (bool, _bool),
-            (Enum, _enum),
-            (Vecs, _vec),
-            (Maps, _map),
-        ]
-
-        for tvar, handler in pairs:
-            if handler and issubclass(target, tvar):
-                return handler(target)  # type: ignore
-        return None
+        return cls._branch(
+            target,
+            issubclass,
+            _datetime=_datetime,
+            _time=_time,
+            _timedelta=_timedelta,
+            _date=_date,
+            _str=_str,
+            _bytes=_bytes,
+            _int=_int,
+            _float=_float,
+            _bool=_bool,
+            _enum=_enum,
+            _vec=_vec,
+            _map=_map,
+            **kwargs,
+        )
 
     def _num_to_time[T: Time](self, data: int | float, target: type[T]) -> T | None:
         """Convert a number to a Time object treating it as a timestamp or ordinal.

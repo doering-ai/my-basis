@@ -1019,6 +1019,11 @@ class Transform[T0, T1]:
         # the dict into a list of keys (then loop). Leave map targets to the map transforms.
         if tym.is_map_type(self.t1):
             return None
+        elif tym.is_string_type(self.t1):
+            # A `str`/`bytes` target is also structurally `Iterable`, so this would otherwise
+            # steal string targets away from `_map_to_string` (e.g. `{}` -> `'[]'` via an
+            # intermediate list, instead of `'{}'` via `_map_to_string`).
+            return None
         return self.by(list)
 
     def _model_fields(

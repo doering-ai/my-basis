@@ -382,13 +382,22 @@ class Transform[T0, T1]:
     @property
     def _t0(self) -> type[T0]:
         ret = self.t0.root
-        assert isinstance(ret, type), f'Expected root type for t0, got {ret} from {self.t0}'
+        if not isinstance(ret, type):
+            # A transform reaching for the concrete source class got a parametrized/non-type form
+            # (e.g. `list[str]`, whose `.root` is the generic alias, not a plain class). It cannot
+            # proceed -- decline so the loop tries a more general candidate. Latent-bug note: the
+            # old blanket `suppress(Exception)` ate the AssertionError this used to raise, so the
+            # model transforms (`_model_to_model`, `_model_to_object`) were silently declining
+            # every parametrized-container source anyway; this just names that outcome.
+            raise Decline(f'no concrete root type for t0: {self.t0}')
         return ret
 
     @property
     def _t1(self) -> type[T1]:
         ret = self.t1.root
-        assert isinstance(ret, type), f'Expected root type for t1, got {ret} from {self.t1}'
+        if not isinstance(ret, type):
+            # See `_t0`: a parametrized/non-type target has no plain-class root to build from.
+            raise Decline(f'no concrete root type for t1: {self.t1}')
         return ret
 
     def _finalize(self, data: object) -> T1 | None:
@@ -539,8 +548,14 @@ class Transform[T0, T1]:
                 _timedelta=_to_timedelta,
             )
 
-        # III. Fall back to an external, flexible library
-        if d := dateutil.parser.parse(data):
+        # III. Fall back to an external, flexible library. `parse` raises `ParserError` (a
+        # `ValueError` subclass) on any string it can't read as a date -- that is a decline, not a
+        # crash: fall through to `return None` so a non-date string moves to the next candidate.
+        try:
+            d = dateutil.parser.parse(data)
+        except (ValueError, OverflowError):
+            return None
+        if d:
             d = d.replace(tzinfo=UTC)
             return self._type_branch(
                 self._t1,
@@ -753,6 +768,15 @@ class Transform[T0, T1]:
             return
         elif match := self.RGXS['csv'].fullmatch(text.strip()):
             raw_members = match.captures('w')
+            if len(raw_members) < 2:
+                # A single word (`'READ'`) is one flag member, not a combination -- leave it to the
+                # more general `_string_to_enum`. Handling it here would `proxy()` the lone word
+                # straight back into this transform (its own csv match is again a single word),
+                # recursing until `RecursionError`. That crash used to be swallowed by the dispatch
+                # loop's blanket suppress, which then fell through to `_string_to_enum` anyway -- so
+                # every single-member flag string paid a full recurse-to-limit-and-unwind before
+                # resolving. Declining up front does the same thing, correctly and cheaply.
+                return None
             members = ut.condense(map(self.proxy, raw_members))
             if len(members) == len(raw_members):
                 _head, *_rest = members
@@ -962,6 +986,13 @@ class Transform[T0, T1]:
 
     @register
     def _map_to_map[S: Map, T: Map](self: Transform[S, T]) -> Map | None:
+        if not tym.is_map_type(self.t1):
+            # A model target (e.g. a pydantic `BaseModel` subclass like `MatchData`) matches the
+            # broad `Map` bound but is not a mapping constructor: the closing `cls(data)` would be
+            # `Model(dict)`, which pydantic rejects (`TypeError: takes 1 positional argument`).
+            # Leave genuine models to `_object_to_model`. (Formerly this crash was swallowed by the
+            # dispatch loop's blanket suppress, which then fell through to that transform anyway.)
+            return None
         if not (items := ut.map_items(self.data)):
             return None if items is None else dict()
 

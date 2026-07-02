@@ -888,7 +888,16 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
         # I. Coerce to signature if needed
         if not isinstance(sig, inspect.Signature):
             assert callable(sig), f'Invalid function provided: {sig}'
-            sig = inspect.signature(sig)
+            try:
+                sig = inspect.signature(sig)
+            except (ValueError, TypeError):
+                # Some builtins (`dict`, `int`, ...) have no introspectable signature -- Python
+                # raises `ValueError: no signature found for builtin type`. "Can't read its
+                # signature" means "can't validate a call to it": report not-invocable (None)
+                # rather than letting the ValueError escape. `_object_to_model` relies on this to
+                # decline builtin targets instead of crashing (the crash was formerly swallowed by
+                # the cast loop's blanket suppress).
+                return None
 
         # II. Attempt to bind the arguments to the signature
         binding = cls._attempt_binding(sig, args, kwargs)

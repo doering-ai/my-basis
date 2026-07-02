@@ -19,7 +19,7 @@ import warnings
 import my.regex as _regex
 from my.files import Markdown
 from my.regex import *  # noqa: F403
-from my.regex import RegexStore, RegexVal
+from my.regex import RegexDef, RegexList, RegexParser, RegexStore, RegexTup, RegexVal
 from my.types import Buffer, Span
 
 warnings.warn(
@@ -31,6 +31,21 @@ warnings.warn(
 
 #: Unambiguous old -> new symbol aliases.
 RgxVal = RegexVal
+RgxParser = RegexParser
+RgxTup = RegexTup
+RgxList = RegexList
+RgxDef = RegexDef
 format_url = RegexStore.format_url
 
-__all__ = [*_regex.__all__, 'Buffer', 'Span', 'Markdown', 'RgxVal', 'format_url']
+__all__ = [
+    *_regex.__all__,
+    'Buffer',
+    'Span',
+    'Markdown',
+    'RgxVal',
+    'RgxParser',
+    'RgxTup',
+    'RgxList',
+    'RgxDef',
+    'format_url',
+]

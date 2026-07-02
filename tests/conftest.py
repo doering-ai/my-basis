@@ -65,6 +65,26 @@ def to_tuple(arg: object, base_type: type) -> tuple:
     return (arg,) if (not isinstance(arg, tuple) or isinstance(arg, base_type)) else arg
 
 
+def type_ids(cases: list[tuple], index: int = -2) -> list[str]:
+    """Derive readable pytest ids from the target-type element of each parametrize case.
+
+    Large parametrize matrices (60+ rows) otherwise collapse any non-scalar leading argument
+    (a list, dict, set, ...) to an opaque `dataN` id, which makes failures/selection painful to
+    read (`test_check[data37-target37]`). Stringifying just the target-type element gives every
+    case a readable id -- collisions (several rows sharing one target type) are still resolved by
+    pytest's own numeric-suffix de-duplication, which is far more legible than a blanket `dataN`.
+
+    Args:
+        cases: Parameter tuples as passed to `@pyt.mark.parametrize`.
+        index: Position of the target-type argument within each tuple. Defaults to the
+            second-to-last slot, matching this suite's `data, tvar/target, expected` convention.
+
+    Returns:
+        One id string per case, suitable for `@pyt.mark.parametrize(..., ids=type_ids(CASES))`.
+    """
+    return [tvar.__name__ if isinstance(tvar := case[index], type) else str(tvar) for case in cases]
+
+
 def boolmap(
     *,
     false: list | None = None,

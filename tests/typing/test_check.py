@@ -15,7 +15,7 @@ import pydantic as pyd
 
 ### INTERNAL
 from my.typing import MyType, TypeCheck, typist
-from ..conftest import boolmap
+from ..conftest import boolmap, type_ids
 
 ############
 ### DATA ###
@@ -143,12 +143,12 @@ class TestCheck:
     # ------------------
     # `*` Primary Methods
     # ------------------
-    @pyt.mark.parametrize('data, tvar, expected', CHECK_CASES)
+    @pyt.mark.parametrize('data, tvar, expected', CHECK_CASES, ids=type_ids(CHECK_CASES))
     def test_check(self, data, tvar: type, expected: bool):
         """Test `tyc.check` directly against the data/type matrix."""
         assert cls.check(data, tvar) == expected
 
-    @pyt.mark.parametrize('data, tvar, expected', CHECK_CASES)
+    @pyt.mark.parametrize('data, tvar, expected', CHECK_CASES, ids=type_ids(CHECK_CASES))
     def test_check__via_mytype(self, data, tvar: type, expected: bool):
         """Test the same matrix through the `MyType.check` delegation surface."""
         assert MyType.parse(tvar).check(data) == expected

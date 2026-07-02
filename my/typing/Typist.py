@@ -796,6 +796,14 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
         """Load & cast data from a TOML file or string. See `ut.from_toml()`."""
         return ut.from_toml(file, tvar, cast)
 
+    @overload
+    def from_pickle(self, file: FileParam) -> dict: ...
+    @overload
+    def from_pickle(self, file: FileParam, tvar: type[F], cast: bool = True) -> F: ...
+    def from_pickle(self, file: FileParam, tvar: type = dict, cast: bool = True) -> Any:
+        """Load & cast data from a Pickle file or bytes. See `ut.from_pickle()`."""
+        return ut.from_pickle(file, tvar, cast)
+
     def to_file(self, data: Atom | Struct, file: str | File) -> None:
         """Save data to a local JSON/YAML/TOML/Pickle file. See `ut.to_file()`."""
         return ut.to_file(data, file)
@@ -811,6 +819,10 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
     def to_toml(self, data: Atom | Struct, wrap: bool = False, **kwargs) -> str:
         """Serialize data to a TOML string. See `ut.to_toml()`."""
         return ut.to_toml(data, wrap, **kwargs)
+
+    def to_pickle(self, data: Atom | Struct, **kwargs) -> bytes:
+        """Serialize data to Pickle bytes. See `ut.to_pickle()`."""
+        return ut.to_pickle(data, **kwargs)
 
     # ---------------
     # `*6` INVOCATION

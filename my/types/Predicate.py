@@ -68,10 +68,11 @@ class Predicate(pyd.BaseModel):
         **kwargs,
     ) -> Self:
         """Construct a new Predicate instance, flexibly coercing most mapping-like objects."""
-        if len(args) == 1 and isinstance(args[0], cls):
+        if len(args) == 1 and isinstance(args[0], cls) and not kwargs:
             # A copy, not the same instance -- otherwise a caller mutating the result (e.g. via
-            # __setitem__) would silently corrupt whatever Predicate they passed in.
-            return args[0].model_copy(deep=True)
+            # __setitem__) would silently corrupt whatever Predicate they passed in. Update
+            # duplicates/overwrite to the caller's requested values rather than the source's.
+            return args[0].model_copy(deep=True, update=dict(duplicates=duplicates, overwrite=overwrite))
 
         ret = cls(duplicates=duplicates, overwrite=overwrite)
         for arg in (*args, kwargs):

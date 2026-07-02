@@ -574,7 +574,8 @@ class Transform[T0, T1]:
             elif char := next(filter(text.__contains__, [',', '//', ':', '.']), ''):
                 # II. Split on common delimiters in order of preference
                 #     e.g. one.oneA:two splits on colons, but one.oneA splits on periods
-                return list(filter(bool, map(str.strip, text.split(char))))
+                parts = list(filter(bool, map(str.strip, text.split(char))))
+                return self.ty.multicast(parts, self.t1.vals) if self.t1.vals else parts
 
         if self.ty.wraps:
             return [text]

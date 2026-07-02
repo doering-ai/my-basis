@@ -84,6 +84,7 @@ test = [
   "coverage>=7.10.5",
   "pytest-asyncio>=1.1.0",
   "pytest-cov>=6.2.1",
+  "pytest-timeout>=2.4.0",
   "pytest>=8.4.1",
   "syrupy>=5.1.0",
 ]
@@ -126,8 +127,11 @@ sync-docs = "my.scripts.sync_docs:main"
 # -------
 # Testing
 # -------
-[tool.pytest]
+[tool.pytest.ini_options]
 testpaths = ["tests"]
+# No unit test in this library should legitimately run anywhere near this long; a test
+# exceeding it means an infinite loop/recursion, not slow I/O -- fail fast instead of hanging.
+timeout = 15
 
 [tool.coverage.report]
 # Regexes for lines to exclude from consideration

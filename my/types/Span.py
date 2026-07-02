@@ -115,9 +115,11 @@ class Span[T: Real](tuple[T, T]):
 
         elif isinstance(data, Iterable):
             # IV. Handle numeric input with second argument
-            a0, a1 = mi.padded((ty.cast(d, tvar) for d in mi.take(2, data)), zero, 2)
-            if a0 is not None and a1 is not None:
-                return a0, a1
+            items = list(data)
+            if len(items) <= 2:
+                a0, a1 = mi.padded((ty.cast(d, tvar) for d in items), zero, 2)
+                if a0 is not None and a1 is not None:
+                    return a0, a1
 
         raise ValueError(f'Invalid first argument for Span: {data=}, t0={type(data)}, {tvar=})')
 

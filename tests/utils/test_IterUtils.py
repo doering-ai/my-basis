@@ -188,14 +188,14 @@ class TestIterUtils:
             ({}, ['a'], None, False, None),  # Empty dict
         ],
     )
-    def test_get_any(
+    def test_get_first(
         self, dictionary: dict, keys: list[str], default: Any, unique: bool, expected: Any
     ):
-        assert cls.get_any(dictionary, *keys, default=default, unique=unique) == expected
+        assert cls.get_first(dictionary, *keys, default=default, unique=unique) == expected
 
-    def test_get_any_unique_error(self):
+    def test_get_first_unique_error(self):
         with pyt.raises(ValueError, match='Multiple keys found'):
-            cls.get_any({'a': 1, 'b': 2}, 'a', 'b', unique=True)
+            cls.get_first({'a': 1, 'b': 2}, 'a', 'b', unique=True)
 
     # ---------------
     # `2` APPLICATION

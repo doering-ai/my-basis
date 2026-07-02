@@ -316,22 +316,31 @@ class IterUtils(_UtilsBase):
 
     @overload
     @classmethod
-    def get_first[K, V](cls, data: _Map[K, V], *args: K | Callable[[K], bool], default: V) -> V: ...
+    def get_first[K, V](
+        cls, data: _Map[K, V], *args: K | Callable[[K], bool], default: V, unique: bool = False
+    ) -> V: ...
     @overload
     @classmethod
-    def get_first[K, V](cls, data: _Map[K, V], *args: K | Callable[[K], bool]) -> V | None: ...
+    def get_first[K, V](
+        cls, data: _Map[K, V], *args: K | Callable[[K], bool], unique: bool = False
+    ) -> V | None: ...
     @overload
     @classmethod
-    def get_first[V](cls, data: Iterable[V], *args: V | Callable[[V], bool], default: V) -> V: ...
+    def get_first[V](
+        cls, data: Iterable[V], *args: V | Callable[[V], bool], default: V, unique: bool = False
+    ) -> V: ...
     @overload
     @classmethod
-    def get_first[V](cls, data: Iterable[V], *args: V | Callable[[V], bool]) -> V | None: ...
+    def get_first[V](
+        cls, data: Iterable[V], *args: V | Callable[[V], bool], unique: bool = False
+    ) -> V | None: ...
     @classmethod
     def get_first(
         cls,
         data: Struct | Iterator,
         *args: object,
         default: object | None = None,
+        unique: bool = False,
     ) -> object | None:
         """Get value for first matching value from the container.
 
@@ -349,13 +358,16 @@ class IterUtils(_UtilsBase):
         if isinstance(data, AsyncIterator):
             return aio.run(cls._async_exhaust(data, *preds, default=default))
         elif isinstance(data, Iterator):
-            return next((item for item, pred in it.product(data, preds) if pred(item)), default)
+            matches = list(dict.fromkeys(item for item, pred in it.product(data, preds) if pred(item)))
+            if unique and len(matches) > 1:
+                raise ValueError(f'Multiple keys found: {matches}')
+            return matches[0] if matches else default
         elif cls.ty.is_map(data):
             data = dict(data)
-            for key, pred in it.product(data, preds):
-                if pred(key):
-                    return data[key]
-            return default
+            matches = list(dict.fromkeys(key for key, pred in it.product(data, preds) if pred(key)))
+            if unique and len(matches) > 1:
+                raise ValueError(f'Multiple keys found: {matches}')
+            return data[matches[0]] if matches else default
 
     @classmethod
     async def _async_exhaust(

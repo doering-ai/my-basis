@@ -54,7 +54,9 @@ class TestMyType:
         """Helper method for checking expectations against an instance."""
         # I.i. Handle expectations of failure and invalid instances
         if exp is None:
-            assert inst is None
+            # `inst` may be a literal `None` (unset `vals`/`keys`) or a falsy `MyType` (an
+            # unhandled/`NoneType` split-union arg) -- both denote "nothing meaningful here".
+            assert not inst
             return
         else:
             assert inst is not None

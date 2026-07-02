@@ -934,11 +934,14 @@ class Transform[T0, T1]:
             # III. Cast items as tuples of (key, value) pairs
             return self.proxy(self.map_items)
         elif tym.is_atom_type(v1):
-            # IV. Just take values or keys if either matches
+            # IV. Just take values or keys if either matches -- neither matching means this map's
+            #     values/keys have no sensible atomic representation, so decline rather than
+            #     falling through to `proxy()` and producing a garbage all-`None` cast.
             if tym.match(v0, v1):
                 return [v for _, v in self.map_items]
             elif tym.match(self.t0.keys, self.t1.vals):
                 return [k for k, _ in self.map_items]
+            return None
 
         return self.proxy(self.map_items)
 
@@ -987,7 +990,15 @@ class Transform[T0, T1]:
             ret = list(data)
 
         if self.t1.vals:
-            return self.ty.multicast(ret, self.t1.vals)
+            cast_ret = self.ty.multicast(ret, self.t1.vals)
+            if ret and all(v is not None and c is None for v, c in zip(ret, cast_ret)):
+                # Every element had a real value but failed to cast -- this isn't a partial
+                # cast (which legitimately keeps `None` placeholders for already-`None`
+                # elements), it's the wrong element type entirely. Decline so the engine can
+                # fall through to another candidate (or fail outright) instead of returning an
+                # all-`None` list that looks like a successful cast.
+                return None
+            return cast_ret
         return ret
 
     @register

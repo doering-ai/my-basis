@@ -55,9 +55,24 @@ class TestMyType:
         """Helper method for checking expectations against an instance."""
         # I.i. Handle expectations of failure and invalid instances
         if exp is None:
-            # `inst` may be a literal `None` (unset `vals`/`keys`) or a falsy `MyType` (an
-            # unhandled/`NoneType` split-union arg) -- both denote "nothing meaningful here".
+            # `inst` may be a literal `None` (unset `vals`/`keys`) or a falsy `MyType` (a
+            # genuinely inert/unhandled special form, e.g. `Coroutine`, or an unconstrained `Any`
+            # slot) -- both denote "nothing meaningful here". This is NOT the same as a union arg
+            # whose *original annotation* was `NoneType`/`None` itself (e.g. the second arg of
+            # `Optional[str]`) -- use the explicit `types.NoneType` sentinel below for that case
+            # instead (see its comment for why `.main`/`.root` can't tell the two apart).
             assert not inst
+            return
+        elif exp is types.NoneType:
+            # Explicit vocabulary for "this union arg's original annotation was `NoneType`/`None`
+            # itself", as distinct from an inert/unhandled form that merely *normalized* to the
+            # null type. NOTE: `.main`/`.root` are NOT usable here -- `_process_root` funnels every
+            # `Metatype.NEVER` form (Coroutine, Generator, Callable, ...) to `root=NoneType` too,
+            # so both cases are `main is None` / `root is NoneType` and behave identically under
+            # `.check()`. Only `.raw` (the pre-normalization original value) still tells them
+            # apart. Do NOT collapse this back into `assert not inst`.
+            assert inst is not None
+            assert inst.raw is types.NoneType
             return
         else:
             assert inst is not None
@@ -254,8 +269,8 @@ class TestMyType:
             ((str, int, float), [str, int, float]),
             ((dict[str, int], int), [(dict, str, int), int]),
             # ---- Complex unions with nested generics ----
-            (Optional[str], [str, None]),  # noqa: UP045
-            (Optional[list[int]], [(list, int), None]),  # noqa: UP045
+            (Optional[str], [str, types.NoneType]),  # noqa: UP045
+            (Optional[list[int]], [(list, int), types.NoneType]),  # noqa: UP045
             (list[int] | dict[str, list[int]], [(list, int), (dict, str, (list, int))]),
         ],
     )

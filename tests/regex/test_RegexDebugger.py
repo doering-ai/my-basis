@@ -3,6 +3,8 @@
 ############
 ### STANDARD
 # from typing import Any
+import subprocess as sbp
+import sys
 
 ### EXTERNAL
 import regex as re
@@ -389,3 +391,24 @@ class TestRegexDebugger:
             # Should be able to get compiled pattern
             pattern = debugger[name]
             assert isinstance(pattern, re.Pattern)
+
+    def test_pytest_import_is_lazy(self):
+        """Regression test for basis-15 (ADDENDUM): `RegexDebugger.pytest()`'s `import pytest as
+        pyt` must be local to that classmethod, not module-level. `my.apis.Environment` pulls
+        `my.regex.__init__` (and therefore this module) into every plain `import my`, and
+        downstream consumers without pytest installed -- basis 0.2.0 dropped the `test` extra
+        that used to smuggle it in -- would otherwise crash on import.
+
+        Runs in a subprocess so it reflects a fresh interpreter's `sys.modules`, not this test
+        process's (which already has pytest loaded to run the suite at all).
+        """
+        result = sbp.run(
+            [
+                sys.executable,
+                '-c',
+                "import my.regex; import sys; assert 'pytest' not in sys.modules",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, result.stderr

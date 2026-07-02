@@ -8,7 +8,6 @@ import functools as ft
 
 ### EXTERNAL
 import regex as re
-import pytest as pyt
 
 ### INTERNAL
 from ..infra.types import Vec
@@ -407,6 +406,12 @@ class RegexDebugger(RegexStore):
             expected: Expected result (None for no match, dict for expected captures).
             verbose: Whether to print debug output on failure.
         """
+        # Imported here, not at module scope: this is the only use of `pytest` in `my.regex`,
+        # and `my.apis.Environment` -> `my.regex.__init__` pulls this module into every plain
+        # `import my`. Downstream envs without pytest installed (basis 0.2.0 dropped the old
+        # `test` extra that used to smuggle it in) would otherwise crash on import.
+        import pytest as pyt
+
         if func in ['full', 'poly']:
             func += 'match'
         elif func == 'split':

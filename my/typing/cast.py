@@ -422,7 +422,11 @@ class Transform[T0, T1]:
         # not callable.
         if t1.main is None:
             return None
-        with ctx.suppress(Exception):
+        # Constructing the concrete target from already-coerced data. A `TypeError`/`ValueError`
+        # here means this data simply isn't valid for that constructor -- a decline (pydantic's
+        # `ValidationError` is a `ValueError`, so model construction failures are covered). Any
+        # other exception is an unexpected crash and now reaches the dispatch valve.
+        with ctx.suppress(TypeError, ValueError):
             return t1.main(data) if not isinstance(data, t1.main) else data  # type: ignore[bad-return]
 
     @ft.cached_property
@@ -551,6 +555,7 @@ class Transform[T0, T1]:
         # III. Fall back to an external, flexible library. `parse` raises `ParserError` (a
         # `ValueError` subclass) on any string it can't read as a date -- that is a decline, not a
         # crash: fall through to `return None` so a non-date string moves to the next candidate.
+        d: datetime | None = None
         try:
             d = dateutil.parser.parse(data)
         except (ValueError, OverflowError):
@@ -572,7 +577,10 @@ class Transform[T0, T1]:
         if not (text := self.to(str)):
             return
         if text:
-            with ctx.suppress(Exception):
+            # `from_yaml` raises `ValueError` (srsly wraps YAML parse errors as `ValueError`) or
+            # `TypeError` (its own "not the expected type" guard) when `text` isn't a parseable
+            # mapping -- a decline. Anything else is unexpected and reaches the dispatch valve.
+            with ctx.suppress(ValueError, TypeError):
                 return self.proxy(ut.from_yaml(text, dict))
 
     @register
@@ -582,8 +590,11 @@ class Transform[T0, T1]:
 
         if self.ty.splits:
             if match := self.RGXS['brackets'].fullmatch(text.strip()):
-                # I. Split json/yaml-like flow sequences
-                with ctx.suppress(Exception):
+                # I. Split json/yaml-like flow sequences. A `ValueError`/`TypeError` from
+                #    `from_yaml` (unparseable / not a list) means this bracketed text isn't a flow
+                #    sequence -- suppress narrowly so the `wraps` fallthrough below still runs, and
+                #    any *other* exception surfaces at the dispatch valve instead of being eaten.
+                with ctx.suppress(ValueError, TypeError):
                     return ut.from_yaml(match[0], list[str], cast=False)
             elif '\n' in text:
                 lines = text.splitlines()
@@ -848,8 +859,10 @@ class Transform[T0, T1]:
             return self.proxy(d[0])
         elif len(d) >= 3:
             # II. it's a sequence of 3 or more values, try interpreting the first 3 as time
-            # components
-            with ctx.suppress(Exception):
+            # components. A `TypeError`/`ValueError` means the values don't form a valid
+            # datetime/date/time (wrong arity, out-of-range) -- fall through to `return d`. Any
+            # other exception is unexpected and reaches the dispatch valve.
+            with ctx.suppress(TypeError, ValueError):
                 return self._type_branch(
                     self._t1,
                     _datetime=lambda _t: _t(*d, tzinfo=UTC),

@@ -12,7 +12,7 @@ import collections.abc as abc
 # from .MyType import MyType
 
 
-class Decline(Exception):
+class Decline(Exception):  # noqa: N818  -- control-flow signal, not an error; "Decline" is exact
     """Raised by a cast transform to signal it cannot handle the given pair -- *not* a crash.
 
     The cast dispatch loop (`Transform.__call__`) tries candidate transforms in turn. For years

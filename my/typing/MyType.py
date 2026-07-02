@@ -338,7 +338,12 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
 
             cls.PARSE_CACHE[uid] = ret = cls(root=root, uid=uid)
             return ret
-        except Exception:
+        except (ValueError, TypeError):
+            # An unparseable annotation surfaces as a `TypeError` (e.g. an unhashable `str(root)`)
+            # or a `ValueError` (pydantic `ValidationError` from `cls(...)`); both mean "can't
+            # decompose this type", so degrade to a minimal `MyType(root=root)`. Narrowed from a
+            # blanket `except Exception` so a genuinely-unexpected failure (e.g. `RecursionError`
+            # from a self-referential annotation) propagates instead of being silently swallowed.
             if cls.RAISE or throw:
                 raise
             else:

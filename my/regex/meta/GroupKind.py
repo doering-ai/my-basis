@@ -56,6 +56,21 @@ class GroupKind(MyEnum, Flag):
     @override
     @classmethod
     def read(cls, value: str | int | list | MyEnum) -> 'GroupKind':
+        """Parse a value into a GroupKind, additionally recognizing regex group prefixes.
+
+        Beyond the member names, integers, and lists handled by `MyEnum.read`, strings that are
+        not member names are interpreted as group prefixes: `'('` alone denotes a positional
+        capturing group, while `'(?'`-prefixed strings are matched against the known prefix
+        patterns (e.g. `'(?:'` -> PLAIN, `'(?='` -> AHEAD).
+
+        Args:
+            value: Member name, group prefix string, integer flag value, list of values, or
+                existing enum member. Falsy input yields the empty flag.
+        Returns:
+            Corresponding GroupKind flag.
+        Raises:
+            ValueError: If a string is neither a member name nor a recognized group prefix.
+        """
         if not value:
             return cls(0)
         elif isinstance(value, MyEnum):

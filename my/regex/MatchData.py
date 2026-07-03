@@ -40,6 +40,18 @@ class MatchData(Predicate):
         match: Match | None = None,
         **kwargs: Any,
     ) -> Self:
+        """Construct a new MatchData, coercing mapping-like arguments and binding a source match.
+
+        Duplicates are always enabled so repeated capture groups accumulate their values; empty
+        group names and empty value lists are dropped.
+
+        Args:
+            *args: Mapping-like objects to merge into the captured group data.
+            match: Original regex match object, retained for span/position/text access.
+            **kwargs: Additional group values to merge.
+        Returns:
+            New MatchData holding the merged group data.
+        """
         ret = cls(duplicates=True, overwrite=False, match=match)
         for arg in (*args, kwargs):
             ret._process_arg(arg)

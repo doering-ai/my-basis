@@ -17,25 +17,23 @@ import pydantic as pyd
 class Worker(pyd.BaseModel):
     """Placeholder worker that starts Sublime Text and waits for it to be set up."""
 
-    xxx: str = ""
+    xxx: str = ''
 
     def __call__(self) -> None:
         """Run the worker."""
-        print("Worker()")
+        print('Worker()')
 
 
 ############
 ### MAIN ###
 ############
 def _cli(*vargs: str) -> ap.Namespace:
-    parser = ap.ArgumentParser(
-        description="Startup sublime text and wait for it to be setup."
-    )
+    parser = ap.ArgumentParser(description='Startup sublime text and wait for it to be setup.')
 
     parser.add_argument(
-        "-x",
-        "--xxx",
-        help="yyy",
+        '-x',
+        '--xxx',
+        help='yyy',
     )
 
     return parser.parse_args(vargs or None)
@@ -49,5 +47,5 @@ def main(*vargs: str) -> None:
     worker()
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

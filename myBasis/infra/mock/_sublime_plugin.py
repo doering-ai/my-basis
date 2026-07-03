@@ -30,7 +30,7 @@ class Command:
         """Return the command name derived from the class name (like Sublime Text)."""
         cls_name = type(self).__name__
         if cls_name.endswith('Command'):
-            cls_name = cls_name[:-len('Command')]
+            cls_name = cls_name[: -len('Command')]
         # Convert CamelCase to snake_case
         s = _re.sub(r'(.)([A-Z][a-z]+)', r'\1_\2', cls_name)
         return _re.sub(r'([a-z0-9])([A-Z])', r'\1_\2', s).lower()

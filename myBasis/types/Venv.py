@@ -27,11 +27,11 @@ from ..infra.utils import ut
 ### DATA ###
 ############
 RGXS = ut.rgx_dict(
-    finder_detritus=r"(?i)^_+(?:find)?|_+(?:(?:venv_?)?find(?:er)?)?$",
-    version=r"(\d+)(?:\.(\d+))?(?:\.(\d+))?",
-    venv_map_item=r"(?mi)^\s*venv\s*[:=]\s*(\S.*)$",
+    finder_detritus=r'(?i)^_+(?:find)?|_+(?:(?:venv_?)?find(?:er)?)?$',
+    version=r'(\d+)(?:\.(\d+))?(?:\.(\d+))?',
+    venv_map_item=r'(?mi)^\s*venv\s*[:=]\s*(\S.*)$',
 )
-IS_WINDOWS = os.name == "nt"
+IS_WINDOWS = os.name == 'nt'
 #: How many ancestors `check_path` may probe when the origin is *not* under `Path.home()`.
 MAX_WALK_DEPTH = 8
 
@@ -51,15 +51,15 @@ class Kind(Flag):
 
 
 class Framework(NamedTuple):
-    cmd: str = ""
-    args: str = ""
-    file: str = ""
+    cmd: str = ''
+    args: str = ''
+    file: str = ''
     parent_index: int = 0
     parser: Callable[[str], str] | None = None
 
     @staticmethod
     def _seek_map_item(output: str) -> str:
-        return m[1] if (m := RGXS["venv_map_item"].search(output)) else ""
+        return m[1] if (m := RGXS['venv_map_item'].search(output)) else ''
 
     @property
     def kind(self) -> Kind:
@@ -67,12 +67,12 @@ class Framework(NamedTuple):
 
 
 FRAMEWORKS = [
-    Framework("hatch", "env find", ""),
-    Framework("pdm", "info --python", ".pdm-python", 2),
-    Framework("pipenv", "--py", "Pipfile", 2),
-    Framework("poetry", "env info -p", "poetry.lock"),
-    Framework("pyenv", "which python", "", 2),
-    Framework("rye", "show", "pyproject.toml", 2, Framework._seek_map_item),
+    Framework('hatch', 'env find', ''),
+    Framework('pdm', 'info --python', '.pdm-python', 2),
+    Framework('pipenv', '--py', 'Pipfile', 2),
+    Framework('poetry', 'env info -p', 'poetry.lock'),
+    Framework('pyenv', 'which python', '', 2),
+    Framework('rye', 'show', 'pyproject.toml', 2, Framework._seek_map_item),
 ]
 
 
@@ -93,24 +93,24 @@ class Venv(pyd.BaseModel):
 
     # ---- Independent (arguments) ----
     #: The raw path of the initial path passed to the guess function
-    raw: str = ""
+    raw: str = ''
     #: The window for which this virtual environment was loaded.
     window: ut.WindowField | None = None
     #: The resolved version of the initial path.
-    origin: pyd.DirectoryPath = Path("/")
+    origin: pyd.DirectoryPath = Path('/')
 
     # ---- Dependent (states) ----
     #: The "home" of the environment (i.e. where `pyproject.toml` is)
-    home: pyd.DirectoryPath = Path("/")
+    home: pyd.DirectoryPath = Path('/')
     #: The root of the actual virtual environment. (i.e. where `lib/`  and `bin/` are.)
-    root: pyd.DirectoryPath = Path("/")
+    root: pyd.DirectoryPath = Path('/')
     #: The type of venv that this represents.
     kind: Kind = Kind.NONE
 
     #: The prompt of the virtual environment.
-    prompt: str = ""
+    prompt: str = ''
     #: The Python version of the virtual environment.
-    python_version: str = ""
+    python_version: str = ''
     #: Any available config information from `pyenv.cfg` or `conda info`.
     data: dict[str, Any] = {}
 
@@ -130,10 +130,10 @@ class Venv(pyd.BaseModel):
         Each element is a digit string or ``''`` if that component was absent.
         Raises `ValueError` if `python_version` contains no recognisable version number.
         """
-        match = RGXS["version"].search(self.python_version)
+        match = RGXS['version'].search(self.python_version)
         if not match:
-            raise ValueError(f"Invalid Python version: {self.python_version}")
-        return match[1] or "3", match[2] or "", match[3] or ""
+            raise ValueError(f'Invalid Python version: {self.python_version}')
+        return match[1] or '3', match[2] or '', match[3] or ''
 
     # -------------------
     # `+` Primary Methods
@@ -143,8 +143,8 @@ class Venv(pyd.BaseModel):
 
         Detection is based on the presence of a ``conda-meta/`` directory inside `self.path`.
         """
-        if (self.origin / "conda-meta").is_dir():
-            if _ret := await ut.exa("conda", "info", "--json", cwd=self.origin):
+        if (self.origin / 'conda-meta').is_dir():
+            if _ret := await ut.exa('conda', 'info', '--json', cwd=self.origin):
                 with ctx.suppress(json.JSONDecodeError):
                     return json.loads(_ret)
         return None
@@ -155,10 +155,10 @@ class Venv(pyd.BaseModel):
         The file is parsed with `configparser` after injecting a synthetic ``[USER]`` section
         header, which is the standard technique for INI-like files that lack section names.
         """
-        if (pyenv := self.root / "pyvenv.cfg").is_file():
+        if (pyenv := self.root / 'pyvenv.cfg').is_file():
             config = ConfigParser()
-            config.read_string(f"[USER]\n{pyenv.read_text()}")
-            return dict(config.items("USER"))
+            config.read_string(f'[USER]\n{pyenv.read_text()}')
+            return dict(config.items('USER'))
         return None
 
     async def check_env(self) -> Path | None:
@@ -168,9 +168,9 @@ class Venv(pyd.BaseModel):
             https://packages.sublimetext.io/packages/Virtualenv
         """
         # I. Check VARIABLES
-        if root := os.getenv("CONDA_PREFIX"):
+        if root := os.getenv('CONDA_PREFIX'):
             self.kind = Kind.CONDA
-        elif root := os.getenv("VIRTUAL_ENV"):
+        elif root := os.getenv('VIRTUAL_ENV'):
             self.kind = Kind.VENV
 
         # II. Check SETTINGS
@@ -178,7 +178,7 @@ class Venv(pyd.BaseModel):
             self.window
             and (project := self.window.project_data())
             and isinstance(project, dict)
-            and (root := project.get("virtualenv", ""))
+            and (root := project.get('virtualenv', ''))
         ):
             self.kind = Kind.IDE
         else:
@@ -188,7 +188,7 @@ class Venv(pyd.BaseModel):
         if ut.is_valid_path(root):
             return root
         else:
-            print(f"[WARN] {self.kind} produced invalid root `{root}`")
+            print(f'[WARN] {self.kind} produced invalid root `{root}`')
             return None
 
     async def check_path(self) -> Path | None:
@@ -200,9 +200,7 @@ class Venv(pyd.BaseModel):
         never probes the filesystem anchor (e.g. ``/``) itself.
         """
         # I. List out all our bounded ancestors.
-        assert self.origin and self.origin.is_dir(), (
-            f"Origin path {self.origin} is not valid."
-        )
+        assert self.origin and self.origin.is_dir(), f'Origin path {self.origin} is not valid.'
         _home = Path.home()
         chain = (self.origin, *self.origin.parents)
         if _home in chain:
@@ -211,7 +209,7 @@ class Venv(pyd.BaseModel):
             anchor = Path(self.origin.anchor)
             candidates = [p for p in chain if p != anchor][:MAX_WALK_DEPTH]
         if not candidates:
-            print(f"[DEBUG] No valid candidate paths found for {self.origin}.")
+            print(f'[DEBUG] No valid candidate paths found for {self.origin}.')
             return None
 
         # II. Walk up the tree until one returns a path to its venv
@@ -222,11 +220,9 @@ class Venv(pyd.BaseModel):
                 return root
         return None
 
-    async def _check_candidate(
-        self, path: pyd.DirectoryPath
-    ) -> pyd.DirectoryPath | None:
+    async def _check_candidate(self, path: pyd.DirectoryPath) -> pyd.DirectoryPath | None:
         # I. Any pyvenv-centered frameworks (incl. `uv`) docs.python.org/library/venv.html
-        names = (".venv", "venv")
+        names = ('.venv', 'venv')
         if child := next((p for n in names if (p := path / n).is_dir()), None):
             ret = child
             self.kind = Kind.VENV
@@ -243,16 +239,14 @@ class Venv(pyd.BaseModel):
 
             # II.iii. Apply parser & normalize
             if fw.parser:
-                _ret = fw.parser(_ret or "")
-            _ret = (_ret or "").strip()
+                _ret = fw.parser(_ret or '')
+            _ret = (_ret or '').strip()
             if not _ret:
                 continue
 
             ret = ut.normalize_path(_ret, self.window)
             if not ut.is_valid_path(ret):
-                print(
-                    f"[WARN] Command `{fw.cmd} {fw.args}` returned invalid path `{_ret}`"
-                )
+                print(f'[WARN] Command `{fw.cmd} {fw.args}` returned invalid path `{_ret}`')
                 continue
 
             # II.iii. Adjust for parents
@@ -261,8 +255,8 @@ class Venv(pyd.BaseModel):
                 for _ in range(fw.parent_index):
                     if ret.parent == ret:  # `Path.parent` of a root is itself
                         print(
-                            f"[WARN] Command `{fw.cmd} {fw.args}` returned path `{_ret}` which is "
-                            f"not deep enough for parent index {fw.parent_index}"
+                            f'[WARN] Command `{fw.cmd} {fw.args}` returned path `{_ret}` which is '
+                            f'not deep enough for parent index {fw.parent_index}'
                         )
                         too_shallow = True
                         break
@@ -285,30 +279,30 @@ class Venv(pyd.BaseModel):
     @ft.cached_property
     def bin(self) -> Path:
         """The path of the `bin` directory of the virtual environment."""
-        return self.root / ("Scripts" if IS_WINDOWS else "bin")
+        return self.root / ('Scripts' if IS_WINDOWS else 'bin')
 
     @ft.cached_property
     def lib(self) -> Path:
         """The path of the `lib` directory of the virtual environment."""
-        return self.root / ("Lib" if IS_WINDOWS else "lib")
+        return self.root / ('Lib' if IS_WINDOWS else 'lib')
 
     @ft.cached_property
     def site_packages(self) -> Path:
         """The path of the `site-packages` directory of the virtual environment."""
-        ret = self.lib / "site-packages"
+        ret = self.lib / 'site-packages'
         if not IS_WINDOWS:
             _parts = list(ret.parts)
-            _parts.insert(len(_parts) - 1, f"python{'.'.join(self.clean_version[:2])}")
+            _parts.insert(len(_parts) - 1, f'python{".".join(self.clean_version[:2])}')
             ret = Path(*_parts)
         return ret
 
     @ft.cached_property
     def python_executable(self) -> Path:
         """The path of the Python executable of the virtual environment."""
-        ret = self.bin / "python"
+        ret = self.bin / 'python'
         if IS_WINDOWS:
-            ret = ret.with_suffix(".exe")
-        assert ret.exists() and ret.is_file(), f"Python executable not found at {ret}"
+            ret = ret.with_suffix('.exe')
+        assert ret.exists() and ret.is_file(), f'Python executable not found at {ret}'
         return ret
 
     @property
@@ -346,26 +340,24 @@ class Venv(pyd.BaseModel):
         elif root := await self.check_env():
             self.root = root
         else:
-            print(f"No virtual environment found for {self.origin}.")
+            print(f'No virtual environment found for {self.origin}.')
             return self
 
         # I. Query tools for the binary's path and version, if we can
         if info := await self.get_pyvenv_info():
             # I. General/PEP-backed case, where `pyvenv.cfg` is the origin of truth
-            self.prompt = info.get("prompt", self.root.name)
+            self.prompt = info.get('prompt', self.root.name)
             # `venv` uses "version", and `uv` uses "version_info"
-            self.python_version = str(
-                info.get("version", info.get("version_info", "")) or ""
-            )
+            self.python_version = str(info.get('version', info.get('version_info', '')) or '')
         elif info := await self.get_conda_info():
             # II. Conda-specific case, where we can read the venv's properties from the CLI
-            self.prompt = info.get("active_prefix_name", "")
+            self.prompt = info.get('active_prefix_name', '')
             self.python_version = (
-                info.get("python_version", "")
-                .replace(".alpha.", "a")
-                .replace(".beta.", "b")
-                .replace(".candidate.", "rc")
-                .partition(".final.")[0]
+                info.get('python_version', '')
+                .replace('.alpha.', 'a')
+                .replace('.beta.', 'b')
+                .replace('.candidate.', 'rc')
+                .partition('.final.')[0]
             )
         return self
 
@@ -374,4 +366,4 @@ class Venv(pyd.BaseModel):
         return aio.run(self.find(origin))
 
 
-__all__ = ["Venv"]
+__all__ = ['Venv']

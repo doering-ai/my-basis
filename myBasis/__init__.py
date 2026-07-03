@@ -14,7 +14,7 @@ from .types.DynamicPrompt import DynamicPrompt
 from .types.Comment import Comment
 from .types.Venv import Venv
 from .types.Template import Template
-from .types.PackageSettings import PackageSettings 
+from .types.PackageSettings import PackageSettings
 
 # Plugins
 from .plugins._MyBase import MyBase

@@ -1,5 +1,7 @@
 # `mySublimeBasis`
 
+> **Status:** Pre-launch — under active development. APIs may change before 1.0.
+
 Typed infrastructure for Sublime Text 4 plugin development.
 
 ST4 ships a Python 3.8 runtime with an untyped, stringly-keyed API: commands receive

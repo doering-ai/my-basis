@@ -1,0 +1,30 @@
+# Changes here will be overwritten by Copier
+_commit: v0.1.6
+_src_path: /home/robbd/my/corpus
+build_system: uv
+caption: An extensive utility library for Sublime Text, with modules to interest both
+    novice and veteran plugin developers.
+cicd: true
+current: private
+deps: []
+host: gitlab.com
+host_group: doering-ai
+host_path: sublime/basis
+license: MPL-2.0
+package: Basis
+path: sublime/basis
+pc_no_zip: true
+pc_uid: Basis
+planned: launch
+pod: ' own '
+precommit: true
+priority: P1
+pyver: 8
+rtd_uid: basis
+tagline: ''
+tags:
+- py
+- sublime
+title: Basis
+uid: basis
+variety: Sublime Plugin

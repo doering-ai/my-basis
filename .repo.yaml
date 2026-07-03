@@ -16,7 +16,7 @@ path: sublime/basis
 pc_no_zip: true
 pc_uid: Basis
 planned: launch
-pod: ' own '
+pod: registry.gitlab.com/doering-ai/sublime/test:latest
 precommit: true
 priority: P1
 pyver: 8

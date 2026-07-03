@@ -1,0 +1,56 @@
+default_language_version:
+    python: 3.13
+
+repos:
+    # --------------------
+    # Basic Imported Hooks
+    # --------------------
+    - repo: https://github.com/pre-commit/pre-commit-hooks
+      rev: v6.0.0
+      hooks:
+        - {id: "check-yaml"}
+        - {id: "check-toml"}
+        - {id: "check-added-large-files"}
+        - {id: "end-of-file-fixer"}
+        - {id: "trailing-whitespace"}
+    # ----------
+    # Ruff Hooks
+    # ----------
+    - repo: https://github.com/astral-sh/ruff-pre-commit
+      rev: v0.15.12
+      hooks:
+        - id: ruff-check
+        - id: ruff-format
+    # ------------------
+    # Local Custom Hooks
+    # ------------------
+    - repo: local
+      hooks:
+        - id: sync-corpus-policies
+          name: Sync corpus policies
+          entry: sync-policies
+          language: python
+          pass_filenames: false
+          always_run: true
+          args: [--quiet]
+        - id: sync-corpus-agents
+          name: Sync corpus agents
+          entry: sync-agents
+          language: python
+          pass_filenames: false
+          always_run: true
+          args: [--quiet]
+        - id: check-sync
+          name: Check that uv is synced and locked.
+          language: system
+          files: '(pyproject.toml|uv.lock)$'
+          pass_filenames: false
+          entry: uv lock --check
+        - id: format
+          name: Reformat changed files
+          language: system
+          files: '\.(?i:py|ya?ml|to?ml|md|sublime-\w+|jso?nc?)$'
+          pass_filenames: false
+          entry: task eval:format
+
+

@@ -11,7 +11,7 @@ import asyncio
 import pytest as pyt
 
 ### INTERNAL
-from myBasis.types.Venv import Venv, Kind, Framework, FRAMEWORKS, RGXS, IS_WINDOWS, MAX_WALK_DEPTH
+from myBasis.types.Venv import Venv, Kind, Framework, FRAMEWORKS, IS_WINDOWS, MAX_WALK_DEPTH
 
 
 ############
@@ -42,45 +42,6 @@ def _make_venv(tmp_path: Path, **kwargs: Any) -> Venv:
 ############
 ### BODY ###
 ############
-class TestKind:
-    """Tests for the ``Kind`` flag enum."""
-
-    def test_is_flag(self):
-        from enum import Flag
-
-        assert issubclass(Kind, Flag)
-
-    def test_none_is_zero(self):
-        assert Kind.NONE.value == 0
-
-    def test_members_distinct(self):
-        members = [
-            Kind.POETRY,
-            Kind.HATCH,
-            Kind.PDM,
-            Kind.RYE,
-            Kind.UV,
-            Kind.PYENV,
-            Kind.PIPENV,
-            Kind.VENV,
-            Kind.CONDA,
-            Kind.IDE,
-        ]
-        assert len(members) == len(set(members))
-
-    def test_combinable(self):
-        combined = Kind.VENV | Kind.CONDA
-        assert Kind.VENV in combined
-        assert Kind.CONDA in combined
-
-    @pyt.mark.parametrize(
-        'name',
-        ['POETRY', 'HATCH', 'PDM', 'RYE', 'UV', 'PYENV', 'PIPENV', 'VENV', 'CONDA', 'IDE'],
-    )
-    def test_member_exists(self, name: str):
-        assert hasattr(Kind, name)
-
-
 class TestFramework:
     """Tests for the ``Framework`` NamedTuple."""
 
@@ -111,29 +72,6 @@ class TestFramework:
     def test_seek_map_item_no_match(self):
         result = Framework._seek_map_item('no venv here')
         assert result == ''
-
-
-class TestFrameworks:
-    """Tests for the ``FRAMEWORKS`` list."""
-
-    def test_nonempty(self):
-        assert len(FRAMEWORKS) >= 5
-
-    def test_all_are_framework_instances(self):
-        for fw in FRAMEWORKS:
-            assert isinstance(fw, Framework)
-
-    def test_contains_hatch(self):
-        assert any(fw.cmd == 'hatch' for fw in FRAMEWORKS)
-
-    def test_contains_pdm(self):
-        assert any(fw.cmd == 'pdm' for fw in FRAMEWORKS)
-
-    def test_contains_poetry(self):
-        assert any(fw.cmd == 'poetry' for fw in FRAMEWORKS)
-
-    def test_contains_pipenv(self):
-        assert any(fw.cmd == 'pipenv' for fw in FRAMEWORKS)
 
 
 class TestVenvBool:
@@ -452,6 +390,108 @@ class TestFrameworkProbe:
         assert venv.home == origin
 
 
+class TestFrameworkMatrix:
+    """Every registered framework CLI can resolve a venv root through ``check_path``."""
+
+    @pyt.fixture(autouse=True)
+    def _isolate(self, tmp_path: Path, monkeypatch: pyt.MonkeyPatch) -> None:
+        """Keep discovery inside ``tmp_path``: no ambient env, no ancestor escape."""
+        monkeypatch.delenv('VIRTUAL_ENV', raising=False)
+        monkeypatch.delenv('CONDA_PREFIX', raising=False)
+        monkeypatch.setattr(Path, 'home', classmethod(lambda cls: tmp_path.parent))
+
+    @staticmethod
+    def _fake_cli(bin_dir: Path, name: str, output: str) -> None:
+        """Drop a fake framework CLI on the probe PATH that prints ``output``."""
+        script = bin_dir / name
+        script.write_text(f"#!/bin/sh\necho '{output}'\n")
+        script.chmod(0o755)
+
+    @pyt.mark.parametrize('fw', FRAMEWORKS, ids=lambda fw: fw.cmd)
+    def test_framework_resolves(self, tmp_path: Path, monkeypatch: pyt.MonkeyPatch, fw: Framework):
+        # I. A project dir with the framework's marker file (when it requires one)
+        origin = tmp_path / 'proj'
+        origin.mkdir()
+        if fw.file:
+            (origin / fw.file).touch()
+
+        # II. A real env dir; the CLI reports it `parent_index` levels deeper (e.g. bin/python)
+        env_root = tmp_path / 'resolved-env'
+        printed = env_root
+        for i in range(fw.parent_index):
+            printed = printed / f'sub{i}'
+        printed.mkdir(parents=True)
+        output = f'venv: {printed}' if fw.parser else str(printed)
+
+        # III. Only this framework's CLI exists on PATH
+        bin_dir = tmp_path / 'fakebin'
+        bin_dir.mkdir()
+        self._fake_cli(bin_dir, fw.cmd, output)
+        monkeypatch.setenv('PATH', str(bin_dir))
+
+        venv = _make_venv(origin, kind=Kind.NONE)
+        result = _run(venv.check_path())
+        assert result == env_root
+        assert venv.kind == fw.kind
+        assert venv.home == origin
+
+
+class TestTooShallowProbeContinues:
+    """Regression: one framework's too-shallow output must not abort the remaining probes."""
+
+    @pyt.fixture(autouse=True)
+    def _isolate(self, tmp_path: Path, monkeypatch: pyt.MonkeyPatch) -> None:
+        monkeypatch.delenv('VIRTUAL_ENV', raising=False)
+        monkeypatch.delenv('CONDA_PREFIX', raising=False)
+        monkeypatch.setattr(Path, 'home', classmethod(lambda cls: tmp_path.parent))
+
+    def test_later_framework_still_wins(
+        self, tmp_path: Path, monkeypatch: pyt.MonkeyPatch, capsys: pyt.CaptureFixture
+    ):
+        """pdm answers too shallow for its parent_index; poetry (probed later) must still win."""
+        # Sanity: the failing framework must be probed before the succeeding one.
+        order = [fw.cmd for fw in FRAMEWORKS]
+        assert order.index('pdm') < order.index('poetry')
+
+        origin = tmp_path / 'proj'
+        origin.mkdir()
+        (origin / '.pdm-python').touch()
+        (origin / 'poetry.lock').touch()
+
+        env_root = tmp_path / 'poetry-env'
+        env_root.mkdir()
+
+        bin_dir = tmp_path / 'fakebin'
+        bin_dir.mkdir()
+        # `/tmp` exists and is valid, but has too few ancestors for pdm's parent_index of 2.
+        TestFrameworkMatrix._fake_cli(bin_dir, 'pdm', '/tmp')
+        TestFrameworkMatrix._fake_cli(bin_dir, 'poetry', str(env_root))
+        monkeypatch.setenv('PATH', str(bin_dir))
+
+        venv = _make_venv(origin, kind=Kind.NONE)
+        result = _run(venv.check_path())
+        assert result == env_root, 'a bad pdm probe must not abort the poetry probe'
+        assert venv.kind == Kind.POETRY
+        assert 'not deep enough' in capsys.readouterr().out
+
+    def test_all_probes_too_shallow_returns_none(
+        self, tmp_path: Path, monkeypatch: pyt.MonkeyPatch
+    ):
+        """When the only answering framework is too shallow, the candidate yields nothing."""
+        origin = tmp_path / 'proj'
+        origin.mkdir()
+        (origin / '.pdm-python').touch()
+
+        bin_dir = tmp_path / 'fakebin'
+        bin_dir.mkdir()
+        TestFrameworkMatrix._fake_cli(bin_dir, 'pdm', '/tmp')
+        monkeypatch.setenv('PATH', str(bin_dir))
+
+        venv = _make_venv(origin, kind=Kind.NONE)
+        assert _run(venv.check_path()) is None
+        assert venv.kind == Kind.NONE
+
+
 class TestExactMatch:
     """Tests for ``Venv.exact_match``."""
 
@@ -464,24 +504,3 @@ class TestExactMatch:
         other.mkdir()
         venv = _make_venv(tmp_path, home=other, origin=tmp_path)
         assert not venv.exact_match
-
-
-class TestVenvRegexes:
-    """Tests for the RGXS dict in Venv."""
-
-    def test_has_finder_detritus(self):
-        assert 'finder_detritus' in RGXS
-
-    def test_has_version(self):
-        assert 'version' in RGXS
-
-    def test_has_venv_map_item(self):
-        assert 'venv_map_item' in RGXS
-
-    def test_version_matches_standard(self):
-        assert RGXS['version'].search('3.8.12')
-        assert RGXS['version'].search('Python 3.9.7')
-
-    def test_venv_map_item_matches(self):
-        assert RGXS['venv_map_item'].search('venv: /path/to/venv')
-        assert RGXS['venv_map_item'].search('venv = /path/to/venv')

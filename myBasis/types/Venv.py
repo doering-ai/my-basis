@@ -257,14 +257,19 @@ class Venv(pyd.BaseModel):
 
             # II.iii. Adjust for parents
             if fw.parent_index:
+                too_shallow = False
                 for _ in range(fw.parent_index):
                     if ret.parent == ret:  # `Path.parent` of a root is itself
                         print(
                             f"[WARN] Command `{fw.cmd} {fw.args}` returned path `{_ret}` which is "
                             f"not deep enough for parent index {fw.parent_index}"
                         )
-                        return None
+                        too_shallow = True
+                        break
                     ret = ret.parent
+                if too_shallow:
+                    # One framework's bad output must not abort the probes of the remaining ones.
+                    continue
 
             self.kind = fw.kind
             return ret

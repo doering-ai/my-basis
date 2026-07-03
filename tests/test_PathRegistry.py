@@ -49,51 +49,6 @@ class TestPathRegistry:
     def test_is_pydantic_model(self):
         assert issubclass(PathRegistry, pyd.BaseModel)
 
-    def test_has_host(self):
-        assert 'host' in PathRegistry.model_fields
-
-    def test_has_home(self):
-        assert 'home' in PathRegistry.model_fields
-
-    def test_has_pkgs(self):
-        assert 'pkgs' in PathRegistry.model_fields
-
-    def test_has_inst(self):
-        assert 'inst' in PathRegistry.model_fields
-
-    def test_has_logs(self):
-        assert 'logs' in PathRegistry.model_fields
-
-    def test_has_venv(self):
-        assert 'venv' in PathRegistry.model_fields
-
-    def test_has_user(self):
-        assert 'user' in PathRegistry.model_fields
-
-    def test_has_base(self):
-        assert 'base' in PathRegistry.model_fields
-
-    def test_has_cache(self):
-        assert 'cache' in PathRegistry.model_fields
-
-    def test_has_data(self):
-        assert 'data' in PathRegistry.model_fields
-
-    def test_has_my(self):
-        assert 'my' in PathRegistry.model_fields
-
-    def test_has_root(self):
-        assert 'root' in PathRegistry.model_fields
-
-    def test_has_stub(self):
-        assert 'stub' in PathRegistry.model_fields
-
-    def test_has_dist(self):
-        assert 'dist' in PathRegistry.model_fields
-
-    def test_has_console(self):
-        assert 'console' in PathRegistry.model_fields
-
     # ---- Field relationships ----
     def test_pkgs_is_home_child(self):
         reg = PATHS

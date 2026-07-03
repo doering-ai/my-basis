@@ -395,6 +395,7 @@ class OutputPanel(pyd.BaseModel):
             if style.span > -1:
                 ret = f'</span>{ret}'
             style.span = pos
+            style.span_val = new_color
             return ret
         return ''
 

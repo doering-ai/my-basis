@@ -360,6 +360,9 @@ _GLOBAL_SETTINGS = Settings()
 #: A map of command names to `callable(view, args)` functions; extend as needed.
 MOCK_COMMANDS: dict = {}
 
+#: Registry of every constructed Window, mirroring the real `sublime.windows()` roster.
+_WINDOWS: list = []
+
 
 class View:
     """Mock view backed by a Buffer.
@@ -380,6 +383,7 @@ class View:
     def __init__(self, id: int | None = None, window: 'Window | None' = None) -> None:
         self.view_id = id if id is not None else next(self._ID_COUNTER)
         self._buf = Buffer()
+        self._buf._views.append(self)
         self.selection = Selection(self.view_id)
         self.selection.add(Region(0, 0))  # start with a cursor at 0
         self.settings_object = _GLOBAL_SETTINGS
@@ -388,6 +392,7 @@ class View:
         self._window = window
         self._change_count = 0
         self._syntax_path: str = ''
+        self._sheet: 'Sheet | None' = None
 
     # --------
     # Identity
@@ -420,10 +425,29 @@ class View:
         return None
 
     def close(self) -> None:
-        pass
+        """Close this view, detaching it from its window and buffer (like the real API)."""
+        if self in self._buf._views:
+            self._buf._views.remove(self)
+        if self._window is not None:
+            self._window._detach_view(self)
 
     def window(self) -> 'Window | None':
         return self._window
+
+    def buffer(self) -> Buffer:
+        """The ``sublime.Buffer`` backing this view."""
+        return self._buf
+
+    def buffer_id(self) -> int:
+        return self._buf.id()
+
+    def sheet(self) -> 'Sheet | None':
+        """The `Sheet` containing this view, if it exists."""
+        return self._sheet
+
+    def element(self) -> 'str | None':
+        """``None`` for regular views (the real API returns element names for UI views)."""
+        return None
 
     # -------------
     # Buffer access
@@ -538,6 +562,11 @@ class View:
                     regions.append(Region(offset + indent_len, offset + len(line_text)))
             offset += len(line_text) + 1  # +1 for the newline
         return regions
+
+    def scope_name(self, point: int = 0) -> str:
+        """The base scope at the given point (the real API returns the full scope stack)."""
+        syn = self.syntax()
+        return f'{syn.scope} ' if syn else 'text.plain '
 
     def meta_info(self, key: str, pt: int = 0, prefix: str = '') -> Any:
         """Return syntax meta information (shell variables, etc.)."""
@@ -656,6 +685,11 @@ class Window:
         self._views: list = []
         self._active_view: 'View | None' = None
         self._settings = Settings()
+        self._sheets: 'list[Sheet]' = []
+        self._selected_sheets: 'list[Sheet]' = []
+        self._project_data: 'dict | None' = None
+        self._project_file_name: 'str | None' = None
+        _WINDOWS.append(self)
 
     def id(self) -> int:
         return self.window_id
@@ -668,12 +702,92 @@ class Window:
 
     def new_file(self, flags: int = 0, syntax: str = '') -> View:
         view = View(window=self)
+        if syntax:
+            view.assign_syntax(syntax)
+        sheet = TextSheet(next(Sheet._ID_COUNTER))
+        sheet._view = view
+        sheet._window = self
+        sheet._group = 0
+        view._sheet = sheet
         self._views.append(view)
+        self._sheets.append(sheet)
         self._active_view = view
+        self._selected_sheets = [sheet]
         return view
 
     def views(self, *, include_transient: bool = False) -> list:
         return list(self._views)
+
+    def _detach_view(self, view: View) -> None:
+        """Remove a closed view (and its sheet) from this window's registries."""
+        if view in self._views:
+            self._views.remove(view)
+        if (sheet := view._sheet) is not None:
+            if sheet in self._sheets:
+                self._sheets.remove(sheet)
+            if sheet in self._selected_sheets:
+                self._selected_sheets.remove(sheet)
+        if self._active_view is view:
+            self._active_view = self._views[-1] if self._views else None
+
+    # ------
+    # Sheets
+    # ------
+    def sheets(self) -> 'list[Sheet]':
+        """All sheets in the window (``sublime.Window.sheets``)."""
+        return list(self._sheets)
+
+    def selected_sheets(self) -> 'list[Sheet]':
+        """All sheets currently selected across groups (``Window.selected_sheets``)."""
+        return list(self._selected_sheets)
+
+    def select_sheets(self, sheets: 'list[Sheet]') -> None:
+        """Change the selected sheets for the entire window (``Window.select_sheets``)."""
+        self._selected_sheets = list(sheets)
+
+    def num_groups(self) -> int:
+        """The number of layout groups (the mock always uses a single group)."""
+        return 1
+
+    def active_group(self) -> int:
+        """The index of the currently selected group."""
+        return 0
+
+    def new_html_sheet(
+        self, name: str, contents: str, flags: int = 0, group: int = -1
+    ) -> HtmlSheet:
+        """Construct a sheet with HTML contents (``Window.new_html_sheet``)."""
+        sheet = HtmlSheet(next(Sheet._ID_COUNTER))
+        sheet._name = name
+        sheet._text = contents
+        sheet._window = self
+        sheet._group = 0 if group == -1 else group
+        self._sheets.append(sheet)
+        self._selected_sheets = [sheet]
+        return sheet
+
+    def get_sheet_index(self, sheet: 'Sheet') -> 'tuple[int, int]':
+        """The (group, index) of the sheet, or ``(-1, -1)`` if not in the window."""
+        if sheet in self._sheets:
+            return (sheet._group or 0, self._sheets.index(sheet))
+        return (-1, -1)
+
+    def set_sheet_index(self, sheet: 'Sheet', group: int, index: int) -> None:
+        """Move the sheet to the given group and index within that group."""
+        if sheet in self._sheets:
+            self._sheets.remove(sheet)
+        sheet._group = group
+        if index == -1:
+            self._sheets.append(sheet)
+        else:
+            self._sheets.insert(index, sheet)
+
+    def focus_view(self, view: View) -> None:
+        """Switch to the given view, making it active (``Window.focus_view``)."""
+        if view in self._views:
+            self._active_view = view
+            if view._sheet is not None:
+                self._selected_sheets = [view._sheet]
 
     def settings(self) -> Settings:
         return self._settings
@@ -692,8 +806,23 @@ class Window:
     def show_panel(self, panel: str, **kwargs: Any) -> None:
         pass
 
+    # -------
+    # Project
+    # -------
+    def project_data(self) -> 'dict | None':
+        """The project data associated with this window (``Window.project_data``)."""
+        return self._project_data
+
+    def set_project_data(self, data: 'dict | None') -> None:
+        """Update the project data; ``folders()`` is derived from it, like the real API."""
+        self._project_data = data
+
+    def project_file_name(self) -> 'str | None':
+        return self._project_file_name
+
     def folders(self) -> list:
-        return []
+        """A list of the currently open folders, derived from the project data."""
+        return [f['path'] for f in (self._project_data or {}).get('folders', []) if 'path' in f]
 
     # -------------
     # Magic Methods
@@ -727,9 +856,13 @@ class Sheet:
     sheet_id: int
     _view: View | None
 
-    def __init__(self, id: int) -> None:
-        self.sheet_id = id
+    _ID_COUNTER: ClassVar[Iterator[int]] = it.count(1)
+
+    def __init__(self, id: int | None = None) -> None:
+        self.sheet_id = id if id is not None else next(self._ID_COUNTER)
         self._view = None
+        self._window: Window | None = None
+        self._group: int | None = None
 
     def __hash__(self) -> int:
         return self.sheet_id
@@ -749,7 +882,7 @@ class Sheet:
 
     def window(self) -> Window | None:
         """The `Window` containing this sheet. May be `None` if the sheet has been closed."""
-        return _GLOBAL_WINDOW
+        return self._window if self._window is not None else _GLOBAL_WINDOW
 
     def view(self) -> View | None:
         """The `View` contained within the sheet if any."""
@@ -773,13 +906,21 @@ class Sheet:
 
     def is_selected(self) -> bool:
         """Whether this sheet is currently selected."""
+        if self._window is not None:
+            return self in self._window._selected_sheets
         return True
 
     def group(self) -> int | None:
         """The (layout) group that the sheet is contained within."""
+        return self._group
 
     def close(self, on_close: Callable[[bool], None] | None = None) -> None:
-        """Closes the sheet."""
+        """Closes the sheet, removing it from its window."""
+        if self._window is not None:
+            if self in self._window._sheets:
+                self._window._sheets.remove(self)
+            if self in self._window._selected_sheets:
+                self._window._selected_sheets.remove(self)
         if on_close:
             on_close(True)
 
@@ -976,6 +1117,11 @@ _GLOBAL_WINDOW = Window()
 ############
 def active_window() -> Window:
     return _GLOBAL_WINDOW
+
+
+def windows() -> 'list[Window]':
+    """A list of all the open windows (``sublime.windows``)."""
+    return list(_WINDOWS)
 
 
 def version() -> str:

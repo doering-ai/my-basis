@@ -19,7 +19,14 @@ from __future__ import annotations
 ### BODY ###
 ############
 class Buffer:
-    """A simple mutable string buffer with row/col and region arithmetic."""
+    """A simple mutable string buffer with row/col and region arithmetic.
+
+    Also plays the role of ``sublime.Buffer``: the real API exposes ``id()``, ``views()`` and
+    ``primary_view()`` on the buffer object that backs one or more views. Views register
+    themselves at construction time (see ``View.__init__``).
+    """
+
+    _id_counter = 0
 
     # -------------------
     # `.` Initial Methods
@@ -27,6 +34,24 @@ class Buffer:
     def __init__(self, text: str = '') -> None:
         """Initialize the buffer."""
         self._text = text
+        type(self)._id_counter += 1
+        self.buffer_id = type(self)._id_counter
+        self._views: list = []
+
+    # -------------------
+    # `.` Identity (sublime.Buffer API)
+    # -------------------
+    def id(self) -> int:
+        """A number that uniquely identifies this buffer (``sublime.Buffer.id``)."""
+        return self.buffer_id
+
+    def views(self) -> list:
+        """The list of all views that share this buffer (``sublime.Buffer.views``)."""
+        return list(self._views)
+
+    def primary_view(self) -> 'object | None':
+        """The first view attached to this buffer (``sublime.Buffer.primary_view``)."""
+        return self._views[0] if self._views else None
 
     # -------------------
     # `-` Private Methods

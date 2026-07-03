@@ -48,11 +48,11 @@ class _TestViewCmd(_MyViewCommand[_SimpleArgs]):
         pass
 
     def process(self, view: sb.View) -> None:
-        """Method with a view param - should be autobound."""
+        """Method with a view param — eligible for autobind only via an explicit list."""
         self.captured_view = view
 
     def process_edit(self, edit: sb.Edit) -> None:
-        """Method with an edit param - should be autobound."""
+        """Method with an edit param — eligible for autobind only via an explicit list."""
         self.captured_edit = edit
 
     def no_args(self) -> str:
@@ -61,6 +61,27 @@ class _TestViewCmd(_MyViewCommand[_SimpleArgs]):
 
     def is_enabled(self, view: sb.View) -> bool:
         return True
+
+
+# A view command whose capture methods ARE autobound, via the explicit autobind list
+class _AutobindViewCmd(_MyViewCommand[_SimpleArgs], autobind=['process', 'process_edit']):
+    NAME = 'autobind_view_cmd'
+
+    captured_view: sb.View | None = None
+    captured_edit: sb.Edit | None = None
+
+    def main(self) -> None:
+        pass
+
+    def process(self, view: sb.View) -> None:
+        self.captured_view = view
+
+    def process_edit(self, edit: sb.Edit) -> None:
+        self.captured_edit = edit
+
+    def unlisted_edit(self, edit: sb.Edit) -> None:
+        """Not named in the autobind list, so it must stay unwrapped."""
+        self.captured_edit = edit
 
 
 # A concrete window command for testing
@@ -649,3 +670,284 @@ class TestOpen:
         view = cmd.open(tmp_path / 'file.txt', window=fake_window)  # type: ignore[arg-type]
         assert view is fake_view
         assert fake_view.polls >= 3, 'open() must poll is_loading() until it turns False'
+
+
+class TestAutobindEndToEnd:
+    """Drive autobound methods end-to-end: the Meta wrapper must cache args before the body."""
+
+    def test_process_receives_and_caches_view(self, make_view: sb.View):
+        """Calling `process(view)` on a bare instance both runs the body and caches the view."""
+        cmd = _AutobindViewCmd.__new__(_AutobindViewCmd)
+        cmd._view = None
+        cmd._views = None
+        cmd.process(make_view)
+        assert cmd.captured_view is make_view, 'the method body must still receive the view'
+        assert cmd.view is make_view, 'the Meta wrapper must have cached the view'
+
+    def test_process_caches_view_by_kwarg(self, make_view: sb.View):
+        cmd = _AutobindViewCmd.__new__(_AutobindViewCmd)
+        cmd._view = None
+        cmd._views = None
+        cmd.process(view=make_view)
+        assert cmd.captured_view is make_view
+        assert cmd.view is make_view
+
+    def test_process_edit_caches_edit(self, make_view: sb.View):
+        """The edit handle is cached by the wrapper alone — the body never touches `self.edit`."""
+        cmd = _AutobindViewCmd(make_view)
+        edit = sb.Edit(make_view)
+        assert not cmd.has_edit()
+        cmd.process_edit(edit)
+        assert cmd.captured_edit is edit
+        assert cmd.has_edit(), 'the Meta wrapper must have cached the edit token'
+        assert cmd.edit is edit
+
+    def test_unlisted_method_is_not_wrapped(self, make_view: sb.View):
+        """Methods outside the explicit autobind list must stay unwrapped."""
+        cmd = _AutobindViewCmd(make_view)
+        edit = sb.Edit(make_view)
+        cmd.unlisted_edit(edit)
+        assert cmd.captured_edit is edit
+        assert not cmd.has_edit(), 'unlisted methods must not cache their arguments'
+
+    def test_default_autobind_skips_non_sublime_methods(self, make_view: sb.View):
+        """With `autobind=True`, only methods named on the sublime base class are wrapped."""
+        cmd = _TestViewCmd(make_view)
+        edit = sb.Edit(make_view)
+        cmd.process_edit(edit)
+        assert cmd.captured_edit is edit
+        assert not cmd.has_edit(), 'process_edit is not a TextCommand attribute -> unwrapped'
+
+    def test_run_caches_edit_positionally(self, make_view: sb.View):
+        """`run` itself caches sublime handles from its positional args."""
+        cmd = _TestViewCmd(make_view)
+        edit = sb.Edit(make_view)
+        cmd.run(edit)
+        assert cmd.has_edit()
+        assert cmd.edit is edit
+
+
+class TestMyBaseOperationalSurface:
+    """Operational methods of ``MyBase``: paths, io, navigation, logging, settings."""
+
+    TEXT = 'alpha\n  beta\n  gamma\ndelta'
+
+    def _loaded_cmd(self, view: sb.View, text: str | None = None) -> _TestViewCmd:
+        view.insert(sb.Edit(view), 0, self.TEXT if text is None else text)
+        return _TestViewCmd(view)
+
+    # ---- error handling ----
+    def test_catch_reraises_by_default(self, make_view: sb.View):
+        cmd = _TestViewCmd(make_view)
+        with pyt.raises(ValueError, match='original'):
+            cmd.catch(ValueError('original'))
+
+    # ---- levels & identity ----
+    @pyt.mark.parametrize(
+        'factory, expected',
+        [
+            (lambda v: _TestViewCmd(v), 'view'),
+            (lambda v: _TestWindowCmd(sb.active_window()), 'window'),
+            (lambda v: _TestAppCmd(), 'app'),
+        ],
+    )
+    def test_api_level(self, make_view: sb.View, factory, expected: str):
+        assert factory(make_view).api_level == expected
+
+    # ---- path helpers ----
+    def test_path_for_none_is_empty_path(self):
+        from pathlib import Path
+
+        assert _TestViewCmd._path_for(None) == Path()
+
+    def test_path_for_expands_and_resolves(self, tmp_path):
+        result = _TestViewCmd._path_for(str(tmp_path) + '/sub/../file.txt')
+        assert result == tmp_path / 'file.txt'
+
+    def test_path_for_view_without_file(self, make_view: sb.View):
+        from pathlib import Path
+
+        assert _TestViewCmd._path_for(make_view) == Path()
+
+    # ---- read / write ----
+    def test_read_full_buffer(self, make_view: sb.View):
+        cmd = self._loaded_cmd(make_view)
+        assert cmd.read() == self.TEXT
+
+    def test_read_region_overloads(self, make_view: sb.View):
+        cmd = self._loaded_cmd(make_view)
+        assert cmd.read(sb.Region(0, 5)) == 'alpha'
+        assert cmd.read(0, 5) == 'alpha'
+        assert cmd.read(6) == self.TEXT[6:]
+
+    def test_write_inserts_at_empty_region(self, make_view: sb.View):
+        cmd = self._loaded_cmd(make_view, 'ad')
+        cmd.edit = sb.Edit(make_view)
+        cmd.write(1, 'bc')
+        assert cmd.read() == 'abcd'
+
+    def test_write_replaces_region(self, make_view: sb.View):
+        cmd = self._loaded_cmd(make_view, 'aXXd')
+        cmd.edit = sb.Edit(make_view)
+        cmd.write(sb.Region(1, 3), 'bc')
+        assert cmd.read() == 'abcd'
+
+    def test_write_accepts_tuple(self, make_view: sb.View):
+        cmd = self._loaded_cmd(make_view, 'aXd')
+        cmd.edit = sb.Edit(make_view)
+        cmd.write((1, 2), 'b')
+        assert cmd.read() == 'abd'
+
+    # ---- coordinates ----
+    def test_row_col_of(self, make_view: sb.View):
+        cmd = self._loaded_cmd(make_view)
+        pos = self.TEXT.index('beta')
+        assert cmd.row_of(pos) == 1
+        assert cmd.col_of(pos) == 2
+        assert cmd.row_of(sb.Region(pos, pos + 4)) == 1
+
+    def test_n_rows(self, make_view: sb.View):
+        cmd = self._loaded_cmd(make_view)
+        assert cmd.n_rows == 4
+
+    # ---- indent analysis ----
+    def test_indents_groups_by_level(self, make_view: sb.View):
+        from myBasis.plugins._MyBase import Indent
+
+        cmd = self._loaded_cmd(make_view)
+        assert cmd.indents == [Indent(0, 0), Indent(1, 2), Indent(3, 0)]
+
+    def test_indent_at(self, make_view: sb.View):
+        cmd = self._loaded_cmd(make_view)
+        assert cmd.indent_at(2).val == 2
+        assert cmd.indent_at(0).val == 0
+
+    def test_shares_indent(self, make_view: sb.View):
+        cmd = self._loaded_cmd(make_view)
+        assert cmd.shares_indent(1, 2), 'beta and gamma share the same indent block'
+        assert not cmd.shares_indent(1, 3), 'delta dedents below beta, ending the block'
+        assert not cmd.shares_indent(2, 0), 'an earlier row is never a child of a later one'
+
+    # ---- syntax ----
+    def test_syntax_is(self, make_view: sb.View):
+        make_view.assign_syntax('Packages/Python/Python.sublime-syntax')
+        cmd = _TestViewCmd(make_view)
+        assert cmd.syntax == 'source.python'
+        assert cmd.syntax_is('python', 'rust')
+        assert not cmd.syntax_is('rust')
+
+    def test_syntax_empty_without_assignment(self, make_view: sb.View):
+        cmd = _TestViewCmd(make_view)
+        assert cmd.syntax == ''
+
+    # ---- navigation ----
+    def test_navigate_subl_invokes_command(self, make_view: sb.View):
+        cmd = _TestViewCmd(make_view)
+        recorded: dict[str, Any] = {}
+
+        def fake_run_command(name: str, args: 'dict | None' = None) -> None:
+            recorded['name'] = name
+            recorded['args'] = args
+
+        make_view.run_command = fake_run_command  # type: ignore[method-assign]
+        cmd.navigate('subl:foo_cmd "key": "val"')
+        assert recorded['name'] == 'foo_cmd'
+        assert recorded['args'] == {'key': 'val'}
+
+    def test_navigate_http_opens_url(self, make_view: sb.View, monkeypatch: pyt.MonkeyPatch):
+        cmd = _TestViewCmd(make_view)
+        recorded: dict[str, Any] = {}
+        monkeypatch.setattr(
+            sb, 'run_command', lambda name, args=None: recorded.update(name=name, args=args)
+        )
+        cmd.navigate('https://example.com')
+        assert recorded['name'] == 'open_url'
+        assert recorded['args'] == {'url': 'https://example.com'}
+
+    def test_navigate_file_opens_path(self, make_view: sb.View):
+        cmd = _TestViewCmd(make_view)
+        opened: list[str] = []
+        cmd.open = opened.append  # type: ignore[method-assign]
+        cmd.navigate('file:/some/path.txt')
+        assert opened == ['/some/path.txt']
+
+    # ---- logging ----
+    def test_log_uses_uid_as_name(self, make_view: sb.View, capsys: pyt.CaptureFixture):
+        cmd = _TestViewCmd(make_view)
+        cmd.log('operational message')
+        out = capsys.readouterr().out
+        assert 'operational message' in out
+        assert f'[{cmd.uid}]' in out
+
+    def test_log_method_formats_signature(self, make_view: sb.View, capsys: pyt.CaptureFixture):
+        cmd = _TestViewCmd(make_view)
+        cmd.log_method(args=(1,), kwargs={'k': 2}, result='ret', name='my_fn')
+        assert 'my_fn(1, k=2) -> ret' in capsys.readouterr().out
+
+    def test_log_method_infers_caller_name(self, make_view: sb.View, capsys: pyt.CaptureFixture):
+        cmd = _TestViewCmd(make_view)
+
+        def some_caller() -> None:
+            cmd.log_method()
+
+        some_caller()
+        assert 'some_caller()' in capsys.readouterr().out
+
+    def test__log_indents_output(self, capsys: pyt.CaptureFixture):
+        _TestViewCmd._log('msg', time=False, indent=4)
+        assert capsys.readouterr().out.startswith('    [')
+
+    def test__log_custom_name_bracketed(self, capsys: pyt.CaptureFixture):
+        _TestViewCmd._log('msg', time=False, name='custom')
+        assert capsys.readouterr().out.startswith('[custom]')
+
+    # ---- context & settings ----
+    def test_with_context_edit_restores(self, make_view: sb.View):
+        cmd = _TestViewCmd(make_view)
+        edit = sb.Edit(make_view)
+        with cmd.with_context(edit=edit):
+            assert cmd.edit is edit
+        assert not cmd.has_edit()
+
+    def test_settings_prefers_view(self, make_view: sb.View):
+        cmd = _TestViewCmd(make_view)
+        assert cmd.settings is make_view.settings()
+
+    def test_tabsize_default(self, make_view: sb.View):
+        cmd = _TestViewCmd(make_view)
+        assert cmd.tabsize == 4
+
+    def test_mutable_settings_rejects_empty(self, make_view: sb.View):
+        cmd = _TestViewCmd(make_view)
+        with pyt.raises(AssertionError, match='non-empty'), cmd.mutable_settings(''):
+            pass
+
+    def test_mutable_settings_rejects_paths(self, make_view: sb.View):
+        cmd = _TestViewCmd(make_view)
+        with pyt.raises(AssertionError, match='single name'), cmd.mutable_settings('sub/dir'):
+            pass
+
+    def test_mutable_settings_yields_settings(self, make_view: sb.View):
+        cmd = _TestViewCmd(make_view)
+        with cmd.mutable_settings('Preferences') as settings:
+            assert isinstance(settings, sb.Settings)
+
+    # ---- selection properties ----
+    def test_selection_properties(self, make_view: sb.View):
+        cmd = self._loaded_cmd(make_view)
+        pos = self.TEXT.index('beta')
+        cmd.selections.clear()
+        cmd.selections.add(sb.Region(pos, pos + 4))
+        assert cmd.selection == sb.Region(pos, pos + 4)
+        assert cmd.pos == pos
+        assert cmd.cursor == pos + 4, 'cursor is the b end of the selection'
+        assert cmd.row == 1
+        assert cmd.col == 6, 'cursor column counts from the b end'
+
+    def test_line_of_cursor(self, make_view: sb.View):
+        cmd = self._loaded_cmd(make_view)
+        pos = self.TEXT.index('beta')
+        cmd.selections.clear()
+        cmd.selections.add(pos)
+        line_start = self.TEXT.index('  beta')
+        assert cmd.line == sb.Region(line_start, line_start + len('  beta'))

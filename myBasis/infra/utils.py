@@ -333,7 +333,11 @@ class Utils(TypesMixin):
             ret = fn(expr)
         except re.error as e:
             print("RGX COMPILATION ERROR")
-            cls._debug_rgx_dict(e, key, expr)
+            try:
+                cls._debug_rgx_dict(e, key, expr)
+            except ValueError as debug_error:
+                # `_debug_rgx_dict` reports by raising; here we only want its diagnostic text.
+                print(debug_error)
             ret = fn(r"ERROR")
         return ret
 
@@ -365,7 +369,6 @@ class Utils(TypesMixin):
                 )
             out = [f"{preamble} = r'''", *lines, "'''"]
 
-        print(len(out))
         raise ValueError("\n".join(out).strip()) from e
 
     @classmethod
@@ -806,7 +809,7 @@ class Utils(TypesMixin):
         _iter = iter(iterable)
         if drop:
             _iter = filter(lambda item: bool(pred(item)), _iter)
-        _iter = sorted(iterable, key=pred)  # type: ignore
+        _iter = sorted(_iter, key=pred)  # type: ignore
 
         yield from ((key, list(items)) for key, items in it.groupby(_iter, key=pred))
 
@@ -1280,7 +1283,7 @@ class Utils(TypesMixin):
         path = cls.path(path)
         # I. Handle environment variables in the first position
         count = 0
-        while path.parts[0].startswith("$"):
+        while path.parts and path.parts[0].startswith("$"):
             env_val = os.getenv(path.parts[0].lstrip("$"), "")
             assert env_val, (
                 f"Environment variable {path.parts[0]} not found for path {path}."
@@ -1320,8 +1323,15 @@ class Utils(TypesMixin):
 
     @classmethod
     def is_relative_to(cls, child: Path | str, parent: Path | str) -> bool:
-        """Naively check if the child is relative to the proposed parent."""
-        return str(child).startswith(str(parent))
+        """Check whether the child path lies at or under the proposed parent.
+
+        Compares whole path segments (`Path.parts`), so sibling directories that merely share
+        a string prefix (e.g. ``/home/user/foo-bar`` vs ``/home/user/foo``) do not match.
+        Pure-path equivalent of Python 3.9's `Path.is_relative_to`, usable on 3.8.
+        """
+        child_parts = Path(child).parts
+        parent_parts = Path(parent).parts
+        return child_parts[: len(parent_parts)] == parent_parts
 
     @classmethod
     def relativize(cls, path: Path, *parents: Path | str) -> Path | None:

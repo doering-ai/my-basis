@@ -49,8 +49,11 @@ class Tool(pyd.BaseModel):
         ```
     """
 
-    #: Subpackages that are internal infrastructure -- no public docs page.
-    SKIP: ClassVar[frozenset[str]] = frozenset({'scripts', 'templates', 'infra'})
+    #: The import name of the package whose subpackages feed the docs pages.
+    PKG: ClassVar[str] = 'my'
+
+    #: Subpackages that are internal infrastructure or deprecated shims -- no public docs page.
+    SKIP: ClassVar[frozenset[str]] = frozenset({'scripts', 'templates', 'infra', 'text', 'type'})
 
     #: The directory containing a local python project.
     root: pyd.DirectoryPath
@@ -94,19 +97,28 @@ class Tool(pyd.BaseModel):
         return content[idx:]
 
     def render_page(self, pkg: str, tagline: str, body: str, preserved: str) -> str:
-        """Assemble the full docs/X.md content."""
+        """Assemble the full docs/X.md content.
+
+        The tagline's trailing period is dropped: docstring first lines end with one, but the
+        page H1s (`` # `my.utils`: Pure, Typed Functional Utilities ``) do not.
+        """
+        tagline = tagline.strip().removesuffix('.')
         body_section = f'\n\n{body}' if body else ''
         return (
             f'---\nnumbering:\n  title: true\n---\n\n'
-            f'# `my.{pkg}`: {tagline}\n\n'
-            f'```{{py:currentmodule}} my.{pkg}\n```'
+            f'# `{self.PKG}.{pkg}`: {tagline}\n\n'
+            f'```{{py:currentmodule}} {self.PKG}.{pkg}\n```'
             f'{body_section}\n\n'
             f'{preserved}'
         )
 
+    def pkg_name(self, init_path: Path) -> str:
+        """Dotted subpackage name relative to `PKG` (e.g. `regex.meta`), keyed to docs/X.md."""
+        return '.'.join(init_path.parent.relative_to(self.root / self.PKG).parts)
+
     def sync_readme(self, file: Path) -> bool:
         """Sync one (sub)package module with its README.md."""
-        pkg = file.parent.name
+        pkg = self.pkg_name(file)
         if not (docstring := self.get_docstring(file)):
             return False
         elif match := re.match(r'^([^\s\n\#].*)\n+', docstring):
@@ -133,17 +145,26 @@ class Tool(pyd.BaseModel):
             print(f'\t\t{z0} → {z1} lines')
             return True
 
+        status = 'UPDATE' if doc_path.exists() else 'CREATE'
         doc_path.write_text(
             new_content,
         )
-        status = 'CREATE' if not doc_path.exists() else 'UPDATE'
         print(f'\t{status} {pkg}: docs/{pkg}.md')
         return True
 
     def find_source_files(self) -> list[Path]:
-        """Find all `__init__.py` files in subpackages, excluding SKIP."""
+        """Find all subpackage `__init__.py` files under `PKG`, excluding SKIP subtrees.
+
+        Only the package source tree is crawled -- never the repo root, which would sweep up
+        `.venv/` site-packages. The top-level `__init__.py` is excluded too (`docs/index.md` is
+        hand-written, not generated).
+        """
+        pkg_dir = self.root / self.PKG
         return sorted(
-            file for file in self.root.rglob('__init__.py') if file.parent.name not in self.SKIP
+            file
+            for file in pkg_dir.rglob('__init__.py')
+            if file.parent != pkg_dir
+            and not any(part in self.SKIP for part in file.parent.relative_to(pkg_dir).parts)
         )
 
 

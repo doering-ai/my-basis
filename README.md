@@ -1,6 +1,9 @@
 ![logo](/assets/logo_512.png)
 
 # `myBasis`: _Ergonomic Python Utilities_
+
+> **Status:** Pre-launch — under active development. APIs may change before 1.0.
+
 ![Pipeline Status](https://img.shields.io/gitlab/pipeline-status/libs/basis?branch=main)
 ![Test Coverage](https://img.shields.io/gitlab/pipeline-coverage/libs/basis?job_name=test&branch=main)
 [![License](https://img.shields.io/gitlab/license/libs/basis)](/LICENSE)

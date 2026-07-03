@@ -28,7 +28,7 @@ workflow:
 ############
 variables:
   PACKAGE: my
-  MAIN_POD: ' own '
+  MAIN_POD: $CI_REGISTRY_IMAGE:latest
   # Enable GitLabs free secret detection -- see `secret_detection` job
   SECRET_DETECTION_ENABLED: 'true'
 ############

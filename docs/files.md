@@ -8,7 +8,9 @@ numbering:
 ```{py:currentmodule} my.files
 ```
 
-The `files` subpackage provides structured representations and utilities for working with file formats. Currently it only contains one format, a somewhat-specialized (opinionated?) markdown format.
+The `files` subpackage provides structured representations and utilities for working with file
+formats. Currently it only contains one format, a somewhat-specialized (opinionated?) markdown
+format.
 
 ```{toctree}
 ---

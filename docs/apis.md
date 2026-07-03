@@ -8,8 +8,9 @@ numbering:
 ```{py:currentmodule} my.apis
 ```
 
-This subpackage provides convenient interfaces for external services and system resources.
-Currently it focuses on two primary concerns: environment variable management and Google Sheets integration.
+This subpackage provides convenient interfaces for external services and system resources. It
+currently covers three concerns: environment variable management (`Environment`), filesystem path
+registration (`Filesystem`), and Google Sheets integration (`GoogleSheet`).
 
 ```{toctree}
 ---

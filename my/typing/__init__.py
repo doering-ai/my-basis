@@ -1,4 +1,4 @@
-"""Utilities for the parsing, checking, matching, coercion, and manipulation of Python types.
+"""Vibe Typists.
 
 This subpackage provides tools for advanced type operations: parsing, checking, matching, coercion,
 manipulation, and more, alongside some high-level functional utilities built upon those features.

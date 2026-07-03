@@ -140,17 +140,50 @@ class TestApplyAnsiCode:
     @pyt.mark.parametrize(
         'code, expected_color',
         [
-            ('38;5;5;1', 'class="red"'),  # palette idx < 16 approximates the base colors
-            ('38;5;5;7', 'class="fg"'),
-            ('38;5;5;16', 'style="color: rgb(0, 0, 0)"'),  # 6x6x6 color cube
-            ('38;5;5;231', 'style="color: rgb(255, 255, 255)"'),
-            ('38;5;5;232', 'style="color: rgb(8, 8, 8)"'),  # grayscale ramp
-            ('38;5;5;255', 'style="color: rgb(261, 261, 261)"'),
+            ('38;5;1', 'class="red"'),  # palette idx < 16 approximates the base colors
+            ('38;5;7', 'class="fg"'),
+            ('38;5;16', 'style="color: rgb(0, 0, 0)"'),  # 6x6x6 color cube
+            ('38;5;231', 'style="color: rgb(255, 255, 255)"'),
+            ('38;5;232', 'style="color: rgb(8, 8, 8)"'),  # grayscale ramp
+            ('38;5;255', 'style="color: rgb(261, 261, 261)"'),
         ],
     )
     def test_256_palette_branch(self, code: str, expected_color: str):
+        """Codes use the real SGR form ``38;5;<idx>`` (no duplicated mode digit)."""
         style = OutputPanel.Style()
         assert OutputPanel._apply_ansi_code(0, code, style) == f'<span {expected_color}>'
+
+    @pyt.mark.parametrize(
+        'code, expected_rgb',
+        [
+            ('38;2;100;150;200', 'rgb(100, 150, 200)'),
+            ('38;2;0;0;0', 'rgb(0, 0, 0)'),
+            ('38;2;255;255;255', 'rgb(255, 255, 255)'),
+        ],
+    )
+    def test_truecolor_branch(self, code: str, expected_rgb: str):
+        """Truecolor is real SGR ``38;2;R;G;B`` -- 4 parts, indices 1-3 are R/G/B."""
+        style = OutputPanel.Style()
+        assert (
+            OutputPanel._apply_ansi_code(0, code, style) == f'<span style="color: {expected_rgb}">'
+        )
+
+    @pyt.mark.parametrize(
+        'code',
+        [
+            '38;2;100;150',  # missing blue component -- must not IndexError
+            '38;2;100',
+            '38;2',
+            '38;5',  # missing palette index
+            '38;5;',  # trailing empty index -- must not ValueError on int()
+            '38;9;1;2',  # unknown extended-color mode
+        ],
+    )
+    def test_malformed_extended_color_is_noop(self, code: str):
+        """Malformed/incomplete extended-color params are ignored, never crash."""
+        style = OutputPanel.Style()
+        assert OutputPanel._apply_ansi_code(0, code, style) == ''
+        assert not style
 
 
 class TestReplaceAnsiColors:
@@ -188,6 +221,52 @@ class TestReplaceAnsiColors:
     def test_color_switch_mid_text(self):
         result = OutputPanel._replace_ansi_colors(f'{RED}r{GREEN}g{RESET}')
         assert result == '<span class="red">r</span><span class="green">g</span>'
+
+    # ---- Multi-part SGR (semicolon-separated) end-to-end coverage ----
+    def test_256_color_end_to_end(self):
+        """A real ``38;5;N`` escape must reach _apply_ansi_code through the full pipeline."""
+        result = OutputPanel._replace_ansi_colors('\x1b[38;5;208mpalette\x1b[0m')
+        assert result == '<span style="color: rgb(255, 102, 0)">palette</span>'
+
+    def test_truecolor_end_to_end(self):
+        """A real ``38;2;R;G;B`` escape must reach _apply_ansi_code through the full pipeline."""
+        result = OutputPanel._replace_ansi_colors('\x1b[38;2;100;150;200mtruecolor\x1b[0m')
+        assert result == '<span style="color: rgb(100, 150, 200)">truecolor</span>'
+
+    def test_unterminated_extended_color_closed_at_end(self):
+        """Reset/close path also applies to extended (256/truecolor) spans."""
+        result = OutputPanel._replace_ansi_colors('\x1b[38;5;208mdangling')
+        assert result == '<span style="color: rgb(255, 102, 0)">dangling</span>'
+
+    @pyt.mark.parametrize(
+        'escape, expected',
+        [
+            ('\x1b[1;31m', '<strong><span class="red">text</span></strong>'),
+            ('\x1b[31;1m', '<span class="red"><strong>text</strong></span>'),
+            ('\x1b[1;3;4m', '<strong><em><u>text</u></em></strong>'),
+        ],
+    )
+    def test_stacked_codes_open_in_escape_order(self, escape: str, expected: str):
+        """Stacked codes in one escape run (semicolon-separated) must open in the order
+        they appear in the escape, and close in the matching reverse (LIFO) order --
+        deterministically, not via arbitrary set-iteration order."""
+        result = OutputPanel._replace_ansi_colors(f'{escape}text\x1b[0m')
+        assert result == expected
+
+    def test_mixed_plain_and_extended_color_does_not_regress(self):
+        """Plain single-code spans and extended-color spans must compose correctly."""
+        text = f'{BOLD}plain{RESET} then \x1b[38;5;208mpalette\x1b[0m'
+        result = OutputPanel._replace_ansi_colors(text)
+        expected = (
+            '<strong>plain</strong> then <span style="color: rgb(255, 102, 0)">palette</span>'
+        )
+        assert result == expected
+
+    def test_multipart_code_without_semicolon_support_would_leak(self):
+        """Documents the pre-fix failure mode: a multi-part escape must be consumed, not
+        leaked into the output as raw bytes."""
+        result = OutputPanel._replace_ansi_colors('\x1b[1;31mtext\x1b[0m')
+        assert '\x1b' not in result
 
 
 class TestConversions:

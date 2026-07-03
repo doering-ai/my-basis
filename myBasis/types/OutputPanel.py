@@ -40,7 +40,7 @@ class OutputPanel(pyd.BaseModel):
     """
 
     RGXS: ClassVar[dict[str, re.Pattern]] = ut.rgx_dict(
-        ansi=r'\x1b\[(?P<code>\d+)m',
+        ansi=r'\x1b\[(?P<code>[\d;]+)m',
         html=ut.multi_rgx(
             r'< *head *>.*?< */ *head *>',
             r'</? *\w+ *[^>]*+(?<!\\)>',
@@ -369,12 +369,12 @@ class OutputPanel(pyd.BaseModel):
         elif new_color := cls.ANSI_CSS_CLASSES.get(code):
             # II.i. Set predefined colors
             pass
-        elif code.startswith('38;5;'):
-            parts = code[len('38;5;') :].split(';')
-            if len(parts) == 3 and parts[0] == '2':
+        elif code.startswith('38;'):
+            parts = code[len('38;') :].split(';')
+            if len(parts) == 4 and parts[0] == '2' and all(p.isdigit() for p in parts[1:]):
                 # II.ii. Apply truecolor RGB
                 new_color = f'style="color: rgb({parts[1]}, {parts[2]}, {parts[3]})"'
-            elif len(parts) == 2 and parts[0] == '5':
+            elif len(parts) == 2 and parts[0] == '5' and parts[1].isdigit():
                 # II.iii. Apply 256-color palette (not supported in html so we must approximate)
                 idx = int(parts[1])
                 if idx < 16:
@@ -399,6 +399,37 @@ class OutputPanel(pyd.BaseModel):
             return ret
         return ''
 
+    @staticmethod
+    def _split_sgr_params(code: str) -> list[str]:
+        """Splits a raw, semicolon-joined SGR parameter list into ordered logical codes.
+
+        A single escape run may stack multiple SGR parameters (e.g. ``1;31`` for bold+red).
+        Most parameters (``1``, ``31``, ...) are independent and map 1:1. The extended-color
+        parameters (``38``/``48``, foreground/background) are the exception: they consume
+        their trailing mode + value(s) as *one* logical code -- ``38;5;N`` (256-color) or
+        ``38;2;R;G;B`` (truecolor) -- rather than being split into unrelated SGR parameters.
+        Malformed/incomplete extended-color sequences (missing components) fall through to
+        the per-parameter case; `_apply_ansi_code` safely no-ops on whatever it can't parse.
+        """
+        if not code:
+            return []
+
+        raw = code.split(';')
+        codes: list[str] = []
+        i, n = 0, len(raw)
+        while i < n:
+            param = raw[i]
+            if param in ('38', '48') and i + 2 < n and raw[i + 1] == '5':
+                codes.append(';'.join(raw[i : i + 3]))
+                i += 3
+            elif param in ('38', '48') and i + 4 < n and raw[i + 1] == '2':
+                codes.append(';'.join(raw[i : i + 5]))
+                i += 5
+            else:
+                codes.append(param)
+                i += 1
+        return codes
+
     @classmethod
     def _replace_ansi_colors(cls, text: str) -> str:
         """Transforms ANSI escape codes into html span tags."""
@@ -411,21 +442,31 @@ class OutputPanel(pyd.BaseModel):
             return text
 
         # I. Iteratively handle the ANSI escape codes
-        pos = 0
+        counter = 0
         for delim, next_section in zip(delims, sections):
             if not delim:
                 parts.append(next_section)
-                pos += len(next_section)
                 continue
 
-            codes = {(pos + m.start(), m['code']) for m in cls.RGXS['ansi'].finditer(delim)}
+            # I.i. Expand each match's raw param list into ordered logical codes. An ordered
+            # list (not a set) is required: stacked codes in one escape run must open in the
+            # order they were written, not in arbitrary set-iteration order.
+            codes = [
+                code
+                for m in cls.RGXS['ansi'].finditer(delim)
+                for code in cls._split_sgr_params(m['code'])
+            ]
 
-            # I.ii. Handle remaining codes
-            starts = ''.join(cls._apply_ansi_code(_pos, _code, style) for _pos, _code in codes)
+            # I.ii. Handle remaining codes. Each logical code gets its own strictly-increasing
+            # counter value so stacked codes sharing one escape run still sort/close correctly
+            # (Style.tags() breaks position ties on field name, not application order).
+            starts = ''
+            for code in codes:
+                starts += cls._apply_ansi_code(counter, code, style)
+                counter += 1
 
             # I.iii. Add the tags before the coming content (if there are any)
             parts.extend((starts, next_section))
-            pos += len(starts) + len(next_section)
 
         # IV. Terminate any remaining tags at the end of the text
         if style:

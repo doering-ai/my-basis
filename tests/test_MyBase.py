@@ -48,16 +48,20 @@ class _TestViewCmd(_MyViewCommand[_SimpleArgs]):
         pass
 
     def process(self, view: sb.View) -> None:
-        """Method with a view param — eligible for autobind only via an explicit list."""
+        """A leading `view` param — autobound via signature-based implicit binding."""
         self.captured_view = view
 
     def process_edit(self, edit: sb.Edit) -> None:
-        """Method with an edit param — eligible for autobind only via an explicit list."""
+        """A leading `edit` param — autobound via signature-based implicit binding."""
         self.captured_edit = edit
 
     def no_args(self) -> str:
         """Method without view/buffer/window/edit - should NOT be autobound."""
         return 'no_args_result'
+
+    def helper(self, x: int, y: str = '') -> str:
+        """Neither the name nor a leading view/edit/window param -> never autobound."""
+        return f'{x}{y}'
 
     def is_enabled(self, view: sb.View) -> bool:
         return True
@@ -81,6 +85,24 @@ class _AutobindViewCmd(_MyViewCommand[_SimpleArgs], autobind=['process', 'proces
 
     def unlisted_edit(self, edit: sb.Edit) -> None:
         """Not named in the autobind list, so it must stay unwrapped."""
+        self.captured_edit = edit
+
+
+# A view command with autobind disabled entirely — even signature-named methods stay unwrapped
+class _NoAutobindViewCmd(_MyViewCommand[_SimpleArgs], autobind=False):
+    NAME = 'no_autobind_view_cmd'
+
+    captured_view: sb.View | None = None
+    captured_edit: sb.Edit | None = None
+
+    def main(self) -> None:
+        pass
+
+    def process(self, view: sb.View) -> None:
+        """`autobind=False` must leave even a signature-named method unwrapped."""
+        self.captured_view = view
+
+    def process_edit(self, edit: sb.Edit) -> None:
         self.captured_edit = edit
 
 
@@ -215,6 +237,74 @@ class TestMetaDoBindMethod:
             pass
 
         assert not Meta.do_bind_method(method, 'no_args', True, set())
+
+    # -- signature-based implicit binding (non-empty sb_attrs, name not a base-class attr) --
+
+    def test_binds_leading_view_param_not_in_sb_attrs(self):
+        """A method whose name is unknown to the Sublime base class is still autobound
+        via signature-based implicit binding when its leading param is named `view`."""
+
+        def process(self, view: sb.View) -> None:
+            pass
+
+        assert Meta.do_bind_method(process, 'process', True, {'run', 'description'})
+
+    def test_binds_leading_edit_param_not_in_sb_attrs(self):
+        def process_edit(self, edit: sb.Edit) -> None:
+            pass
+
+        assert Meta.do_bind_method(process_edit, 'process_edit', True, {'run', 'description'})
+
+    def test_binds_leading_window_param_not_in_sb_attrs(self):
+        def process_window(self, window: sb.Window) -> None:
+            pass
+
+        assert Meta.do_bind_method(process_window, 'process_window', True, {'run', 'description'})
+
+    def test_does_not_bind_leading_buffer_param_not_in_sb_attrs(self):
+        """`buffer` is deliberately excluded from signature-based implicit binding — only
+        `view`/`edit`/`window` leading params trigger it for non-base-class method names."""
+
+        def process_buffer(self, buffer: sb.Buffer) -> None:
+            pass
+
+        assert not Meta.do_bind_method(
+            process_buffer, 'process_buffer', True, {'run', 'description'}
+        )
+
+    def test_does_not_bind_non_signature_method_not_in_sb_attrs(self):
+        """No false positive: an unrecognized name with unrelated leading params stays unwrapped."""
+
+        def helper(self, x: int, y: str) -> str:
+            return f'{x}{y}'
+
+        assert not Meta.do_bind_method(helper, 'helper', True, {'run', 'description'})
+
+    def test_does_not_bind_trailing_view_param_not_in_sb_attrs(self):
+        """Only the *leading* param counts — a `view` param that isn't first does not qualify."""
+
+        def process(self, count: int, view: sb.View) -> None:
+            pass
+
+        assert not Meta.do_bind_method(process, 'process', True, {'run', 'description'})
+
+    def test_binds_base_class_name_regardless_of_signature(self):
+        """A method named after a real base-class attribute is bound via the original
+        name/annotation check, unaffected by the new signature-based path."""
+
+        def run(self, view: sb.View) -> None:
+            pass
+
+        assert Meta.do_bind_method(run, 'run', True, {'run', 'description'})
+
+    def test_explicit_list_unaffected_by_signature_based_binding(self):
+        """`autobind=[...]` semantics stay exactly as they were: only listed names bind,
+        signature-based implicit binding never applies."""
+
+        def process(self, view: sb.View) -> None:
+            pass
+
+        assert not Meta.do_bind_method(process, 'process', ['other_method'], {'run'})
 
 
 class TestMetaCacheArgs:
@@ -710,13 +800,50 @@ class TestAutobindEndToEnd:
         assert cmd.captured_edit is edit
         assert not cmd.has_edit(), 'unlisted methods must not cache their arguments'
 
-    def test_default_autobind_skips_non_sublime_methods(self, make_view: sb.View):
-        """With `autobind=True`, only methods named on the sublime base class are wrapped."""
+    def test_default_autobind_binds_signature_named_edit_method(self, make_view: sb.View):
+        """With `autobind=True` (default), a method not named on the Sublime base class is
+        still bound when its leading parameter is named `edit` — signature-based implicit
+        binding, in addition to base-class method names."""
         cmd = _TestViewCmd(make_view)
         edit = sb.Edit(make_view)
+        assert not cmd.has_edit()
         cmd.process_edit(edit)
-        assert cmd.captured_edit is edit
-        assert not cmd.has_edit(), 'process_edit is not a TextCommand attribute -> unwrapped'
+        assert cmd.captured_edit is edit, 'the method body must still receive the edit token'
+        assert cmd.has_edit(), 'process_edit has a leading `edit` param -> now autobound by default'
+        assert cmd.edit is edit
+
+    def test_default_autobind_binds_signature_named_view_method(self, make_view: sb.View):
+        """Same contract as above, but for a leading `view` parameter."""
+        cmd = _TestViewCmd.__new__(_TestViewCmd)
+        cmd._view = None
+        cmd._views = None
+        cmd.process(make_view)
+        assert cmd.captured_view is make_view, 'the method body must still receive the view'
+        assert cmd.view is make_view, (
+            'process has a leading `view` param -> now autobound by default'
+        )
+
+    def test_default_autobind_ignores_non_signature_methods(self, make_view: sb.View):
+        """A method that is neither a Sublime base-class name nor has a leading
+        view/edit/window parameter must never be autobound — no false positives."""
+        cmd = _TestViewCmd(make_view)
+        assert not cmd.has_edit()
+        result = cmd.helper(1, 'x')
+        # `helper` takes (x, y) — neither name matches a base-class attr nor view/edit/window
+        assert result == '1x'
+        assert not cmd.has_edit(), 'helper must not have been wrapped to cache anything'
+
+    def test_autobind_false_leaves_signature_named_methods_unwrapped(self, make_view: sb.View):
+        """`autobind=False` must disable binding entirely, even for a method whose leading
+        parameter is named `view`/`edit`/`window`."""
+        cmd = _NoAutobindViewCmd.__new__(_NoAutobindViewCmd)
+        cmd._view = None
+        cmd._views = None
+        cmd.process(make_view)
+        assert cmd.captured_view is make_view
+        assert cmd._view is None, (
+            'autobind=False must not cache the view even though the leading param is named `view`'
+        )
 
     def test_run_caches_edit_positionally(self, make_view: sb.View):
         """`run` itself caches sublime handles from its positional args."""

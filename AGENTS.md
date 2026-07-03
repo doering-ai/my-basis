@@ -58,7 +58,7 @@ External scripts should call `myBasis.infra.mock.install()` explicitly if they n
 ### Plugin base classes (`plugins/`)
 
 All plugin classes go through the **`Meta`** metaclass defined in `_MyBase.py`.
-`Meta` inspects each ST-style method on a subclass at class-creation time: if a method accepts a `view`, `buffer`, `window`, or `edit` argument, it is wrapped so that argument is satisfied automatically from the instance (autobind).
+`Meta` inspects each method on a subclass at class-creation time and wraps it (autobind) so a relevant argument is satisfied automatically from the instance, either because the method's *name* matches a Sublime base-class callback (e.g. `on_activated`, `run`) whose signature includes a `view`, `buffer`, `window`, or `edit` argument, or — for any other user-defined method — because its leading parameter (after `self`) is named exactly `view`, `edit`, or `window` (signature-based implicit binding; `buffer` is not matched this way).
 The stored values are then accessible as `self.view`, `self.window`, `self.buffer`, and `self.edit` throughout the class.
 Autobind can be limited to a specific list of method names or disabled entirely with the `autobind` class keyword.
 

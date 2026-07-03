@@ -52,9 +52,9 @@ from ..types.CommandArguments import CommandArguments
 ############
 ### META ###
 ############
-C = TypeVar("C", bound="MyBase")
-R = TypeVar("R", bound=object)
-Function = TypeVar("Function", bound=Callable)
+C = TypeVar('C', bound='MyBase')
+R = TypeVar('R', bound=object)
+Function = TypeVar('Function', bound=Callable)
 InputHandler = sbp.CommandInputHandler
 SublimeBases = (
     sbp.TextCommand,
@@ -72,7 +72,7 @@ SublimeBase = Union[
     sbp.ViewEventListener,
     sbp.TextChangeListener,
 ]
-CommandLevel: TypeAlias = Literal["buffer", "view", "window", "app"]
+CommandLevel: TypeAlias = Literal['buffer', 'view', 'window', 'app']
 
 
 class _CustomNamespace(dict):
@@ -91,7 +91,8 @@ class Meta(type):
     """Metaclass that wraps all methods whose argument is a View, Buffer, or Window."""
 
     CACHED_TYPES: ClassVar[set[type]] = {View, Buffer, Window, Edit}
-    ALLOWED_NAMES: ClassVar[re.Pattern] = re.compile(r"^([^_].*|__init__)$")
+    ALLOWED_NAMES: ClassVar[re.Pattern] = re.compile(r'^([^_].*|__init__)$')
+    AUTOBIND_PARAM_NAMES: ClassVar[frozenset[str]] = frozenset({'view', 'edit', 'window'})
 
     @classmethod
     def __prepare__(cls, *args: Any, **kwargs: Any) -> dict[str, Any]:
@@ -116,14 +117,14 @@ class Meta(type):
             sb_attrs = {
                 key
                 for key, val in sb_base.__dict__.items()
-                if key and not key.startswith("_") and callable(val)
+                if key and not key.startswith('_') and callable(val)
             }
             for name, value in namespace.items():
                 # I. Wrap methods from base classes
                 if metacls.do_bind_method(value, name, autobind, sb_attrs):
                     namespace[name] = metacls.bind_method(value)
 
-        namespace["DEBUG"] = debug
+        namespace['DEBUG'] = debug
 
         # Pass everything else along to type
         return super().__new__(metacls, clsname, bases, namespace, **kwargs)
@@ -132,11 +133,7 @@ class Meta(type):
     def find_sublime_base(bases: tuple[type, ...]) -> SublimeBase | None:
         next_bases = list(
             filter(
-                (
-                    lambda base: (
-                        isinstance(base, type) and issubclass(base, SublimeBases)
-                    )
-                ),
+                (lambda base: isinstance(base, type) and issubclass(base, SublimeBases)),
                 bases,
             )
         )
@@ -153,27 +150,38 @@ class Meta(type):
         autobind: Sequence[str] | set[str] | bool | None,
         sb_attrs: set[str],
     ) -> TypeGuard[Callable]:
-        """Bind the method."""
+        """Bind the method.
+
+        With ``autobind=True`` (the default), a method is bound either because its name is
+        inherited from the Sublime base class (``sb_attrs``), or -- signature-based implicit
+        binding -- because its leading (first non-``self``) parameter is named exactly
+        ``view``, ``edit``, or ``window``. The latter lets user-defined methods like
+        ``process(self, view)`` be autobound without appearing in an explicit ``autobind=[...]``
+        list, which is what the ``autobind=True`` default has always claimed to do.
+        """
         if not callable(method) or not cls.ALLOWED_NAMES.match(name):
             # I.i. Filter out obviously invalid attributes, like non-methods
             return False
         elif autobind and isinstance(autobind, (Sequence, set)):
             # I.ii. If the user supplied an override, only use that
             return name in autobind
-        elif sb_attrs and name not in sb_attrs:
-            # I.iii. If the method is not from a Sublime base class, ignore it
-            return False
-        elif name.startswith("is_"):
-            # I.iv. Filter out likely boolean methods
+        elif name.startswith('is_'):
+            # I.iii. Filter out likely boolean methods
             return False
 
         try:
             # II.i. Filter out methods that don't have at least one argument after `self`
             params = list(inspect.signature(method).parameters.items())
-            if len(params) < 2 or params[0][0] != "self":
+            if len(params) < 2 or params[0][0] != 'self':
                 return False
 
-            # II.ii. Determine if any parameters are named-like or annotated-as a relevant type
+            if sb_attrs and name not in sb_attrs:
+                # II.ii. Not a Sublime base-class method name: only autobind it via
+                #        signature-based implicit binding -- i.e. its leading parameter
+                #        is named exactly `view`/`edit`/`window`.
+                return params[1][0] in cls.AUTOBIND_PARAM_NAMES
+
+            # II.iii. Determine if any parameters are named-like or annotated-as a relevant type
             names, annotations = map(set, mi.unzip(params[1:]))
             _cnames, _ctypes = cls.cache_details()
             return bool(names & _cnames) or bool(annotations & _ctypes)
@@ -181,7 +189,7 @@ class Meta(type):
         except Exception:
             # III. Obviously, any unexpected failures mean 'no'
             warnings.warn(
-                f"Failed to inspect method `{name}` for binding: {method!r}",
+                f'Failed to inspect method `{name}` for binding: {method!r}',
                 stacklevel=3,
             )
             return False
@@ -199,16 +207,16 @@ class Meta(type):
 
     @staticmethod
     def cache_args(self: MyBase, args: tuple, kwargs: dict) -> None:
-        for name, arg in it.chain((("", a) for a in args), kwargs.items()):
-            if isinstance(arg, list) and (name == "views"):
+        for name, arg in it.chain((('', a) for a in args), kwargs.items()):
+            if isinstance(arg, list) and (name == 'views'):
                 self.views = arg
-            elif isinstance(arg, View) or (name == "view" and arg is None):
+            elif isinstance(arg, View) or (name == 'view' and arg is None):
                 self.view = arg
-            elif isinstance(arg, Buffer) or (name == "buffer" and arg is None):
+            elif isinstance(arg, Buffer) or (name == 'buffer' and arg is None):
                 self.buffer = arg
-            elif isinstance(arg, Window) or (name == "window" and arg is None):
+            elif isinstance(arg, Window) or (name == 'window' and arg is None):
                 self.window = arg
-            elif isinstance(arg, Edit) or (name == "edit" and arg is None):
+            elif isinstance(arg, Edit) or (name == 'edit' and arg is None):
                 self.edit = arg
 
     @staticmethod
@@ -243,11 +251,11 @@ class Indent(NamedTuple):
 
 
 RGXS = ut.rgx_dict(
-    comment_punct=r"[[:punct:]]{1,3}",
-    indent=r"(?m)^([ \t]*+)(\S?)",
+    comment_punct=r'[[:punct:]]{1,3}',
+    indent=r'(?m)^([ \t]*+)(\S?)',
     args=r'^(?P<cmd>[-\w]++) *(?:["\'](?P<key>\w+)["\']: *["\'](?P<val>.+?)["\'])*+$',
 )
-_I = TypeVar("_I", bound=CommandArguments)
+_I = TypeVar('_I', bound=CommandArguments)
 
 
 ############
@@ -290,11 +298,9 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
 
     @classmethod
     def __init_subclass__(cls, **kwargs: Any) -> None:
-        for base in getattr(cls, "__orig_bases__", ()):
+        for base in getattr(cls, '__orig_bases__', ()):
             origin = get_origin(base)
-            if origin is MyBase or (
-                isinstance(origin, type) and issubclass(origin, MyBase)
-            ):
+            if origin is MyBase or (isinstance(origin, type) and issubclass(origin, MyBase)):
                 if (
                     (type_args := get_args(base))
                     and isinstance(type_args[0], type)
@@ -302,15 +308,15 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
                 ):
                     cls.Interface = type_args[0]  # type: ignore
 
-        if not getattr(cls, "Interface", None):
+        if not getattr(cls, 'Interface', None):
             cls.Interface = CommandArguments  # type: ignore
 
     def name(self) -> str:
-        return getattr(type(self), "NAME", super().name())
+        return getattr(type(self), 'NAME', super().name())
 
     @property
     def uid(self) -> str:
-        return f"{self.classname}[{str(id(self))[-4:]}]"
+        return f'{self.classname}[{str(id(self))[-4:]}]'
 
     @property
     def prompt(self) -> StaticPrompt | None:
@@ -319,9 +325,7 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
     @property
     def args(self) -> _I:
         """The arguments passed to this command, as an instance of the `Interface` class."""
-        assert self._args is not None, (
-            "Called args-dependent method without setting `args`."
-        )
+        assert self._args is not None, 'Called args-dependent method without setting `args`.'
         return self._args
 
     @args.setter
@@ -355,14 +359,12 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
     # `-` Private Methods
     # -------------------
     def _raw_line_comment_iter(self) -> Iterator[LineComment]:
-        for comment in self.view.find_by_selector(
-            "comment.line - punctuation.definition.comment"
-        ):
+        for comment in self.view.find_by_selector('comment.line - punctuation.definition.comment'):
             line = self.view.line(comment.begin())
             line_text = self.read(line)
             row, col = self.view.rowcol(comment.a)
             punct = line_text[:col].lstrip()
-            if not RGXS["comment_punct"].fullmatch(punct):
+            if not RGXS['comment_punct'].fullmatch(punct):
                 # Skip comments at the end of non-empty lines
                 continue
 
@@ -375,7 +377,7 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
         return Path(filename).expanduser().resolve() if filename is not None else Path()
 
     def _calc_indent(self, text: str) -> int:
-        match = re.match(r" +", text.expandtabs(self.tabsize))
+        match = re.match(r' +', text.expandtabs(self.tabsize))
         return len(match[0]) if match else 0
 
     @overload
@@ -386,7 +388,7 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
 
     def _line_content(self, *, row: int = -1, pos: int = -1) -> tuple[Region, str]:
         if pos < 0:
-            assert row >= 0, "Must specify either a non-negative row or position."
+            assert row >= 0, 'Must specify either a non-negative row or position.'
             pos = self.view.text_point(row, 0)
         region = self.view.line(pos)
         text = self.read(region)
@@ -401,7 +403,7 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
         cls,
         *args: Any,
         data: dict | pyd.BaseModel | set | Sequence | None = None,
-        sep: str = " ",
+        sep: str = ' ',
         time: bool = True,
         indent: pyd.NonNegativeInt = 0,
         rjust: int = 0,
@@ -414,26 +416,26 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
 
         # I. Normalize a name identifying the caller.
         if name is None:
-            name = f"[{cls.__name__}]"
+            name = f'[{cls.__name__}]'
         elif name := name.strip():
-            if not name.startswith("["):
-                name = f"[{name}]"
+            if not name.startswith('['):
+                name = f'[{name}]'
 
         # II. Join the name and arguments into a single line
         parts = list(filter(bool, (name, *map(str, args))))
         ret = sep.join(parts)
         if time:
-            ret = ut.posix().strftime("%H:%M:%S.%f")[:-3] + f" {ret}"
+            ret = ut.posix().strftime('%H:%M:%S.%f')[:-3] + f' {ret}'
 
         # III. Print multiline data
         if data:
-            ret = ut.multiprint(title=ret.rstrip(" :") + ":", data=data)
+            ret = ut.multiprint(title=ret.rstrip(' :') + ':', data=data)
 
         # IV. Transform spacing
         if rjust:
-            ret = "\n".join(line.rjust(rjust - indent) for line in ret.splitlines())
+            ret = '\n'.join(line.rjust(rjust - indent) for line in ret.splitlines())
         elif indent:
-            ret = re.sub(r"(?m)^(?!$)", " " * indent, ret)
+            ret = re.sub(r'(?m)^(?!$)', ' ' * indent, ret)
 
         print(ret, **kwargs)
 
@@ -441,7 +443,7 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
         self,
         *args: Any,
         data: dict | pyd.BaseModel | set | Sequence | None = None,
-        sep: str = " ",
+        sep: str = ' ',
         time: bool = True,
         indent: pyd.NonNegativeInt = 0,
         rjust: int = 0,
@@ -449,7 +451,7 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
         log_level: str | int = logging.INFO,
         **kwargs: Any,
     ) -> None:
-        kwargs.setdefault("name", name or self.uid)
+        kwargs.setdefault('name', name or self.uid)
         self._log(
             *args,
             data=data,
@@ -466,7 +468,7 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
         args: tuple[Any, ...] | None = None,
         kwargs: dict[str, Any] | None = None,
         result: str | None = None,
-        name: str = "",
+        name: str = '',
         log_level: str | int = logging.INFO,
         **log_kwargs: Any,
     ) -> None:
@@ -478,23 +480,21 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
         elif (frame := inspect.currentframe()) is not None and frame.f_back is not None:
             name = frame.f_back.f_code.co_name
         else:
-            name = "<anon>"
+            name = '<anon>'
 
         arg_parts = []
         if args:
             arg_parts.extend(map(str, args))
         if kwargs:
-            arg_parts.extend(f"{k}={v}" for k, v in kwargs.items())
+            arg_parts.extend(f'{k}={v}' for k, v in kwargs.items())
 
-        _text = f"{name}({', '.join(arg_parts)})" + (f" -> {result}" if result else "")
+        _text = f'{name}({", ".join(arg_parts)})' + (f' -> {result}' if result else '')
         self._log(_text, log_level=log_level, **log_kwargs)
 
     @ctx.contextmanager
     def update_view_property(self, *names: str) -> Generator[dict[str, Any]]:
         missing = [n for n in names if n not in self._cache]
-        assert not missing, (
-            f"Tried to update non-existent view_properties ({missing=})."
-        )
+        assert not missing, f'Tried to update non-existent view_properties ({missing=}).'
         values = {name: self._cache.values[name] for name in names}
         yield values
         count = self.view.change_count()
@@ -532,30 +532,30 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
         """A context manager that sets the given attribute to the given value."""
         old: dict = {}
         if view is not None:
-            old["view"] = self._view
-            old["views"] = self._views
+            old['view'] = self._view
+            old['views'] = self._views
             self.view = view
         elif buffer is not None:
-            old["buffer"] = self._buffer
+            old['buffer'] = self._buffer
             self.buffer = buffer
         elif window is not None:
-            old["window"] = self._window
+            old['window'] = self._window
             self.window = window
         elif edit is not None:
-            old["edit"] = self._edit
+            old['edit'] = self._edit
             self.edit = edit
         try:
             yield
         finally:
-            if "view" in old:
-                self.view = old["view"]
-                self.views = old["views"]
-            if "buffer" in old:
-                self.buffer = old["buffer"]
-            elif "window" in old:
-                self.window = old["window"]
-            elif "edit" in old:
-                self.edit = old["edit"]
+            if 'view' in old:
+                self.view = old['view']
+                self.views = old['views']
+            if 'buffer' in old:
+                self.buffer = old['buffer']
+            elif 'window' in old:
+                self.window = old['window']
+            elif 'edit' in old:
+                self.edit = old['edit']
 
     @ctx.asynccontextmanager
     async def with_view_async(self, path: Path | str, **kwargs: Any) -> AsyncGenerator:
@@ -576,30 +576,30 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
     def navigate(self, href: str) -> None:
         """Navigate to a code point from a hyperlink in an annotation popup."""
         href = unquote(href).strip()
-        if href.startswith("file:"):
+        if href.startswith('file:'):
             self.open(href[5:].strip())
-        elif href.startswith("http"):
-            sb.run_command("open_url", {"url": href})
-        elif href.startswith("subl:"):
-            match = RGXS["args"].fullmatch(href[5:].strip())
-            assert match, f"Invalid command href: {href!r}"
+        elif href.startswith('http'):
+            sb.run_command('open_url', {'url': href})
+        elif href.startswith('subl:'):
+            match = RGXS['args'].fullmatch(href[5:].strip())
+            assert match, f'Invalid command href: {href!r}'
             data, captures = ut.clean_rgx_match(match)
-            args: dict = dict(zip(captures["key"], captures["val"]))
-            self.invoke(data["cmd"], **args)
+            args: dict = dict(zip(captures['key'], captures['val']))
+            self.invoke(data['cmd'], **args)
 
     async def navigate_async(self, href: str) -> None:
         """Navigate to a code point from a hyperlink in an annotation popup."""
         href = unquote(href).strip()
-        if href.startswith("file:"):
+        if href.startswith('file:'):
             await self.open_async(href[5:].strip())
-        elif href.startswith("http"):
-            sb.run_command("open_url", {"url": href})
-        elif href.startswith("subl:"):
-            match = RGXS["args"].fullmatch(href[5:].strip())
-            assert match, f"Invalid command href: {href!r}"
+        elif href.startswith('http'):
+            sb.run_command('open_url', {'url': href})
+        elif href.startswith('subl:'):
+            match = RGXS['args'].fullmatch(href[5:].strip())
+            assert match, f'Invalid command href: {href!r}'
             data, captures = ut.clean_rgx_match(match)
-            args: dict = dict(zip(captures["key"], captures["val"]))
-            await self.invoke_async(data["cmd"], **args)
+            args: dict = dict(zip(captures['key'], captures['val']))
+            await self.invoke_async(data['cmd'], **args)
 
     # ------------------
     # `x` Public Methods
@@ -611,9 +611,7 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
         `sublime_plugin.load_module()`.
         Sadly, there's no way to prevent this other than changing their code.
         """
-        raise NotImplementedError(
-            "You must implement the `main` method to use this class."
-        )
+        raise NotImplementedError('You must implement the `main` method to use this class.')
 
     def catch(self, error: Exception) -> None:
         """A standardized point to handle any errors that arise during the exection of `main()`."""
@@ -626,29 +624,27 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
 
     @view_property(hash_by_syntax=True)
     def _syntax_vars(self) -> dict[str, str]:
-        shell_vars = self.view.meta_info("shellVariables", 0)
+        shell_vars = self.view.meta_info('shellVariables', 0)
         assert isinstance(shell_vars, list)
-        return {item["name"]: item["value"] for item in shell_vars}
+        return {item['name']: item['value'] for item in shell_vars}
 
     @view_property(hash_by_syntax=True)
     def _comment_mark(self) -> str:
-        return self._syntax_vars.get("TM_COMMENT_START", "#").strip()
+        return self._syntax_vars.get('TM_COMMENT_START', '#').strip()
 
     @view_property
     def indents(self) -> list[Indent]:
         matches = [
             (len(item[0].expandtabs(self.tabsize)), bool(item[1]))
-            for item in RGXS["indent"].findall(self.read())
+            for item in RGXS['indent'].findall(self.read())
         ]
         match_len = len(matches)
-        assert match_len == self.n_rows, "Indent count does not match line count."
+        assert match_len == self.n_rows, 'Indent count does not match line count.'
 
         ret = []
         last = 0
-        _iter = mi.groupby_transform(
-            matches, keyfunc=lambda item: item[0], reducefunc=list
-        )  # type: ignore
-        _iter = cast("Iterator[tuple[int, list[tuple[int, bool]]]]", _iter)
+        _iter = mi.groupby_transform(matches, keyfunc=lambda item: item[0], reducefunc=list)  # type: ignore
+        _iter = cast('Iterator[tuple[int, list[tuple[int, bool]]]]', _iter)
         for indent, lines in _iter:
             size = len(lines)
             has_content = lines[0][1]
@@ -685,8 +681,7 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
             return True
         else:
             return all(
-                ix.val >= min_indent
-                for ix in indents[indents.index(i0) + 1 : indents.index(i1)]
+                ix.val >= min_indent for ix in indents[indents.index(i0) + 1 : indents.index(i1)]
             )
 
     # ----------------------
@@ -697,19 +692,13 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
         """The particualr view (i.e. tab) associated with this command."""
         if self._views is None:
             self._infer_views()
-        assert self._views is not None, (
-            "Called views-dependent method without setting `views`."
-        )
+        assert self._views is not None, 'Called views-dependent method without setting `views`.'
         return self._views
 
     @views.setter
     def views(self, new_views: list[View] | None) -> None:
-        if (
-            new_views is not None
-            and self._views is not None
-            and not self._ALLOW_OVERRIDES
-        ):
-            err = f"{self.classname} received a new list of views before the old ones were cleaned."
+        if new_views is not None and self._views is not None and not self._ALLOW_OVERRIDES:
+            err = f'{self.classname} received a new list of views before the old ones were cleaned.'
             assert len(self._views) == len(new_views), err
             assert all(v0 is v1 for v0, v1 in zip(self._views, new_views)), err
             return
@@ -721,12 +710,10 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
         """The particualr view (i.e. tab) associated with this command."""
         if self._view is None:
             self._infer_view()
-        assert self._view is not None, (
-            "Called view-dependent method without setting any views."
-        )
+        assert self._view is not None, 'Called view-dependent method without setting any views.'
 
         if self.has_views():
-            assert self._view in self.views, "Inferred view is not in views list."
+            assert self._view in self.views, 'Inferred view is not in views list.'
 
         return self._view
 
@@ -739,7 +726,7 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
             self._views = [self._view]
         else:
             assert self._view in self._views, (
-                f"{self.classname} received a new view that is not in the current views list."
+                f'{self.classname} received a new view that is not in the current views list.'
             )
 
     def _infer_views(self) -> None:
@@ -763,7 +750,7 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
             self._view = self._buffer.primary_view()
         elif self._views is not None and len(self._views) > 0:
             warnings.warn(
-                f"{self.classname} has multiple views but no view set; defaulting to the first.",
+                f'{self.classname} has multiple views but no view set; defaulting to the first.',
                 stacklevel=3,
             )
             self._view = self._views[0]
@@ -783,9 +770,7 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
     @property
     def buffer(self) -> Buffer:
         """The Buffer (i.e. list of views) tied to this command."""
-        assert self._buffer is not None, (
-            "Called buffer-dependent method without setting `buffer`."
-        )
+        assert self._buffer is not None, 'Called buffer-dependent method without setting `buffer`.'
         return self._buffer
 
     @buffer.setter
@@ -804,7 +789,7 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
 
         elif self._buffer is not None:
             assert self._buffer is val, (
-                f"{self.classname} received a new view object before the old one was cleaned."
+                f'{self.classname} received a new view object before the old one was cleaned.'
             )
             return
         self._buffer = val
@@ -832,7 +817,7 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
         if self._window is None:
             self._infer_window()
         assert self._window is not None, (
-            "Called window-dependent method without setting `window` or `view`."
+            'Called window-dependent method without setting `window` or `view`.'
         )
         return self._window
 
@@ -840,7 +825,7 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
     def window(self, val: Window | None) -> None:
         if self.has_window() and val is not None and not self._ALLOW_OVERRIDES:
             assert self._window is val, (
-                f"{self.classname} received a new window object before the old one was cleaned."
+                f'{self.classname} received a new window object before the old one was cleaned.'
             )
             return
         self._window = val
@@ -866,9 +851,7 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
     @property
     def edit(self) -> Edit:
         """The Edit handle associated with this command (usually only for TextCommands)."""
-        assert self._edit is not None, (
-            "Called edit-dependent method without setting `edit`."
-        )
+        assert self._edit is not None, 'Called edit-dependent method without setting `edit`.'
         return self._edit
 
     @edit.setter
@@ -903,19 +886,17 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
         elif window := mi.first(sb.windows(), None):
             return window.settings()
         else:
-            raise RuntimeError("No windows found to get settings from.")
+            raise RuntimeError('No windows found to get settings from.')
 
     @ctx.contextmanager
     def mutable_settings(self, filename: str) -> Generator[Settings]:
         """A context manager that lets you modify the identified settings file on disk."""
         # I. Clean & pre-verify the given filename
-        assert filename, "Filename must be non-empty."
+        assert filename, 'Filename must be non-empty.'
         _path = Path(filename)
         if not _path.suffix:
-            _path = _path.with_suffix(".sublime-settings")
-        assert len(_path.parts) == 1, (
-            f'Filename "{_path}" must be a single name, not a path.'
-        )
+            _path = _path.with_suffix('.sublime-settings')
+        assert len(_path.parts) == 1, f'Filename "{_path}" must be a single name, not a path.'
         filename = _path.name
 
         settings = sb.load_settings(filename)
@@ -924,7 +905,7 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
 
     @ft.cached_property
     def tabsize(self) -> int:
-        return self.settings.get("tab_size", 4)
+        return self.settings.get('tab_size', 4)
 
     # -----------------
     # `x3` VIEW METHODS
@@ -949,7 +930,7 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
         """Read the text in the given region."""
         if isinstance(region, int):
             region = sb.Region(region, end or len(self.view))
-        assert isinstance(region, sb.Region), f"Invalid region argument {region!r}."
+        assert isinstance(region, sb.Region), f'Invalid region argument {region!r}.'
         return self.view.substr(region)
 
     def read_all(self, selector: str) -> Iterator[str]:
@@ -973,15 +954,13 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
     @ctx.contextmanager
     def batch_write(self, debug: bool | None = None) -> Generator[ut.Writer]:
         # return ut.batch_write(self.write, self.DEBUG if debug is None else debug)
-        with ut.batch_write(
-            self.view, self.edit, self.DEBUG if debug is None else debug
-        ) as writer:
+        with ut.batch_write(self.view, self.edit, self.DEBUG if debug is None else debug) as writer:
             yield writer
 
     def show(
         self,
         dest: Region | int | None,
-        mode: Literal["normal", "top", "center", "bottom"] = "normal",
+        mode: Literal['normal', 'top', 'center', 'bottom'] = 'normal',
         select: bool = True,
         **kwargs: Any,
     ) -> None:
@@ -997,22 +976,20 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
             self.selections.clear()
             self.selections.add(dest)
 
-        if mode == "normal":
+        if mode == 'normal':
             # III.i. Base case: scroll using Sublime's automated features
             self.view.show(dest, **kwargs)
-        elif mode == "center":
+        elif mode == 'center':
             # III.ii. Scroll so that the point is centered, again using premade features
             self.view.show_at_center(dest, **kwargs)
         else:
             # III.iii. Finally, scroll so that the targeted line is either at the top or the bottom
             #          of the screen using logic borrowed from Vintage.
             screen = self.view.visible_region()
-            orig_line = self.view.rowcol(
-                screen.begin() if mode == "top" else screen.end()
-            )[0]
+            orig_line = self.view.rowcol(screen.begin() if mode == 'top' else screen.end())[0]
             dest_line = self.view.rowcol(dest.begin())[0]
             offset = dest_line - orig_line
-            self.view.run_command("scroll_lines", {"amount": -offset})
+            self.view.run_command('scroll_lines', {'amount': -offset})
 
     def write_comment(self, comment: Comment) -> int:
         """Write the given Comment back to the view."""
@@ -1027,21 +1004,19 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
         """Find all regions matching the given selector within the given region."""
         yield from filter(region.contains, self.view.find_by_selector(selector))
 
-    def find_iter(
-        self, selector: str, region: Region | None = None
-    ) -> Iterator[Region]:
+    def find_iter(self, selector: str, region: Region | None = None) -> Iterator[Region]:
         """Simple wrapper for `find_by_selector` that returns a view instead of a list."""
         if region is not None:
             yield from self.find_within(selector, region)
         else:
             yield from iter(self.view.find_by_selector(selector))
 
-    @view_property(scopes=("comment.line",))
+    @view_property(scopes=('comment.line',))
     def line_comments(self) -> dict[int, Comment]:
         ret = {
             block[0].row: Comment(
                 lines=[line.region for line in block],
-                texts=[line.text.rstrip("\n") for line in block],
+                texts=[line.text.rstrip('\n') for line in block],
                 row=block[0].row,
                 col=block[0].col,
                 punct=block[0].punct,
@@ -1069,9 +1044,7 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
         """
         filters = list(preds)
         if start or end:
-            assert start >= 0 and (start < end or end == 0), (
-                "Start and end must be non-negative."
-            )
+            assert start >= 0 and (start < end or end == 0), 'Start and end must be non-negative.'
             bounds = Region(start, end or self.view.size())
             filters.append(lambda comment: bounds.contains(comment.region))
 
@@ -1089,7 +1062,7 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
     @view_property
     def function_map(self) -> dict[str, sb.Region]:
         ret = {}
-        for region in self.view.find_by_selector("entity.name.function"):
+        for region in self.view.find_by_selector('entity.name.function'):
             name = self.view.substr(region)
             if name not in ret:
                 ret[name] = region
@@ -1098,7 +1071,7 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
     @view_property
     def class_map(self) -> dict[str, sb.Region]:
         ret = {}
-        for region in self.view.find_by_selector("entity.name.class"):
+        for region in self.view.find_by_selector('entity.name.class'):
             name = self.view.substr(region)
             if name not in ret:
                 ret[name] = region
@@ -1115,12 +1088,12 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
         #     assert pos >= 0, 'Must specify either a non-negative position or row.'
         #     row = self.view.rowcol(pos)[0]
         if pos < 0:
-            assert row >= 0, "Must specify either a non-negative position or row."
+            assert row >= 0, 'Must specify either a non-negative position or row.'
             pos = self.view.text_point(row, 0)
 
         bol = self.view.text_point(row, 0)
         line = self.read(self.view.line(bol))
-        if match := RGXS["indent"].match(line):
+        if match := RGXS['indent'].match(line):
             return pos + len(match[1])
         return pos
 
@@ -1207,7 +1180,7 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
     @property
     def syntax(self) -> str:
         """The simplified syntax of the current view."""
-        return inst.scope if (inst := self.view.syntax()) is not None else ""
+        return inst.scope if (inst := self.view.syntax()) is not None else ''
 
     def syntax_is(self, *args: str) -> bool:
         """Whether the current view's syntax matches any of the given ones."""
@@ -1225,16 +1198,14 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
     def api_level(self) -> CommandLevel:
         """The *primary* level at which this command lives."""
         if isinstance(self, (sbp.TextCommand, sbp.ViewEventListener)):
-            return "view"
+            return 'view'
         elif isinstance(self, sbp.WindowCommand):
-            return "window"
+            return 'window'
         elif isinstance(self, sbp.TextChangeListener):
-            return "buffer"
+            return 'buffer'
         elif isinstance(self, (sbp.ApplicationCommand, sbp.EventListener)):
-            return "app"
-        raise RuntimeError(
-            f"Unknown bases for {self.classname}: {self.__class__.__bases__}"
-        )
+            return 'app'
+        raise RuntimeError(f'Unknown bases for {self.classname}: {self.__class__.__bases__}')
 
     def invoke(
         self,
@@ -1256,11 +1227,9 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
         """
         fn: Callable[[str, dict], None]
         if _level is not None:
-            if _level == "buffer":
-                raise NotImplementedError(
-                    "Invoking commands at the buffer level is not supported."
-                )
-            elif _level == "app":
+            if _level == 'buffer':
+                raise NotImplementedError('Invoking commands at the buffer level is not supported.')
+            elif _level == 'app':
                 fn = sb.run_command
             else:
                 fn = getattr(self, _level).run_command
@@ -1284,9 +1253,7 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
         **kwargs: Any,
     ) -> None:
         """Asynchronously invoke another command with the given arguments."""
-        fn = ft.partial(
-            self.invoke, command, _delay=_delay, _async=_async, _level=_level, **kwargs
-        )
+        fn = ft.partial(self.invoke, command, _delay=_delay, _async=_async, _level=_level, **kwargs)
         await aio.get_event_loop().run_in_executor(None, fn)
 
     @property
@@ -1335,7 +1302,7 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
             return next(_ffs)  # pyrefly: ignore[bad-argument-type]
 
         if self.has_view():
-            return ut.path(self.view.file_name() or "").parent
+            return ut.path(self.view.file_name() or '').parent
         return Path.cwd()
 
     def open(
@@ -1365,7 +1332,7 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
         pathstr = str(path)
         if row > -1:
             flags |= sb.NewFileFlags.ENCODED_POSITION
-            pathstr += f":{row}"
+            pathstr += f':{row}'
 
         # III. Actually open the file and wait up to 3s for it to load
         view = window.open_file(pathstr, flags, group)
@@ -1387,7 +1354,5 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
         group: int = -1,
     ) -> View:
         """Asynchronously open the given file in a new view."""
-        fn = ft.partial(
-            self.open, path=path, row=row, flags=flags, window=window, group=group
-        )
+        fn = ft.partial(self.open, path=path, row=row, flags=flags, window=window, group=group)
         return await aio.get_event_loop().run_in_executor(None, fn)

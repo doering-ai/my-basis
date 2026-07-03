@@ -101,8 +101,8 @@ class PackageSettings(pyd.BaseModel):
         """Get the filename for this settings class."""
         return f'{cls.PKG}.sublime-settings'
 
-    @ctx.contextmanager
     @classmethod
+    @ctx.contextmanager
     def open(cls) -> Generator[Self]:
         """Open the settings for potential editing, writing any changes back at the end."""
         inst = cls.new()

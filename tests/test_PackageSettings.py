@@ -114,6 +114,61 @@ class TestPackageSettingsFilename:
         assert _Settings.filename() == 'my_test_pkg.sublime-settings'
 
 
+class TestPackageSettingsOpen:
+    """Regression tests for ``PackageSettings.open`` (contextmanager/classmethod order)."""
+
+    def test_open_is_usable_as_a_context_manager(self):
+        """``open()`` must be invokable directly on the class and bind ``cls`` correctly.
+
+        Guards against the decorator-order bug where ``@ctx.contextmanager`` was stacked above
+        ``@classmethod``: contextmanager wrapped the classmethod descriptor itself, so ``cls``
+        never bound and ``SomeSettings.open()`` raised at call time instead of entering the
+        context manager.
+        """
+
+        class _Settings(PackageSettings):
+            PKG: ClassVar[str] = 'test_pkg_open'
+            debug: bool = False
+
+        with _Settings.open() as inst:
+            assert isinstance(inst, _Settings)
+
+    def test_open_yields_the_registered_instance(self):
+        """The yielded object is the same instance the class registry already holds."""
+
+        class _Settings(PackageSettings):
+            PKG: ClassVar[str] = 'test_pkg_open_yield'
+            debug: bool = False
+
+        expected = _Settings.new()
+        with _Settings.open() as inst:
+            assert inst is expected
+            assert inst.debug is False
+
+    def test_open_across_subclasses_binds_the_correct_cls(self):
+        """Two subclasses opened in sequence must each yield their own class's instance.
+
+        A broken binding (``cls`` failing to resolve, or resolving to the wrong class) would be
+        masked if only one subclass were ever exercised.
+        """
+
+        class _SettingsA(PackageSettings):
+            PKG: ClassVar[str] = 'test_pkg_open_a'
+            debug: bool = False
+
+        class _SettingsB(PackageSettings):
+            PKG: ClassVar[str] = 'test_pkg_open_b'
+            debug: bool = False
+
+        with _SettingsA.open() as inst_a:
+            assert isinstance(inst_a, _SettingsA)
+            assert not isinstance(inst_a, _SettingsB)
+
+        with _SettingsB.open() as inst_b:
+            assert isinstance(inst_b, _SettingsB)
+            assert not isinstance(inst_b, _SettingsA)
+
+
 class TestPackageSettingsNew:
     """Tests for ``PackageSettings.new``."""
 

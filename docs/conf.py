@@ -33,7 +33,7 @@ JNJ_DIR = SRC_DIR + '/data/templates'
 # -------
 project = 'MyBasis'
 author = 'Robb Doering'
-version = metadata.version('MyBasis')
+version = metadata.version('my-basis')  # the [project].name in pyproject.toml
 release = version
 
 # -------
@@ -113,7 +113,9 @@ autodoc_default_options = {
     'member-order': 'bysource',
     # 'show-inheritance': None,
     'class-doc-from': 'class',
-    # 'no-value': None,
+    # Value reprs of data/attribute members (e.g. `RegexStore.META_RGXS`, a dict of compiled
+    # patterns) are unreadable and get re-parsed as markup, spraying xref warnings. Hide them.
+    'no-value': True,
     # 'no-index': None,
     # 'no-index-entry': None,
 }

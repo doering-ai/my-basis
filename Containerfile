@@ -9,12 +9,12 @@ FROM ghcr.io/astral-sh/uv:python3.13-trixie-slim AS system
 ENV DEBIAN_FRONTEND=noninteractive \
     LANG=C.UTF-8 \
     _APT="apt-get update && apt-get install -y --no-install-recommends" \
-    _APT_CLEAN="apt-get clean"
+    _APT_CLEAN="apt-get clean && rm -rf /var/lib/apt/lists/*"
 
 # ---- apt ----
 RUN set -eux && \
-    ${_APT} git curl ca-certificates gosu && \
-    ${_APT_CLEAN}
+    eval "${_APT} git curl ca-certificates gosu" && \
+    eval "${_APT_CLEAN}"
 
 # ---- tools ----
 # Taskfile

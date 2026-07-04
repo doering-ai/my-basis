@@ -386,7 +386,7 @@ class OutputPanel(pyd.BaseModel):
                     b = (idx % 6) * 51
                     new_color = f'style="color: rgb({r}, {g}, {b})"'
                 elif idx >= 232:
-                    gray = ((idx - 232) * 11) + 8
+                    gray = min(255, ((idx - 232) * 11) + 8)
                     new_color = f'style="color: rgb({gray}, {gray}, {gray})"'
 
         # II.iv. Apply color changes
@@ -408,8 +408,13 @@ class OutputPanel(pyd.BaseModel):
         parameters (``38``/``48``, foreground/background) are the exception: they consume
         their trailing mode + value(s) as *one* logical code -- ``38;5;N`` (256-color) or
         ``38;2;R;G;B`` (truecolor) -- rather than being split into unrelated SGR parameters.
-        Malformed/incomplete extended-color sequences (missing components) fall through to
-        the per-parameter case; `_apply_ansi_code` safely no-ops on whatever it can't parse.
+        Malformed/incomplete extended-color sequences with a *recognized* mode (``5`` or ``2``)
+        but missing value components fall through to the per-parameter case; `_apply_ansi_code`
+        safely no-ops on whatever it can't parse. An *unrecognized* mode digit (neither ``5``
+        nor ``2``) makes the rest of the group unparseable -- there is no way to know how many
+        trailing tokens it was meant to consume -- so the entire remainder of the escape run is
+        folded into one opaque code instead of being leaked as independent SGR parameters (which
+        could otherwise apply unrelated formatting, e.g. a stray ``1`` rendering bold).
         """
         if not code:
             return []
@@ -425,6 +430,9 @@ class OutputPanel(pyd.BaseModel):
             elif param in ('38', '48') and i + 4 < n and raw[i + 1] == '2':
                 codes.append(';'.join(raw[i : i + 5]))
                 i += 5
+            elif param in ('38', '48') and i + 1 < n and raw[i + 1] not in ('5', '2'):
+                codes.append(';'.join(raw[i:]))
+                i = n
             else:
                 codes.append(param)
                 i += 1

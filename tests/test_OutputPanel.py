@@ -145,7 +145,8 @@ class TestApplyAnsiCode:
             ('38;5;16', 'style="color: rgb(0, 0, 0)"'),  # 6x6x6 color cube
             ('38;5;231', 'style="color: rgb(255, 255, 255)"'),
             ('38;5;232', 'style="color: rgb(8, 8, 8)"'),  # grayscale ramp
-            ('38;5;255', 'style="color: rgb(261, 261, 261)"'),
+            ('38;5;254', 'style="color: rgb(250, 250, 250)"'),  # ramp still in-range
+            ('38;5;255', 'style="color: rgb(255, 255, 255)"'),  # regression: was rgb(261,261,261)
         ],
     )
     def test_256_palette_branch(self, code: str, expected_color: str):
@@ -184,6 +185,75 @@ class TestApplyAnsiCode:
         style = OutputPanel.Style()
         assert OutputPanel._apply_ansi_code(0, code, style) == ''
         assert not style
+
+
+class TestSplitSgrParams:
+    """Tests for ``OutputPanel._split_sgr_params``."""
+
+    def test_empty_code_yields_no_params(self):
+        assert OutputPanel._split_sgr_params('') == []
+
+    @pyt.mark.parametrize(
+        'code, expected',
+        [
+            ('1', ['1']),
+            ('1;31', ['1', '31']),
+            ('1;3;4', ['1', '3', '4']),
+        ],
+    )
+    def test_independent_params_split_one_to_one(self, code: str, expected: list):
+        assert OutputPanel._split_sgr_params(code) == expected
+
+    @pyt.mark.parametrize(
+        'code, expected',
+        [
+            ('38;5;208', ['38;5;208']),
+            ('48;5;208', ['48;5;208']),
+            ('38;2;100;150;200', ['38;2;100;150;200']),
+            ('48;2;100;150;200', ['48;2;100;150;200']),
+            ('1;38;5;208', ['1', '38;5;208']),
+            ('38;5;208;1', ['38;5;208', '1']),
+        ],
+    )
+    def test_recognized_extended_color_groups_as_one_code(self, code: str, expected: list):
+        """A real ``5`` (256-color) or ``2`` (truecolor) mode consumes exactly its own
+        value(s), leaving any surrounding independent codes untouched."""
+        assert OutputPanel._split_sgr_params(code) == expected
+
+    @pyt.mark.parametrize(
+        'code, expected',
+        [
+            ('38', ['38']),  # bare marker, no mode digit at all
+            ('38;5', ['38', '5']),  # recognized mode, missing index -- unaffected by this fix
+            ('38;2;100;150', ['38', '2', '100', '150']),  # recognized mode, missing components
+        ],
+    )
+    def test_incomplete_but_recognized_mode_still_falls_through_per_param(
+        self, code: str, expected: list
+    ):
+        """Pre-existing behavior for a *recognized* mode (5/2) with missing value components is
+        unchanged: each leaked token is still individually safe, since none of ``38``, ``5``,
+        ``2``, or bare digit fragments match a real SGR code in `_apply_ansi_code`."""
+        assert OutputPanel._split_sgr_params(code) == expected
+
+    @pyt.mark.parametrize(
+        'code',
+        [
+            '38;9;1;2',  # spec example: unrecognized mode digit `9`
+            '48;9;1;2',  # background variant of the same bug
+            '38;99;31',  # unrecognized mode digit, would otherwise leak a `31` (red)
+        ],
+    )
+    def test_unrecognized_mode_discards_whole_group(self, code: str):
+        """Regression: an unrecognized extended-color MODE digit (not `5` or `2`) must not
+        leak its trailing tokens as independent SGR codes -- e.g. a stray `1` must not render
+        bold. The whole group collapses into one opaque code that `_apply_ansi_code` no-ops on."""
+        assert OutputPanel._split_sgr_params(code) == [code]
+
+    def test_unrecognized_mode_does_not_consume_preceding_independent_codes(self):
+        """Only the malformed group itself is discarded; codes stacked *before* it in the same
+        escape run must still be split out normally."""
+        assert OutputPanel._split_sgr_params('1;38;9;1;2') == ['1', '38;9;1;2']
 
 
 class TestReplaceAnsiColors:
@@ -267,6 +337,20 @@ class TestReplaceAnsiColors:
         leaked into the output as raw bytes."""
         result = OutputPanel._replace_ansi_colors('\x1b[1;31mtext\x1b[0m')
         assert '\x1b' not in result
+
+    def test_unrecognized_extended_color_mode_does_not_leak_bold(self):
+        """Regression: an unrecognized extended-color MODE digit (e.g. `38;9;...`) must not
+        leak its trailing tokens as independent SGR codes. Before the fix, the stray `1` in
+        `38;9;1;2` was applied as an independent bold code."""
+        result = OutputPanel._replace_ansi_colors('\x1b[38;9;1;2mtext\x1b[0m')
+        assert result == 'text'
+        assert '<strong>' not in result
+
+    def test_unrecognized_extended_color_mode_preserves_preceding_codes(self):
+        """A malformed extended-color group must not swallow codes stacked before it in the
+        same escape run."""
+        result = OutputPanel._replace_ansi_colors('\x1b[1;38;9;1;2mtext\x1b[0m')
+        assert result == '<strong>text</strong>'
 
 
 class TestConversions:

@@ -290,4 +290,4 @@ def _decorator_factory(
 
         return cache.values[name]
 
-    return property(_wrapper)
+    return property(_wrapper)  # pyrefly: ignore[bad-return]  # generic descriptor; property() is a property at runtime

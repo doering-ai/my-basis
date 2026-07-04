@@ -1,5 +1,5 @@
 # Changes here will be overwritten by Copier
-_commit: v0.1.6
+_commit: v0.1.8-45-geab3cc4
 _src_path: /home/robbd/my/corpus
 build_system: uv
 caption: An extensive utility library for python, focusing especially on iterables

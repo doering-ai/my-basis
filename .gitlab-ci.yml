@@ -10,10 +10,19 @@ stages:
   - release
 # Import static analysis tools
 include:
+<<<<<<< before updating
   - template: Security/Secret-Detection.gitlab-ci.yml
   - component: gitlab.com/gitlab-org/professional-services-automation/tools/utilities/pipeintel/pipeintel@main
     inputs:
       stage: eval
+=======
+    - template: Security/Secret-Detection.gitlab-ci.yml
+    - component: gitlab.com/gitlab-org/professional-services-automation/tools/utilities/pipeintel/pipeintel@1.0.0
+      inputs:
+        stage: eval
+        offline: true
+
+>>>>>>> after updating
 # Determine when this pipeline should run
 workflow:
   rules:
@@ -27,14 +36,31 @@ workflow:
 ### DATA ###
 ############
 variables:
+<<<<<<< before updating
   PACKAGE: my
   MAIN_POD: $CI_REGISTRY_IMAGE:latest
   # Enable GitLabs free secret detection -- see `secret_detection` job
   SECRET_DETECTION_ENABLED: 'true'
+=======
+    PACKAGE: my
+    DOCKER_TLS_CERTDIR: /certs
+    TEST_POD: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
+    MAIN_POD: $CI_REGISTRY_IMAGE:latest
+
+    # Enable GitLabs free secret detection -- see `secret_detection` job
+    SECRET_DETECTION_ENABLED: 'true'
+
+    # Where uv caches wheels/downloads -- kept inside the project so GitLab can cache it.
+    UV_CACHE_DIR: .uv-cache
+    USER: my
+
+
+>>>>>>> after updating
 ############
 ### BODY ###
 ############
 default:
+<<<<<<< before updating
   image: $MAIN_POD
 secret_detection:
   stage: eval
@@ -57,3 +83,77 @@ Test Python:
   script:
     - task test:cov
   coverage: '/TOTAL.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
+=======
+    image:
+        name: $MAIN_POD
+        entrypoint: [""]
+
+cache:
+    key:
+        files:
+            - uv.lock
+    paths:
+        - $UV_CACHE_DIR
+
+secret_detection:
+    stage: eval
+    cache: []
+
+.docker:
+    image: docker:26
+    services: [docker:26-dind]
+    before_script:
+        - echo "$CI_REGISTRY_PASSWORD" | docker login $CI_REGISTRY -u gitlab-ci-token --password-stdin
+    cache: []
+
+Rebuild Pod:
+    stage: build
+    extends: .docker
+    script:
+        - docker build --pull -t $TEST_POD -f Containerfile .
+        - docker push $TEST_POD
+    rules:
+        - changes:
+            - Containerfile
+            - Taskfile.dist.yaml
+            - .repo.yaml
+
+Release Pod:
+    stage: release
+    extends: .docker
+    script:
+        - docker pull $TEST_POD
+        - docker tag $TEST_POD $MAIN_POD
+        - docker push $MAIN_POD
+    rules:
+        - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+        - changes:
+            - Containerfile
+            - Taskfile.dist.yaml
+            - .repo.yaml
+
+Evaluate Python:
+    stage: eval
+    before_script:
+        - cd $CI_PROJECT_DIR
+        - uv sync --all-extras
+    script:
+        - uv run ruff check --output-format=gitlab --output-file=code-quality-report.json
+        - uv run ruff format --diff
+        - uv run pyrefly check
+    interruptible: true
+    artifacts:
+        reports:
+            codequality: $CI_PROJECT_DIR/code-quality-report.json
+
+Test Python:
+    stage: test
+    before_script:
+        - cd $CI_PROJECT_DIR
+        - uv sync --all-extras
+    script:
+        - uv run task test:cov
+    coverage: '/TOTAL.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
+ 
+ 
+>>>>>>> after updating

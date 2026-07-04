@@ -2,6 +2,7 @@
 ############
 ### HEAD ###
 ############
+# These will be executed in turn, corresponding to one or more jobs below
 stages:
   - build
   - eval
@@ -19,8 +20,10 @@ include:
 # Determine when this pipeline should run
 workflow:
   rules:
+    # Never run for draft commits
     - if: '$CI_COMMIT_TITLE =~ /-draft$/ || $CI_MERGE_REQUEST_DRAFT == "true"'
       when: never
+    # Run for merge requests and pushes to the main branch
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
@@ -29,17 +32,18 @@ workflow:
 ############
 variables:
   PACKAGE: my
-  USER: root
+  USER: my
   DOCKER_TLS_CERTDIR: /certs
   TEST_POD: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
   MAIN_POD: $CI_REGISTRY_IMAGE:latest
+  # Enable GitLabs free secret detection -- see `secret_detection` job
   SECRET_DETECTION_ENABLED: 'true'
 
 ############
 ### BODY ###
 ############
 default:
-  image: ghcr.io/astral-sh/uv:python3.13-bookworm
+  image: $MAIN_POD
 
 .docker:
   image: docker:26
@@ -77,24 +81,21 @@ secret_detection:
 
 Evaluate Python:
   stage: eval
+  interruptible: true
   before_script:
     - cd $CI_PROJECT_DIR
-    - uv sync --all-extras
-  interruptible: true
+    - ruff --version
+    - pyrefly --version
   script:
-    - uv run ruff check --output-format=gitlab --output-file=code-quality-report.json
-    - uv run ruff format --diff
-    - uv run pyrefly check
+    - ruff check --output-format=gitlab --output-file=code-quality-report.json
+    - ruff format --diff
+    - pyrefly check
   artifacts:
     reports:
       codequality: $CI_PROJECT_DIR/code-quality-report.json
 
 Test Python:
   stage: test
-  before_script:
-    - cd $CI_PROJECT_DIR
-    - uv sync --all-extras
   script:
-    - sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
-    - uv run task test:cov
+    - task test:cov
   coverage: '/TOTAL.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'

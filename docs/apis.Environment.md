@@ -3,11 +3,11 @@
 ```{py:currentmodule} my.apis.Environment
 ```
 
-```{autodata} env
+```{eval-rst}
+.. autodata:: my.apis.Environment.env
 ```
 
-```{autoclass} Environment
----
-members:
----
+```{eval-rst}
+.. autoclass:: my.apis.Environment.Environment
+   :members:
 ```

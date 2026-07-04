@@ -83,77 +83,84 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
     It contains a large variety of functionality-for and examples-of working with types at runtime,
     but I suspect that this sort of **"Vibe Typing"** usecase will remain its shining capability.
 
-    ```{tip}
-    Typist is written as an instanced class only for situations where configuration differs across a
-    single project. If that's not you, just use the global instance `typist`!
-    ```
+    .. tip::
+       Typist is written as an instanced class only for situations where configuration differs
+       across a single project. If that's not you, just use the global instance ``typist``!
 
-    #### `I` Parsing
+    .. rubric:: I. Parsing
+
     The features of Typist that most diverge from what's capable with the standard library rely
-    on the `parse()` method, which decomposes a given type so that other methods can intelligently
+    on the ``parse()`` method, which decomposes a given type so that other methods can intelligently
     handly each part in turn. By far the most likely usecase is for containers such as
-    `dict[str, int]` (which becomes the tuple `(dict, str, int)`) and `list[int]` (which becomes
-    `(list, int, None)`), but it's useful for other generics, unions (e.g. `string | int`),
-    and special non-type forms (e.g. `Annotated` and `Literal`).
+    ``dict[str, int]`` (which becomes the tuple ``(dict, str, int)``) and ``list[int]`` (which
+    becomes ``(list, int, None)``), but it's useful for other generics, unions (e.g.
+    ``string | int``), and special non-type forms (e.g. ``Annotated`` and ``Literal``).
 
-    That said, not all possible type annotations are covered -- see the `Typist.SPECIAL_TYPES`
+    That said, not all possible type annotations are covered -- see the ``Typist.SPECIAL_TYPES``
     attribute for a best-effort list of unhandled annotations.
 
-    #### `II` Comparison
-    ##### Type Comparison ("matching")
-    Type matching (mostly via `match()`) determines whether a value or type is a valid subset of
-    another type. As opposed to the stdlib's `issubclass()`, Typist handles subtypes of generics
-    recursively; for example, `dict[str, int]` matches `Mapping[str, int]` and
-    `Collection[Sequence, int]`, but not `Mapping[str, str]` or `Collection[int]`.
+    .. rubric:: II. Comparison
 
-    Matching results are cached using a `NestedCache` for performance.
+    **Type Comparison ("matching")**
+
+    Type matching (mostly via ``match()``) determines whether a value or type is a valid subset of
+    another type. As opposed to the stdlib's ``issubclass()``, Typist handles subtypes of generics
+    recursively; for example, ``dict[str, int]`` matches ``Mapping[str, int]`` and
+    ``Collection[Sequence, int]``, but not ``Mapping[str, str]`` or ``Collection[int]``.
+
+    Matching results are cached using a ``NestedCache`` for performance.
 
     A small number of non-atomic yet common types are handled with custom logic:
-    `tuple[int, str, float]` only matches another tuple with the same length and member types,
-    whereas `tuple[int, ...]` matches any-length tuples of ints.
+    ``tuple[int, str, float]`` only matches another tuple with the same length and member types,
+    whereas ``tuple[int, ...]`` matches any-length tuples of ints.
 
-    ##### Object Comparison ("checking")
-    Runtime data can be compared to other data using `match_instances()`, but obviously the primary
-    usecase is to bring type-checking functionality into runtime in an ergonomic, idiomatic way.
-    For this, Typist publishes `check()` for individual object/type pairs, and `all_are()` for
-    asserting the types of the contents of containers.
+    **Object Comparison ("checking")**
+
+    Runtime data can be compared to other data using ``match_instances()``, but obviously the
+    primary usecase is to bring type-checking functionality into runtime in an ergonomic, idiomatic
+    way. For this, Typist publishes ``check()`` for individual object/type pairs, and ``all_are()``
+    for asserting the types of the contents of containers.
 
     All of these methods use the TypeGuard protocol to enable type-narrowing in conditional
     statements, complementing static type-checkers like mypy or ty.
 
-    #### `III` Coercion
-    The core functionality is **intelligent type coercion via `cast()` and `flexcast()`,**  which
-    both try their absolute hardest to find a reasonable mapping between any two types. Obviously
-    this is definitionally impossible to do perfectly for all possible types, but it has been tested
-    extensively on the types that make up the vast majority of usecases (AI or otherwise):
+    .. rubric:: III. Coercion
 
-    - Atomic types: `str`, `int`, `float`, and `bool`
-    - Series: `list`, `tuple`, `set`, `deque`, etc.
-    - Maps: `dict`, `Counter`, `Predicate`, etc.
-    - Pydantic models: any subclass of `pyd.BaseModel`
-    - Times: `datetime`, `date`, `time`, and `timedelta`
-    - Enums: standard Python `Enum` types
+    The core functionality is **intelligent type coercion via** ``cast()`` **and** ``flexcast()``,
+    which both try their absolute hardest to find a reasonable mapping between any two types.
+    Obviously this is definitionally impossible to do perfectly for all possible types, but it has
+    been tested extensively on the types that make up the vast majority of usecases (AI or
+    otherwise):
+
+    - Atomic types: ``str``, ``int``, ``float``, and ``bool``
+    - Series: ``list``, ``tuple``, ``set``, ``deque``, etc.
+    - Maps: ``dict``, ``Counter``, ``Predicate``, etc.
+    - Pydantic models: any subclass of ``pyd.BaseModel``
+    - Times: ``datetime``, ``date``, ``time``, and ``timedelta``
+    - Enums: standard Python ``Enum`` types
     - And, most importantly: nested combinations of the above!
 
     Some of the decisions made within this class are arbitrary, but if the system is used
     consistently for both reading and writing, the implied instability/inconsistency can be
     minimized.
 
+    .. rubric:: IV. Transformation
 
-    #### `IV` Transformation
     Typist provides more than just type coercion, which is ideally a minimally-semantic process.
-    Namely, the `serialize()`, `assemble()` and `distill()` methods are built to flatten, combine
-    together, and split apart complex nested data structures composed of sequences, mappings, and
-    even Pydantic objects.
+    Namely, the ``serialize()``, ``assemble()`` and ``distill()`` methods are built to flatten,
+    combine together, and split apart complex nested data structures composed of sequences,
+    mappings, and even Pydantic objects.
 
-    #### `V` Persistence
-    For reading and writing typed data to and from disk, Typist provides `to_file()` and
-    `from_file()`. In just one short statement, users can interface with three file
-    formats--**YAML, JSON, and Pickle**--using the very highly performant [`srsly`](https://github.com/explosion/srsly)
-    library.
+    .. rubric:: V. Persistence
 
-    #### `VI` Invocation
-    Finally, `invoke()` provides safe function calling with automatic type casting of arguments
+    For reading and writing typed data to and from disk, Typist provides ``to_file()`` and
+    ``from_file()``. In just one short statement, users can interface with three file
+    formats--**YAML, JSON, and Pickle**--using the very highly performant `srsly
+    <https://github.com/explosion/srsly>`_ library.
+
+    .. rubric:: VI. Invocation
+
+    Finally, ``invoke()`` provides safe function calling with automatic type casting of arguments
     and return values. It inspects function signatures to determine expected types, casts provided
     arguments accordingly, and casts the return value to the annotated return type. This enables
     seamless integration of typed functions into dynamic workflows.
@@ -204,7 +211,8 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
     LOGGER: ClassVar[logging.Logger] = logger
     _INST: ClassVar[Typist]
 
-    #: Validate flag assignment so runtime toggles (e.g. `typist.splits = False`) stay type-checked.
+    #: Validate flag assignment so runtime toggles (e.g. ``typist.splits = False``) stay
+    #: type-checked.
     model_config = pyd.ConfigDict(validate_assignment=True)
 
     # ---- Cast configuration flags ----
@@ -216,30 +224,31 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
     # a cast already in flight is no longer disturbed by a mid-cast mutation. See
     # `docs/DESIGN-cast-flags.md` and `cast.CastFlags`.
 
-    #: `Vec -> Atom` Collapse a multi-element series to its first element (`[1, 2] -> 1`).
+    #: ``Vec -> Atom`` Collapse a multi-element series to its first element (``[1, 2] -> 1``).
     firsts: bool = True
 
-    #: `Vec -> Atom` Unwrap a single-element series (`[1] -> 1`).
+    #: ``Vec -> Atom`` Unwrap a single-element series (``[1] -> 1``).
     atomics: bool = True
 
-    #: `String -> Struct` Split a string before casting it to a collection (`'a.b' -> ['a', 'b']`).
+    #: ``String -> Struct`` Split a string before casting it to a collection
+    #: (``'a.b' -> ['a', 'b']``).
     splits: bool = True
 
-    #: `Atom <-> Struct` Wrap an atom into a collection, and vice-versa (`'a' -> ['a']`).
+    #: ``Atom <-> Struct`` Wrap an atom into a collection, and vice-versa (``'a' -> ['a']``).
     wraps: bool = True
 
     @classmethod
     def preset(cls, level: CastPreset = 'basic') -> dict[str, bool]:
         """Get a preset bundle of cast-flag values for a strictness tier.
 
-        Delegates to `CastFlags.preset`, the canonical per-call value-object equivalent of this
-        bundle (see `docs/DESIGN-cast-flags.md`).
+        Delegates to ``CastFlags.preset``, the canonical per-call value-object equivalent of this
+        bundle (see ``docs/DESIGN-cast-flags.md``).
 
         Args:
             level: The strictness tier -- 'strict' disables every loose coercion, 'basic' enables
                 the everyday conveniences, and 'flex' additionally wraps atoms into collections.
         Returns:
-            A mapping of cast-flag names to booleans, suitable for `Typist(**preset(...))` or for
+            A mapping of cast-flag names to booleans, suitable for ``Typist(**preset(...))`` or for
             assigning onto an existing instance.
         """
         return CastFlags.preset(level).model_dump()
@@ -251,9 +260,9 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
     def inst(cls) -> Typist:
         """Get the global instance of Typist.
 
-        The global singleton defaults to the `flex` tier -- every loose coercion enabled -- in
+        The global singleton defaults to the ``flex`` tier -- every loose coercion enabled -- in
         keeping with the package's permissive "vibe typing" stance. Tighten it per-process by
-        assigning a stricter `preset()` bundle onto the returned instance.
+        assigning a stricter ``preset()`` bundle onto the returned instance.
         """
         if not hasattr(cls, '_INST'):
             cls._INST = cls(**cls.preset('flex'))
@@ -618,7 +627,7 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
         """Recursively simplify the given object into serialization-ready, standardized types.
 
         This method is undeniably an opinionated way of preparing data for export, but it should
-        be easy enough to change or add some of these decisions using `cases`.
+        be easy enough to change or add some of these decisions using ``cases``.
 
         The following rules are applied:
 
@@ -626,7 +635,7 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
         - All other **atomics** are left as-is
         - All **series** are cast to lists.
         - All **maps** are cast to dicts.
-        - All **models** are converted to dicts using their `model_dump()` method.
+        - All **models** are converted to dicts using their ``model_dump()`` method.
 
         Args:
             data: The source data to serialize. Passing more than one obviously creates a list.
@@ -796,7 +805,7 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
     @overload
     def from_file(self, file: FileParam, tvar: type[F], cast: bool = True) -> F: ...
     def from_file(self, file: FileParam, tvar: type = dict, cast: bool = True) -> Any:
-        """Load & cast data from a local JSON/YAML/TOML/Pickle file. See `ut.from_file()`."""
+        """Load & cast data from a local JSON/YAML/TOML/Pickle file. See ``ut.from_file()``."""
         return ut.from_file(file, tvar, cast)
 
     @overload
@@ -804,7 +813,7 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
     @overload
     def from_json(self, file: FileParam, tvar: type[F], cast: bool = True) -> F: ...
     def from_json(self, file: FileParam, tvar: type = dict, cast: bool = True) -> Any:
-        """Load & cast data from a JSON file or string. See `ut.from_json()`."""
+        """Load & cast data from a JSON file or string. See ``ut.from_json()``."""
         return ut.from_json(file, tvar, cast)
 
     @overload
@@ -812,7 +821,7 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
     @overload
     def from_yaml(self, file: FileParam, tvar: type[F], cast: bool = True) -> F: ...
     def from_yaml(self, file: FileParam, tvar: type = dict, cast: bool = True) -> Any:
-        """Load & cast data from a YAML file or string. See `ut.from_yaml()`."""
+        """Load & cast data from a YAML file or string. See ``ut.from_yaml()``."""
         return ut.from_yaml(file, tvar, cast)
 
     @overload
@@ -820,7 +829,7 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
     @overload
     def from_toml(self, file: FileParam, tvar: type[F], cast: bool = True) -> F: ...
     def from_toml(self, file: FileParam, tvar: type = dict, cast: bool = True) -> Any:
-        """Load & cast data from a TOML file or string. See `ut.from_toml()`."""
+        """Load & cast data from a TOML file or string. See ``ut.from_toml()``."""
         return ut.from_toml(file, tvar, cast)
 
     @overload
@@ -828,27 +837,27 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
     @overload
     def from_pickle(self, file: FileParam, tvar: type[F], cast: bool = True) -> F: ...
     def from_pickle(self, file: FileParam, tvar: type = dict, cast: bool = True) -> Any:
-        """Load & cast data from a Pickle file or bytes. See `ut.from_pickle()`."""
+        """Load & cast data from a Pickle file or bytes. See ``ut.from_pickle()``."""
         return ut.from_pickle(file, tvar, cast)
 
     def to_file(self, data: Atom | Struct, file: str | File) -> None:
-        """Save data to a local JSON/YAML/TOML/Pickle file. See `ut.to_file()`."""
+        """Save data to a local JSON/YAML/TOML/Pickle file. See ``ut.to_file()``."""
         return ut.to_file(data, file)
 
     def to_yaml(self, data: Atom | Struct, wrap: bool = False, **kwargs) -> str:
-        """Serialize data to a YAML string. See `ut.to_yaml()`."""
+        """Serialize data to a YAML string. See ``ut.to_yaml()``."""
         return ut.to_yaml(data, wrap, **kwargs)
 
     def to_json(self, data: Atom | Struct, wrap: bool = False, **kwargs) -> str:
-        """Serialize data to a JSON string. See `ut.to_json()`."""
+        """Serialize data to a JSON string. See ``ut.to_json()``."""
         return ut.to_json(data, wrap, **kwargs)
 
     def to_toml(self, data: Atom | Struct, wrap: bool = False, **kwargs) -> str:
-        """Serialize data to a TOML string. See `ut.to_toml()`."""
+        """Serialize data to a TOML string. See ``ut.to_toml()``."""
         return ut.to_toml(data, wrap, **kwargs)
 
     def to_pickle(self, data: Atom | Struct, **kwargs) -> bytes:
-        """Serialize data to Pickle bytes. See `ut.to_pickle()`."""
+        """Serialize data to Pickle bytes. See ``ut.to_pickle()``."""
         return ut.to_pickle(data, **kwargs)
 
     # ---------------
@@ -988,8 +997,8 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
         Args:
             data: The source data to cast.
             tvar: The target type to cast to.
-            flags: An explicit `CastFlags` snapshot (or preset-level name); resolved once here so
-                every option attempted below shares the same flag set. See `TypeCast.cast`.
+            flags: An explicit ``CastFlags`` snapshot (or preset-level name); resolved once here so
+                every option attempted below shares the same flag set. See ``TypeCast.cast``.
         """
         # I. Return null if the target is invalid
         if data is None or tvar in {None, Any}:
@@ -1047,7 +1056,7 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
             and result is the return value of the function (or None if it failed).
 
         Raises:
-            ValueError: If `_strict` is set and the function doesn't exist or couldn't be called.
+            ValueError: If ``_strict`` is set and the function doesn't exist or couldn't be called.
         """
         # I. Check if the function can be called with the given arguments
         if not func:

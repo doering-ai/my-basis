@@ -3,8 +3,7 @@
 ```{py:currentmodule} my.caches.NestedCache
 ```
 
-```{autoclass} NestedCache
----
-members:
----
+```{eval-rst}
+.. autoclass:: my.caches.NestedCache.NestedCache
+   :members:
 ```

@@ -3,8 +3,7 @@
 ```{py:currentmodule} my.regex.RegexDebugger
 ```
 
-```{autoclass} RegexDebugger
----
-members:
----
+```{eval-rst}
+.. autoclass:: my.regex.RegexDebugger.RegexDebugger
+   :members:
 ```

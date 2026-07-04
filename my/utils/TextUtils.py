@@ -152,7 +152,7 @@ class TextUtils(_UtilsBase):
             suf: Suffix to add after combined pattern (default: empty).
             branching: If True, use branching group (resets group names b/w branches)
         Returns:
-            Combined regex pattern in group format `(?|...)` or `(?:...)`.
+            Combined regex pattern in group format ``(?|...)`` or ``(?:...)``.
         """
         parts = [(expr if isinstance(expr, str) else sep.join(expr)) for expr in expressions]
         contents = r'|'.join(parts)

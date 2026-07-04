@@ -3,103 +3,132 @@
 ```{py:currentmodule} my.utils.IterUtils
 ```
 
-```{autoclass} IterUtils
+```{eval-rst}
+.. autoclass:: my.utils.IterUtils.IterUtils
 ```
 
 ## `I` Construction
 
-```{automethod} IterUtils.build
+```{eval-rst}
+.. automethod:: my.utils.IterUtils.IterUtils.build
 ```
 
-```{automethod} IterUtils.map_items
+```{eval-rst}
+.. automethod:: my.utils.IterUtils.IterUtils.map_items
 ```
 
-```{automethod} IterUtils.partition
+```{eval-rst}
+.. automethod:: my.utils.IterUtils.IterUtils.partition
 ```
 
-```{automethod} IterUtils.multi_partition
+```{eval-rst}
+.. automethod:: my.utils.IterUtils.IterUtils.multi_partition
 ```
 
-```{automethod} IterUtils.bucket
+```{eval-rst}
+.. automethod:: my.utils.IterUtils.IterUtils.bucket
 ```
 
 ## `II` Selection
 
-```{automethod} IterUtils.find
+```{eval-rst}
+.. automethod:: my.utils.IterUtils.IterUtils.find
 ```
 
-```{automethod} IterUtils.find_key
+```{eval-rst}
+.. automethod:: my.utils.IterUtils.IterUtils.find_key
 ```
 
-```{automethod} IterUtils.next_in
+```{eval-rst}
+.. automethod:: my.utils.IterUtils.IterUtils.next_in
 ```
 
-```{automethod} IterUtils.condense
+```{eval-rst}
+.. automethod:: my.utils.IterUtils.IterUtils.condense
 ```
 
-```{automethod} IterUtils.map_condense
+```{eval-rst}
+.. automethod:: my.utils.IterUtils.IterUtils.map_condense
 ```
 
-```{automethod} IterUtils.get_all
+```{eval-rst}
+.. automethod:: my.utils.IterUtils.IterUtils.get_all
 ```
 
-```{automethod} IterUtils.get_any
+```{eval-rst}
+.. automethod:: my.utils.IterUtils.IterUtils.get_any
 ```
 
 ## `III` Application
 
-```{automethod} IterUtils.val_map
+```{eval-rst}
+.. automethod:: my.utils.IterUtils.IterUtils.val_map
 ```
 
-```{automethod} IterUtils.attr_map
+```{eval-rst}
+.. automethod:: my.utils.IterUtils.IterUtils.attr_map
 ```
 
-```{automethod} IterUtils.chain_map
+```{eval-rst}
+.. automethod:: my.utils.IterUtils.IterUtils.inverse_map
 ```
 
 ## `IV` Execution
 
-```{automethod} IterUtils.repeat_until_complete
+```{eval-rst}
+.. automethod:: my.utils.IterUtils.IterUtils.repeat_until_complete
 ```
 
 ## `V` Presence
 
-```{automethod} IterUtils.has_all
+```{eval-rst}
+.. automethod:: my.utils.IterUtils.IterUtils.has_all
 ```
 
-```{automethod} IterUtils.has_any
+```{eval-rst}
+.. automethod:: my.utils.IterUtils.IterUtils.has_any
 ```
 
-```{automethod} IterUtils.has_only
+```{eval-rst}
+.. automethod:: my.utils.IterUtils.IterUtils.has_only
 ```
 
-```{automethod} IterUtils.has_none
+```{eval-rst}
+.. automethod:: my.utils.IterUtils.IterUtils.has_none
 ```
 
-```{automethod} IterUtils.all_has_all
+```{eval-rst}
+.. automethod:: my.utils.IterUtils.IterUtils.all_has_all
 ```
 
-```{automethod} IterUtils.any_has_all
+```{eval-rst}
+.. automethod:: my.utils.IterUtils.IterUtils.any_has_all
 ```
 
-```{automethod} IterUtils.all_has_any
+```{eval-rst}
+.. automethod:: my.utils.IterUtils.IterUtils.all_has_any
 ```
 
-```{automethod} IterUtils.any_has_any
+```{eval-rst}
+.. automethod:: my.utils.IterUtils.IterUtils.any_has_any
 ```
 
 ## `VI` Comparison
 
-```{automethod} IterUtils.shared_prefix
+```{eval-rst}
+.. automethod:: my.utils.IterUtils.IterUtils.shared_prefix
 ```
 
-```{automethod} IterUtils.shared_suffix
+```{eval-rst}
+.. automethod:: my.utils.IterUtils.IterUtils.shared_suffix
 ```
 
-```{automethod} IterUtils.common_elements
+```{eval-rst}
+.. automethod:: my.utils.IterUtils.IterUtils.common_elements
 ```
 
 ## `VII` Modification
 
-```{automethod} IterUtils.drop_at
+```{eval-rst}
+.. automethod:: my.utils.IterUtils.IterUtils.drop_at
 ```

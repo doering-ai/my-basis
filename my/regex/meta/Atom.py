@@ -159,7 +159,10 @@ class Atom(pyd.BaseModel):
 
     @ft.cached_property
     def is_optional(self) -> bool:
-        """Determines if this atom has an optional quantifier (e.g. `r'?'`, `r'*'`, r`{0,3}'`)."""
+        """Determines if this atom has an optional quantifier.
+
+        E.g. ``r'?'``, ``r'*'``, ``r'{0,3}'``.
+        """
         return self.quantifier.is_optional
 
     @ft.cached_property

@@ -3,8 +3,7 @@
 ```{py:currentmodule} my.apis.GoogleSheet
 ```
 
-```{autoclass} GoogleSheet
----
-members:
----
+```{eval-rst}
+.. autoclass:: my.apis.GoogleSheet.GoogleSheet
+   :members:
 ```

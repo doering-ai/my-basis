@@ -3,8 +3,7 @@
 ```{py:currentmodule} my.typing.AutocastModel
 ```
 
-```{autoclass} AutocastModel
----
-members:
----
+```{eval-rst}
+.. autoclass:: my.typing.AutocastModel.AutocastModel
+   :members:
 ```

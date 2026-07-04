@@ -3,31 +3,38 @@
 ```{py:currentmodule} my.utils.SemanticUtils
 ```
 
-```{autoclass} SemanticUtils
+```{eval-rst}
+.. autoclass:: my.utils.SemanticUtils.SemanticUtils
 ```
 
 ## `I` Formatting
 
-```{automethod} SemanticUtils.decimal_to_roman
+```{eval-rst}
+.. automethod:: my.utils.SemanticUtils.SemanticUtils.decimal_to_roman
 ```
 
-```{automethod} SemanticUtils.roman_to_decimal
+```{eval-rst}
+.. automethod:: my.utils.SemanticUtils.SemanticUtils.roman_to_decimal
 ```
 
 ## `II` Amounts
 
-```{automethod} SemanticUtils.format_amount
+```{eval-rst}
+.. automethod:: my.utils.SemanticUtils.SemanticUtils.format_amount
 ```
 
 ## `III` Pluralization
 
-```{automethod} SemanticUtils.to_singular
+```{eval-rst}
+.. automethod:: my.utils.SemanticUtils.SemanticUtils.to_singular
 ```
 
-```{automethod} SemanticUtils.to_ordinal
+```{eval-rst}
+.. automethod:: my.utils.SemanticUtils.SemanticUtils.to_ordinal
 ```
 
 ## `IV` Identifiers
 
-```{automethod} SemanticUtils.validate_identifier
+```{eval-rst}
+.. automethod:: my.utils.SemanticUtils.SemanticUtils.validate_identifier
 ```

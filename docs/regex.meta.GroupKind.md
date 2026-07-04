@@ -3,8 +3,7 @@
 ```{py:currentmodule} my.regex.meta.GroupKind
 ```
 
-```{autoclass} GroupKind
----
-members:
----
+```{eval-rst}
+.. autoclass:: my.regex.meta.GroupKind.GroupKind
+   :members:
 ```

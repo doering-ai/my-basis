@@ -3,5 +3,6 @@
 ```{py:currentmodule} my.regex.meta.meta_rgxs
 ```
 
-```{autodata} META_RGXS
+```{eval-rst}
+.. autodata:: my.regex.meta.meta_rgxs.META_RGXS
 ```

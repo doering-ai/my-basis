@@ -39,7 +39,7 @@ release = version
 # -------
 # General
 # -------
-default_role = 'any'
+default_role = 'literal'
 extensions = [
     'sphinx.ext.autodoc',
     # 'sphinx.ext.apidoc',
@@ -61,6 +61,8 @@ exclude_patterns = [
     '_build',
     'build',
     'conf.py',
+    'coverage.md',  # stray coverage report, not part of the doc tree
+    'DESIGN-*.md',  # design notes live alongside docs but are not built pages
     'dist',
     'node_modules',
     'Thumbs.db',

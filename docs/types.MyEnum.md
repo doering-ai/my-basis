@@ -3,8 +3,7 @@
 ```{py:currentmodule} my.types.MyEnum
 ```
 
-```{autoclass} MyEnum
----
-members:
----
+```{eval-rst}
+.. autoclass:: my.types.MyEnum.MyEnum
+   :members:
 ```

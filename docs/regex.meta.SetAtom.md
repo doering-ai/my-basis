@@ -3,8 +3,7 @@
 ```{py:currentmodule} my.regex.meta.SetAtom
 ```
 
-```{autoclass} SetAtom
----
-members:
----
+```{eval-rst}
+.. autoclass:: my.regex.meta.SetAtom.SetAtom
+   :members:
 ```

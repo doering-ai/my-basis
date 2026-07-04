@@ -3,8 +3,7 @@
 ```{py:currentmodule} my.regex.meta.Quantifier
 ```
 
-```{autoclass} Quantifier
----
-members:
----
+```{eval-rst}
+.. autoclass:: my.regex.meta.Quantifier.Quantifier
+   :members:
 ```

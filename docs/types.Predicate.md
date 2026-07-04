@@ -3,8 +3,7 @@
 ```{py:currentmodule} my.types.Predicate
 ```
 
-```{autoclass} Predicate
----
-members:
----
+```{eval-rst}
+.. autoclass:: my.types.Predicate.Predicate
+   :members:
 ```

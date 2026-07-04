@@ -3,8 +3,7 @@
 ```{py:currentmodule} my.caches.Cache
 ```
 
-```{autoclass} Cache
----
-members:
----
+```{eval-rst}
+.. autoclass:: my.caches.Cache.Cache
+   :members:
 ```

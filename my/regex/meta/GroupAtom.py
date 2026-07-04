@@ -38,7 +38,7 @@ class GroupAtom(Atom):
     """
 
     # Primary fields
-    #: The syntax between the opening paren and the group's actual contents (e.g. `(?:`).
+    #: The syntax between the opening paren and the group's actual contents (e.g. ``(?:``).
     start: str = ''
     #: The "content" of the group, separate from its traits as a group.
     body: str = ''
@@ -50,7 +50,7 @@ class GroupAtom(Atom):
     kind: GroupKind = NO_KIND
     #: The name of the group, if it is a named capture, invocation, or substitution.
     name: str = ''
-    #: The flags of the group, if it has any (e.g. `(?smi)` or `(?smi:content)`).
+    #: The flags of the group, if it has any (e.g. ``(?smi)`` or ``(?smi:content)``).
     flags: set[str] = set()  # noqa: RUF012
 
     # -------------------
@@ -129,7 +129,7 @@ class GroupAtom(Atom):
 
     @ft.cached_property
     def is_simple(self) -> bool:
-        """Whether this group is plain (`(?:...)`) or atomic (`(?>...)`) w/ a simple quantifier."""
+        """Whether this group is a plain/atomic group w/ a simple quantifier."""
         return super().is_simple and self.kind in GroupKind._SIMPLE
 
     @ft.cached_property

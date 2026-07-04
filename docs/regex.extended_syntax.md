@@ -21,9 +21,8 @@ If you're new to regex in general, I reccommend you start by reading [python's q
 _([regular-expressions.info lesson](https://www.regular-expressions.info/modifiers.html))_
 
 ```{admonition} [Basic Syntax](https://docs.python.org/3/library/re.html#flags)
----
-class: hint
----
+:class: hint
+See Python's standard-library `re` documentation for the basic, global flag syntax; the sections below cover the scoped and extended flags added by the `regex` module.
 ```
 
 ### Scoped Flags
@@ -33,15 +32,12 @@ Scoped flags can apply to only part of a pattern and can be turned on or off.
 #### Encoding
 
 ##### `(?u)` UNICODE
-
 The default encoding of a regex string, matching everything according to international Unicode standards.
 
 ##### `(?a)` ASCII
-
 Makes `\w`, `\W`, `\b`, `\B`, `\d`, `\D`, `\s` and `\S` match only ASCII characters.
 
 ##### `(?L)` LOCALE
-
 Makes `\w`, `\W`, `\b`, `\B`, `\d`, `\D`, `\s` and `\S` match according to the current locale settings.
 
 ```{caution}
@@ -51,11 +47,9 @@ This flag is intended for legacy code and has limited support. We recommended yo
 #### Case
 
 ##### `(?i)` IGNORECASE
-
 Upper and lower case alphabet characters are matched as if they were identical.
 
 ##### `(?f)` FULLCASE
-
 When combined with `(?i)`, enables "full" [case-folding](https://www.w3.org/TR/charmod-norm/#definitionCaseFolding) of Unicode text, which is critical if dealing with non-romance languages.
 
 The flag is off by default in V0, and on by default in V1.
@@ -68,19 +62,16 @@ regex.match(r"(?iV1)stra\N{LATIN SMALL LETTER SHARP S}e", "STRASSE").span() # ->
 #### Whitespace
 
 ##### `(?m)` MULTILINE
-
 _([regular-expressions.info lesson](https://www.regular-expressions.info/anchors.html))_
 
 The `^` and `$` literals now match the beginnings and ends of lines, rather than of the whole string/file.
 
 ##### `(?s)` DOTALL
-
 _([regular-expressions.info lesson](https://www.regular-expressions.info/dot.html))_
 
 The catch-all literal `.` now also catches line separators.
 
 ##### `(?x)` VERBOSE (i.e. Extended)
-
 _([regular-expressions.info lesson](https://www.regular-expressions.info/freespacing.html))_
 
 Ignores all raw whitespace characters in the following pattern, allowing the user to include whitespace between components for clarity.
@@ -89,7 +80,6 @@ Also allows comments, which begin with an "#" and continue until the end of the 
 To match whitespace in an extended expression, wrap it it in a character set (e.g. ` ?` -> `[ ]?`).
 
 ##### `(?w)` WORD
-
 Changes the definition of a 'word boundary' (`\b`/`\B`) to that of a default Unicode word boundary, a better choice for a variety of non-romance languages.
 
 It also affects line separators (and, in turn, `(?s)` and `(?m)`):
@@ -104,7 +94,6 @@ Global flags apply to the entire pattern and can only be turned on -- if these p
 #### General
 
 ##### `(?p)` Posix
-
 Enables POSIX (leftmost longest) matching.
 
 Note that it will take longer to find matches because when it finds a match at a certain position, it won't return that immediately, but will keep looking to see if there's another longer match there.
@@ -118,7 +107,6 @@ regex.search(r'(?p)one(self)?(selfsufficient)?', 'oneselfsufficient') # -> onese
 ```
 
 ##### `(?r)` Reverse
-
 Enables reverse matching (from the end of the string to the beginning).
 
 ```python
@@ -136,21 +124,17 @@ regex.findall(r"(?r)..", "abcde") # -> ['de', 'bc']
 #### Version
 
 ##### `(?V0)` Version0
-
 Enables version 0 behaviour (old behaviour, compatible with the re module).
 
 ##### `(?V1)` Version1
-
 Enables version 1 behaviour (new behaviour, possibly different from the re module).
 
 #### Fuzzy Match Modes
 
 ##### `(?b)` Best Match
-
 Enables [fuzzy matching](#fuzzy-matching) search for the best match instead of the next match.
 
 ##### `(?e)` Enhance Match
-
 Enables [fuzzy matching](#fuzzy-matching) to attempt to improve the fit of the next match that it finds.
 
 ## Sets
@@ -315,7 +299,6 @@ A lookbehind can match a variable-length string.
 ## Other Literals
 
 (unicode)=
-
 ### Unicode Properties (`\p{property}`)
 
 _([regular-expressions.info lesson](https://www.regular-expressions.info/unicode.html))_
@@ -344,7 +327,6 @@ In addition to the usual properties, you can also use:
 - `\p{Vert_Space}`/`\p{V}` matches vertical whitespace.
 
 (posix)=
-
 ### POSIX Character Classes (`[[:class:]]`)
 
 _([regular-expressions.info lesson](https://www.regular-expressions.info/posixbrackets.html))_
@@ -749,7 +731,7 @@ regex.sub(r'[a-z]', slow_replace, 'abcde', timeout=2) # -> TimeoutError: regex t
 
 Regex usually attempts an exact match, but sometimes an approximate, or "fuzzy", match is needed, for those cases where the text being searched may contain errors in the form of inserted, deleted or substituted characters.
 
-#### Basics
+### Basics
 
 A fuzzy regex specifies A) which types of errors are permitted, and, optionally, B) either the minimum and maximum or only the maximum permitted number of each type.
 The 3 types of error are: Insertion (`i`), Deletion (`d`), Substitution (`s`), or any (`e`).
@@ -772,14 +754,14 @@ If a certain type of error is specified, then any type not specified will **not*
 - `(...){1<=e<=3}` permit at least 1 and at most 3 errors
 - `(...){i<3,d<=2,e<4}` permit at most 2 insertions, at most 2 deletions, at most 3 errors in total, but no substitutions
 
-#### Costs & Budgets
+### Costs & Budgets
 
 It's also possible to state the costs of each type of error and the maximum permitted total cost:
 
 - `(...){2i+2d+1s<=4}` each insertion costs 2, each deletion costs 2, each substitution costs 1, the total cost must not exceed 4
 - `(...){i<=1,d<=1,s<=1,2i+2d+1s<=4}` at most 1 insertion, at most 1 deletion, at most 1 substitution; each insertion costs 2, each deletion costs 2, each substitution costs 1, the total cost must not exceed 4
 
-#### Tests
+### Tests
 
 You can add a test to perform on a character that's substituted or inserted.
 
@@ -788,7 +770,7 @@ You can add a test to perform on a character that's substituted or inserted.
 - `(...){s<=2:[a-z]}` at most 2 substitutions, which must be in the character set `[a-z]`.
 - `(...){s<=2,i<=3:\d}` at most 2 substitutions, at most 3 insertions, which must be digits.
 
-#### Flags
+### Flags
 
 By default, fuzzy matching searches for the first match that meets the given constraints.
 The `ENHANCEMATCH` flag will cause it to attempt to improve the fit (i.e. reduce the number of errors) of the match that it has found.

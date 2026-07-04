@@ -24,27 +24,27 @@ class GroupKind(MyEnum, Flag):
     """
 
     # Basics
-    POSIT = auto()  #: Positional capturing group -- `r'(...)'`.
-    PLAIN = auto()  #: Positional non-capturing group -- `r'(?:...)'`.
-    FLAGS = auto()  #: Custom flag group for setting regex flags -- `r'(?msi)'`
-    ATOMS = auto()  #: Atomic group -- `r'(?>...)'`.
-    RESET = auto()  #: Branch reset group -- `r'(?|...)'`.
+    POSIT = auto()  #: Positional capturing group -- ``r'(...)'``.
+    PLAIN = auto()  #: Positional non-capturing group -- ``r'(?:...)'``.
+    FLAGS = auto()  #: Custom flag group for setting regex flags -- ``r'(?msi)'``
+    ATOMS = auto()  #: Atomic group -- ``r'(?>...)'``.
+    RESET = auto()  #: Branch reset group -- ``r'(?|...)'``.
 
     # Captures
-    NAMED = auto()  #: Named capturing group -- `r'(?P<name>...)'`.
-    INVOC = auto()  #: Reuse capturing group -- `r'(?P&name)'`/`r'(?P>name)'`.
-    SUBST = auto()  #: Backreference to a capturing group -- `r'(?P=name)'`
+    NAMED = auto()  #: Named capturing group -- ``r'(?P<name>...)'``.
+    INVOC = auto()  #: Reuse capturing group -- ``r'(?P&name)'``/``r'(?P>name)'``.
+    SUBST = auto()  #: Backreference to a capturing group -- ``r'(?P=name)'``
 
     # Lookarounds
-    AHEAD = auto()  #: Positive lookahead assertion -- `r'(?=...)'`.
-    BEHIND = auto()  #: Positive lookbehind assertion -- `r'(?<=...)'`.
-    NOT_AHEAD = auto()  #: Negative lookahead assertion -- `r'(?!...)'`.
-    NOT_BEHIND = auto()  #: Negative lookbehind assertion -- `r'(?<!...)'`.
-    DEFINE = auto()  #: Group for defining subpatterns without capturing -- `r'(?(DEFINE)...)'`.
+    AHEAD = auto()  #: Positive lookahead assertion -- ``r'(?=...)'``.
+    BEHIND = auto()  #: Positive lookbehind assertion -- ``r'(?<=...)'``.
+    NOT_AHEAD = auto()  #: Negative lookahead assertion -- ``r'(?!...)'``.
+    NOT_BEHIND = auto()  #: Negative lookbehind assertion -- ``r'(?<!...)'``.
+    DEFINE = auto()  #: Group for defining subpatterns without capturing -- ``r'(?(DEFINE)...)'``.
 
     # OTHER
-    CONDN = auto()  #: Named conditional -- `(?(1)...|...)`.
-    CONDL = auto()  #: Lookaround conditional -- `(?(?=...)...|...)`.
+    CONDN = auto()  #: Named conditional -- ``(?(1)...|...)``.
+    CONDL = auto()  #: Lookaround conditional -- ``(?(?=...)...|...)``.
 
     _NAMED = NAMED | INVOC | SUBST  #: Combined flag for all named groups
     _LOOKAHEADS = AHEAD | NOT_AHEAD  #: Union of lookahead groups
@@ -58,10 +58,10 @@ class GroupKind(MyEnum, Flag):
     def read(cls, value: str | int | list | MyEnum) -> 'GroupKind':
         """Parse a value into a GroupKind, additionally recognizing regex group prefixes.
 
-        Beyond the member names, integers, and lists handled by `MyEnum.read`, strings that are
-        not member names are interpreted as group prefixes: `'('` alone denotes a positional
-        capturing group, while `'(?'`-prefixed strings are matched against the known prefix
-        patterns (e.g. `'(?:'` -> PLAIN, `'(?='` -> AHEAD).
+        Beyond the member names, integers, and lists handled by ``MyEnum.read``, strings that are
+        not member names are interpreted as group prefixes: ``'('`` alone denotes a positional
+        capturing group, while ``'(?'``-prefixed strings are matched against the known prefix
+        patterns (e.g. ``'(?:'`` -> PLAIN, ``'(?='`` -> AHEAD).
 
         Args:
             value: Member name, group prefix string, integer flag value, list of values, or

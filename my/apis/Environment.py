@@ -37,38 +37,38 @@ class Environment(pyd.BaseModel):
     automatic dotenv loading, performant caching, and most importantly, a much clearer and more
     ergonomic syntax.
 
-    ```python
-    from my.apis import env
+    .. code-block:: python
 
-    # export SOME_TEXT="production"
-    print(f'{env.SOME_TEXT=!r}')  # -> 'production'
-    print(f'{env.MISSING_VAR=!r}')  # -> ''
+       from my.apis import env
 
-    # export SOME_PATH="~/Downloads"
-    # export NESTED_PATH="$SOME_PATH/child"
-    print(f'{env.paths.SOME_PATH=!r}')  # -> PosixPath('/home/username/Downloads')
-    print(f'{env.paths.NESTED_PATH=!r}')  # -> PosixPath('/home/username/Downloads/child')
+       # export SOME_TEXT="production"
+       print(f'{env.SOME_TEXT=!r}')  # -> 'production'
+       print(f'{env.MISSING_VAR=!r}')  # -> ''
 
-    # export SOME_FLAG="32"
-    # export OTHER_FLAG="yes"
-    # export FALSE_FLAG="yes, some non-truthy string"
-    print(env.flags.SOME_FLAG)  # -> 32
-    print(bool(env.flags.OTHER_FLAG))  # -> True
-    print(bool(env.flags.FALSE_FLAG))  # -> False
-    print(bool(env.flags.MISSING_FLAG))  # -> False
-    ```
+       # export SOME_PATH="~/Downloads"
+       # export NESTED_PATH="$SOME_PATH/child"
+       print(f'{env.paths.SOME_PATH=!r}')  # -> PosixPath('/home/username/Downloads')
+       print(f'{env.paths.NESTED_PATH=!r}')  # -> PosixPath('/home/username/Downloads/child')
+
+       # export SOME_FLAG="32"
+       # export OTHER_FLAG="yes"
+       # export FALSE_FLAG="yes, some non-truthy string"
+       print(env.flags.SOME_FLAG)  # -> 32
+       print(bool(env.flags.OTHER_FLAG))  # -> True
+       print(bool(env.flags.FALSE_FLAG))  # -> False
+       print(bool(env.flags.MISSING_FLAG))  # -> False
 
     Beyond basic string access via attribute or item notation, the class provides specialized
     accessors for common use cases:
 
-    1. The `paths` property turns vars into filesystem paths with variable expansion, user home
+    1. The ``paths`` property turns vars into filesystem paths with variable expansion, user home
     directory expansion, and automatic path resolution.
 
-    2. The `flags` property interprets environment variables as int flags, recognizing common
-    truthy values like `true`, `yes`,and `ON` as `1` for use w/ booleans.
+    2. The ``flags`` property interprets environment variables as int flags, recognizing common
+    truthy values like ``true``, ``yes``,and ``ON`` as ``1`` for use w/ booleans.
 
-    ```{note} All environment variable names must be uppercase to be recognized by the interface.
-    ```
+    .. note::
+       All environment variable names must be uppercase to be recognized by the interface.
     """
 
     _ENVIRON: ClassVar[dict[str, str]] = initial_env

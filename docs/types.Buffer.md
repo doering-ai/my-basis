@@ -3,8 +3,7 @@
 ```{py:currentmodule} my.types.Buffer
 ```
 
-```{autoclass} Buffer
----
-members:
----
+```{eval-rst}
+.. autoclass:: my.types.Buffer.Buffer
+   :members:
 ```

@@ -3,54 +3,70 @@
 ```{py:currentmodule} my.utils.TextUtils
 ```
 
-```{autoclass} TextUtils
+```{eval-rst}
+.. autoclass:: my.utils.TextUtils.TextUtils
 ```
 
 ## `I` Manipulation & Regex
 
-```{automethod} TextUtils.replace
+```{eval-rst}
+.. automethod:: my.utils.TextUtils.TextUtils.replace
 ```
 
-```{automethod} TextUtils.split_into
+```{eval-rst}
+.. automethod:: my.utils.TextUtils.TextUtils.split_into
 ```
 
-```{automethod} TextUtils.regex_dict
+```{eval-rst}
+.. automethod:: my.utils.TextUtils.TextUtils.regex_dict
 ```
 
-```{automethod} TextUtils.regex_array
+```{eval-rst}
+.. automethod:: my.utils.TextUtils.TextUtils.regex_array
 ```
 
-```{automethod} TextUtils.multi_rgx
+```{eval-rst}
+.. automethod:: my.utils.TextUtils.TextUtils.multi_rgx
 ```
 
 ## `II` Formatting
 
-```{automethod} TextUtils.strip_quotes
+```{eval-rst}
+.. automethod:: my.utils.TextUtils.TextUtils.strip_quotes
 ```
 
-```{automethod} TextUtils.clean_string
+```{eval-rst}
+.. automethod:: my.utils.TextUtils.TextUtils.clean_string
 ```
 
-```{automethod} TextUtils.wrap
+```{eval-rst}
+.. automethod:: my.utils.TextUtils.TextUtils.wrap
 ```
 
-```{automethod} TextUtils.to_words
+```{eval-rst}
+.. automethod:: my.utils.TextUtils.TextUtils.to_words
 ```
 
-```{automethod} TextUtils.line_num
+```{eval-rst}
+.. automethod:: my.utils.TextUtils.TextUtils.line_num
 ```
 
-```{automethod} TextUtils.parse_domain
+```{eval-rst}
+.. automethod:: my.utils.TextUtils.TextUtils.parse_domain
 ```
 
-```{automethod} TextUtils.indent
+```{eval-rst}
+.. automethod:: my.utils.TextUtils.TextUtils.indent
 ```
 
-```{automethod} TextUtils.unindent
+```{eval-rst}
+.. automethod:: my.utils.TextUtils.TextUtils.unindent
 ```
 
-```{automethod} TextUtils.wrap_paragraphs
+```{eval-rst}
+.. automethod:: my.utils.TextUtils.TextUtils.wrap_paragraphs
 ```
 
-```{automethod} TextUtils.unwrap_paragraphs
+```{eval-rst}
+.. automethod:: my.utils.TextUtils.TextUtils.unwrap_paragraphs
 ```

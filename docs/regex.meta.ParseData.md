@@ -3,8 +3,7 @@
 ```{py:currentmodule} my.regex.meta.ParseData
 ```
 
-```{autoclass} ParseData
----
-members:
----
+```{eval-rst}
+.. autoclass:: my.regex.meta.ParseData.ParseData
+   :members:
 ```

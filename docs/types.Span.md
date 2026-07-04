@@ -3,8 +3,7 @@
 ```{py:currentmodule} my.types.Span
 ```
 
-```{autoclass} Span
----
-members:
----
+```{eval-rst}
+.. autoclass:: my.types.Span.Span
+   :members:
 ```

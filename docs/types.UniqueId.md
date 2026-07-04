@@ -3,8 +3,7 @@
 ```{py:currentmodule} my.types.UniqueId
 ```
 
-```{autoclass} UniqueId
----
-members:
----
+```{eval-rst}
+.. autoclass:: my.types.UniqueId.UniqueId
+   :members:
 ```

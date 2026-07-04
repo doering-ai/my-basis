@@ -3,8 +3,7 @@
 ```{py:currentmodule} my.files.Markdown
 ```
 
-```{autoclass} Markdown
----
-members:
----
+```{eval-rst}
+.. autoclass:: my.files.Markdown.Markdown
+   :members:
 ```

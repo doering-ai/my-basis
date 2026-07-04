@@ -3,8 +3,7 @@
 ```{py:currentmodule} my.typing.MyType
 ```
 
-```{autoclass} MyType
----
-members:
----
+```{eval-rst}
+.. autoclass:: my.typing.MyType.MyType
+   :members:
 ```

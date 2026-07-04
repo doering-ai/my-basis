@@ -94,78 +94,82 @@ empty = inspect.Parameter.empty
 class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
     """A wrapper for any type annotation that normalizes the wide variety of interfaces.
 
-    #### Examples
+    .. rubric:: Examples
+
     Consider this simplified subset of the hierarchy:
-    ```py
-    str_t = MyType(str)
-    bytes_t = MyType(bytes)
-    int_t = MyType(int)
-    float_t = MyType(float)
 
-    String = str | bytes
-    string_t = MyType(String)
-    Scalar = int | float
-    scalar_t = MyType(Scalar)
+    .. code-block:: python
 
-    Atom = str | int | bytes | float
-    atom_t = MyType(Atom)
-    ```
+       str_t = MyType(str)
+       bytes_t = MyType(bytes)
+       int_t = MyType(int)
+       float_t = MyType(float)
 
-    ##### `__and__()`
-    ```py
-    # Affirms if either is part of the other, fails otherwise
-    assert str_t & atom_t
-    assert atom_t & str_t
-    assert not str_t & int_t
+       String = str | bytes
+       string_t = MyType(String)
+       Scalar = int | float
+       scalar_t = MyType(Scalar)
 
-    # Works with raw or wrapped types as long as at least one side is wrapped
-    assert str & atom_t and str_t & Atom
-    assert atom_t & str and Atom & str_t
-    #! assert str & Atom and Atom & str
+       Atom = str | int | bytes | float
+       atom_t = MyType(Atom)
 
-    # Works with type tuples and unions (when LHS is wrapped)
-    assert str_t & (str | Scalar)
-    assert str_t & (str, Scalar)
-    assert not str_t & (bytes, Scalar)
-    ```
+    **``__and__()``**
 
-    ##### `__contains__()`
-    ```py
-    # Determines whether the LHS is a subset of the RHS, but not the other way around.
-    assert str in atom_t
-    assert Atom not in str_t
+    .. code-block:: python
 
-    # RHS must be a MyType.
-    #! assert str in Atom
+       # Affirms if either is part of the other, fails otherwise
+       assert str_t & atom_t
+       assert atom_t & str_t
+       assert not str_t & int_t
 
-    # Works with tuples
-    assert str in (str_t, Scalar)
+       # Works with raw or wrapped types as long as at least one side is wrapped
+       assert str & atom_t and str_t & Atom
+       assert atom_t & str and Atom & str_t
+       #! assert str & Atom and Atom & str
 
-    # def ex[T](tvar: type[T]) -> None:
-    #     target = MyType(tvar)
-    ```
+       # Works with type tuples and unions (when LHS is wrapped)
+       assert str_t & (str | Scalar)
+       assert str_t & (str, Scalar)
+       assert not str_t & (bytes, Scalar)
 
+    **``__contains__()``**
 
-    ### "Main" types (i.e. `MyType.main`)
+    .. code-block:: python
+
+       # Determines whether the LHS is a subset of the RHS, but not the other way around.
+       assert str in atom_t
+       assert Atom not in str_t
+
+       # RHS must be a MyType.
+       #! assert str in Atom
+
+       # Works with tuples
+       assert str in (str_t, Scalar)
+
+       # def ex[T](tvar: type[T]) -> None:
+       #     target = MyType(tvar)
+
+    .. rubric:: "Main" types (i.e. ``MyType.main``)
 
     The main type of an instance represents the most meaningfully *active* part of that type in
     this moment. Some cases:
 
-    ```py
-    assert MyType(dict[str, int]).main is dict
-    assert MyType(Literal['a', 'b']).main is None
-    assert MyType(Optional[int]).main is None
-    ```
+    .. code-block:: python
+
+       assert MyType(dict[str, int]).main is dict
+       assert MyType(Literal['a', 'b']).main is None
+       assert MyType(Optional[int]).main is None
+
     Some cases:
       - Basic generics use their origins, while the vast majority of Atoms use themselves in full.
 
-      - Literals use `Literal`.
+      - Literals use ``Literal``.
 
-      - Monotomic "Special Forms" (e.g. `Optional[int]`, `Annotated[int, ...]`) use a type or union
-        representing the wrapped content of the inner form.
+      - Monotomic "Special Forms" (e.g. ``Optional[int]``, ``Annotated[int, ...]``) use a type or
+        union representing the wrapped content of the inner form.
 
-      - Polytomic "Special Forms" (e.g. `Union[int, str]` -> `UnionType`, `Unpack[str, str]` ->
-        `Unpack`) us a type representing the wrapping content of the outer form.
+      - Polytomic "Special Forms" (e.g. ``Union[int, str]`` -> ``UnionType``, ``Unpack[str, str]``
+        -> ``Unpack``) us a type representing the wrapping content of the outer form.
     """
 
     POS: ClassVar[MyType]
@@ -174,13 +178,13 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
     #: Whether to raise exceptions when type casting fails unexpectedly.
     RAISE: ClassVar[bool] = False
 
-    #: Performance cache based on full type stringification (i.e. `__str__()`)
+    #: Performance cache based on full type stringification (i.e. ``__str__()``)
     PARSE_CACHE: ClassVar[Cache[int, MyType]] = Cache()
 
     #: Cache of manually indexed types, where the key is a unique, hierarchical identifier.
     IDXS: ClassVar[dict[str, MyType]] = {}
 
-    #: The original value passed in -- used for `uid` generation.
+    #: The original value passed in -- used for ``uid`` generation.
     raw: Any = NoneType
 
     #: The original type annotation passed in, which may be unparseable.
@@ -200,18 +204,19 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
 
     #: The the type annotation for the contents of a generic collection.
     #: The vast majority of generics are monotyped so only use this field (e.g. vecs & iters).
-    #: None when the contents are unconstrained (e.g. a bare `list` or an `Any` value type).
+    #: None when the contents are unconstrained (e.g. a bare ``list`` or an ``Any`` value type).
     vals: MyType | None = None
 
     #: For mappings, the type annotation of the keys. For other types, None.
-    #: Can sometimes be monotype, e.g. `Counter[str]` -> `dict[str, int]`
+    #: Can sometimes be monotype, e.g. ``Counter[str]`` -> ``dict[str, int]``
     keys: MyType | None = None
 
     # ---- Internal attributes ----
-    #: The origin of the type, if it has one (e.g. `dict` for `dict[str, int]`); otherwise None.
+    #: The origin of the type, if it has one (e.g. ``dict`` for ``dict[str, int]``); otherwise None.
     origin: type | None = None
 
-    #: For literal types, the list of literal members (e.g. `["a", "b"]` for `Literal["a", "b"]`).
+    #: For literal types, the list of literal members
+    #: (e.g. ``["a", "b"]`` for ``Literal["a", "b"]``).
     literal_members: list[Any] = []
 
     # -------------------
@@ -226,7 +231,7 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
     def __init__[R = Any](self, root: TypeArg[R] = Any, uid: int = 0, **kwargs):
         """Initialize a MyType instance with the given source type and unique identifier.
 
-        This function is overriden from `pyd.BaseModel` so as to allow positional args.
+        This function is overriden from ``pyd.BaseModel`` so as to allow positional args.
 
         Args:
             root: The original type annotation that this MyType instance represents. Can be any type
@@ -309,10 +314,10 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
     def parse[R](cls, root: object, throw: bool = False) -> MyType:
         """Decompose a given type so that other methods can intelligently handly each part in turn.
 
-        By far the most likely usecase is for containers such as `dict[str, int]` (which becomes the
-        tuple `(dict, str, int)`) and `list[int]` (which becomes `(list, int, None)`), but it's
-        useful for other generics, unions (e.g. `string | int`), and special non-type forms
-        (e.g. `Annotated` and `Literal`).
+        By far the most likely usecase is for containers such as ``dict[str, int]`` (which becomes
+        the tuple ``(dict, str, int)``) and ``list[int]`` (which becomes ``(list, int, None)``), but
+        it's useful for other generics, unions (e.g. ``string | int``), and special non-type forms
+        (e.g. ``Annotated`` and ``Literal``).
 
         Args:
             root: The type annotation to decompose -- either a type, a union of types, or None.
@@ -510,7 +515,7 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
                 yield arg
 
     def _process_generic(self, origin: type, args: tuple[MyType, ...]) -> None:
-        """Wire up `keys`/`vals` (and tuple literals) from a generic origin and its args."""
+        """Wire up ``keys``/``vals`` (and tuple literals) from a generic origin and its args."""
         n = len(args or [])
         is_map = inspect.isclass(origin) and issubclass(origin, Mapping)
         if n == 0:
@@ -671,7 +676,7 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
     def rtype(self) -> type | UnionType:
         """A version of the root that has been lightly coerced into being a regular type.
 
-        Returns `Any` if the root is not parseable as a type, or if it's a split type with an
+        Returns ``Any`` if the root is not parseable as a type, or if it's a split type with an
         unparseable root.
         """
         ret = self.root
@@ -820,7 +825,7 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
         return False
 
     def check_iter(self, data: Iterable) -> Iterator[bool]:
-        """Yield a boolean for each element of `data` indicating if it matches this type.
+        """Yield a boolean for each element of ``data`` indicating if it matches this type.
 
         Args:
             data: The iterable of values to check. Ideally not an exhaustable iter.
@@ -834,7 +839,7 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
         return self.ty.is_literal(val, self)
 
     def is_map_item(self) -> bool:
-        """Whether this type is a map item: a bare `tuple` or a `tuple` of exactly two types."""
+        """Whether this type is a map item: a bare ``tuple`` or a ``tuple`` of exactly two types."""
         main = self.main
         if main is None or not (inspect.isclass(main) and issubclass(main, tuple)):
             return False

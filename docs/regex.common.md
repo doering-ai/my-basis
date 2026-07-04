@@ -3,5 +3,6 @@
 ```{py:currentmodule} my.regex.common_rgxs
 ```
 
-```{autodata} COMMON_RGXS
+```{eval-rst}
+.. autodata:: my.regex.common_rgxs.COMMON_RGXS
 ```

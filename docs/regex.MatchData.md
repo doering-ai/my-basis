@@ -3,5 +3,6 @@
 ```{py:currentmodule} my.regex.MatchData
 ```
 
-```{autoclass} MatchData
+```{eval-rst}
+.. autoclass:: my.regex.MatchData.MatchData
 ```

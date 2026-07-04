@@ -3,8 +3,7 @@
 ```{py:currentmodule} my.types.Command
 ```
 
-```{autoclass} Command
----
-members:
----
+```{eval-rst}
+.. autoclass:: my.types.Command.Command
+   :members:
 ```

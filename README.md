@@ -29,14 +29,14 @@ that declares the command's typed input schema.
 
 Async variants of all six live under `plugins/aio/`.
 
-> The **`Meta`** metaclass *autobinds* each method whose name matches a Sublime
-> base-class callback (e.g. `on_activated`, `on_modified`), plus any user-defined method
-> whose leading parameter (after `self`) is named exactly `view`, `edit`, or `window` —
-> those arguments are satisfied from `self` at call time, so handlers no longer need to
-> declare them explicitly. A `buffer`-taking method is only autobound when its *name*
-> matches a base-class callback; naming a leading parameter `buffer` alone does not
-> trigger autobind. Autobind can be narrowed to a specific list of method names or
-> disabled entirely with the `autobind` class keyword.
+The **`Meta`** metaclass *autobinds* each method whose name matches a Sublime
+base-class callback (e.g. `on_activated`, `on_modified`), plus any user-defined method
+whose leading parameter (after `self`) is named exactly `view`, `edit`, or `window` —
+those arguments are satisfied from `self` at call time, so handlers no longer need to
+declare them explicitly. A `buffer`-taking method is only autobound when its *name*
+matches a base-class callback; naming a leading parameter `buffer` alone does not
+trigger autobind. Autobind can be narrowed to a specific list of method names or
+disabled entirely with the `autobind` class keyword.
 
 ```python
 from myBasis import _MyViewCommand, CommandArguments

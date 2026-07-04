@@ -154,10 +154,15 @@ class Meta(type):
 
         With ``autobind=True`` (the default), a method is bound either because its name is
         inherited from the Sublime base class (``sb_attrs``), or -- signature-based implicit
-        binding -- because its leading (first non-``self``) parameter is named exactly
-        ``view``, ``edit``, or ``window``. The latter lets user-defined methods like
-        ``process(self, view)`` be autobound without appearing in an explicit ``autobind=[...]``
-        list, which is what the ``autobind=True`` default has always claimed to do.
+        binding -- because its first binding-relevant parameter after ``self`` (i.e. the
+        first parameter that is not a ``*args``/``**kwargs`` catch-all, which carries no
+        meaningful name) is named exactly ``view``, ``edit``, or ``window``. The latter lets
+        user-defined methods like ``process(self, view)`` be autobound without appearing in
+        an explicit ``autobind=[...]`` list, which is what the ``autobind=True`` default has
+        always claimed to do. This also covers a keyword-only leading param
+        (``process(self, *, view)``) and a ``view`` that follows a ``*args`` catch-all
+        (``process(self, *args, view=None)``) -- both bind, since in each case ``view`` is
+        the first parameter capable of carrying a meaningful name.
         """
         if not callable(method) or not cls.ALLOWED_NAMES.match(name):
             # I.i. Filter out obviously invalid attributes, like non-methods
@@ -177,9 +182,28 @@ class Meta(type):
 
             if sb_attrs and name not in sb_attrs:
                 # II.ii. Not a Sublime base-class method name: only autobind it via
-                #        signature-based implicit binding -- i.e. its leading parameter
-                #        is named exactly `view`/`edit`/`window`.
-                return params[1][0] in cls.AUTOBIND_PARAM_NAMES
+                #        signature-based implicit binding -- i.e. the first
+                #        binding-relevant parameter after `self` (skipping
+                #        `*args`/`**kwargs`, which carry no meaningful name) is named
+                #        exactly `view`/`edit`/`window`. This covers a keyword-only
+                #        leading param (`def process(self, *, view)`) and a `view`
+                #        that follows a `*args` catch-all (`def process(self, *args,
+                #        view=None)`), while still requiring the match to be the
+                #        *first* such parameter.
+                leading = next(
+                    (
+                        param
+                        for _, param in params[1:]
+                        if param.kind
+                        in (
+                            inspect.Parameter.POSITIONAL_ONLY,
+                            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                            inspect.Parameter.KEYWORD_ONLY,
+                        )
+                    ),
+                    None,
+                )
+                return leading is not None and leading.name in cls.AUTOBIND_PARAM_NAMES
 
             # II.iii. Determine if any parameters are named-like or annotated-as a relevant type
             names, annotations = map(set, mi.unzip(params[1:]))

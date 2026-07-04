@@ -25,7 +25,7 @@ from myBasis import ut
 from .enums import IdxStyle
 
 # Test
-roman_rgx = ut.RGXS["roman"].pattern
+roman_rgx = ut.RGXS['roman'].pattern
 
 
 ############
@@ -51,32 +51,32 @@ class IdxSpec(pyd.BaseModel):
     ```
     """
 
-    SYMBOLS: ClassVar[str] = ".-+*^"
+    SYMBOLS: ClassVar[str] = '.-+*^'
     EXPRS: ClassVar[dict[str, str]] = dict(
-        untagged_pre=r"(?m)(?<=\s|^)",
-        untagged_suf=r"(?=\s|$)",
-        tagged_pre=r"(?m)(?<=`|^)",
-        tagged_suf=r"(?=(?:\s[^\n`]*)?`|$)",
-        flex_pre=r"(?m)(?<=[\s`]|^)",
-        flex_suf=r"(?=[\s`]|$)",
+        untagged_pre=r'(?m)(?<=\s|^)',
+        untagged_suf=r'(?=\s|$)',
+        tagged_pre=r'(?m)(?<=`|^)',
+        tagged_suf=r'(?=(?:\s[^\n`]*)?`|$)',
+        flex_pre=r'(?m)(?<=[\s`]|^)',
+        flex_suf=r'(?=[\s`]|$)',
     )
     RGXS: ClassVar[dict[str, ut.RegexField]] = ut.rgx_dict(
-        mark=r"[.:)]",
-        symbol=rf"[{re.escape(SYMBOLS)}]",
-        number=r"\d(?:\d+(?=[.:)]))?",
-        alphal=r"\b(?:\p{Ll}\b|\p{Ll}+(?=[.:)]))",
-        alphau=r"\b(?:\p{Lu}\b|\p{Lu}+(?=[.:)]))",
-        alpha=r"\b(?:\p{Ll}\b|\p{Lu}\b|(?:\p{Ll}+|\p{Lu}+)(?=[.:)]))",
+        mark=r'[.:)]',
+        symbol=rf'[{re.escape(SYMBOLS)}]',
+        number=r'\d(?:\d+(?=[.:)]))?',
+        alphal=r'\b(?:\p{Ll}\b|\p{Ll}+(?=[.:)]))',
+        alphau=r'\b(?:\p{Lu}\b|\p{Lu}+(?=[.:)]))',
+        alpha=r'\b(?:\p{Ll}\b|\p{Lu}\b|(?:\p{Ll}+|\p{Lu}+)(?=[.:)]))',
         roman=roman_rgx,
-        romanl=r"(?=\p{Ll}+(?:[.:)]|$))" + roman_rgx,
-        romanu=r"(?=\p{Lu}+(?:[.:)]|$))" + roman_rgx,
-        flex=r"(?>{{.symbol}}|{{.number}}|{{.alpha}}|{{.roman}})",
-        flex_full="".join(
+        romanl=r'(?=\p{Ll}+(?:[.:)]|$))' + roman_rgx,
+        romanu=r'(?=\p{Lu}+(?:[.:)]|$))' + roman_rgx,
+        flex=r'(?>{{.symbol}}|{{.number}}|{{.alpha}}|{{.roman}})',
+        flex_full=''.join(
             [
-                r"(?(DEFINE)(?P<flex>{{.flex}}))",
-                EXPRS["flex_pre"],
-                r"(?P>flex)(?|(?:\.(?P>flex))+|(?P>flex)+)?",
-                EXPRS["flex_suf"],
+                r'(?(DEFINE)(?P<flex>{{.flex}}))',
+                EXPRS['flex_pre'],
+                r'(?P>flex)(?|(?:\.(?P>flex))+|(?P>flex)+)?',
+                EXPRS['flex_suf'],
             ]
         ),
     )
@@ -89,7 +89,7 @@ class IdxSpec(pyd.BaseModel):
     #: Whether nested index levels are separated by periods.
     dotted: bool | None = None
     #: The character printed at the end of every full idx chain.
-    marked: Literal["", ".", ")", ":"] | None = None
+    marked: Literal['', '.', ')', ':'] | None = None
     #: Whether the idx appears with any tags in a bactic-fenced prefix. If False, must be marked.
     tagged: bool | None = None
     #: Whether this idx is a required part of the HeaderSpec that contains it, or is forbidden.
@@ -98,29 +98,29 @@ class IdxSpec(pyd.BaseModel):
     # -------------------
     # `.` Initial Methods
     # -------------------
-    @pyd.model_validator(mode="before")
+    @pyd.model_validator(mode='before')
     @classmethod
     def _prepare_spec(cls, data: dict) -> dict:
         # I. Coerce style strings/ints into Enum values
-        if "styles" in data:
-            styles = data["styles"]
+        if 'styles' in data:
+            styles = data['styles']
             if not isinstance(styles, Sequence):
                 styles = (styles,)
 
             if any(isinstance(style, str) for style in styles):
-                data["styles"] = tuple(map(IdxStyle.coerce, styles))
+                data['styles'] = tuple(map(IdxStyle.coerce, styles))
 
         # II. Accept False & None for marked
-        if "marked" in data and not data["marked"]:
-            data["marked"] = ""
+        if 'marked' in data and not data['marked']:
+            data['marked'] = ''
         return data
 
-    @pyd.model_validator(mode="after")
+    @pyd.model_validator(mode='after')
     def _validate_spec(self) -> Self:
         if any(style in IdxStyle.ROMAN for style in self.styles):
             self.dotted = True
         if not (self.tagged or self.marked):
-            self.marked = "."
+            self.marked = '.'
         return self
 
     # -------------------
@@ -152,85 +152,83 @@ class IdxSpec(pyd.BaseModel):
 
         if IdxStyle.NONE in self.styles:
             # 0. Skip any specs that explicitly set style to NONE
-            return {}, r"^$"
+            return {}, r'^$'
         elif self.styles:
             # I. If styles are specified, accumulate an order-sensititve expression
             # I.i. Determine the lookbehind/lookahead pair to use
             if self.tagged:
-                pre, suf = self.EXPRS["tagged_pre"], self.EXPRS["tagged_suf"]
+                pre, suf = self.EXPRS['tagged_pre'], self.EXPRS['tagged_suf']
             else:
-                pre, suf = self.EXPRS["untagged_pre"], self.EXPRS["untagged_suf"]
+                pre, suf = self.EXPRS['untagged_pre'], self.EXPRS['untagged_suf']
 
             # I.ii. Fetch the expressions for each of the styles in order
-            names = [(style.name or "").lower() for style in self.styles]
-            assert all(n in self.RGXS for n in names), (
-                f"Invalid styles in spec: {self.styles}"
-            )
+            names = [(style.name or '').lower() for style in self.styles]
+            assert all(n in self.RGXS for n in names), f'Invalid styles in spec: {self.styles}'
             groups.update({name: self.RGXS[name].pattern for name in set(names)})
-            atoms = [rf"(?P>{name})" for name in names]
+            atoms = [rf'(?P>{name})' for name in names]
 
             # I.iii. Construct the final expression one nested step at a time
-            stack = deque([""])
+            stack = deque([''])
             for is_first, is_last, atom in mi.mark_ends(reversed(atoms)):
                 if is_last or self.dotted is False:
-                    dot = r""
+                    dot = r''
                 elif self.dotted:
-                    dot = r"\."
+                    dot = r'\.'
                 else:
                     assert self.dotted is None
-                    dot = r"\.?"
+                    dot = r'\.?'
 
                 if is_last:
-                    quant = r""
+                    quant = r''
                 elif is_first:
                     if self.max_depth <= 0:
-                        quant = r"*"
+                        quant = r'*'
                     elif (diff := self.max_depth - len(self.styles)) > 0:
-                        quant = rf"{{0,{diff}}}"
+                        quant = rf'{{0,{diff}}}'
                     else:
-                        quant = r"?"
+                        quant = r'?'
                 else:
-                    quant = r"?"
+                    quant = r'?'
 
                 if quant:
                     if dot or stack[0]:
-                        stack.appendleft(rf"(?:{dot}{atom}{stack[0]}){quant}")
+                        stack.appendleft(rf'(?:{dot}{atom}{stack[0]}){quant}')
                     else:
-                        stack.appendleft(rf"{atom}{quant}")
+                        stack.appendleft(rf'{atom}{quant}')
                 else:
-                    stack.appendleft(rf"{dot}{atom}{stack[0]}")
+                    stack.appendleft(rf'{dot}{atom}{stack[0]}')
             body = stack[0]
         else:
             # II. If no styles are specified, check for any valid idxs in any order
             #     Note that specs can still set `dotted,` `marked`, and `tagged` without styles
             # II.i. Determine the lookbehind/lookahead pair to use
-            pre, suf = self.EXPRS["flex_pre"], self.EXPRS["flex_suf"]
-            groups["flex"] = self.RGXS["flex"].pattern
+            pre, suf = self.EXPRS['flex_pre'], self.EXPRS['flex_suf']
+            groups['flex'] = self.RGXS['flex'].pattern
 
             # II.ii. Determine the final atom's quantifier based on `max_depth`
             if self.max_depth <= 0:
-                quant = r"*"
+                quant = r'*'
             elif self.max_depth == 1:
-                quant = r""
+                quant = r''
             else:
-                quant = rf"{{0,{self.max_depth - 1}}}"
+                quant = rf'{{0,{self.max_depth - 1}}}'
 
             # II.iii. Construct the simple final expression based on `dotted` and `tagged` options
             if self.dotted:
-                base = rf"(?:\.(?P>flex)){quant}"
+                base = rf'(?:\.(?P>flex)){quant}'
             elif self.dotted is not None:
-                base = rf"(?P>flex){quant}"
+                base = rf'(?P>flex){quant}'
             else:
-                base = rf"(?|(?P>flex){quant}|(?:\.(?P>flex)){quant})"
-            body = rf"(?P>flex){base}"
+                base = rf'(?|(?P>flex){quant}|(?:\.(?P>flex)){quant})'
+            body = rf'(?P>flex){base}'
 
         # III. Consolidate groups before returning
-        if "romanl" in groups and "romanu" in groups:
-            _rgx = groups["roman"] = self.RGXS["roman"].pattern
-            groups["romanl"] = groups.pop("romanl").replace(_rgx, r"(?P>roman)")
-            groups["romanu"] = groups.pop("romanu").replace(_rgx, r"(?P>roman)")
+        if 'romanl' in groups and 'romanu' in groups:
+            _rgx = groups['roman'] = self.RGXS['roman'].pattern
+            groups['romanl'] = groups.pop('romanl').replace(_rgx, r'(?P>roman)')
+            groups['romanu'] = groups.pop('romanu').replace(_rgx, r'(?P>roman)')
 
-        return groups, rf"{pre}{body}{self.mark_rgx}{suf}"
+        return groups, rf'{pre}{body}{self.mark_rgx}{suf}'
 
     def style_iter(self, start: int = 0, end: int = -1) -> Iterator[IdxStyle]:
         """Yield default `IdxStyle` values for index depths in the range `[start, end)`.
@@ -245,7 +243,7 @@ class IdxSpec(pyd.BaseModel):
         """
         n = len(self.styles)
         end = end if end > 0 else n
-        assert 0 <= start <= end, f"Invalid depth range: {start + 1} to {end + 1}"
+        assert 0 <= start <= end, f'Invalid depth range: {start + 1} to {end + 1}'
         if start == end:
             return
 
@@ -260,12 +258,12 @@ class IdxSpec(pyd.BaseModel):
     @property
     def mark_rgx(self) -> str:
         """The regex pattern for matching the mark at the end of an index string."""
-        return r"[.):]?" if self.marked is None else re.escape(self.marked)
+        return r'[.):]?' if self.marked is None else re.escape(self.marked)
 
     @property
     def mark(self) -> str:
         """The character printed at the end of every full idx chain (if specified)."""
-        return self.marked or ""
+        return self.marked or ''
 
     def __hash__(self):
         return hash((self.styles, self.dotted, self.marked, self.tagged))
@@ -280,7 +278,7 @@ class IdxSpec(pyd.BaseModel):
         header regex.
         """
         groups, rgx = self._build_rgx(self)
-        groups["idx"] = rgx
+        groups['idx'] = rgx
         return groups
 
     @property

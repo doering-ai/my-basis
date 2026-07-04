@@ -54,18 +54,18 @@ class Idx(pyd.BaseModel):
         tagged_flex=IdxSpec(tagged=True).rgx,
     )
 
-    root: str = ""
+    root: str = ''
     parts: list[tuple[IdxStyle, int]] = []
     spec: IdxSpec = IdxSpec()
 
     # -------------------
     # `.` Initial Methods
     # -------------------
-    def __init__(self, root: str = "", **kwargs) -> None:
+    def __init__(self, root: str = '', **kwargs) -> None:
         """Initializes the Idx object with the given root string and optional parts and spec."""
         super().__init__(root=root, **kwargs)
 
-    @pyd.model_validator(mode="after")
+    @pyd.model_validator(mode='after')
     def read(self) -> Self:
         """Reads the root string and populates the parts, dotted, and marked attributes."""
         self.root = self.root.strip()
@@ -75,16 +75,16 @@ class Idx(pyd.BaseModel):
             return self
 
         _rem = self.root
-        if _rem[-1] in ".):":
+        if _rem[-1] in '.):':
             self.spec.marked = _rem[-1]  # type: ignore
             _rem = _rem[:-1]
 
-        if "." in _rem:
+        if '.' in _rem:
             self.spec.dotted = True
-            _parts = _rem.split(".")
+            _parts = _rem.split('.')
             if _max := self.spec.max_depth:
-                assert len(_parts) <= _max, f"{self.root} has > {_max} parts."
-            assert all(_parts), f"Invalid index with empty part: {self.root}"
+                assert len(_parts) <= _max, f'{self.root} has > {_max} parts.'
+            assert all(_parts), f'Invalid index with empty part: {self.root}'
 
             try:
                 self.parts = list(map(self._read_dotted_part, _parts))
@@ -100,7 +100,7 @@ class Idx(pyd.BaseModel):
                     style, place, _rem = self._read_part(_rem)
                     self.parts.append((style, place))
                 if _max and len(self.parts) > _max:
-                    raise ValueError(f"{self.root} has > {_max} parts.")
+                    raise ValueError(f'{self.root} has > {_max} parts.')
             except (AssertionError, ValueError):
                 self.parts = []
                 if self._DEBUG:
@@ -111,9 +111,9 @@ class Idx(pyd.BaseModel):
     def write(self) -> str:
         """Writes the root string based on the parts, dotted, and marked attributes."""
         if not self.parts:
-            return ""
+            return ''
 
-        sep = "." if self.spec.dotted is True else ""
+        sep = '.' if self.spec.dotted is True else ''
         ret = sep.join(it.starmap(self._write_part, self.parts)) + self.spec.mark
         return ret
 
@@ -137,13 +137,13 @@ class Idx(pyd.BaseModel):
     @staticmethod
     def alpha_to_int(text: str) -> int:
         """Converts a single alphabetical character to an integer."""
-        return ord(text[0].upper()) - ord("A") + 1
+        return ord(text[0].upper()) - ord('A') + 1
 
     @staticmethod
     def int_to_alpha(num: int, upper: bool = False) -> str:
         """Converts an integer to a single alphabetical character."""
-        assert num < 26, "int_to_alpha only supports values up to 26."
-        return chr(ord("A" if upper else "a") + num)
+        assert num < 26, 'int_to_alpha only supports values up to 26.'
+        return chr(ord('A' if upper else 'a') + num)
 
     # -------------------
     # `+` Primary Methods
@@ -165,14 +165,14 @@ class Idx(pyd.BaseModel):
         Raises:
             ValueError: If *text* cannot be classified as any known style.
         """
-        assert text, "Cannot read empty idx part."
+        assert text, 'Cannot read empty idx part.'
         if text.isdigit():
             return IdxStyle.NUMBER, int(text)
 
         elif (val := IdxSpec.SYMBOLS.find(text)) > -1:
             return IdxStyle.SYMBOL, val
 
-        elif IdxSpec.RGXS["roman"].fullmatch(text):
+        elif IdxSpec.RGXS['roman'].fullmatch(text):
             # Roman Numerals can only be used with dot separators or when total depth is 0
             style = IdxStyle.ROMANU if text.isupper() else IdxStyle.ROMANL
             return style, ut.roman_to_decimal(text)
@@ -185,7 +185,7 @@ class Idx(pyd.BaseModel):
                 val += cls.alpha_to_int(char) * (26**place)
             return style, val
 
-        raise ValueError(f"Cannot classify idx: {text}")
+        raise ValueError(f'Cannot classify idx: {text}')
 
     @classmethod
     def _read_part(cls, text: str) -> tuple[IdxStyle, int, str]:
@@ -194,25 +194,25 @@ class Idx(pyd.BaseModel):
         Returns:
             3-tuple with `(style, position, remaining text)`.
         """
-        assert text, "Cannot read empty idx part."
+        assert text, 'Cannot read empty idx part.'
         if text[0].isdigit():
             return IdxStyle.NUMBER, int(text[0]), text[1:]
 
         elif text[0] in IdxSpec.SYMBOLS:
-            assert len(text) == 1, "Symbol idx must be a single character."
+            assert len(text) == 1, 'Symbol idx must be a single character.'
             return IdxStyle.SYMBOL, IdxSpec.SYMBOLS.index(text[0]), text[1:]
 
-        elif IdxSpec.RGXS["roman"].fullmatch(text):
+        elif IdxSpec.RGXS['roman'].fullmatch(text):
             # Roman Numerals can only be used with dot separators or when total depth is 0
             style = IdxStyle.ROMANU if text.isupper() else IdxStyle.ROMANL
-            return style, ut.roman_to_decimal(text), ""
+            return style, ut.roman_to_decimal(text), ''
 
         elif text[0].isalpha():
             # NOTE: alpha must be matched after roman numerals, for obvious reasons
             style = IdxStyle.ALPHAU if text[0].isupper() else IdxStyle.ALPHAL
             return (style, cls.alpha_to_int(text[0]), text[1:])
 
-        raise ValueError(f"Cannot classify idx: {text}")
+        raise ValueError(f'Cannot classify idx: {text}')
 
     @classmethod
     def _write_part(cls, style: IdxStyle, place: int) -> str:
@@ -229,12 +229,12 @@ class Idx(pyd.BaseModel):
             AssertionError: If *place* is negative or out of range for the style.
             ValueError: If *style* is unrecognised.
         """
-        assert place >= 0, f"Cannot write negative idx place: {place}"
+        assert place >= 0, f'Cannot write negative idx place: {place}'
         if style == IdxStyle.NUMBER:
             return str(place)
 
         elif style == IdxStyle.SYMBOL:
-            assert place < len(IdxSpec.SYMBOLS), f"Symbol idx {place} is out of bounds."
+            assert place < len(IdxSpec.SYMBOLS), f'Symbol idx {place} is out of bounds.'
             return IdxSpec.SYMBOLS[place]
 
         elif style & IdxStyle.ROMAN:
@@ -251,10 +251,10 @@ class Idx(pyd.BaseModel):
                 while place > 0:
                     chars.appendleft(cls.int_to_alpha(place % 26, upper=is_upper))
                     place //= 26
-                return "".join(chars)
+                return ''.join(chars)
 
         else:
-            raise ValueError(f"Cannot write idx for unrecognized style: {style}")
+            raise ValueError(f'Cannot write idx for unrecognized style: {style}')
 
     # ------------------
     # `*` Public Methods
@@ -267,7 +267,7 @@ class Idx(pyd.BaseModel):
         elif isinstance(other, Idx):
             return self.root == other.root
         else:
-            raise TypeError(f"Cannot compare Idx to {type(other)}")
+            raise TypeError(f'Cannot compare Idx to {type(other)}')
 
     def __lt__(self, other: Idx | str):
         """Orders two indices.
@@ -280,7 +280,7 @@ class Idx(pyd.BaseModel):
         """
         if isinstance(other, str):
             _ret = Idx.attempt_to_read(other)
-            assert _ret is not None, f"Cannot compare to invalid index string: {other}"
+            assert _ret is not None, f'Cannot compare to invalid index string: {other}'
             other = _ret
 
         if self == other:
@@ -289,7 +289,7 @@ class Idx(pyd.BaseModel):
         return self.root < other.root
 
     def __repr__(self):
-        return f"`{self.root}`"
+        return f'`{self.root}`'
 
     def __str__(self):
         return self.root
@@ -323,7 +323,7 @@ class Idx(pyd.BaseModel):
         elif isinstance(other, Idx):
             return self.__class__(root=self.root + other.root)
         else:
-            raise TypeError(f"Cannot add Idx to {type(other)}")
+            raise TypeError(f'Cannot add Idx to {type(other)}')
 
     def __sub__(self, num: int) -> Self:
         """Remove the last *num* depth levels from this index.
@@ -341,9 +341,7 @@ class Idx(pyd.BaseModel):
         elif num >= len(self):
             return self.__class__()
         else:
-            assert 0 < num < len(self), (
-                f"Invalid subtraction length for {self.root}: {num}"
-            )
+            assert 0 < num < len(self), f'Invalid subtraction length for {self.root}: {num}'
             return self.__class__(root=self.root[:-num])
 
     def matches(self, other: Idx | str | None) -> bool:
@@ -462,23 +460,19 @@ class Idx(pyd.BaseModel):
         elif rel_depth != 0:
             # I.ii. Shift depth
             if rel_depth > 0:
-                parts.extend(
-                    (_s, 0) for _s in self.spec.style_iter(depth0, depth0 + rel_depth)
-                )
+                parts.extend((_s, 0) for _s in self.spec.style_iter(depth0, depth0 + rel_depth))
             else:
                 parts = parts[:-rel_depth]
 
         depth = len(parts)
         if depth == 0:
-            raise IndexError(f"Vertical change out of bounds: {depth0} + {rel_depth}")
+            raise IndexError(f'Vertical change out of bounds: {depth0} + {rel_depth}')
 
         # II. Set place(s) within depth(s)
         if isinstance(abs_place, list):
             # II.i. Set all places
             abs_place = list(abs_place)
-            assert len(abs_place) == depth, (
-                f"Given {len(abs_place)} new places for {depth} parts."
-            )
+            assert len(abs_place) == depth, f'Given {len(abs_place)} new places for {depth} parts.'
             parts = [(style, pos) for (style, _), pos in zip(parts, abs_place)]
         elif abs_place >= 0:
             # II.ii. Set last place
@@ -487,17 +481,15 @@ class Idx(pyd.BaseModel):
             # II.iii. Shift all places
             rel_place = list(rel_place)
             assert len(rel_place) == depth, (
-                f"Given {len(rel_place)} place shifts for {depth} parts."
+                f'Given {len(rel_place)} place shifts for {depth} parts.'
             )
-            parts = [
-                (style, cur + shift) for (style, cur), shift in zip(parts, rel_place)
-            ]
+            parts = [(style, cur + shift) for (style, cur), shift in zip(parts, rel_place)]
         elif rel_place != 0:
             # II.iv. Shift last place
             style, last = parts[-1]
             parts[-1] = style, last + rel_place
 
         if any(pos < 0 for _, pos in parts):
-            raise IndexError(f"Horizontal change(s) out of bounds: {parts=}")
+            raise IndexError(f'Horizontal change(s) out of bounds: {parts=}')
 
         return self.model_copy(update=dict(parts=parts))

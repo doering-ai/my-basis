@@ -7,6 +7,7 @@
 ![Pipeline Status](https://img.shields.io/gitlab/pipeline-status/libs/basis?branch=main)
 ![Test Coverage](https://img.shields.io/gitlab/pipeline-coverage/libs/basis?job_name=test&branch=main)
 [![License](https://img.shields.io/gitlab/license/libs/basis)](/LICENSE)
+
 <!-- Not live yet -- restore once the package is published to ReadTheDocs/PyPI:
 [![Documentation](https://app.readthedocs.org/projects/my-basis/badge)](https://my-basis.readthedocs.io)
 ![Python Version](https://img.shields.io/pypi/pyversions/my-basis)
@@ -21,14 +22,15 @@
 [![img](https://img.shields.io/badge/Sublime%20Text-4200+-aa673a?logo=sublimetext&logoColor=white&labelColor=d18140)](https://www.sublimetext.com/download)
 
 {align="center"}
+
 > An extensive utility library for python, focusing especially on iterables and a Regex "Store".
 
----
+______________________________________________________________________
 
 ## Install
 
-> `my-basis` is not yet published to PyPI. Every consumer in this ecosystem depends on it the
-> same way: as an editable local path added via `uv`.
+`my-basis` is not yet published to PyPI. Every consumer in this ecosystem depends on it the
+same way: as an editable local path added via `uv`.
 
 ```toml
 # pyproject.toml
@@ -41,13 +43,13 @@ dependencies = [
 my-basis = { path = "../libs/basis", editable = true }
 ```
 
-> Adjust the relative `path` to wherever this repo lives on disk from the consuming project,
-> then run `uv sync`.
+Adjust the relative `path` to wherever this repo lives on disk from the consuming project,
+then run `uv sync`.
 
 ## Quickstart
 
-> The core loop: cast untyped data into a target type, check whether a value already fits one,
-> and introspect a type itself as a `MyType` node.
+The core loop: cast untyped data into a target type, check whether a value already fits one,
+and introspect a type itself as a `MyType` node.
 
 ```python
 from my import ty, MyType
@@ -68,7 +70,7 @@ t.args    # -> (MyType[str], MyType[int])
 t.root    # -> dict[str, int]
 ```
 
-> `ty` is the package-wide `Typist` singleton -- `cast`/`check`/`match` chambers composed onto
-> one object. See `docs/` (built locally with `task docs`, or the hosted site once published)
-> for the full subpackage tour: `typing` (this cast/check/match/`MyType` machinery), `types`,
-> `regex`, `caches`, `apis`, `utils`, and `files`.
+`ty` is the package-wide `Typist` singleton -- `cast`/`check`/`match` chambers composed onto
+one object. See `docs/` (built locally with `task docs`, or the hosted site once published)
+for the full subpackage tour: `typing` (this cast/check/match/`MyType` machinery), `types`,
+`regex`, `caches`, `apis`, `utils`, and `files`.

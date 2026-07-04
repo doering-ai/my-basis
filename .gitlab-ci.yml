@@ -8,7 +8,6 @@ stages:
   - eval
   - test
   - release
-
 # Import static analysis tools
 include:
   - template: Security/Secret-Detection.gitlab-ci.yml
@@ -16,7 +15,6 @@ include:
     inputs:
       stage: eval
       offline: true
-
 # Determine when this pipeline should run
 workflow:
   rules:
@@ -26,30 +24,25 @@ workflow:
     # Run for merge requests and pushes to the main branch
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-
 ############
 ### DATA ###
 ############
 variables:
   PACKAGE: my
+  USER: my
   DOCKER_TLS_CERTDIR: /certs
   TEST_POD: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
   MAIN_POD: $CI_REGISTRY_IMAGE:latest
-
   # Enable GitLabs free secret detection -- see `secret_detection` job
   SECRET_DETECTION_ENABLED: 'true'
-
   # Where uv caches wheels/downloads -- kept inside the project so GitLab can cache it.
   UV_CACHE_DIR: .uv-cache
-  USER: my
-
 cache:
   key:
     files:
       - uv.lock
   paths:
     - $UV_CACHE_DIR
-
 ############
 ### BODY ###
 ############
@@ -57,18 +50,15 @@ default:
   image:
     name: $MAIN_POD
     entrypoint: [""]
-
 secret_detection:
   stage: eval
   cache: []
-
 .docker:
   image: docker:26
-  services: [docker:26-dind]
+  services: ['docker:26-dind']
   before_script:
     - echo "$CI_REGISTRY_PASSWORD" | docker login $CI_REGISTRY -u gitlab-ci-token --password-stdin
   cache: []
-
 Rebuild Pod:
   stage: build
   extends: .docker
@@ -80,7 +70,6 @@ Rebuild Pod:
         - Containerfile
         - Taskfile.dist.yaml
         - .repo.yaml
-
 Release Pod:
   stage: release
   extends: .docker
@@ -94,7 +83,6 @@ Release Pod:
         - Containerfile
         - Taskfile.dist.yaml
         - .repo.yaml
-
 Evaluate Python:
   stage: eval
   before_script:
@@ -108,7 +96,6 @@ Evaluate Python:
   artifacts:
     reports:
       codequality: $CI_PROJECT_DIR/code-quality-report.json
-
 Test Python:
   stage: test
   before_script:

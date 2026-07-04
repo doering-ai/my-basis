@@ -53,7 +53,7 @@ Rebuild Pod:
   stage: build
   extends: .docker
   script:
-    - docker build --pull -t $TEST_POD .
+    - docker build --pull -t $TEST_POD -f Containerfile .
     - docker push $TEST_POD
   rules:
     - changes:

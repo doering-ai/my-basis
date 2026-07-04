@@ -12,9 +12,10 @@ variables:
 
 include:
     - template: Security/Secret-Detection.gitlab-ci.yml
-    - component: gitlab.com/gitlab-org/professional-services-automation/tools/utilities/pipeintel/pipeintel@main
+    - component: gitlab.com/gitlab-org/professional-services-automation/tools/utilities/pipeintel/pipeintel@1.0.0
       inputs:
         stage: eval
+        offline: true
 
 # ---- Lifecyle ----
 # These will be executed in turn, corresponding to one or more jobs below
@@ -38,6 +39,7 @@ workflow:
     # From https://docs.astral.sh/uv/guides/integration/docker/#available-images
     image: $MAIN_IMAGE
 
+<<<<<<< before updating
     # See https://docs.gitlab.com/ci/yaml/#cachekeyfiles
     cache:
         - key: {files: [uv.lock]}
@@ -48,6 +50,31 @@ workflow:
 
     after_script:
         - uv cache prune --ci
+=======
+    # Where uv caches wheels/downloads -- kept inside the project so GitLab can cache it.
+    UV_CACHE_DIR: .uv-cache
+    USER: my
+
+
+############
+### BODY ###
+############
+default:
+    image:
+        name: $MAIN_POD
+        entrypoint: [""]
+
+cache:
+    key:
+        files:
+            - uv.lock
+    paths:
+        - $UV_CACHE_DIR
+
+secret_detection:
+    stage: eval
+    cache: []
+>>>>>>> after updating
 
 #################
 ### III. JOBS ###
@@ -64,6 +91,7 @@ test-plugin:
 eval-types:
     # Run static type checkers on source code
     stage: eval
+<<<<<<< before updating
     extends: .uv
     script:
         - uv run --project $CI_PROJECT_DIR pyrefly check
@@ -74,3 +102,27 @@ eval-logic:
     extends: .uv
     script:
         - uv run --project $CI_PROJECT_DIR ruff check .
+=======
+    before_script:
+        - cd $CI_PROJECT_DIR
+        - uv sync --all-extras
+    script:
+        - uv run ruff check --output-format=gitlab --output-file=code-quality-report.json
+        - uv run ruff format --diff
+        - uv run pyrefly check
+    interruptible: true
+    artifacts:
+        reports:
+            codequality: $CI_PROJECT_DIR/code-quality-report.json
+
+Test Python:
+    stage: test
+    before_script:
+        - cd $CI_PROJECT_DIR
+        - uv sync --all-extras
+    script:
+        - uv run task test:cov
+    coverage: '/TOTAL.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
+ 
+ 
+>>>>>>> after updating

@@ -160,3 +160,6 @@ Taskfile.yaml
 
 # Sublime Text
 formatter.assets/
+
+# Agent worktrees (corpus worktree-isolation policy)
+.worktrees/

@@ -43,7 +43,9 @@ variables:
 ### BODY ###
 ############
 default:
-  image: $MAIN_POD
+  image:
+    name: $MAIN_POD
+    entrypoint: [""]
 
 .docker:
   image: docker:26

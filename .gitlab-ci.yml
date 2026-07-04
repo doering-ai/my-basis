@@ -11,7 +11,7 @@ stages:
 # Import static analysis tools
 include:
   - template: Security/Secret-Detection.gitlab-ci.yml
-  - component: gitlab.com/gitlab-org/professional-services-automation/tools/utilities/pipeintel/pipeintel@main
+  - component: gitlab.com/gitlab-org/professional-services-automation/tools/utilities/pipeintel/pipeintel@1.0.0
     inputs:
       stage: eval
 # Determine when this pipeline should run

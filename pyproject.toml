@@ -34,6 +34,12 @@ dependencies = [
   "sublime-aio",
   "toml>=0.10.2",
   "anyio>=4.5.2",
+  # Required at runtime (not just for dev/eval tooling): myBasis uses PEP 585 generics
+  # (e.g. `dict[str, int]`) on pydantic Generic models under `from __future__ import
+  # annotations`, which pydantic can only resolve on Python 3.8 via eval_type_backport.
+  # Any downstream consumer that imports myBasis needs this present, not just this repo's
+  # own dev environment.
+  "eval-type-backport>=0.3.1",
 ]
 
 [dependency-groups]
@@ -45,7 +51,6 @@ dev = [
 
 eval = [
   "annotated-types>=0.7.0",
-  "eval-type-backport>=0.3.1",
   "ruff>=0.14.14",
   "sublime-stubs",
   "pyrefly>=0.61.0",

@@ -54,7 +54,9 @@ class PackageSettings(pyd.BaseModel):
                 settings = sb.load_settings(f'{cls.PKG}.sublime-settings')
             _get = ft.partial(cls._get, settings)
             data = {key: val for key in cls.normkeys() if (val := _get(key))}
-            cls.REGISTRY[cls.PKG] = cls(**data)
+            inst = cls(**data)
+            inst._root = settings
+            cls.REGISTRY[cls.PKG] = inst
         return cls.REGISTRY[cls.PKG]
 
     @classmethod

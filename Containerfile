@@ -13,8 +13,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 # ---- apt ----
 RUN set -eux && \
-    ${_APT} git curl ca-certificates gosu && \
-    ${_APT_CLEAN}
+    eval "${_APT} git curl ca-certificates gosu" && \
+    eval "${_APT_CLEAN}"
 
 # ---- tools ----
 # Taskfile
@@ -47,3 +47,5 @@ FROM system AS final
 
 ENTRYPOINT ["task"]
 CMD ["test"]
+
+# Bootstrap trigger

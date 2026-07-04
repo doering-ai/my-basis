@@ -29,6 +29,7 @@ workflow:
 ############
 variables:
   PACKAGE: my
+  USER: root
   DOCKER_TLS_CERTDIR: /certs
   TEST_POD: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
   MAIN_POD: $CI_REGISTRY_IMAGE:latest

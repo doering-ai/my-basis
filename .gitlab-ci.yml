@@ -38,6 +38,14 @@ variables:
   MAIN_POD: $CI_REGISTRY_IMAGE:latest
   # Enable GitLabs free secret detection -- see `secret_detection` job
   SECRET_DETECTION_ENABLED: 'true'
+  UV_CACHE_DIR: .uv-cache
+
+cache:
+  key:
+    files:
+      - uv.lock
+  paths:
+    - $UV_CACHE_DIR
 
 ############
 ### BODY ###
@@ -52,6 +60,7 @@ default:
   services: [docker:26-dind]
   before_script:
     - echo "$CI_REGISTRY_PASSWORD" | docker login $CI_REGISTRY -u gitlab-ci-token --password-stdin
+  cache: []
 
 Rebuild Pod:
   stage: build
@@ -80,24 +89,27 @@ Release Pod:
 
 secret_detection:
   stage: eval
+  cache: []
 
 Evaluate Python:
   stage: eval
-  interruptible: true
   before_script:
     - cd $CI_PROJECT_DIR
-    - ruff --version
-    - pyrefly --version
+    - uv sync --all-extras
+  interruptible: true
   script:
-    - ruff check --output-format=gitlab --output-file=code-quality-report.json
-    - ruff format --diff
-    - pyrefly check
+    - uv run ruff check --output-format=gitlab --output-file=code-quality-report.json
+    - uv run ruff format --diff
+    - uv run pyrefly check
   artifacts:
     reports:
       codequality: $CI_PROJECT_DIR/code-quality-report.json
 
 Test Python:
   stage: test
+  before_script:
+    - cd $CI_PROJECT_DIR
+    - uv sync --all-extras
   script:
-    - task test:cov
+    - uv run task test:cov
   coverage: '/TOTAL.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'

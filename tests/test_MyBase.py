@@ -288,6 +288,38 @@ class TestMetaDoBindMethod:
 
         assert not Meta.do_bind_method(process, 'process', True, {'run', 'description'})
 
+    # -- MEMY-76: signature edge cases (keyword-only leading param; `view` after `*args`) --
+
+    def test_binds_keyword_only_leading_view_param(self):
+        """A keyword-only leading param (`def process(self, *, view)`) still autobinds:
+        `view` is the first parameter capable of carrying a meaningful name, even though
+        it can only be passed by keyword. Verifies the contract -- not just documents the
+        prior implementation's incidental behavior."""
+
+        def process(self, *, view: sb.View) -> None:
+            pass
+
+        assert Meta.do_bind_method(process, 'process', True, {'run', 'description'})
+
+    def test_binds_view_param_after_var_positional_args(self):
+        """`view` following a `*args` catch-all (`def process(self, *args, view=None)`)
+        autobinds: `*args` carries no meaningful name, so it is skipped when scanning for
+        the first binding-relevant parameter, and `view` -- the next one -- qualifies."""
+
+        def process(self, *args: Any, view: sb.View = None) -> None:
+            pass
+
+        assert Meta.do_bind_method(process, 'process', True, {'run', 'description'})
+
+    def test_does_not_bind_var_positional_only_no_view(self):
+        """A bare `*args` catch-all with no named `view`/`edit`/`window` afterward must not
+        autobind -- there is no binding-relevant parameter to match against."""
+
+        def process(self, *args: Any) -> None:
+            pass
+
+        assert not Meta.do_bind_method(process, 'process', True, {'run', 'description'})
+
     def test_binds_base_class_name_regardless_of_signature(self):
         """A method named after a real base-class attribute is bound via the original
         name/annotation check, unaffected by the new signature-based path."""

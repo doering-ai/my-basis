@@ -1,128 +1,79 @@
 # Guided overall by https://docs.astral.sh/uv/guides/integration/gitlab/
 # Modeled on the sibling `test` repo's pipeline (../test/.gitlab-ci.yml).
-#########################
-### I. CONTROL BLOCKS ###
-#########################
-variables:
-    PACKAGE: myBasis
-    # basis has no Containerfile of its own; jobs run inside the shared Sublime test-harness
-    # image built and pushed by the sibling `test` project (ST runtime + task + uv).
-    MAIN_IMAGE: registry.gitlab.com/doering-ai/sublime/mytest:latest
-    SECRET_DETECTION_ENABLED: 'true'
-
-include:
-    - template: Security/Secret-Detection.gitlab-ci.yml
-    - component: gitlab.com/gitlab-org/professional-services-automation/tools/utilities/pipeintel/pipeintel@1.0.0
-      inputs:
-        stage: eval
-        offline: true
-
-# ---- Lifecyle ----
-# These will be executed in turn, corresponding to one or more jobs below
+############
+### HEAD ###
+############
 stages:
-    - test
-    - eval
+  - test
+  - eval
+
+# Import static analysis tools
+include:
+  - template: Security/Secret-Detection.gitlab-ci.yml
+  - component: gitlab.com/gitlab-org/professional-services-automation/tools/utilities/pipeintel/pipeintel@1.0.0
+    inputs:
+      stage: eval
+      offline: true
 
 # Only run the pipeline for non-draft commits in a Merge Request or directly onto the main branch.
 workflow:
-    rules:
-        - if: '$CI_COMMIT_TITLE =~ /-draft$/ || $CI_MERGE_REQUEST_DRAFT == "true"'
-          when: never
-        - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-        - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  rules:
+    - if: '$CI_COMMIT_TITLE =~ /-draft$/ || $CI_MERGE_REQUEST_DRAFT == "true"'
+      when: never
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
-#####################
-### II. TEMPLATES ###
-#####################
-.uv:
-    # This job is never directly executed, but serves as a template for all UV-based jobs.
-    # From https://docs.astral.sh/uv/guides/integration/docker/#available-images
-    image: $MAIN_IMAGE
+############
+### DATA ###
+############
+variables:
+  PACKAGE: myBasis
+  # basis has no Containerfile of its own; jobs run inside the shared Sublime test-harness
+  # image built and pushed by the sibling `test` project (ST runtime + task + uv).
+  MAIN_POD: registry.gitlab.com/doering-ai/sublime/mytest:latest
+  SECRET_DETECTION_ENABLED: 'true'
+  UV_CACHE_DIR: .uv-cache
+  USER: my
 
-<<<<<<< before updating
-    # See https://docs.gitlab.com/ci/yaml/#cachekeyfiles
-    cache:
-        - key: {files: [uv.lock]}
-          paths: ["${UV_CACHE_DIR}"]
-
-    before_script:
-        - uv sync
-
-    after_script:
-        - uv cache prune --ci
-=======
-    # Where uv caches wheels/downloads -- kept inside the project so GitLab can cache it.
-    UV_CACHE_DIR: .uv-cache
-    USER: my
-
+cache:
+  key:
+    files:
+      - uv.lock
+  paths:
+    - $UV_CACHE_DIR
 
 ############
 ### BODY ###
 ############
 default:
-    image:
-        name: $MAIN_POD
-        entrypoint: [""]
-
-cache:
-    key:
-        files:
-            - uv.lock
-    paths:
-        - $UV_CACHE_DIR
+  image:
+    name: $MAIN_POD
+    entrypoint: [""]
 
 secret_detection:
-    stage: eval
-    cache: []
->>>>>>> after updating
+  stage: eval
+  cache: []
 
-#################
-### III. JOBS ###
-#################
 test-plugin:
-    stage: test
-    extends: .uv
-    script:
-        - uv run --project $CI_PROJECT_DIR pytest
-    rules:
-        - changes:
-            - '**/*.py'
+  stage: test
+  before_script:
+    - cd $CI_PROJECT_DIR
+    - uv sync --all-extras
+  script:
+    - uv run pytest
+  rules:
+    - changes:
+        - '**/*.py'
 
-eval-types:
-    # Run static type checkers on source code
-    stage: eval
-<<<<<<< before updating
-    extends: .uv
-    script:
-        - uv run --project $CI_PROJECT_DIR pyrefly check
-
-eval-logic:
-    # Run semantic linters on source code
-    stage: eval
-    extends: .uv
-    script:
-        - uv run --project $CI_PROJECT_DIR ruff check .
-=======
-    before_script:
-        - cd $CI_PROJECT_DIR
-        - uv sync --all-extras
-    script:
-        - uv run ruff check --output-format=gitlab --output-file=code-quality-report.json
-        - uv run ruff format --diff
-        - uv run pyrefly check
-    interruptible: true
-    artifacts:
-        reports:
-            codequality: $CI_PROJECT_DIR/code-quality-report.json
-
-Test Python:
-    stage: test
-    before_script:
-        - cd $CI_PROJECT_DIR
-        - uv sync --all-extras
-    script:
-        - uv run task test:cov
-    coverage: '/TOTAL.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
- 
- 
->>>>>>> after updating
+Evaluate Python:
+  stage: eval
+  before_script:
+    - cd $CI_PROJECT_DIR
+    - uv sync --all-extras
+  interruptible: true
+  script:
+    - uv run ruff check --output-format=gitlab --output-file=code-quality-report.json
+    - uv run pyrefly check
+  artifacts:
+    reports:
+      codequality: $CI_PROJECT_DIR/code-quality-report.json

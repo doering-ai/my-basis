@@ -168,6 +168,26 @@ class TestPackageSettingsOpen:
             assert isinstance(inst_b, _SettingsB)
             assert not isinstance(inst_b, _SettingsA)
 
+    def test_open_mutate_and_persist_writes_back(self):
+        """Mutating the yielded instance inside the ``with`` block must write the change back.
+
+        Regression for MEMY-69: ``new()`` never assigned ``_root``, so the exit path's
+        ``settings = inst._root`` was always ``None`` and ``assert settings, 'Settings instance
+        not found on object.'`` raised whenever a caller actually mutated the yielded settings
+        (the very thing ``open()`` exists to support). ``new()`` now stashes the backing
+        ``sb.Settings`` object on the instance so the write-back has something to write to.
+        """
+
+        class _Settings(PackageSettings):
+            PKG: ClassVar[str] = 'test_pkg_open_mutate'
+            debug: bool = False
+
+        with _Settings.open() as inst:
+            inst.debug = True
+
+        settings = sb.load_settings(_Settings.filename())
+        assert settings.get('debug') is True
+
 
 class TestPackageSettingsNew:
     """Tests for ``PackageSettings.new``."""

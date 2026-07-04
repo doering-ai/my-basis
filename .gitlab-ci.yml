@@ -39,9 +39,6 @@ variables:
 ############
 default:
   image: ghcr.io/astral-sh/uv:python3.13-bookworm
-  before_script:
-    - cd $CI_PROJECT_DIR
-    - uv sync --all-extras
 
 .docker:
   image: docker:26
@@ -54,7 +51,6 @@ Rebuild Pod:
   extends: .docker
   script:
     - docker build --pull -t $TEST_POD -f Containerfile .
-    - docker push $TEST_POD
   rules:
     - changes:
         - Containerfile
@@ -80,6 +76,9 @@ secret_detection:
 
 Evaluate Python:
   stage: eval
+  before_script:
+    - cd $CI_PROJECT_DIR
+    - uv sync --all-extras
   interruptible: true
   script:
     - uv run ruff check --output-format=gitlab --output-file=code-quality-report.json
@@ -91,6 +90,9 @@ Evaluate Python:
 
 Test Python:
   stage: test
+  before_script:
+    - cd $CI_PROJECT_DIR
+    - uv sync --all-extras
   script:
     - sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
     - uv run task test:cov

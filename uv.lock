@@ -372,10 +372,11 @@ wheels = [
 
 [[package]]
 name = "sublime-basis"
-version = "0.1.0"
+version = "0.7.0"
 source = { editable = "." }
 dependencies = [
     { name = "anyio" },
+    { name = "eval-type-backport" },
     { name = "jinja2" },
     { name = "more-itertools" },
     { name = "pydantic" },
@@ -391,7 +392,6 @@ dev = [
     { name = "annotated-types" },
     { name = "better-exceptions" },
     { name = "coverage" },
-    { name = "eval-type-backport" },
     { name = "pyrefly" },
     { name = "pytest" },
     { name = "ruff" },
@@ -402,7 +402,6 @@ dev = [
 ]
 eval = [
     { name = "annotated-types" },
-    { name = "eval-type-backport" },
     { name = "pyrefly" },
     { name = "ruff" },
     { name = "sublime-stubs" },
@@ -418,6 +417,7 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "anyio", specifier = ">=4.5.2" },
+    { name = "eval-type-backport", specifier = ">=0.3.1" },
     { name = "jinja2", specifier = ">=3.1.6" },
     { name = "more-itertools", specifier = ">=10.5.0" },
     { name = "pydantic", specifier = ">=2.10.6" },
@@ -433,7 +433,6 @@ dev = [
     { name = "annotated-types", specifier = ">=0.7.0" },
     { name = "better-exceptions", specifier = ">=0.3.3" },
     { name = "coverage", specifier = ">=7.6.1" },
-    { name = "eval-type-backport", specifier = ">=0.3.1" },
     { name = "pyrefly", specifier = ">=0.61.0" },
     { name = "pytest", specifier = ">=8.3.5" },
     { name = "ruff", specifier = ">=0.14.14" },
@@ -444,7 +443,6 @@ dev = [
 ]
 eval = [
     { name = "annotated-types", specifier = ">=0.7.0" },
-    { name = "eval-type-backport", specifier = ">=0.3.1" },
     { name = "pyrefly", specifier = ">=0.61.0" },
     { name = "ruff", specifier = ">=0.14.14" },
     { name = "sublime-stubs", directory = "../.pkgs/sublime-stubs" },
@@ -477,7 +475,7 @@ dev = [{ name = "pyrefly", specifier = ">=0.62.0" }]
 
 [[package]]
 name = "sublime-test"
-version = "0.1.0"
+version = "0.7.0"
 source = { editable = "../test" }
 dependencies = [
     { name = "coverage" },
@@ -510,7 +508,6 @@ dev = [
     { name = "annotated-types", specifier = ">=0.7.0" },
     { name = "better-exceptions", specifier = ">=0.3.3" },
     { name = "bpython", specifier = ">=0.24" },
-    { name = "eval-type-backport", specifier = ">=0.3.1" },
     { name = "mdpopups", url = "https://github.com/facelessuser/sublime-markdown-popups/releases/download/st3-4.3.5/mdpopups-4.3.5-py3-none-any.whl" },
     { name = "mk", specifier = ">=2.4.1" },
     { name = "prek", specifier = ">=0.3.13" },
@@ -524,7 +521,6 @@ dev = [
 ]
 eval = [
     { name = "annotated-types", specifier = ">=0.7.0" },
-    { name = "eval-type-backport", specifier = ">=0.3.1" },
     { name = "pyrefly", specifier = ">=0.61.0" },
     { name = "ruff", specifier = ">=0.14.14" },
     { name = "sublime-stubs", directory = "../.pkgs/sublime-stubs" },

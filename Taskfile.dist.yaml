@@ -5,6 +5,9 @@ version: '3'
 
 vars:
     _0: '{{.TASK_DIR}}'
+    GIT_REMOTE: '{{.GIT_REMOTE | default "origin"}}'
+    CORPUS: '{{.MY_CORPUS | default "~/my/corpus"}}'
+    AWT: uv run --project {{.CORPUS}} agent-worktree --repo {{._0}}
     UV: uv --project {{._0}}
     REPO_YAML:
         sh: cat {{._0}}/.repo.yaml 2>/dev/null || echo {}
@@ -16,6 +19,150 @@ vars:
     DOC_OUT: '{{.DOC_DIR}}/_build'
 
 tasks:
+
+    # -------------
+    # Moving Tags
+    # -------------
+    # Core parameterizable task — moves an annotated tag to HEAD and force-pushes.
+    # Usage:
+    #   task tag:move -- TAG=stable
+    #   task tag:move -- TAG=dev MSG="Development snapshot"
+    tag:move:
+        desc: >-
+            Move an annotated git tag to HEAD and force-push it.  Pass
+            `TAG=<name>` and optional `MSG=<message>`.
+        vars:
+            TAG: '{{.TAG | default "stable"}}'
+            _HASH:
+                sh: git -C {{._0}} rev-parse --short HEAD 2>/dev/null || echo ""
+            _MSG: '{{.MSG | default (printf "%s @ %s" .TAG ._HASH)}}'
+        preconditions:
+            - sh: git -C {{._0}} rev-parse --git-dir > /dev/null 2>&1
+              msg: Not inside a git repository.
+        prompt: 'Move `{{.TAG}}` tag to HEAD and force-push to `{{.GIT_REMOTE}}`?'
+        cmds:
+            - cmd: >-
+                git -C {{._0}} tag -f -a '{{.TAG}}' HEAD
+                -m '{{._MSG}}'
+            - cmd: git -C {{._0}} push '{{.GIT_REMOTE}}' '{{.TAG}}' --force
+
+    # Convenience aliases for industry-standard moving tags.
+    tag:stable:
+        desc: Move the `stable` annotated tag to HEAD and force-push.
+        cmds:
+            - task: tag:move
+              vars: {TAG: stable}
+
+    tag:dev:
+        desc: Move the `dev` annotated tag to HEAD and force-push.
+        cmds:
+            - task: tag:move
+              vars: {TAG: dev}
+
+    tag:latest:
+        desc: Move the `latest` annotated tag to HEAD and force-push.
+        cmds:
+            - task: tag:move
+              vars: {TAG: latest}
+
+    tag:nightly:
+        desc: Move the `nightly` annotated tag to HEAD and force-push.
+        cmds:
+            - task: tag:move
+              vars: {TAG: nightly}
+
+    tag:edge:
+        desc: Move the `edge` annotated tag to HEAD and force-push.
+        cmds:
+            - task: tag:move
+              vars: {TAG: edge}
+
+    # -----------------
+    # Permanent Tags
+    # -----------------
+    # Semver version tags — created once, never moved.
+    # Usage:
+    #   task tag:version -- VERSION=v1.0.0
+    #   task tag:version -- VERSION=v1.0.0 MSG="Initial release"
+    tag:version:
+        desc: >-
+            Create a permanent semver version tag at HEAD and push.  Requires
+            `VERSION=<v1.0.0>`.  Optional `MSG=<message>`.
+        vars:
+            VERSION: '{{.VERSION | default ""}}'
+            _MSG: '{{.MSG | default (printf "Release %s" .VERSION)}}'
+        preconditions:
+            - sh: git -C {{._0}} rev-parse --git-dir > /dev/null 2>&1
+              msg: Not inside a git repository.
+            - sh: '[[ "{{.VERSION}}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]'
+              msg: 'VERSION must be a semver string like `v1.0.0` (pass with `VERSION=<v1.0.0>`).'
+        prompt: 'Create version tag `{{.VERSION}}` at HEAD and push to `{{.GIT_REMOTE}}`?'
+        cmds:
+            - cmd: git -C {{._0}} tag -a '{{.VERSION}}' HEAD -m '{{._MSG}}'
+            - cmd: git -C {{._0}} push '{{.GIT_REMOTE}}' '{{.VERSION}}'
+
+    # Pre-release tags (rc, beta, alpha).
+    # Usage:
+    #   task tag:prerelease -- VERSION=v1.0.0-rc.1
+    #   task tag:prerelease -- VERSION=v1.0.0-beta.3 MSG="Feature freeze"
+    tag:prerelease:
+        desc: >-
+            Create a pre-release tag (rc/beta/alpha) at HEAD and push.  Requires
+            `VERSION=<v1.0.0-rc.1>`.  Optional `MSG=<message>`.
+        vars:
+            VERSION: '{{.VERSION | default ""}}'
+            _MSG: '{{.MSG | default (printf "Pre-release %s" .VERSION)}}'
+        preconditions:
+            - sh: git -C {{._0}} rev-parse --git-dir > /dev/null 2>&1
+              msg: Not inside a git repository.
+            - sh: '[[ "{{.VERSION}}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-(rc|beta|alpha)\.?[0-9]*$ ]]'
+              msg: 'VERSION must be a pre-release semver like `v1.0.0-rc.1`.'
+        prompt: 'Create pre-release tag `{{.VERSION}}` at HEAD and push to `{{.GIT_REMOTE}}`?'
+        cmds:
+            - cmd: git -C {{._0}} tag -a '{{.VERSION}}' HEAD -m '{{._MSG}}'
+            - cmd: git -C {{._0}} push '{{.GIT_REMOTE}}' '{{.VERSION}}'
+
+    # -------------
+    # Utilities
+    # -------------
+    tag:list:
+        desc: List all git tags, sorted by version (newest first).
+        cmd: git -C {{._0}} tag -l --sort=-v:refname
+
+    tag:push:
+        desc: Push all local tags to the remote.
+        cmd: git -C {{._0}} push '{{.GIT_REMOTE}}' --tags
+
+    tag:clean:
+        desc: >-
+            Prune local tags (and stale remote-tracking branches) that no longer
+            exist on the remote.
+        cmd: git -C {{._0}} fetch '{{.GIT_REMOTE}}' --prune --prune-tags
+
+    agent:new:
+        cmd: '{{.AWT}} new {{.CLI_ARGS}}'
+        desc: 'Provision an isolated worktree+branch: `task agent:new -- MEMY-88 "short desc"`.'
+        aliases: [wt:new]
+
+    agent:list:
+        cmd: '{{.AWT}} list'
+        desc: List the live agent/* worktrees with ahead/dirty status.
+        aliases: [wt:list, wt:ls]
+
+    agent:merge:
+        cmd: '{{.AWT}} merge {{.CLI_ARGS}}'
+        desc: 'Land a reviewed branch into local main (never pushes): `task agent:merge -- agent/<branch>`.'
+        aliases: [wt:merge, wt:land]
+
+    agent:abandon:
+        cmd: '{{.AWT}} abandon {{.CLI_ARGS}}'
+        desc: 'Discard a rejected branch + its worktree: `task agent:abandon -- agent/<branch>`.'
+        aliases: [wt:abandon]
+
+    agent:gc:
+        cmd: '{{.AWT}} gc'
+        desc: Prune merged agent/* branches past the grace window.
+        aliases: [wt:gc]
 
     sync:
         cmd: '{{.UV}} sync --all-extras {{.CLI_ARGS}}'

@@ -39,4 +39,5 @@ class LogToDiskCommand(sbp.ApplicationCommand):
                     If None, logging behavior is toggled.
             fmt: Format string for log messages.
         """
-        ut.log_to_disk(target, fmt)
+        # TODO: restore fmt param — log_to_disk was refactored to drop fmt/clear/level
+        ut.log_to_disk(target)

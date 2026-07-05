@@ -3,7 +3,7 @@
 ###################
 [project]
 name = "sublime-basis"
-version = "0.1.0"
+version = "0.7.0"
 description = "A basis for using, extending, and designing SublimeText plugins."
 requires-python = "==3.8.*"
 urls = { Homepage = "https://gitlab.com/doering-ai/libs/sublime/basis" }

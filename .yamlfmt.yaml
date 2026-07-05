@@ -1,0 +1,33 @@
+continue_on_error: false
+doublestar: true
+# include: []
+exclude:
+    - 'node_modules/**'
+    - '.venv/**'
+    - 'prof/**'
+    - 'dist/**'
+    - '**/syntax_test_*'
+extensions: [yaml, yml]
+gitignore_excludes: false
+line_ending: lf
+output_format: default
+formatter:
+    # Main fields:
+    max_line_length: 90
+    indent: 4
+    # array_indent: 2
+    pad_line_comments: 2
+    indent_root_array: true
+    trim_trailing_whitespace: true
+    retain_line_breaks_single: true
+
+    # Random stuff:
+    type: basic
+    disallow_anchors: false
+    drop_merge_tag: true
+    eof_newline: true
+    include_document_start: false
+    indentless_arrays: false
+    # line_ending: lf
+    # retain_line_breaks: false
+    scan_folded_as_literal: true

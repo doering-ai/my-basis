@@ -1,0 +1,27 @@
+#: Paragraph word wrap mode
+wrap = "keep" # keep|no|INTEGER
+
+#: apply consecutive numbering to ordered lists
+number = true # false|true
+
+#: output file line ending mode (default: lf)
+end_of_line = "lf" # lf|crlf|keep
+
+#: Validate that the rendered HTML is consistent
+validate = true # false|true
+
+#: Enabled extensions (default: all installed)
+# extensions = [      
+#     "gfm",
+#     "toc",
+# ]
+
+#: Enabled code formatter languages (default: all installed)
+# codeformatters = [  
+#     "python",
+#     "json",
+# ]
+
+# ---- Python 3.13+ only ----
+#: options: a list of file path pattern strings
+exclude = ["**/syntax_test_*", "**/myst-mdformat/README.md", "**/myst-mdformat/docs/**", "stash/skill-normalization-ideas.md"]

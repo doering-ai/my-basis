@@ -65,6 +65,14 @@ class Predicate(pyd.BaseModel):
     duplicates: bool = False
     overwrite: bool = False
 
+    @pyd.model_validator(mode='before')
+    @classmethod
+    def _validate_before(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if 'root' in data and 'data' not in data:
+                data['data'] = data.pop('root')
+        return data
+
     # -------------------
     # `.` Initial Methods
     # -------------------

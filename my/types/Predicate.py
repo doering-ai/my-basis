@@ -65,6 +65,14 @@ class Predicate(pyd.BaseModel):
     duplicates: bool = False
     overwrite: bool = False
 
+    @pyd.model_validator(mode='before')
+    @classmethod
+    def _validate_before(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if 'root' in data and 'data' not in data:
+                data['data'] = data.pop('root')
+        return data
+
     # -------------------
     # `.` Initial Methods
     # -------------------
@@ -429,6 +437,15 @@ class Predicate(pyd.BaseModel):
     # ---------------
     # `*1` Properties
     # ---------------
+    @property
+    def root(self) -> dict[str, list[str]]:
+        """Backwards compatibility alias for data."""
+        return self.data
+
+    @root.setter
+    def root(self, value: dict[str, list[str]]) -> None:
+        self.data = value
+
     @property
     def size(self) -> int:
         """The number of individual values in this predicate (i.e. cells, not just rows)."""

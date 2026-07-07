@@ -239,7 +239,7 @@ class IterUtils(_UtilsBase):
         match pred:
             case _ if callable(pred):
                 return pred
-            case Container():
+            case Container() if not isinstance(pred, (str, bytes, bytearray)):
                 return pred.__contains__
             case Iterator():
                 return lambda v: any(cls.apply(pred, v))
@@ -381,7 +381,11 @@ class IterUtils(_UtilsBase):
             return matches[0] if matches else default
         elif cls.ty.is_map(data):
             data = dict(data)
-            matches = list(dict.fromkeys(key for key, pred in it.product(data, preds) if pred(key)))
+            matches = []
+            for pred in preds:
+                for key in data:
+                    if pred(key):
+                        matches.append(key)
             if unique and len(matches) > 1:
                 raise ValueError(f'Multiple keys found: {matches}')
             return data[matches[0]] if matches else default

@@ -72,7 +72,7 @@ class MatchData(Predicate):
     # -------------------
     # `+` Primary Methods
     # -------------------
-    CACHED_PROPERTIES: ClassVar[set[str]] = {'data', 'span', 'start', 'end', 'text', 'size'}
+    CACHED_PROPERTIES: ClassVar[set[str]] = {'flat', 'span', 'start', 'end', 'text', 'size'}
 
     @ft.cached_property
     def flat(self) -> dict[str, str]:

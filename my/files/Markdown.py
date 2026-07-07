@@ -675,6 +675,20 @@ class Markdown(pyd.BaseModel):
 
         return ret
 
+    def render(self, data: dict[str, Any], fix: bool = True) -> str:
+        """Render markdown template with the given data dict.
+
+        Args:
+            data: Data to render template with.
+            fix: Whether to format output with mdformat.
+        Returns:
+            Rendered markdown string.
+        """
+        body = get_template(self.TEMPLATE).render(data)
+        if fix:
+            body = mdformat.text(body)
+        return body
+
     def to_string(self, strip_notes: bool = False, fix: bool = True) -> str:
         """Render this node and its children as markdown text.
 
@@ -688,7 +702,4 @@ class Markdown(pyd.BaseModel):
         if strip_notes and 'notes' in data:
             del data['notes']
 
-        body = get_template(self.TEMPLATE).render(data)
-        if fix:
-            body = mdformat.text(body)
-        return body
+        return self.render(data, fix)

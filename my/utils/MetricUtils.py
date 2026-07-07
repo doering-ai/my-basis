@@ -364,8 +364,8 @@ class MetricUtils(_UtilsBase):
 
         return wrapper
 
-    @ctx.contextmanager
     @classmethod
+    @ctx.contextmanager
     @_guard
     def measure_context(cls, name: str, counter: dict[str, int]):
         """Context manager to measure execution time of a code block.

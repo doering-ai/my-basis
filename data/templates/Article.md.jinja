@@ -1,0 +1,23 @@
+{% extends "Markdown.md.jinja" %}
+{% block prose %}
+{% if description %}
+
+**Description:** _{{ description }}_
+
+{% endif %}
+
+{% if containers %}
+
+**Categories:** {% for cat in containers|sort %}`{{cat}}`{{', ' if not loop.last}}{% endfor %}
+
+{% endif %}
+
+{{ super() }}
+{% endblock %}
+
+{% block notes %}
+{% if notes %}
+{{ super() }}
+{{ notes }}
+{% endif %}
+{% endblock %}

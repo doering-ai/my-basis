@@ -430,6 +430,15 @@ class Predicate(pyd.BaseModel):
     # `*1` Properties
     # ---------------
     @property
+    def root(self) -> dict[str, list[str]]:
+        """Backwards compatibility alias for data."""
+        return self.data
+
+    @root.setter
+    def root(self, value: dict[str, list[str]]) -> None:
+        self.data = value
+
+    @property
     def size(self) -> int:
         """The number of individual values in this predicate (i.e. cells, not just rows)."""
         return sum(map(len, self.data.values()))

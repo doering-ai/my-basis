@@ -25,3 +25,7 @@ validate = true # false|true
 # ---- Python 3.13+ only ----
 #: options: a list of file path pattern strings
 exclude = ["**/syntax_test_*", "**/myst-mdformat/README.md", "**/myst-mdformat/docs/**", "stash/skill-normalization-ideas.md"]
+
+#: myst-mdformat plugin options ([plugin.myst] must follow all top-level keys)
+[plugin.myst]
+sembr = true # reflow prose to one sentence per line (semantic line breaks)

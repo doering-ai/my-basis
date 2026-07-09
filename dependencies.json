@@ -1,20 +1,21 @@
 {
-    "$schema": "sublime://packagecontrol.io/schemas/dependencies",
-    "*": {
-        ">=4096": [
-            "more-itertools",
-            "pydantic",
-            "pydantic-core",
-            "regex",
-            "ruamel.yaml",
-            "ruamel.yaml.clib",
-            "sublime_lib",
-            "sublime_aio",
-            "mdpopups",
-            "toml",
-            "annotated-types",
-            "eval_type_backport",
-            "typing-extensions"
-        ]
-    }
+  "$schema": "sublime://packagecontrol.io/schemas/dependencies",
+  "*": {
+    ">=4096": [
+      "jinja2",
+      "more-itertools",
+      "pydantic",
+      "pydantic-core",
+      "regex",
+      "ruamel.yaml",
+      "ruamel.yaml.clib",
+      "sublime_lib",
+      "sublime_aio",
+      "mdpopups",
+      "toml",
+      "annotated-types",
+      "eval_type_backport",
+      "typing-extensions"
+    ]
+  }
 }

@@ -76,7 +76,7 @@ namespace = true
 sublime-stubs = { path = "../.pkgs/sublime-stubs" }
 sublime-lib = { url = "https://github.com/SublimeText/sublime_lib/releases/download/v2.1.0/sublime_lib-2.1.0-py3-none-any.whl" }
 sublime-aio = { url = "https://github.com/packagecontrol/sublime_aio/releases/download/v0.1.6/sublime_aio-0.1.6-py3-none-any.whl" }
-sublime-test = { git = "https://gitlab.com/doering-ai/sublime/pytest.git", tag = "stable" }
+sublime-test = { path = "../test", editable = true }
 
 [project.scripts]
 setup-sublime = "myBasis.infra.setup_sublime:main"

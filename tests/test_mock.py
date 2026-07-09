@@ -41,15 +41,30 @@ class TestIsLive:
 
 
 class TestInferPaths:
-    """Tests for ``mock._sublime.infer_paths`` root validation."""
+    """Tests for ``mock._sublime.infer_paths`` root resolution.
+
+    Path inference must never raise -- not even at import time, and not even when explicitly
+    pointed at a nonexistent directory -- since `import myBasis` has to succeed in a bare Python
+    env with no live SublimeText install (MEMY-60). Anything unresolvable degrades gracefully to a
+    tmp directory instead, with a `UserWarning` so the situation is still visible.
+    """
 
     def test_valid_st_root(self, tmp_path: Path, monkeypatch: pyt.MonkeyPatch):
         monkeypatch.setenv('ST_ROOT', str(tmp_path))
         _home, _cache, root = _sublime.infer_paths()
         assert root == tmp_path.resolve()
 
-    def test_invalid_st_root_raises(self, tmp_path: Path, monkeypatch: pyt.MonkeyPatch):
-        """A nonexistent $ST_ROOT must be rejected, not silently returned."""
+    def test_invalid_st_root_falls_back_to_tmp(self, tmp_path: Path, monkeypatch: pyt.MonkeyPatch):
+        """A nonexistent $ST_ROOT must degrade to a tmp dir (with a warning), never raise."""
         monkeypatch.setenv('ST_ROOT', str(tmp_path / 'nonexistent'))
-        with pyt.raises(ValueError, match='ST_ROOT'):
-            _sublime.infer_paths()
+        with pyt.warns(UserWarning, match='root'):
+            _home, _cache, root = _sublime.infer_paths()
+        assert root != tmp_path / 'nonexistent'
+        assert root.exists() and root.is_dir()
+
+    def test_import_never_raises_with_no_st_env(self, monkeypatch: pyt.MonkeyPatch):
+        """Nothing in path inference should require a live ST install or any $ST_* env var."""
+        for envvar in ('ST_HOME', 'ST_PKGS', 'ST_CACHE', 'ST_ROOT'):
+            monkeypatch.delenv(envvar, raising=False)
+        home, cache, root = _sublime.infer_paths()
+        assert all(p.exists() and p.is_dir() for p in (home, cache, root))

@@ -27,6 +27,8 @@ import itertools as it
 import json
 import os
 import sys
+import tempfile
+import warnings
 
 ### EXTERNAL
 import pydantic as pyd
@@ -48,45 +50,72 @@ MODE = 'external'
 Directory = pyd.DirectoryPath
 
 
+def _fallback_dir(name: str) -> Directory:
+    """Return a private tmp dir standing in for an unresolvable ST path, creating it if needed.
+
+    Used when neither an explicit env var nor the default XDG location resolves to a directory
+    that actually exists on disk (e.g. a bare Python env / CI container with no live ST install).
+    Keeps path inference -- and therefore `import myBasis` -- free of hard failures.
+    """
+    path = Path(tempfile.gettempdir()) / 'myBasis-mock' / name
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _resolve(*candidates: Path | None, name: str) -> Directory:
+    """Return the first existing directory among `candidates`, else a tmp fallback (warns)."""
+    for candidate in candidates:
+        if candidate and candidate.exists() and candidate.is_dir():
+            return candidate
+    warnings.warn(
+        f'Could not infer a real SublimeText {name!r} directory; falling back to a temp directory. '
+        f'Set the appropriate $ST_* environment variable to silence this.',
+        stacklevel=3,
+    )
+    return _fallback_dir(name)
+
+
+def _infer_home() -> Directory:
+    """Infer the main SublimeText directory (usually `~/.config/sublime-text`)."""
+    candidate = None
+    if envvar := os.getenv('ST_HOME'):
+        candidate = Path(envvar).expanduser().resolve()
+    elif envvar := os.getenv('ST_PKGS'):
+        candidate = Path(envvar).expanduser().resolve().parent
+
+    xdg = Path(os.getenv('XDG_CONFIG_HOME', '~/.config')).expanduser().resolve() / 'sublime-text'
+    return _resolve(candidate, xdg, name='home')
+
+
+def _infer_cache() -> Directory:
+    """Infer the SublimeText cache directory (usually `~/.cache/sublime-text/Cache`)."""
+    candidate = None
+    if envvar := os.getenv('ST_CACHE'):
+        candidate = Path(envvar).expanduser().resolve()
+
+    xdg = (
+        Path(os.getenv('XDG_CACHE_HOME', '~/.cache')).expanduser().resolve()
+        / 'sublime-text'
+        / 'Cache'
+    )
+    return _resolve(candidate, xdg, name='cache')
+
+
+def _infer_root() -> Directory:
+    """Infer the root of the installed SublimeText application (usually `/opt/sublime_text`)."""
+    candidate = Path(os.getenv('ST_ROOT', '/opt/sublime_text')).expanduser().resolve()
+    return _resolve(candidate, name='root')
+
+
 def infer_paths() -> tuple[Directory, Directory, Directory]:
-    def home() -> Directory:
-        path = None
-        if envvar := os.getenv('ST_HOME'):
-            path = Path(envvar).expanduser().resolve()
-        elif envvar := os.getenv('ST_PKGS'):
-            path = Path(envvar).expanduser().resolve().parent
+    """Infer the (home, cache, root) SublimeText directories.
 
-        if not (path and path.exists()):
-            xdg = Path(os.getenv('XDG_CONFIG_HOME', '~/.config')).expanduser().resolve()
-            path = xdg / 'sublime-text'
-
-        if not (path and path.exists() and path.is_dir()):
-            raise ValueError('Could not infer $ST_MAIN -- please set manually.')
-        return path
-
-    def cache() -> Directory:
-        path = None
-        if envvar := os.getenv('ST_CACHE'):
-            path = Path(envvar).expanduser().resolve()
-
-        if not (path and path.exists()):
-            xdg = Path(os.getenv('XDG_CACHE_HOME', '~/.cache')).expanduser().resolve()
-            path = xdg / 'sublime-text' / 'Cache'
-
-        if not (path and path.exists() and path.is_dir()):
-            raise ValueError('Could not infer $ST_CACHE -- please set manually.')
-        return path
-
-    def root() -> Directory:
-        path = Path(os.getenv('ST_ROOT', '/opt/sublime_text')).expanduser().resolve()
-        if not (path and path.exists() and path.is_dir()):
-            raise ValueError('Could not infer $ST_ROOT -- please set manually.')
-        return path
-
-    return home(), cache(), root()
-
-
-ST_HOME, ST_CACHE, ST_ROOT = infer_paths()
+    Each is resolved from an explicit env var, then a default XDG/well-known location, and finally
+    (only if neither exists on disk) a tmp directory -- this never raises, so it is always safe to
+    call, including from a bare Python env with no live SublimeText install. Nothing here runs at
+    import time; each directory is only inferred the first time it's actually asked for.
+    """
+    return _infer_home(), _infer_cache(), _infer_root()
 
 
 ############
@@ -1137,19 +1166,19 @@ def platform() -> Literal['osx', 'linux', 'windows']:
 
 
 def packages_path() -> str:
-    return str(ST_HOME / 'Packages')
+    return str(_infer_home() / 'Packages')
 
 
 def installed_packages_path() -> str:
-    return str(ST_HOME / 'Installed Packages')
+    return str(_infer_home() / 'Installed Packages')
 
 
 def cache_path() -> str:
-    return str(ST_CACHE)
+    return str(_infer_cache())
 
 
 def executable_path() -> str:
-    return str(ST_ROOT / 'sublime_text')
+    return str(_infer_root() / 'sublime_text')
 
 
 def load_settings(base_name: str) -> Settings:

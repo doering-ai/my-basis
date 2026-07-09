@@ -1,7 +1,10 @@
 """Torus showcase through PyRatatui.
 
-TODO: Writeup policy documents to enforce the style changes implied by the diff of this commit
-with the previous one, which was automated.
+A rotating 4D Clifford torus rendered from Python through `pyratatui`, the Python
+binding for Ratatui. Animation state lives in `TorusApp`; each frame rotates the
+sampled surface in several 4D coordinate planes, then projects 4D -> 3D -> 2D for
+the terminal canvas. PyRatatui is an optional dependency (the `terminal` extra)
+and is imported lazily so the pure-geometry core stays importable without it.
 """
 
 ############
@@ -9,7 +12,7 @@ with the previous one, which was automated.
 ############
 ### STANDARD
 from __future__ import annotations
-from typing import NamedTuple
+from typing import TYPE_CHECKING, NamedTuple
 
 from collections.abc import Iterable
 from math import cos, pi, sin
@@ -21,7 +24,10 @@ import itertools as it
 from pydantic import BaseModel, Field
 
 ### INTERNAL
-from my import Scalar
+# Local imports
+
+if TYPE_CHECKING:
+    from pyratatui import Frame
 
 ############
 ### DATA ###
@@ -124,13 +130,12 @@ class TorusApp:
         coords[b] = xa * sa + xb * ca
         return (coords[0], coords[1], coords[2], coords[3])
 
-    def _rotate(self, point: R4, dur: float, *args: Scalar) -> R4:
+    def _rotate(self, point: R4, dur: float) -> R4:
         """Apply several coupled 4D rotations to a point.
 
         Args:
             point: Original 4D point.
             dur: Animation time in seconds.
-            *args: Unused; reserved for future per-call rotation overrides.
         Returns:
             Rotated 4D point.
         """
@@ -264,7 +269,7 @@ class TorusApp:
         return title + '\n' + '\n'.join(''.join(row).rstrip() for row in rows)
 
 
-def _draw_canvas(app: TorusApp, frame: object) -> None:
+def _draw_canvas(app: TorusApp, frame: Frame) -> None:
     """Draw the torus frame through PyRatatui.
 
     Args:
@@ -293,7 +298,10 @@ def _draw_canvas(app: TorusApp, frame: object) -> None:
         .title_bottom(f' q/Esc quit │ Space pause │ +/- speed {app.speed:0.2f}x │ r reset ')
         .border_style(Style().fg(Color.cyan()))
     )
-    inner = block.inner(area)
+    # `Block.inner(area)` shrinks a bordered block's area by one cell per side;
+    # `Rect.inner(1, 1)` is the equivalent, stub-complete form (pyratatui's
+    # stubs do not yet expose `Block.inner`).
+    inner = area.inner(1, 1)
     frame.render_widget(block, area)
     frame.render_widget(canvas, inner)
 
@@ -314,7 +322,7 @@ def _parse_args() -> TorusConfig:
         Validated torus configuration.
     """
     parser = ap.ArgumentParser(
-        prog='python -m my.scripts.pyratatui_torus',
+        prog='tuitorii',
         description='Render a rotating 4D Clifford torus through PyRatatui.',
     )
     parser.add_argument('--snapshot', action='store_true', help='print one ASCII frame and exit')

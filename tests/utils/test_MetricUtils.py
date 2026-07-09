@@ -101,3 +101,24 @@ class TestMetricUtils:
             time.sleep(0.01)
 
         assert counter['blk'] > 0
+
+    @pyt.mark.parametrize(
+        'counter',
+        [
+            pyt.param({}, id='unseeded'),
+            pyt.param({'blk': 0}, id='seeded'),
+        ],
+    )
+    def test_measure_context_unseeded_counter_no_keyerror(self, counter: dict[str, int]):
+        """`_measure` must not raise `KeyError` when `name` isn't pre-seeded in `counter`.
+
+        Regression test for MEMY-165: `counter[name] += dur_ms` assumes `name` is already a key
+        in `counter`, which raises `KeyError` the first time a nonzero-duration measurement
+        fires for a metric nobody pre-seeded. Every caller in this codebase happens to
+        pre-seed (e.g. `dict.fromkeys(TIME_INDEX, 0)`), which masked the bug; this asserts an
+        unseeded counter works identically to a seeded one.
+        """
+        with cls.measure_context('blk', counter):
+            time.sleep(0.01)
+
+        assert counter['blk'] > 0

@@ -329,7 +329,7 @@ class MetricUtils(_UtilsBase):
             if isinstance(counter, OpenTelemetryCounter):
                 counter.add(dur_ms)
             else:
-                counter[name] += dur_ms
+                counter[name] = counter.get(name, 0) + dur_ms
 
     @classmethod
     @_guard

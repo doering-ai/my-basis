@@ -152,8 +152,11 @@ class TestMetricUtils:
         """
         counter: dict[str, int] = {'blk': 0}
 
-        with pyt.raises(ValueError), cls.measure_context('blk', counter):
+        def _sleep_then_raise() -> None:
             time.sleep(0.01)
             raise ValueError('boom')
+
+        with pyt.raises(ValueError, match='boom'), cls.measure_context('blk', counter):
+            _sleep_then_raise()
 
         assert counter['blk'] > 0

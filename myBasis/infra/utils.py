@@ -1381,9 +1381,6 @@ class Utils(TypesMixin):
                     If a string or Path is provided, logs will be written to that file.
                     If False, disk logging will be disabled.
                     If None, logging behavior is toggled.
-            fmt: Format string for log messages.
-            clear: If True, clears the log file if it already exists.
-            level: Logging level to set for the logger.
         Returns:
             The path to the log file if logging is enabled, or None if disabled.
         """

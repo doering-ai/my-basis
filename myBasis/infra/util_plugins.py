@@ -27,7 +27,6 @@ class LogToDiskCommand(sbp.ApplicationCommand):
         self,
         *,
         target: bool | None | str | Path = True,
-        fmt: str = '[%(relativeCreated)d] %(message)s',
         **_kwargs,
     ) -> None:
         """Write the content to the specified file path.
@@ -37,7 +36,5 @@ class LogToDiskCommand(sbp.ApplicationCommand):
                     If a string or Path is provided, logs will be written to that file.
                     If False, disk logging will be disabled.
                     If None, logging behavior is toggled.
-            fmt: Format string for log messages.
         """
-        # TODO: restore fmt param — log_to_disk was refactored to drop fmt/clear/level
         ut.log_to_disk(target)

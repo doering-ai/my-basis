@@ -268,6 +268,7 @@ class MetricUtils(_UtilsBase):
         cls.LOGGERS[package] = logger
         return logger
 
+    @staticmethod
     @_guard
     def setup_warnings():
         """Configure warning filters to suppress common deprecation warnings.

@@ -40,6 +40,25 @@ class TestMetricUtils:
         finally:
             cls.WARNINGS_SETUP = original
 
+    def test_setup_warnings_callable_on_instance(self):
+        """`setup_warnings` must be callable on an instance, not just the class.
+
+        Regression test for MEMY-165: `setup_warnings` was a bare `@_guard`-decorated function
+        with no `self`/`cls` parameter and no `@staticmethod`, so `MetricUtils().setup_warnings()`
+        raised `TypeError: setup_warnings() takes 0 positional arguments but 1 was given` --
+        Python implicitly passes the instance as the first positional argument to an
+        undecorated function accessed off an instance. Dormant because every call site in this
+        codebase goes through the class directly (`MetricUtils.setup_warnings()`, never
+        instantiated), but it detonates on first instance access.
+        """
+        original = cls.WARNINGS_SETUP
+        try:
+            cls.WARNINGS_SETUP = False
+            cls().setup_warnings()
+            assert cls.WARNINGS_SETUP is True
+        finally:
+            cls.WARNINGS_SETUP = original
+
     # -----------
     # `4` METRICS
     # -----------

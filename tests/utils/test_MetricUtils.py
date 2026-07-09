@@ -40,6 +40,25 @@ class TestMetricUtils:
         finally:
             cls.WARNINGS_SETUP = original
 
+    def test_setup_warnings_callable_on_instance(self):
+        """`setup_warnings` must be callable on an instance, not just the class.
+
+        Regression test for MEMY-165: `setup_warnings` was a bare `@_guard`-decorated function
+        with no `self`/`cls` parameter and no `@staticmethod`, so `MetricUtils().setup_warnings()`
+        raised `TypeError: setup_warnings() takes 0 positional arguments but 1 was given` --
+        Python implicitly passes the instance as the first positional argument to an
+        undecorated function accessed off an instance. Dormant because every call site in this
+        codebase goes through the class directly (`MetricUtils.setup_warnings()`, never
+        instantiated), but it detonates on first instance access.
+        """
+        original = cls.WARNINGS_SETUP
+        try:
+            cls.WARNINGS_SETUP = False
+            cls().setup_warnings()
+            assert cls.WARNINGS_SETUP is True
+        finally:
+            cls.WARNINGS_SETUP = original
+
     # -----------
     # `4` METRICS
     # -----------
@@ -76,6 +95,12 @@ class TestMetricUtils:
                 id='owning_class',
             ),
             pyt.param(
+                # MEMY-165: pyrefly WARNs `missing-attribute` here -- `my/__init__.py`'s
+                # `Utils` re-export shadows the `my.utils` submodule name, so pyrefly's static
+                # view of `ut` resolves to `Utils` (no `measure_context`) even though `ut` is
+                # genuinely the submodule at runtime. Known, intentional facade shadow, not an
+                # upstream stub gap; see the `missing-attribute` note in
+                # `[tool.pyrefly.errors]` (pyproject.toml) for the full rationale.
                 lambda counter: ft.partial(ut.measure_context, counter=counter),
                 id='partial_via_module_facade',
             ),
@@ -99,5 +124,45 @@ class TestMetricUtils:
 
         with measure('blk'):
             time.sleep(0.01)
+
+        assert counter['blk'] > 0
+
+    @pyt.mark.parametrize(
+        'counter',
+        [
+            pyt.param({}, id='unseeded'),
+            pyt.param({'blk': 0}, id='seeded'),
+        ],
+    )
+    def test_measure_context_unseeded_counter_no_keyerror(self, counter: dict[str, int]):
+        """`_measure` must not raise `KeyError` when `name` isn't pre-seeded in `counter`.
+
+        Regression test for MEMY-165: `counter[name] += dur_ms` assumes `name` is already a key
+        in `counter`, which raises `KeyError` the first time a nonzero-duration measurement
+        fires for a metric nobody pre-seeded. Every caller in this codebase happens to
+        pre-seed (e.g. `dict.fromkeys(TIME_INDEX, 0)`), which masked the bug; this asserts an
+        unseeded counter works identically to a seeded one.
+        """
+        with cls.measure_context('blk', counter):
+            time.sleep(0.01)
+
+        assert counter['blk'] > 0
+
+    def test_measure_context_records_elapsed_time_on_exception(self):
+        """`measure_context` must record timing even when the block raises.
+
+        Regression test for MEMY-165: the original implementation was a bare `yield` with no
+        `try`/`finally`, so `cls._measure` never ran when the body raised -- the timing was
+        silently dropped on exactly the paths (slow-then-crashing code) where a caller
+        debugging via metrics would want it most.
+        """
+        counter: dict[str, int] = {'blk': 0}
+
+        def _sleep_then_raise() -> None:
+            time.sleep(0.01)
+            raise ValueError('boom')
+
+        with pyt.raises(ValueError, match='boom'), cls.measure_context('blk', counter):
+            _sleep_then_raise()
 
         assert counter['blk'] > 0

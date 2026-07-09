@@ -122,3 +122,19 @@ class TestMetricUtils:
             time.sleep(0.01)
 
         assert counter['blk'] > 0
+
+    def test_measure_context_records_elapsed_time_on_exception(self):
+        """`measure_context` must record timing even when the block raises.
+
+        Regression test for MEMY-165: the original implementation was a bare `yield` with no
+        `try`/`finally`, so `cls._measure` never ran when the body raised -- the timing was
+        silently dropped on exactly the paths (slow-then-crashing code) where a caller
+        debugging via metrics would want it most.
+        """
+        counter: dict[str, int] = {'blk': 0}
+
+        with pyt.raises(ValueError), cls.measure_context('blk', counter):
+            time.sleep(0.01)
+            raise ValueError('boom')
+
+        assert counter['blk'] > 0

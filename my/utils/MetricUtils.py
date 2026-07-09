@@ -370,6 +370,9 @@ class MetricUtils(_UtilsBase):
     def measure_context(cls, name: str, counter: dict[str, int]):
         """Context manager to measure execution time of a code block.
 
+        Timing is recorded even if the block raises, so a slow-then-crashing path still shows
+        up in `counter`.
+
         Args:
             name: Metric name for recording.
             counter: Dictionary counter to record elapsed time.
@@ -377,8 +380,10 @@ class MetricUtils(_UtilsBase):
             None (timing measured around context block).
         """
         start = perf_counter_ns()
-        yield
-        cls._measure(name, counter, start)
+        try:
+            yield
+        finally:
+            cls._measure(name, counter, start)
 
     @classmethod
     @_guard

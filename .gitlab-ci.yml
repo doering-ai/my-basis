@@ -4,103 +4,147 @@
 ############
 # These will be executed in turn, corresponding to one or more jobs below
 stages:
-  - build
-  - eval
-  - test
-  - release
+    - build
+    - eval
+    - test
+    - release
 # Import static analysis tools
 include:
-  - template: Security/Secret-Detection.gitlab-ci.yml
-  - component: gitlab.com/gitlab-org/professional-services-automation/tools/utilities/pipeintel/pipeintel@1.0.0
-    inputs:
-      stage: eval
-      offline: true
+    - template: Security/Secret-Detection.gitlab-ci.yml
+    - component: gitlab.com/gitlab-org/professional-services-automation/tools/utilities/pipeintel/pipeintel@1.0.0
+      inputs:
+        stage: eval
+        offline: true
 # Determine when this pipeline should run
 workflow:
-  rules:
-    # Never run for draft commits
-    - if: '$CI_COMMIT_TITLE =~ /-draft$/ || $CI_MERGE_REQUEST_DRAFT == "true"'
-      when: never
-    # Run for merge requests and pushes to the main branch
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    rules:
+        # Never run for draft commits
+        - if: '$CI_COMMIT_TITLE =~ /-draft$/ || $CI_MERGE_REQUEST_DRAFT == "true"'
+          when: never
+        # Run for merge requests and pushes to the main branch
+        - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+        - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+        # Run for version tags -- this is what creates the pipeline the PyPI publish
+        # job lives in. WITHOUT this rule a `v*` tag push matches nothing and GitLab
+        # creates no pipeline at all, so the job-level `rules:` can never fire.
+        - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
 ############
 ### DATA ###
 ############
 variables:
-  PACKAGE: my
-  USER: my
-  DOCKER_TLS_CERTDIR: /certs
-  TEST_POD: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
-  MAIN_POD: $CI_REGISTRY_IMAGE:latest
-  # Enable GitLabs free secret detection -- see `secret_detection` job
-  SECRET_DETECTION_ENABLED: 'true'
-  # Where uv caches wheels/downloads -- kept inside the project so GitLab can cache it.
-  UV_CACHE_DIR: .uv-cache
+    PACKAGE: my
+    USER: my
+    DOCKER_TLS_CERTDIR: /certs
+    TEST_POD: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
+    MAIN_POD: $CI_REGISTRY_IMAGE:latest
+    # Enable GitLabs free secret detection -- see `secret_detection` job
+    SECRET_DETECTION_ENABLED: 'true'
+    # Where uv caches wheels/downloads -- kept inside the project so GitLab can cache it.
+    UV_CACHE_DIR: .uv-cache
 cache:
-  key:
-    files:
-      - uv.lock
-  paths:
-    - $UV_CACHE_DIR
+    key:
+        files:
+            - uv.lock
+    paths:
+        - $UV_CACHE_DIR
 ############
 ### BODY ###
 ############
 default:
-  image:
-    name: $MAIN_POD
-    entrypoint: [""]
+    image:
+        name: $MAIN_POD
+        entrypoint: [""]
 secret_detection:
-  stage: eval
-  cache: []
+    stage: eval
+    cache: []
 .docker:
-  image: docker:26
-  services: ['docker:26-dind']
-  before_script:
-    - echo "$CI_REGISTRY_PASSWORD" | docker login $CI_REGISTRY -u gitlab-ci-token --password-stdin
-  cache: []
+    image: docker:26
+    services: ['docker:26-dind']
+    before_script:
+        - echo "$CI_REGISTRY_PASSWORD" | docker login $CI_REGISTRY -u gitlab-ci-token --password-stdin
+    cache: []
 Rebuild Pod:
-  stage: build
-  extends: .docker
-  script:
-    - docker build --pull -t $TEST_POD -f Containerfile .
-    - docker push $TEST_POD
-  rules:
-    - changes:
-        - Containerfile
-        - Taskfile.dist.yaml
-        - .repo.yaml
+    stage: build
+    extends: .docker
+    script:
+        - docker build --pull -t $TEST_POD -f Containerfile .
+        - docker push $TEST_POD
+    rules:
+        - changes:
+            - Containerfile
+            - Taskfile.dist.yaml
+            - .repo.yaml
 Release Pod:
-  stage: release
-  extends: .docker
-  script:
-    - docker pull $TEST_POD
-    - docker tag $TEST_POD $MAIN_POD
-    - docker push $MAIN_POD
-  rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-    - changes:
-        - Containerfile
-        - Taskfile.dist.yaml
-        - .repo.yaml
+    stage: release
+    extends: .docker
+    script:
+        - docker pull $TEST_POD
+        - docker tag $TEST_POD $MAIN_POD
+        - docker push $MAIN_POD
+    rules:
+        - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+        - changes:
+            - Containerfile
+            - Taskfile.dist.yaml
+            - .repo.yaml
+# PyPI trusted publishing (OIDC) -- no long-lived token. Triggered by a `v*` tag
+# (see the workflow rule above). GitLab mints a short-lived id_token bound to the
+# top-level pipeline; we exchange it at PyPI's mint endpoint for a project-scoped
+# token that expires in <=15 min, then `uv publish`. uv has NO GitLab auto-detect,
+# so the exchange is manual and lives here.
+#
+# PREREQUISITES (one-time, operator, PyPI/GitLab side -- the job is inert without
+# them): (1) register a Trusted Publisher on PyPI for my-basis -- provider GitLab
+# CI/CD, namespace doering-ai, project libs/basis, pipeline `.gitlab-ci.yml`, env
+# `pypi`; (2) mark the `pypi` environment PROTECTED with required approval so the
+# release stays a deliberate, logged human decision.
+Publish PyPI:
+    stage: release
+    # Self-contained uv+python image; python3 (stdlib urllib) does the exchange.
+    image:
+        name: ghcr.io/astral-sh/uv:python3.13-bookworm-slim
+        entrypoint: [""]
+    id_tokens:
+        PYPI_ID_TOKEN:
+            aud: pypi
+    rules:
+        - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
+    environment: pypi
+    cache: []
+    script:
+        - uv build --no-sources
+        - |
+          export UV_PUBLISH_TOKEN=$(python3 -c '
+          import json, os, urllib.request
+          req = urllib.request.Request(
+              "https://pypi.org/_/oidc/mint-token",
+              data=json.dumps({"token": os.environ["PYPI_ID_TOKEN"]}).encode(),
+              headers={"Content-Type": "application/json"},
+          )
+          print(json.load(urllib.request.urlopen(req))["token"])
+          ')
+        # NOTE: uploads only. `uv publish` uploads PEP 740 attestations if present
+        # in dist/ but does NOT generate them; provenance needs a separate signing
+        # step (deferred -- see MEMY-247's trailing work item).
+        - uv publish
 Evaluate Python:
-  stage: eval
-  before_script:
-    - cd $CI_PROJECT_DIR
-    - uv sync --all-extras
-  interruptible: true
-  script:
-    - uv run ruff check --output-format=gitlab --output-file=code-quality-report.json
-    - uv run ruff format --diff
-    - uv run pyrefly check
-  artifacts:
-    reports:
-      codequality: $CI_PROJECT_DIR/code-quality-report.json
+    stage: eval
+    before_script:
+        - cd $CI_PROJECT_DIR
+        - uv sync --all-extras
+    interruptible: true
+    script:
+        - uv run ruff check --output-format=gitlab --output-file=code-quality-report.json
+        - uv run ruff format --diff
+        - uv run pyrefly check
+    artifacts:
+        reports:
+            codequality: $CI_PROJECT_DIR/code-quality-report.json
 Test Python:
-  stage: test
-  before_script:
-    - cd $CI_PROJECT_DIR
-    - uv sync --all-extras
-  script:
-    - uv run task test:cov
-  coverage: '/TOTAL.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
+    stage: test
+    before_script:
+        - cd $CI_PROJECT_DIR
+        - uv sync --all-extras
+    script:
+        - uv run task test:cov
+    coverage: '/TOTAL.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'

@@ -40,7 +40,7 @@ COMMON_RGXS = RegexStore.new(
         ],
         RegexStore.format_url,
     ),
-    md_url=r'(?<![!\[])\[ *(?P<alias>[^\]\n]+?) *\]\((?P<target>[^\)\n]+?)\)',
+    md_url=r'(?<![!\[])\[ *+(?P<alias>[^\]\n]+?) *+\]\((?P<target>[^\)\n]+?)\)',
     # Numeric patterns
     _roman_numeral=[
         r'(?i)(?<![[:alnum:]])(?=[IVXLCDM])',

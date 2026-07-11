@@ -34,6 +34,10 @@ def _no_spans() -> SpanArray:
 
 
 NO_ESC = r'(?<!(?:^|[^\\])\\)'
+
+#: Timeout (seconds) for regex searches in hot iterators. Catches catastrophic
+#: backtracking in unattended processing without false-positives on normal input.
+REGEX_TIMEOUT: float = 10.0
 DEBUG = False
 
 PairMode = Literal['all', 'roots', 'leaves']
@@ -409,7 +413,7 @@ class Buffer(pyd.BaseModel):
         starts: deque[Span] = deque()
 
         # Iterate using the regex library's native positional search(), adjusting for modifications
-        while match := rgx.search(self.text[0], pos):
+        while match := rgx.search(self.text[0], pos, timeout=REGEX_TIMEOUT):
             oldlen = len(self)
             params = match.groupdict()
             span = Span._fast(*match.span())
@@ -765,7 +769,7 @@ class Buffer(pyd.BaseModel):
         b1 = b1 if b1 != -1 else len(self)
         starts: list[Span] = []
         ends: list[Span] = []
-        while match := rgx.search(self.text[0][:b1], pos):
+        while match := rgx.search(self.text[0][:b1], pos, timeout=REGEX_TIMEOUT):
             params = match.groupdict()
             span = Span._fast(*match.span())
             s0, pos = span
@@ -888,7 +892,7 @@ class Buffer(pyd.BaseModel):
 
         pos = b0
         b1 = b1 if b1 != -1 else len(self)
-        while match := rgx.search(self.text[0], pos):
+        while match := rgx.search(self.text[0], pos, timeout=REGEX_TIMEOUT):
             x0, x1 = match.span()
             if x1 > b1:
                 break

@@ -97,6 +97,11 @@ class Buffer(pyd.BaseModel):
     fence_rgxs: list[str] = []
 
     fence_rgx: ut.RegexField | None = pyd.Field(default=None, exclude=True)
+    #: Version counter that increments on every text mutation (``_replace_span``).
+    #: Used by consumers to cache iterator results and invalidate on change.
+    _version: int = pyd.PrivateAttr(default=0)
+    #: Cache for :meth:`pair_list`, cleared automatically by version bumps.
+    _pair_cache: dict = pyd.PrivateAttr(default_factory=dict)
 
     # -------------------
     # `.` Initial Methods
@@ -170,12 +175,14 @@ class Buffer(pyd.BaseModel):
 
     def memcopy(self) -> Self:
         """Create a deep copy of this Buffer instance without recalculating fences."""
-        return self.__class__(
+        copy = self.__class__(
             text=[self.text[0]],
             fence_rgxs=self.fence_rgxs,
             fences=np.copy(self.fences),
             uid=self.uid,
         )
+        copy._version = self._version
+        return copy
 
     # -------------------
     # `-` Private Methods
@@ -193,6 +200,8 @@ class Buffer(pyd.BaseModel):
         start, end = old
         if end == 0 and not new_text:
             return
+        self._version += 1
+        self._pair_cache.clear()
 
         # Perform the replacement
         self.text[0] = self.text[0][:start] + new_text + self.text[0][end:]
@@ -821,6 +830,36 @@ class Buffer(pyd.BaseModel):
             Tuples of spans representing the start and end delimiters.
         """
         yield from map(self._yield_pair, self.raw_pair_iterator(rgx, mode, b0, b1))
+
+    def pair_list(
+        self,
+        rgx: Pattern,
+        mode: PairMode = 'all',
+        b0: int = 0,
+        b1: int = -1,
+    ) -> list[tuple[Span, str, str, str]]:
+        """Materialized, cached version of :meth:`pair_iterator` for read-only passes.
+
+        Returns the full list of ``(full_span, start_text, body_text, end_text)`` tuples.
+        Results are cached per ``(rgx identity, mode, buffer version)`` and invalidated
+        on any text mutation.  Use this instead of ``pair_iterator`` when the caller
+        does not modify the buffer during iteration — it avoids re-running the regex
+        scan on repeated calls with the same delimiter pattern.
+
+        Args:
+            rgx: The regex pattern with the named groups 'start' and 'end'.
+            mode: 'all' by default, 'roots' to exclude nested pairs, or 'leaves' for the opposite.
+            b0: The positive, inclusive start bound for searching.
+            b1: The positive, exclusive end bound for searching, or -1 to search the whole text.
+        Returns:
+            A list of ``(full_span, start_text, body_text, end_text)`` tuples.
+        """
+        key = (id(rgx), mode, b0, b1, self._version)
+        if key not in self._pair_cache:
+            self._pair_cache[key] = list(
+                map(self._yield_pair, self.raw_pair_iterator(rgx, mode, b0, b1))
+            )
+        return self._pair_cache[key]
 
     def rgx_iterator(
         self,

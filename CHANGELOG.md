@@ -4,6 +4,22 @@ All notable changes to `my-basis` are documented here.
 The project has no prior tagged release -- `0.2.0` is the first tag, closing out a multi-month typing/subpackage overhaul that landed while the version stayed pinned at `0.1.0`.
 Where a change is a behavior break rather than an internal fix, it's called out explicitly; mechanism and rationale live in the cited commit bodies, not repeated here.
 
+## [0.8.3] - 2026-07-11
+
+Performance and security release for MEMY-175 wikiparse polish wave 2.
+
+### Performance
+
+- `Span._fast(a, b)` trusted constructor bypassing all type coercion and validation for hot iterators (Buffer, MatchData). +45% throughput in wikiparse.
+- `Buffer._version` counter + `_pair_cache` dict + `pair_list()` cached method for read-only pair iteration.
+- `raw_pair_iterator` gained `strict: bool = True` parameter for cached/non-strict modes.
+- `_shift_pair_cache` method for incremental cache updates (infrastructure, not yet enabled).
+
+### Security
+
+- `REGEX_TIMEOUT = 10.0` guard on Buffer's 3 hot iterator `rgx.search()` calls (ReDoS protection).
+- Fixed `md_url` ReDoS vulnerability (cubic backtracking on spaces) via possessive `*+` quantifiers in `common_rgxs.py`.
+
 ## [0.8.1] - 2026-07-10
 
 First PyPI release (`pip install my-basis`).

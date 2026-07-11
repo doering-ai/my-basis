@@ -82,6 +82,22 @@ class Span[T: Real](tuple[T, T]):
         return super().__new__(cls, (x0, x1))  # type: ignore
 
     @classmethod
+    def _fast(cls, a: int, b: int) -> Span[int]:
+        """Trusted fast-path constructor for int pairs from regex matches.
+
+        Bypasses all type coercion, MyType construction, and validation.
+        Use only when inputs are guaranteed valid ints with ``a <= b``
+        (e.g. ``match.span()`` results inside hot iterators).
+
+        Args:
+            a: Start position (inclusive).
+            b: End position (exclusive).
+        Returns:
+            A Span without any validation overhead.
+        """
+        return super().__new__(cls, (a, b))
+
+    @classmethod
     def _new_impl[S: Real](
         cls,
         data: String | Scalar | Span[S] | Iterable[Scalar] | Empty | None,

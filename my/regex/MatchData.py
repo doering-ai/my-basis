@@ -82,7 +82,7 @@ class MatchData(Predicate):
     @ft.cached_property
     def span(self) -> Span:
         """Returns the span of the match if present; otherwise returns the null span (0, 0)."""
-        return Span(self.match.span() if self.match else (0, 0))
+        return Span._fast(*self.match.span()) if self.match else Span._fast(0, 0)
 
     @ft.cached_property
     def start(self) -> int:
@@ -153,7 +153,7 @@ class MatchData(Predicate):
         """Returns the spans of the match for the specified field."""
         if self.match is None or field not in self:
             return []
-        return list(map(Span, self.match.spans(field)))
+        return [Span._fast(*s) for s in self.match.spans(field)]
 
     def ends(self, field: str) -> list[int]:
         """Returns the end indices of the match for the specified field."""

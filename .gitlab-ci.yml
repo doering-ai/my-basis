@@ -70,6 +70,9 @@ Rebuild Pod:
         - docker build --pull -t $TEST_POD -f Containerfile .
         - docker push $TEST_POD
     rules:
+        # A release tag reuses the image built on `main`; don't rebuild on tags.
+        - if: $CI_COMMIT_TAG
+          when: never
         - changes:
             - Containerfile
             - Taskfile.dist.yaml
@@ -110,6 +113,10 @@ Publish PyPI:
     rules:
         - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
     environment: pypi
+    # Decouple from the eval/test stages: the release must publish independently,
+    # never blocked by a slow or hung eval-stage job (e.g. the pipeintel component,
+    # which can't be scoped off tag pipelines). The tag is cut from green `main`.
+    needs: []
     cache: []
     script:
         - uv build --no-sources
@@ -129,6 +136,15 @@ Publish PyPI:
         - uv publish
 Evaluate Python:
     stage: eval
+    # Lint/typecheck is always fast; a longer run is a hang, not real work. Cap it
+    # so a transient runner/registry stall can't burn a full job-timeout of shared
+    # compute (a 1h stall on the v0.8.2 tag pipeline is what prompted this).
+    timeout: 10m
+    # A release tag is cut from already-green `main` -- no need to re-lint it.
+    rules:
+        - if: $CI_COMMIT_TAG
+          when: never
+        - when: on_success
     before_script:
         - cd $CI_PROJECT_DIR
         - uv sync --all-extras
@@ -142,6 +158,12 @@ Evaluate Python:
             codequality: $CI_PROJECT_DIR/code-quality-report.json
 Test Python:
     stage: test
+    timeout: 30m
+    # A release tag is cut from already-green `main` -- no need to re-run tests.
+    rules:
+        - if: $CI_COMMIT_TAG
+          when: never
+        - when: on_success
     before_script:
         - cd $CI_PROJECT_DIR
         - uv sync --all-extras

@@ -43,10 +43,9 @@ class Predicate(pyd.BaseModel):
     dictionary-of-lists format, optionally deduplicating values.
 
     Serialization supports nested dictionary structures using dot notation in keys. A field like
-    `"user.name"` becomes `{"user": {"name": value}}` in the output. The serializer can target
-    different types via generic parameters, with intelligent type coercion for leaves and nesting.
-    This makes Predicate suitable for representing structured data that originates as flat
-    key-value pairs but needs hierarchical output.
+    `"user.name"` becomes `{"user": {"name": value}}` in the output. This makes Predicate suitable
+    for representing structured data that originates as flat key-value pairs but needs hierarchical
+    output.
     """
 
     RGXS: ClassVar[dict[str, re.Pattern]] = ut.regex_dict(

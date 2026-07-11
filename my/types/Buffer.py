@@ -205,6 +205,8 @@ class Buffer(pyd.BaseModel):
         if end == 0 and not new_text:
             return
         self._version += 1
+
+        # Clear pair cache on any text mutation
         self._pair_cache.clear()
 
         # Perform the replacement
@@ -213,6 +215,53 @@ class Buffer(pyd.BaseModel):
         if self.fence_rgx is not None:
             len_old = end - start
             self.update_fences(start, len_old, len(new_text) - len_old, diff)
+
+    def _shift_pair_cache(self, edit_start: int, edit_end: int, delta: int, new_text: str) -> None:
+        """Incrementally update cached pair lists for a span replacement.
+
+        Instead of clearing ``_pair_cache`` on every modification, this method:
+        - Shifts pairs after the edit by ``delta``
+        - Drops the entire cache entry when any pair overlaps the edit or the
+          replacement text might contain new delimiters, forcing a re-scan
+
+        Args:
+            edit_start: Start position of the replaced region.
+            edit_end: End position of the replaced region.
+            delta: Change in length (new_len - old_len).
+            new_text: The replacement text (checked for delimiter characters).
+        """
+        if not self._pair_cache:
+            return
+
+        has_delims = any(d in new_text for d in ('{{', '}}', '[[', ']]'))
+        old_cache = dict(self._pair_cache)
+        self._pair_cache.clear()
+
+        for key, pairs in old_cache.items():
+            rgx_id, mode, b0, b1, _old_ver = key
+
+            # Check if any pair overlaps the edit region
+            has_overlap = any(
+                not (int(p[0][1]) <= edit_start or int(p[0][0]) >= edit_end) for p in pairs
+            )
+
+            if has_delims or has_overlap:
+                # Replacement text might introduce new pairs, or a pair spans
+                # across the edit boundary (its delimiters survive but its body
+                # changed).  Drop this cache entry so the next pair_list() re-scans.
+                continue
+
+            # No pair overlaps the edit; just shift pairs after the edit by delta
+            if delta == 0:
+                self._pair_cache[(rgx_id, mode, b0, b1, self._version)] = pairs
+            else:
+                updated = [
+                    (Span._fast(int(p[0][0]) + delta, int(p[0][1]) + delta), p[1], p[2], p[3])
+                    if int(p[0][0]) >= edit_end
+                    else p
+                    for p in pairs
+                ]
+                self._pair_cache[(rgx_id, mode, b0, b1, self._version)] = updated
 
     def update_fences(self, start: int, len_old: int, delta: int, diff: int = 0) -> None:
         """(Re-)calculates the fence spans for the given region.
@@ -394,6 +443,7 @@ class Buffer(pyd.BaseModel):
         mode: PairMode = 'all',
         b0: int = 0,
         b1: int = -1,
+        strict: bool = True,
     ) -> Iterator[Pair]:
         """Finds all the "pairs" of text delimiters with the given fruit, handling edge cases.
 
@@ -405,6 +455,7 @@ class Buffer(pyd.BaseModel):
                 opposite.
             b0: The positive, inclusive start bound for searching.
             b1: The positive, exclusive end bound for searching, or -1 to search the whole text.
+            strict: If True, raise ValueError on unmatched starts; if False, silently ignore them.
         Yields:
             Tuples of spans representing the start and end delimiters.
         """
@@ -457,8 +508,10 @@ class Buffer(pyd.BaseModel):
                 pos += delta
                 b1 += delta
 
-        # V. If we still have unmatched starts on the stack, raise an error
+        # V. If we still have unmatched starts on the stack, raise an error (strict mode only)
         if remaining := len(starts):
+            if not strict:
+                return
             err_text = f'Found {remaining} unmatched starts'
             err_lines = (f'`{s0}`: "{self[s0:s1]}"{self[s1 : s1 + 16]}...' for s0, s1 in starts)
             if DEBUG:

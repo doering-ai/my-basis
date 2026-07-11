@@ -220,7 +220,7 @@ class Buffer(pyd.BaseModel):
         if self.fence_rgx is None:
             return
 
-        pre, post = self._split_spans(self.fences, Span(start, start + len_old), delta)
+        pre, post = self._split_spans(self.fences, Span._fast(start, start + len_old), delta)
         n, n_pre, n_post = self.fences.shape[0], pre.shape[0], post.shape[0]
         if diff == 0:
             # I. Handle fences in new text, or that appeared b/c of old text
@@ -250,7 +250,7 @@ class Buffer(pyd.BaseModel):
                 return
             else:
                 end = start + len(old)
-                self._replace_span(Span(start, end), new)
+                self._replace_span(Span._fast(start, end), new)
                 cur = len(new) - len(old) + start + 1
                 i += 1
 
@@ -281,7 +281,7 @@ class Buffer(pyd.BaseModel):
             4. The text of the end delimiter.
         """
         (s0, s1), (e0, e1) = pair
-        return Span((s0, e1)), self[s0:s1], self[s1:e0], self[e0:e1]
+        return Span._fast(s0, e1), self[s0:s1], self[s1:e0], self[e0:e1]
 
     def _is_fenced(self, x: int | Span) -> bool:
         """Efficiently check if the given span intersects with any of the fenced spans.
@@ -403,7 +403,7 @@ class Buffer(pyd.BaseModel):
         while match := rgx.search(self.text[0], pos):
             oldlen = len(self)
             params = match.groupdict()
-            span = Span(match.span())
+            span = Span._fast(*match.span())
             s0, pos = span
 
             if pos > b1:
@@ -416,7 +416,7 @@ class Buffer(pyd.BaseModel):
 
             elif params.get('is_complete', None):
                 # II.i. Yield self-closing starts (e.g. '<span />')
-                yield span, Span((span[1], span[1]))
+                yield span, Span._fast(span[1], span[1])
 
             elif params.get('start', ''):
                 # II.ii. We've found the start of a new pair; record it and continue
@@ -480,7 +480,7 @@ class Buffer(pyd.BaseModel):
     def fence_spans(self) -> Iterator[Span]:
         """An iterator over the current fence spans."""
         for s0, s1 in self.fences:
-            yield Span((s0, s1))
+            yield Span._fast(int(s0), int(s1))
 
     def __repr__(self) -> str:
         contents = []
@@ -581,7 +581,7 @@ class Buffer(pyd.BaseModel):
             pos: The position to insert the new text at.
             new: The new text to insert.
         """
-        self._replace_span(Span(pos, pos), new)
+        self._replace_span(Span._fast(pos, pos), new)
 
     def drop(self, old: str | Span | tuple[int, int]) -> Self:
         """Convenience setter for removing the specified text from the buffer.
@@ -688,7 +688,7 @@ class Buffer(pyd.BaseModel):
         end = text.find('\n', start)
         if end == -1:
             end = len(text)
-        return Span(start, end)
+        return Span._fast(start, end)
 
     def dedent(self) -> Self:
         """Dedents all text evenly, so that the line with the fewest spaces starts at column 0."""
@@ -758,7 +758,7 @@ class Buffer(pyd.BaseModel):
         ends: list[Span] = []
         while match := rgx.search(self.text[0][:b1], pos):
             params = match.groupdict()
-            span = Span(match.span())
+            span = Span._fast(*match.span())
             s0, pos = span
 
             if self._is_fenced(s0) or params.get('is_complete', None):

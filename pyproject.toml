@@ -3,9 +3,11 @@
 ###################
 [project]
 name = "my-basis"
-version = "0.8.0"
+version = "0.8.1"
 description = "An extensive utility library for python, focusing especially on iterables and a Regex 'Store'."
 readme = "README.md"
+license = "MPL-2.0"
+license-files = ["LICENSE"]
 authors = [{ name = "Robb Doering", email = "robb@doering.ai" }]
 requires-python = ">=3.13"
 classifiers = [

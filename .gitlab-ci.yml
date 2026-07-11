@@ -73,10 +73,12 @@ Rebuild Pod:
         # A release tag reuses the image built on `main`; don't rebuild on tags.
         - if: $CI_COMMIT_TAG
           when: never
+        # The image bakes only the system base (uv + task + prek + git + the `my`
+        # user); it COPYs no repo files and runs no `uv sync`, so ONLY a Containerfile
+        # change can make it stale. Deps are synced per-job at runtime, so uv.lock /
+        # Taskfile / .repo.yaml changes do not require a rebuild.
         - changes:
             - Containerfile
-            - Taskfile.dist.yaml
-            - .repo.yaml
 Release Pod:
     stage: release
     extends: .docker
@@ -85,11 +87,13 @@ Release Pod:
         - docker tag $TEST_POD $MAIN_POD
         - docker push $MAIN_POD
     rules:
+        # Promote to :latest ONLY when a fresh image was just built on the default
+        # branch -- i.e. the Containerfile changed. Every other default-branch commit
+        # reuses the existing :latest, so re-tagging it is a no-op; skip it. A tag has
+        # no branch, so this also keeps Release Pod off tag pipelines.
         - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-        - changes:
+          changes:
             - Containerfile
-            - Taskfile.dist.yaml
-            - .repo.yaml
 # PyPI trusted publishing (OIDC) -- no long-lived token. Triggered by a `v*` tag
 # (see the workflow rule above). GitLab mints a short-lived id_token bound to the
 # top-level pipeline; we exchange it at PyPI's mint endpoint for a project-scoped

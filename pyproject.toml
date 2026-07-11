@@ -20,7 +20,11 @@ classifiers = [
   "Typing :: Typed",
 ]
 
-urls = { Homepage = "https://gitlab.com/doering-ai/libs/basis" }
+# PyPI renders these as the sidebar "Project links".
+urls.Homepage = "https://gitlab.com/doering-ai/libs/basis"
+urls.Source = "https://gitlab.com/doering-ai/libs/basis"
+urls.Issues = "https://gitlab.com/doering-ai/libs/basis/-/issues"
+urls.Documentation = "https://my-basis.readthedocs.io"
 
 
 ########################

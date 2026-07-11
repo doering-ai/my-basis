@@ -24,6 +24,10 @@ workflow:
         # Run for merge requests and pushes to the main branch
         - if: $CI_PIPELINE_SOURCE == "merge_request_event"
         - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+        # Run for version tags -- this is what creates the pipeline the PyPI publish
+        # job lives in. WITHOUT this rule a `v*` tag push matches nothing and GitLab
+        # creates no pipeline at all, so the job-level `rules:` can never fire.
+        - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
 ############
 ### DATA ###
 ############
@@ -83,6 +87,46 @@ Release Pod:
             - Containerfile
             - Taskfile.dist.yaml
             - .repo.yaml
+# PyPI trusted publishing (OIDC) -- no long-lived token. Triggered by a `v*` tag
+# (see the workflow rule above). GitLab mints a short-lived id_token bound to the
+# top-level pipeline; we exchange it at PyPI's mint endpoint for a project-scoped
+# token that expires in <=15 min, then `uv publish`. uv has NO GitLab auto-detect,
+# so the exchange is manual and lives here.
+#
+# PREREQUISITES (one-time, operator, PyPI/GitLab side -- the job is inert without
+# them): (1) register a Trusted Publisher on PyPI for my-basis -- provider GitLab
+# CI/CD, namespace doering-ai, project libs/basis, pipeline `.gitlab-ci.yml`, env
+# `pypi`; (2) mark the `pypi` environment PROTECTED with required approval so the
+# release stays a deliberate, logged human decision.
+Publish PyPI:
+    stage: release
+    # Self-contained uv+python image; python3 (stdlib urllib) does the exchange.
+    image:
+        name: ghcr.io/astral-sh/uv:python3.13-bookworm-slim
+        entrypoint: [""]
+    id_tokens:
+        PYPI_ID_TOKEN:
+            aud: pypi
+    rules:
+        - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
+    environment: pypi
+    cache: []
+    script:
+        - uv build --no-sources
+        - |
+          export UV_PUBLISH_TOKEN=$(python3 -c '
+          import json, os, urllib.request
+          req = urllib.request.Request(
+              "https://pypi.org/_/oidc/mint-token",
+              data=json.dumps({"token": os.environ["PYPI_ID_TOKEN"]}).encode(),
+              headers={"Content-Type": "application/json"},
+          )
+          print(json.load(urllib.request.urlopen(req))["token"])
+          ')
+        # NOTE: uploads only. `uv publish` uploads PEP 740 attestations if present
+        # in dist/ but does NOT generate them; provenance needs a separate signing
+        # step (deferred -- see MEMY-247's trailing work item).
+        - uv publish
 Evaluate Python:
     stage: eval
     before_script:

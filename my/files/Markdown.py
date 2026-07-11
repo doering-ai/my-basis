@@ -652,7 +652,7 @@ class Markdown(pyd.BaseModel):
         if first_node := Markdown.RGXS.search('node', self.prose):
             node_text = self.prose[first_node.start :]
             self.prose.drop((first_node.start, len(self.prose)))
-            self.add_node(Markdown.parse(node_text, base_level=1), left=True)
+            self.add_node(type(self).parse(node_text, base_level=1), left=True)
 
     def from_yaml(self) -> dict[str, Any]:
         """Parses prose as YAML and recursively collects child nodes as nested dicts.

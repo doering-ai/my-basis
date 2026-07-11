@@ -363,7 +363,7 @@ class Markdown(pyd.BaseModel):
             yield self.nodes[i]
 
             # II.i. If this child wasn't removed, recurse into its children
-            if (delta := len(self.nodes) - n) >= 0 and new_depth > 0:
+            if (delta := len(self.nodes) - n) >= 0 and new_depth != 0:
                 yield from self.nodes[i].walk(True, asc, new_depth)
 
             # II.ii. Update the index only if the caller (likely) modified what's ahead

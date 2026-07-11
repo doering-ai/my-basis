@@ -385,6 +385,31 @@ class TestMarkdown:
         assert walked[0].title == 'Root'
         assert walked[1].title == 'Child'
 
+    def test_walk__unlimited_depth(self):
+        """The -1 sentinel must recurse past two levels (regression: capped at depth 2)."""
+        node = cls.new(
+            title='Root',
+            nodes=[
+                {
+                    'title': 'Child',
+                    'nodes': [
+                        {
+                            'title': 'Grandchild',
+                            'nodes': [
+                                {'title': 'Great-Grandchild'},
+                            ],
+                        },
+                    ],
+                },
+            ],
+        )
+
+        walked = list(node.walk())
+        assert [n.title for n in walked] == ['Root', 'Child', 'Grandchild', 'Great-Grandchild']
+
+        walked = list(node.walk(max_d=2))
+        assert [n.title for n in walked] == ['Root', 'Child', 'Grandchild']
+
     def test_add_node__append(self):
         node = cls.new(title='Parent')
         child = cls.new(title='Child')

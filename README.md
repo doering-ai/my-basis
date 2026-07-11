@@ -1,4 +1,11 @@
-# `mySublimeBasis`
+# mySublimeBasis
+
+![Pipeline Status](https://img.shields.io/gitlab/pipeline-status/doering-ai/sublime/basis?branch=main)
+[![License](https://img.shields.io/gitlab/license/doering-ai/sublime/basis)](/LICENSE)
+[![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit)](https://github.com/pre-commit/pre-commit)
+[![pyrefly](https://img.shields.io/endpoint?url=https://pyrefly.org/badge.json)](https://github.com/facebook/pyrefly)
+[![ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![Sublime Text](https://img.shields.io/badge/Sublime%20Text-4200+-aa673a?logo=sublimetext&logoColor=white&labelColor=d18140)](https://www.sublimetext.com/download)
 
 > **Status:** Pre-launch — under active development.
 > APIs may change before 1.0.

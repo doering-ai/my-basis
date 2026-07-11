@@ -3,6 +3,6 @@
 version: '3'
 
 includes:
-    basis:
-        taskfile: ./../Taskfile.yaml
+    dist:
+        taskfile: ./Taskfile.dist.yaml
         flatten: true

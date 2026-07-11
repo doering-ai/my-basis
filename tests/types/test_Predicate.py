@@ -123,7 +123,6 @@ class TestPredicate:
         result = cls.new(*(args or []), **(kwargs or {}))
         assert result.data == expected
 
-
     # -------------------
     # `-` Private Methods
     # -------------------

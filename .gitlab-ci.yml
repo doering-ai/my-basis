@@ -108,9 +108,17 @@ Release Pod:
 Publish PyPI:
     stage: release
     # Self-contained uv+python image; python3 (stdlib urllib) does the exchange.
+    # On self-hosted shell runners the image is ignored; uv+python3 come from the
+    # host. On shared Docker runners it provides an isolated uv+python environment.
     image:
         name: ghcr.io/astral-sh/uv:python3.13-bookworm-slim
         entrypoint: [""]
+    tags:
+        - self-hosted
+    before_script:
+        - export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+        - export UV_PYTHON="3.13"
+        - cd $CI_PROJECT_DIR
     id_tokens:
         PYPI_ID_TOKEN:
             aud: pypi

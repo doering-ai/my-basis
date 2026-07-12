@@ -12,6 +12,16 @@
 
 Typed infrastructure for Sublime Text 4 plugin development.
 
+## Ecosystem
+
+`myBasis` is the foundational library in a small ecosystem of Sublime Text packages.
+Its mock layer (`IS_LIVE`, stub `sublime`/`sublime_plugin` modules) enables headless testing, CLI tooling, and type-checking without a running editor — the key innovation that [`myTest`](https://gitlab.com/doering-ai/sublime/test) builds on to provide pytest integration for ST plugin development.
+
+Together, `myBasis` and `myTest` form a modern development stack (typed commands, mockable APIs, pytest, CLI-driven CI, type checking) that the Sublime Text ecosystem has not previously had.
+Several other packages in this workspace — [`syntect`](https://gitlab.com/doering-ai/sublime/syntect), [`pyrefly`](https://gitlab.com/doering-ai/sublime/pyrefly), [`pyinfo`](https://gitlab.com/doering-ai/sublime/pyinfo), [`headers`](https://gitlab.com/doering-ai/sublime/headers), [`imports`](https://gitlab.com/doering-ai/sublime/imports), [`irix`](https://gitlab.com/doering-ai/sublime/irix), and [`arch`](https://gitlab.com/doering-ai/sublime/arch) — depend on one or both.
+
+See [`SUBLIME_DEV_REPORT.md`](../syntaxes/SUBLIME_DEV_REPORT.md) for a full analysis of the ecosystem, the broader ST plugin development landscape, and Package Control supply-chain security.
+
 ST4 ships a Python 3.8 runtime with an untyped, stringly-keyed API: commands receive `**kwargs` without a schema, test modules fail to import outside a live process, and event listeners can't declare what they expect.
 `mySublimeBasis` addresses all three directly.
 

@@ -115,11 +115,10 @@ Publish PyPI:
         entrypoint: [""]
     tags:
         - self-hosted
-    variables:
-        UV_CACHE_DIR: "$HOME/.uv-cache"
     before_script:
         - export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
         - export UV_PYTHON="3.13"
+        - export UV_CACHE_DIR="$HOME/.uv-cache"
         - cd $CI_PROJECT_DIR
     id_tokens:
         PYPI_ID_TOKEN:

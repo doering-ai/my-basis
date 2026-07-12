@@ -25,6 +25,7 @@ from collections.abc import (
     AsyncGenerator,
     ItemsView,
     Hashable,
+    Mapping,
 )
 from collections import Counter, defaultdict, deque
 from dataclasses import is_dataclass, Field
@@ -560,7 +561,7 @@ class Transform[T0, T1]:
     @classmethod
     def _cast_members(
         cls,
-        items: Iterable[tuple[str, Any]],
+        items: Iterable[tuple[str, Any]] | Mapping[str, Any],
         target: type,
         flags: CastFlags | CastPreset | None = None,
     ) -> dict[str, Any]:
@@ -569,8 +570,14 @@ class Transform[T0, T1]:
         `AutocastModel` calls this directly as its own public entry point (outside a
         `Transform`), so `flags` is resolved here rather than assumed pre-resolved.
 
+        Accepts either an iterable of key-value pairs or a bare mapping (the latter is
+        what `AutocastModel._auto_validate` passes). Mappings are normalised through
+        `ut.map_items` so the pair-unpacking in the comprehension below never sees a
+        bare key string (which would raise ``too many values to unpack`` for keys
+        longer than two characters).
+
         Args:
-            items: Key-value pairs to cast.
+            items: Key-value pairs or a mapping to cast.
             target: The target class type with type annotations.
             flags: An explicit `CastFlags` snapshot (or preset-level name) to forward to each
                 member's cast; `None` resolves against the live `Typist` singleton. See
@@ -578,6 +585,8 @@ class Transform[T0, T1]:
         Returns:
             Dictionary with cast values matching target's field types.
         """
+        if isinstance(items, Mapping):
+            items = ut.map_items(items)
         resolved = CastFlags.resolve(flags)
         annotations = ut.instance_aliases(target)
         return {key: tyt.cast(val, annotations.get(key, Any), flags=resolved) for key, val in items}
@@ -730,9 +739,21 @@ class Transform[T0, T1]:
                 if self.t1.vals and String not in self.t1.vals:
                     lines = ut.condense(map(str.strip, lines))
 
-            elif char := next(filter(text.__contains__, [',', '//', ':', '.']), ''):
+            elif not (
+                self.t1.vals
+                and tym.is_string_type(self.t1.vals)
+                and self.t1.main is not tuple
+            ) and (
+                char := next(filter(text.__contains__, [',', '//', ':', '.']), '')
+            ):
                 # II. Split on common delimiters in order of preference
-                #     e.g. one.oneA:two splits on colons, but one.oneA splits on periods
+                #     e.g. one.oneA:two splits on colons, but one.oneA splits on periods.
+                #     But only when the target's value type is not a plain string (and
+                #     the target is not a tuple) -- a scalar string value like
+                #     'a/b/c.txt' must survive the round-trip intact rather than being
+                #     fragmented on its own delimiters.  Tuples are exempt: they
+                #     represent structured sequences (paths, key chains) where
+                #     delimiter splitting is the desired behaviour.
                 parts = list(filter(bool, map(str.strip, text.split(char))))
                 return (
                     self.ty.multicast(parts, self.t1.vals, flags=self.flags)

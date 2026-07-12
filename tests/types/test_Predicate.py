@@ -384,3 +384,29 @@ class TestPredicate:
     # -------------
     # `*3` Mutators
     # -------------
+
+    # ---- Regression: zero-valued entries must survive round-trip ----
+
+    @pyt.mark.parametrize(
+        'key, value',
+        [
+            ('count', 0),
+            ('ratio', 0.0),
+            ('flag', False),
+            ('empty', ''),
+        ],
+    )
+    def test_zero_values_survive_roundtrip(self, key: str, value: object):
+        """A zero-valued or falsy entry must survive a serialize/deserialize round-trip.
+
+        Previously the ``new`` constructor's final filter (``if k and v``) silently dropped
+        any entry whose *list* of values was empty -- which included the string-ified
+        representations of ``0``, ``0.0``, ``False`` and ``''`` after they were cast to
+        ``list[str]`` and then decast by ``flex_deserialize``.  The fix ensures that an
+        explicit zero value is either preserved or raises at construction time.
+        """
+        pred = cls.new({key: value})
+        dumped = pred.model_dump()
+        restored = cls.new(dumped)
+        assert restored.data == pred.data
+        assert key in restored.data

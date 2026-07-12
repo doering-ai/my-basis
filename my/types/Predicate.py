@@ -177,8 +177,14 @@ class Predicate(pyd.BaseModel):
                 yield from cls._cast_arg(f'{prefix}{c_field}', c_val, duplicates)
         else:
             # Cast to list[str] first -- val may be a bare scalar (e.g. 'val'), which
-            # unique_everseen() would otherwise iterate character-by-character.
-            vec = ty.cast(val, list[str]) or []
+            # unique_everseen() would otherwise iterate character-by-character.  When the
+            # typist cannot cast directly (e.g. int 0, float 0.0, bool False -- all falsy
+            # scalars that the typist declines to wrap), fall back to the string
+            # representation so the value survives the truthiness filter in ``new``
+            # instead of being silently dropped as an empty list.
+            vec = ty.cast(val, list[str])
+            if vec is None:
+                vec = [str(val)] if val is not None else []
             if not duplicates:
                 vec = list(mi.unique_everseen(vec))
             yield (field, vec)

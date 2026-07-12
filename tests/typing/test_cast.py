@@ -272,8 +272,8 @@ CAST_EDGE_CASES = [
     ('1', tuple[int], (1,)),
     (['1'], int, 1),
     (['1', '2'], int, 1),
-    ('abc, cde. efg!', list[str], ['abc', 'cde. efg!']),
-    ('transformers, safetensors', set[str], {'transformers', 'safetensors'}),
+    ('abc, cde. efg!', list[str], ['abc, cde. efg!']),
+    ('transformers, safetensors', set[str], {'transformers, safetensors'}),
     # Malformed times
     ('25-07-02', datetime, datetime(2025, 7, 2, tzinfo=UTC)),
     (
@@ -534,13 +534,16 @@ class TestCast:
     def test_cast__splits_and_wraps(self, flex_typist: Typist):
         """Test that `splits`/`wraps` gate string-splitting and atom-wrapping during casts."""
         typist = flex_typist
-        assert typist.cast('A.B', set[str]) == {'A', 'B'}
-        assert typist.cast('A.B:C', set[str]) == {'A.B', 'C'}
-        assert typist.cast('A.B:C, D', set[str]) == {'A.B:C', 'D'}
-        assert typist.cast('A.B:C //   D', set[str]) == {'A.B:C', 'D'}
+        # String-to-string-container: wrap, don't split (bare scalar survives intact).
+        assert typist.cast('A.B', set[str]) == {'A.B'}
+        assert typist.cast('A.B:C', set[str]) == {'A.B:C'}
+        assert typist.cast('A.B:C, D', set[str]) == {'A.B:C, D'}
+        assert typist.cast('A.B:C //   D', set[str]) == {'A.B:C //   D'}
         assert typist.cast(['A.B'], set[str]) == {'A.B'}
         assert typist.cast([['A.B']], list[set[str]]) == [{'A.B'}]
-        assert typist.cast(['A.B'], list[set[str]]) == [{'A', 'B'}]
+        assert typist.cast(['A.B'], list[set[str]]) == [{'A.B'}]
+        # String-to-non-string-container: split (parsing '1.2' into [1, 2]).
+        assert typist.cast('1.2', list[int]) == [1, 2]
 
         typist.splits = False
         assert typist.cast('A.B', set[str]) == {'A.B'}
@@ -590,16 +593,18 @@ class TestCast:
         'flags, expected',
         [
             (CastFlags.preset('strict'), None),
-            (CastFlags.preset('flex'), {'A', 'B'}),
+            (CastFlags.preset('flex'), {'A.B'}),
             ('strict', None),
-            ('flex', {'A', 'B'}),
+            ('flex', {'A.B'}),
         ],
     )
     def test_cast_flags__explicit_arg_wins(
         self, flex_typist: Typist, flags: CastFlags | CastPreset, expected: set[str] | None
     ):
-        """An explicit `flags=` argument overrides the ambient singleton, regardless of it."""
-        # The singleton is `flex` here (via the fixture), which would otherwise let 'A.B' split.
+        """An bare scalar string like 'A.B' is wrapped as a single element (not fragmented)
+        because the target's value type is `str`."""
+        # The singleton is `flex` here (via the fixture); the `splits` flag no longer
+        # overrides the string-target wrap-first behaviour.
         flex_typist.splits = True
         flex_typist.wraps = True
         assert typist.cast('A.B', set[str], flags=flags) == expected
@@ -633,16 +638,17 @@ class TestCast:
         moment each candidate transform ran, not just once at the start).
         """
         flex_typist.splits = True
-        transform = Transform('A.B', set[str], flags=CastFlags.resolve(None))
+        transform = Transform('1.2', list[int], flags=CastFlags.resolve(None))
 
         # Mutate the singleton *after* the snapshot was taken, simulating a concurrent cast (or a
         # nested transform) flipping the ambient default mid-flight.
         flex_typist.splits = False
 
         # The transform still splits -- its own captured `flags.splits` is untouched.
-        assert transform() == {'A', 'B'}
-        # Meanwhile, a brand-new cast (which resolves a fresh snapshot) correctly sees the change.
-        assert typist.cast('A.B', set[str]) == {'A.B'}
+        assert transform() == [1, 2]
+        # Meanwhile, a brand-new cast (which resolves a fresh snapshot) correctly sees the change:
+        # with splits now False the string is wrapped as a single element instead of being split.
+        assert typist.cast('1.2', list[int]) == ['1.2']
 
     @pyt.fixture
     def clear_dispatch_cache(self) -> abc.Iterator[None]:
@@ -775,3 +781,48 @@ class TestCast:
         serialized = typist.serialize(data)
         result = typist.cast(serialized, target)
         assert result == data
+
+    # ---- MEMY-325 regression: scalar strings must not be split on delimiters ----
+
+    @pyt.mark.parametrize(
+        'data, target, expected',
+        [
+            ('a/b/c.txt', list[str], ['a/b/c.txt']),
+            ('a/b/c.txt', set[str], {'a/b/c.txt'}),
+            ('host:port', list[str], ['host:port']),
+            ('one,two', list[str], ['one,two']),
+            ('1.2.3', list[str], ['1.2.3']),
+            # Non-string element types still split (parsing behaviour).
+            ('1,2,3', list[int], [1, 2, 3]),
+            ('1.2', list[int], [1, 2]),
+        ],
+    )
+    def test_cast__scalar_string_not_split(self, data: str, target: type, expected: object):
+        """A scalar string cast to a string-element container wraps as a single element.
+
+        Previously the typist split scalar strings on ``.``/``:``/``//``/``,`,
+        fragmenting values like ``'a/b/c.txt'`` into ``['a/b/c', 'txt']``.
+        Non-string element types still split because that is the parsing path.
+        """
+        assert typist.cast(data, target) == expected
+
+    # ---- MEMY-326 regression: AutocastModel must accept >=3-char field names ----
+
+    def test_cast__autocast_model_long_field_names(self):
+        """Constructing an ``AutocastModel`` with field names >= 3 chars must not raise.
+
+        Previously ``AutocastModel._auto_validate`` handed the raw ``data`` mapping to
+        ``Transform._cast_members``, which iterates it as key-value pairs -- so any field
+        name longer than two characters raised ``too many values to unpack (expected 2)``.
+        """
+        from my.typing import AutocastModel
+
+        class Frame(AutocastModel):
+            name: str = ''
+            age: int = 0
+            email: str = ''
+
+        f = Frame(name='alice', age=30, email='a@example.com')
+        assert f.name == 'alice'
+        assert f.age == 30
+        assert f.email == 'a@example.com'

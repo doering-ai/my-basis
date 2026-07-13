@@ -376,6 +376,49 @@ class FileCache[T]:
         else:
             self.write_to_cache(group, file, {name: item})
 
+    def delete(self, group: str, name: str) -> bool:
+        """Delete a single item by name from the cache and disk.
+
+        Removes the item from its shard file, unlinking the file when it becomes
+        empty.  Returns ``False`` when the item is not found, ``True`` when deleted.
+
+        Args:
+            group: Category/namespace.
+            name: Item identifier (file derived via splitter).
+        Returns:
+            Whether the item was found and deleted.
+        """
+        file = self.splitter(name)[0]
+        prefix = self._prefix(file)
+        # Track whether the shard is on disk *before* read_from_cache moves it to
+        # memory (read_from_cache calls move_to_mem which clears the disk index).
+        was_on_disk = self._get_sys_items(group, prefix, file) is not None
+        items = self.read_from_cache(group, file, prefix)
+        if not items or name not in items:
+            return False
+
+        del items[name]
+        self.isize -= 1
+
+        if not items:
+            # Shard is now empty -- remove from memory and unlink the disk file.
+            del self.items[group][prefix][file]
+            if not self.items[group][prefix]:
+                del self.items[group][prefix]
+            path = self._path(group, prefix, file)
+            if path.exists():
+                path.unlink()
+        elif was_on_disk:
+            # Shard was on disk and still has items -- persist the trimmed version.
+            path = self._path(group, prefix, file)
+            self._write(path, items)
+            self.files[group][prefix][file] = set(items.keys())
+            self.fsize -= 1  # the deleted item is gone from the disk count
+        # else: shard was already in memory and still has items; the in-place
+        # mutation above is sufficient and will be persisted by the next prune/flush.
+
+        return True
+
     def flush(self) -> None:
         """Write all in-memory items to disk and clear memory cache."""
         for group in self.items.keys():

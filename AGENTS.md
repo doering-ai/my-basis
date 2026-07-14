@@ -164,3 +164,42 @@ For exceptions, add `# type: ignore` to the end of the line.
 Each public class and function should have a docstring describing its purpose, parameters, and return value(s).
 Docstrings follow the Google format for python docstrings.
 Do not include type annotations in the docstring.
+
+
+______________________________________________________________________
+
+## Task Backlog — `~/local/tasks` (read this first)
+
+> **Priority: high.** This is the canonical backlog.
+> Treat it as the default source of work for any session that is not explicitly personal/one-off.
+
+**What it is.** `~/local/tasks/` is a directory of plain Markdown files — one per task — that mirror the Plane.so backlog (workspace `dtm`, project `MEMY`).
+Each file (`MEMY-<N>.md`, or a campaign-prefixed spec like `basis-07-*.md`) carries YAML frontmatter (`title`, `state`, `state_group`, `priority`, `tags`, `step`, `repo`) and a Markdown body that is the full spec of record: problem, plan, steps, acceptance criteria, verification snippet.
+It is the *collaboration surface*; Plane is a remote mirror a background sync keeps in step.
+
+**How central.** Before starting non-personal work, look here.
+The standing posture is: *pick a task file, execute its spec, report against its acceptance criteria* — not "wait for an inline prompt."
+When the user gives open-ended direction ("keep going", "what's next", "make progress on the backlog"), the answer is almost always a file in this directory, chosen by `priority`/`state_group` (`backlog` → `started` → `done`) and the user's stated preferences.
+Campaign indexes (e.g. `basis-00-index.md`) sequence their own subtasks — read the index first when one exists for a series you're entering.
+
+Read/write mechanics, the gated `plane_push` rule, conflict resolution, and the bare-number legacy-file caveat are documented in `~/my/corpus/policies/task-sync.md` and the `plane-ops` skill — this section is the centrality pointer, not the spec.
+
+______________________________________________________________________
+
+## Agent Coordination Hygiene — four soft rules (read this too)
+
+> **Priority: high.** Four soft rules ("do unless you have a strong reason") keep parallel agents from stepping on each other and the user.
+> Full text in `~/my/corpus/policies/agent_coordination.md`.
+
+1. **Task file for every non-trivial unit of work** — even a compilation task.
+   Check for an existing task before creating one; prefer reopening an incomplete or problem-causing task to a follow-up.
+   The SID goes in commit messages (`Refs: MEMY-N`) and branch names.
+2. **Work in your own worktree; verify state on exit** — never exit without confirming your worktree is in the expected state.
+   Provision one proactively for non-trivial work — isolation is the default, not something the operator should have to ask for.
+   Flag anomalies to the user and move them to a `wip/` branch if necessary.
+   Delete your bulletin entry as part of this check.
+   See `~/my/corpus/policies/worktrees.md` for the worktree lifecycle.
+3. **Coordinate via `~/.ai/bulletin.md`** — register a ~3-line note (what / where / changes?) at the start of non-trivial work; delete it when done.
+   A systemd timer (`corpus-bulletin-poll`) snapshots the file every 5 min into `~/.ai/bulletin-history/` with symbolic overlap checks + optional DSPy conflict assessment.
+4. **Use MyST Minisites for massive outputs** — never dump thousands of tokens of deep research, architectural analysis, or multi-stage synthesis into the chat context.
+   Instead, run `uv run myst-report new <topic>` to initialize a minimal Sphinx+MyST project in a scratch directory, write your findings hierarchically in `index.md`, build the HTML with `uv run myst-report build <dir>`, and hand the user a local `file:///` link to the output.

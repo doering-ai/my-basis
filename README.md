@@ -1,4 +1,4 @@
-![logo](/assets/logo_512.png)
+![logo](assets/logo_512.png)
 
 # myBasis: _Ergonomic Python Utilities_
 

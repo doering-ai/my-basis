@@ -516,6 +516,10 @@ class TestMyBaseProperties:
         cmd = _TestViewCmd(make_view)
         assert cmd.prompt is None
 
+    def test_input_description_delegates_to_sublime_default(self, make_view: sb.View):
+        cmd = _TestViewCmd(make_view)
+        assert cmd.input_description() == ''
+
     def test_prompt_with_static_prompt(self, make_view: sb.View):
         from myBasis.types.StaticPrompt import StaticPrompt
 

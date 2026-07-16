@@ -422,6 +422,7 @@ class View:
         self._change_count = 0
         self._syntax_path: str = ''
         self._sheet: 'Sheet | None' = None
+        self._file_name: str | None = None
 
     # --------
     # Identity
@@ -451,7 +452,7 @@ class View:
         self._scratch = scratch
 
     def file_name(self) -> 'str | None':
-        return None
+        return self._file_name
 
     def close(self) -> None:
         """Close this view, detaching it from its window and buffer (like the real API)."""
@@ -744,7 +745,19 @@ class Window:
         self._selected_sheets = [sheet]
         return view
 
-    def views(self, *, include_transient: bool = False) -> list:
+    def open_file(self, file_name: str, flags: int = 0, group: int = -1) -> View:
+        """Open a file into a new view and retain its path and current contents."""
+        view = self.new_file(flags)
+        view._file_name = file_name
+        path = Path(file_name)
+        if path.is_file():
+            text = path.read_bytes().decode('utf-8-sig', errors='replace')
+            view._buf._text = text.replace('\r\n', '\n').replace('\r', '\n')
+        if view._sheet is not None:
+            view._sheet._group = 0 if group == -1 else group
+        return view
+
+    def views(self, *, include_transient: bool = False) -> list[View]:
         return list(self._views)
 
     def _detach_view(self, view: View) -> None:
@@ -849,7 +862,7 @@ class Window:
     def project_file_name(self) -> 'str | None':
         return self._project_file_name
 
-    def folders(self) -> list:
+    def folders(self) -> list[str]:
         """A list of the currently open folders, derived from the project data."""
         return [f['path'] for f in (self._project_data or {}).get('folders', []) if 'path' in f]
 

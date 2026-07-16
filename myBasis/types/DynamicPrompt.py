@@ -5,7 +5,7 @@
 # Standard
 # --------
 from __future__ import annotations
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, cast
 from types import MethodType
 from typing_extensions import TypeAlias
 from collections.abc import Callable
@@ -85,9 +85,7 @@ class DynamicPrompt(StaticPrompt):
     def _setup_method(namespace: dict[str, Any], name: str, method: Callable) -> None:
         namespace[name] = ft.update_wrapper(method, getattr(ListHandler, name))
 
-    def _generate_namespace(
-        self, command: StaticPrompt._MyViewCommand
-    ) -> tuple[dict, type[ListHandler]]:
+    def _generate_namespace(self, command: Any) -> tuple[dict, type[ListHandler]]:
         # I. Build initial namespace from super classes' fields
         namespace, _ = super()._generate_namespace(command)
         _setup = ft.partial(self._setup_method, namespace)
@@ -113,6 +111,9 @@ class DynamicPrompt(StaticPrompt):
     # ------------------
     # `*` Public Methods
     # ------------------
+    def generate_input_handler(self, command: Any, raw_args: dict) -> type[ListHandler]:
+        """Generate a list input handler with the dynamic methods configured above."""
+        return cast('type[ListHandler]', super().generate_input_handler(command, raw_args))
 
 
 # class DynamicListHandler(ListHandler):

@@ -3,6 +3,7 @@
 ############
 ### STANDARD
 from __future__ import annotations
+from typing import Any, cast
 
 ### EXTERNAL
 import pytest as pyt
@@ -329,7 +330,7 @@ class TestViewPropertyDecorator:
     def test_assert_multiple_hash_methods(self):
         """Cannot specify more than one hash method at once."""
         with pyt.raises(AssertionError):
-            view_property(scopes=('comment',), hash_by_syntax=True)
+            cast('Any', view_property)(scopes=('comment',), hash_by_syntax=True)
 
 
 class TestHashScopeExecutor:

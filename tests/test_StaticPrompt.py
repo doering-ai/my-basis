@@ -20,7 +20,7 @@ class TestStaticPromptConstruction:
 
     def test_requires_keyword(self):
         with pyt.raises(pyd.ValidationError):
-            StaticPrompt()
+            StaticPrompt.model_validate({})
 
     def test_basic_construction(self):
         sp = StaticPrompt(keyword='my_arg')
@@ -156,8 +156,6 @@ class TestStaticPromptSuccessor:
     def test_successor_static_prompt(self):
         successor = StaticPrompt(keyword='second_arg')
         sp = StaticPrompt(keyword='first_arg', successor=successor)
-        # Set _args which is needed by the successor lambda
-        sp._args = {}
         handler_cls = sp.generate_input_handler(command=None, raw_args={})
         instance = handler_cls()
         next_handler = instance.next_input({'first_arg': 'val'})

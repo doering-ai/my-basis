@@ -5,7 +5,7 @@
 from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 import asyncio
 import json
 import pickle
@@ -18,6 +18,9 @@ import sublime as sb
 ### INTERNAL
 from myBasis.infra import utils as utils_module
 from myBasis.infra.utils import ut, Utils, PATHS
+
+_Edit = cast('Any', sb.Edit)
+_Window = cast('Any', sb.Window)
 
 
 ############
@@ -465,7 +468,7 @@ class TestGroupby:
     DATA: ClassVar[list] = [(1, 'a'), (0, 'b'), (2, 'c'), (0, 'd'), (1, 'e')]
 
     def test_by_index(self):
-        result = dict(ut.groupby(self.DATA, 0))
+        result = cast('dict[int, list[tuple[int, str]]]', dict(ut.groupby(self.DATA, 0)))
         assert result[1] == [(1, 'a'), (1, 'e')]
         assert result[0] == [(0, 'b'), (0, 'd')]
 
@@ -569,7 +572,7 @@ class TestBatchWrite:
     """Tests for the ``Utils.batch_write`` context manager against the mock view."""
 
     def _fill(self, view: sb.View, text: str) -> sb.Edit:
-        edit = sb.Edit(view)
+        edit = _Edit(view)
         view.insert(edit, 0, text)
         return edit
 
@@ -722,14 +725,14 @@ class TestNormalizePath:
 
     def test_window_folder_relative(self, monkeypatch: pyt.MonkeyPatch, tmp_path: Path):
         monkeypatch.setattr(Utils, 'package_list', lambda: set())
-        window = sb.Window()
+        window = _Window()
         window.set_project_data({'folders': [{'path': str(tmp_path / 'proj')}]})
         result = ut.normalize_path('proj/file.txt', window)
         assert result == tmp_path / 'proj' / 'file.txt'
 
     def test_unresolvable_relative_passthrough(self, monkeypatch: pyt.MonkeyPatch):
         monkeypatch.setattr(Utils, 'package_list', lambda: set())
-        assert ut.normalize_path('no/such/prefix', sb.Window()) == Path('no/such/prefix')
+        assert ut.normalize_path('no/such/prefix', _Window()) == Path('no/such/prefix')
 
 
 class TestPathPredicates:
@@ -883,25 +886,25 @@ class TestWindowHelpers:
     """Tests for the window-facing helpers (`get_window`, `open_folders`, `open_projects`)."""
 
     def test_get_window_by_id(self):
-        window = sb.Window()
+        window = _Window()
         assert ut.get_window(window.id()) is window
 
     def test_get_window_unknown_id(self):
         assert ut.get_window(-12345) is None
 
     def test_window_folders(self, tmp_path: Path):
-        window = sb.Window()
+        window = _Window()
         window.set_project_data({'folders': [{'path': str(tmp_path)}]})
         assert ut.window_folders(window) == [tmp_path]
 
     def test_open_folders_includes_existing(self, tmp_path: Path):
-        window = sb.Window()
+        window = _Window()
         window.set_project_data({'folders': [{'path': str(tmp_path)}]})
         folders = ut.open_folders()
         assert folders[window.id()] == {tmp_path}
 
     def test_open_folders_skips_missing(self, tmp_path: Path, capsys: pyt.CaptureFixture):
-        window = sb.Window()
+        window = _Window()
         window.set_project_data({'folders': [{'path': str(tmp_path / 'gone')}]})
         assert window.id() not in ut.open_folders()
         assert 'does not exist' in capsys.readouterr().out
@@ -911,14 +914,14 @@ class TestWindowHelpers:
         real.mkdir()
         link = tmp_path / 'link'
         link.symlink_to(real)
-        window = sb.Window()
+        window = _Window()
         window.set_project_data({'folders': [{'path': str(link)}]})
         assert ut.open_folders()[window.id()] == {link, real}
 
     def test_open_projects_resolves_relative_folders(self, tmp_path: Path):
         (tmp_path / 'src').mkdir()
-        window = sb.Window()
-        window._project_file_name = str(tmp_path / 'myproj.sublime-project')
+        window = _Window()
+        cast('Any', window)._project_file_name = str(tmp_path / 'myproj.sublime-project')
         window.set_project_data({'folders': [{'path': 'src'}]})
         projects = ut.open_projects()
         assert projects['myproj'] == {tmp_path / 'src'}

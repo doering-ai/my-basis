@@ -19,9 +19,7 @@ class TestMode:
     """Tests for the ``_Mode`` enum."""
 
     def test_members(self):
-        assert _Mode.PASSIVE
-        assert _Mode.WRAPPER
-        assert _Mode.CONSUME
+        assert list(_Mode) == [_Mode.PASSIVE, _Mode.WRAPPER, _Mode.CONSUME]
 
     def test_ordering(self):
         assert _Mode.PASSIVE < _Mode.WRAPPER

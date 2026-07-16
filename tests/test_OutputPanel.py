@@ -4,13 +4,14 @@
 ### STANDARD
 from __future__ import annotations
 from pathlib import Path
+from typing import Any, cast
 
 ### EXTERNAL
 import pytest as pyt
 import sublime as sb
 
 ### INTERNAL
-from myBasis.types.OutputPanel import OutputPanel
+from myBasis.types.OutputPanel import Format, OutputPanel
 
 
 ############
@@ -386,7 +387,7 @@ class TestConversions:
             ('<em>y</em>', 'html', 'plain', 'y'),
         ],
     )
-    def test_format_dispatch(self, text: str, f0: str, f1: str, expected: str):
+    def test_format_dispatch(self, text: str, f0: Format, f1: Format, expected: str):
         assert OutputPanel.format(text, f0, f1) == expected
 
 
@@ -402,14 +403,18 @@ class TestPanelLifecycle:
 
     def test_panel_settings_applied(self):
         panel = _make_panel(word_wrap=True, line_numbers=True, file_regex='^ERR')
-        settings = panel.panel.settings()
+        panel_view = panel.panel
+        assert panel_view is not None
+        settings = panel_view.settings()
         assert settings.get('word_wrap') is True
         assert settings.get('line_numbers') is True
         assert settings.get('result_file_regex') == '^ERR'
 
     def test_panel_read_only_by_default(self):
         panel = _make_panel()
-        assert panel.panel.is_read_only()
+        panel_view = panel.panel
+        assert panel_view is not None
+        assert panel_view.is_read_only()
 
     def test_panel_name_normalized(self):
         panel = _make_panel(name='  My Cool  Panel ')
@@ -417,7 +422,9 @@ class TestPanelLifecycle:
 
     def test_uid_prefixes(self):
         panel = _make_panel()
-        assert panel.uid == f'v{panel.panel.id()}'
+        panel_view = panel.panel
+        assert panel_view is not None
+        assert panel.uid == f'v{panel_view.id()}'
 
     def test_repr_mentions_formats_and_status(self):
         panel = _make_panel()
@@ -438,6 +445,7 @@ class TestPanelLifecycle:
         panel.writeln('world')
         panel.flush()
         view = panel.view
+        assert view is not None
         assert view.substr(sb.Region(0, view.size())) == 'hello world\n'
         assert panel.content == 'hello world\n'
 
@@ -468,7 +476,9 @@ class TestPanelLifecycle:
         panel.reset()
         assert panel.status == 'open'
         assert panel.content == ''
-        assert panel.view.size() == 0
+        view = panel.view
+        assert view is not None
+        assert view.size() == 0
 
     def test_format_properties(self):
         panel = _make_panel(formats=('shell', 'plain'))
@@ -487,7 +497,9 @@ class TestPanelLifecycle:
         panel.write('abc')
         panel.edit(str.upper)
         assert panel.content == 'ABC'
-        assert panel.view.substr(sb.Region(0, panel.view.size())) == 'ABC'
+        view = panel.view
+        assert view is not None
+        assert view.substr(sb.Region(0, view.size())) == 'ABC'
 
     def test_hardcopy_written_to_disk(self, tmp_path: Path):
         target = tmp_path / 'out.txt'
@@ -520,8 +532,10 @@ class TestHtmlLifecycle:
         panel = _make_panel(formats=('html', 'html'))
         panel.write('<em>hi</em>')
         panel.flush()
-        assert '<em>hi</em>' in panel.html._text
-        assert panel.html._text == panel.html_content
+        html_sheet = panel.html
+        assert html_sheet is not None
+        assert '<em>hi</em>' in cast('Any', html_sheet)._text
+        assert cast('Any', html_sheet)._text == panel.html_content
 
     def test_html_content_wraps_body(self):
         panel = _make_panel(formats=('html', 'html'))

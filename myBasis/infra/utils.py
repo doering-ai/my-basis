@@ -1373,7 +1373,7 @@ class Utils(TypesMixin):
         return data
 
     @classmethod
-    def log_to_disk(cls, target: bool | Path = True) -> pyd.FilePath | None:
+    def log_to_disk(cls, target: bool | str | Path | None = True) -> pyd.FilePath | None:
         """Control whether all Sublime Text logging is also routed to a local file.
 
         Args:

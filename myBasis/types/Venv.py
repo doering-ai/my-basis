@@ -274,7 +274,7 @@ class Venv(pyd.BaseModel):
     # ------------------
     def __bool__(self) -> bool:
         """Whether this virtual environment is valid."""
-        return bool(ut.is_valid_path(self.root) and self.kind is not Kind.NONE)
+        return ut.is_valid_path(self.root) and self.kind is not Kind.NONE
 
     @ft.cached_property
     def bin(self) -> Path:

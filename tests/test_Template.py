@@ -4,6 +4,7 @@
 ### STANDARD
 from __future__ import annotations
 from pathlib import Path
+from typing import Any, cast
 
 ### EXTERNAL
 import pytest as pyt
@@ -31,7 +32,7 @@ class TestTemplateConstruction:
 
     def test_get_requires_path_or_raw(self):
         with pyt.raises(ValueError, match='path or raw'):
-            Template.get()
+            cast('Any', Template.get)()
 
     def test_get_raw_caches(self):
         """``_new_from_raw`` uses ``lru_cache``."""

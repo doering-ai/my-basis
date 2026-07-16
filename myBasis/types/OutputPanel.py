@@ -6,7 +6,7 @@ from __future__ import annotations
 from typing import ClassVar, TextIO, Literal
 from typing_extensions import Self, TypeAlias
 from collections import deque
-from collections.abc import Iterator, Callable
+from collections.abc import Callable, Generator
 from threading import Lock
 from pathlib import Path
 from traceback import format_exc
@@ -504,7 +504,7 @@ class OutputPanel(pyd.BaseModel):
 
     @staticmethod
     @ctx.contextmanager
-    def _writable(view: sb.View) -> Iterator[None]:
+    def _writable(view: sb.View) -> Generator[None, None, None]:
         """Context manager to temporarily set a view to writable if it is read-only."""
         readonly = view.is_read_only()
         if readonly:
@@ -551,6 +551,7 @@ class OutputPanel(pyd.BaseModel):
             return cls.shell_to_plain(text) if f1 == 'plain' else cls.shell_to_html(text)
         elif f0 == 'html':
             return cls.html_to_plain(text) if f1 == 'plain' else cls.html_to_shell(text)
+        raise AssertionError(f'Unsupported format conversion: {f0} -> {f1}')
 
     # ------------------
     # `*` Public Methods
@@ -584,7 +585,7 @@ class OutputPanel(pyd.BaseModel):
         return None
 
     @ctx.contextmanager
-    def eavesdrop(self, also_log: bool = False) -> Iterator[None]:
+    def eavesdrop(self, also_log: bool = False) -> Generator[None, None, None]:
         """Context manager that redirects standard output and error to the output panel."""
         mode = 'WRAPPER' if also_log else 'CONSUME'
         stream = Multiplex.add('OutputPanel', self, mode)

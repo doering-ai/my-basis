@@ -43,7 +43,10 @@ class PackageSettings(pyd.BaseModel):
         if not (pkg := getattr(cls, 'PKG', '')):
             raise TypeError(f'Settings model "{cls.__name__}" must define a `PKG` class variable.')
         if pkg in _DEFINED:
-            raise TypeError(f'Settings model for package "{pkg}" already registered.')
+            # Allow re-registration when the module is reloaded (e.g. by
+            # AutomaticPackageReloader). The new class definition replaces
+            # the old one silently.
+            _DEFINED.discard(pkg)
         _DEFINED.add(pkg)
 
     @classmethod

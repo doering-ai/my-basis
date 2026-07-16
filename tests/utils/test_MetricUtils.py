@@ -66,17 +66,32 @@ class TestMetricUtils:
         assert system_metrics == []
         assert logger.handlers == []
 
-    def test_setup_fire_logging_rejects_unsafe_overrides(self, monkeypatch: pyt.MonkeyPatch):
-        """Callers cannot silently disable scrubbing or capture arguments."""
+    @pyt.mark.parametrize('scrubbing', [False, 0, None, True])
+    def test_setup_fire_logging_rejects_unsafe_scrubbing(
+        self, monkeypatch: pyt.MonkeyPatch, scrubbing: object
+    ):
+        """Falsy lookalikes cannot bypass the content-scrubbing boundary."""
+        monkeypatch.setattr(metric_module.fire, 'configure', lambda **_: None)
+
+        with pyt.raises(ValueError, match='privacy'):
+            cls.setup_fire_logging(
+                'synthetic-token',
+                'test-package',
+                lg.getLogger('test-unsafe-scrubbing'),
+                scrubbing=scrubbing,
+            )
+
+    def test_setup_fire_logging_rejects_other_unsafe_overrides(self, monkeypatch: pyt.MonkeyPatch):
+        """Argument capture and an unconditional hosted send cannot be smuggled in."""
         monkeypatch.setattr(metric_module.fire, 'configure', lambda **_: None)
         logger = lg.getLogger('test-unsafe-telemetry')
 
         with pyt.raises(ValueError, match='privacy'):
-            cls.setup_fire_logging('synthetic-token', 'test-package', logger, scrubbing=False)
-        with pyt.raises(ValueError, match='privacy'):
             cls.setup_fire_logging(
                 'synthetic-token', 'test-package', logger, inspect_arguments=True
             )
+        with pyt.raises(ValueError, match='destination policy'):
+            cls.setup_fire_logging('synthetic-token', 'test-package', logger, send_to_logfire=True)
 
     def test_setup_fire_logging_sensitive_features_are_opt_in(self, monkeypatch: pyt.MonkeyPatch):
         """Hosted logs and per-process host metrics require an explicit caller choice."""
@@ -102,6 +117,55 @@ class TestMetricUtils:
 
         assert system_metrics == [True]
         assert len(logger.handlers) == 1
+
+    def test_setup_fire_logging_cleans_up_a_partial_failure(self, monkeypatch: pyt.MonkeyPatch):
+        """Post-configure instrumentation failure cannot leave active global providers."""
+        shutdown: list[dict[str, object]] = []
+        logger = lg.getLogger('test-partial-telemetry')
+        logger.handlers.clear()
+        monkeypatch.setattr(metric_module.fire, 'configure', lambda **_: None)
+        monkeypatch.setattr(
+            metric_module.fire,
+            'instrument_system_metrics',
+            lambda: (_ for _ in ()).throw(RuntimeError('provider failure')),
+        )
+        monkeypatch.setattr(
+            metric_module.fire, 'shutdown', lambda **kwargs: shutdown.append(kwargs)
+        )
+
+        with pyt.raises(RuntimeError, match='provider failure'):
+            cls.setup_fire_logging(
+                'synthetic-token',
+                'test-package',
+                logger,
+                is_dev=False,
+                system_metrics=True,
+            )
+
+        assert shutdown == [{'timeout_millis': 1_000, 'flush': False}]
+        assert logger.handlers == []
+
+    def test_setup_logging_warns_when_cached_options_are_ignored(
+        self, caplog: pyt.LogCaptureFixture
+    ):
+        """Idempotent setup makes its first-configuration-wins rule visible."""
+        logger = lg.getLogger('test-cached-telemetry')
+        original = cls.LOGGERS
+        cls.LOGGERS = {'test-package': logger}
+        try:
+            with caplog.at_level(lg.WARNING):
+                result = cls.setup_logging(
+                    logdir=Path(),
+                    is_dev=False,
+                    fire_token='',
+                    package='test-package',
+                    system_metrics=True,
+                )
+        finally:
+            cls.LOGGERS = original
+
+        assert result is logger
+        assert 'later setup options were not applied' in caplog.text
 
     def test_setup_logging_degrades_without_provider_details(
         self, monkeypatch: pyt.MonkeyPatch, caplog: pyt.LogCaptureFixture

@@ -740,12 +740,8 @@ class Transform[T0, T1]:
                     lines = ut.condense(map(str.strip, lines))
 
             elif not (
-                self.t1.vals
-                and tym.is_string_type(self.t1.vals)
-                and self.t1.main is not tuple
-            ) and (
-                char := next(filter(text.__contains__, [',', '//', ':', '.']), '')
-            ):
+                self.t1.vals and tym.is_string_type(self.t1.vals) and self.t1.main is not tuple
+            ) and (char := next(filter(text.__contains__, [',', '//', ':', '.']), '')):
                 # II. Split on common delimiters in order of preference
                 #     e.g. one.oneA:two splits on colons, but one.oneA splits on periods.
                 #     But only when the target's value type is not a plain string (and

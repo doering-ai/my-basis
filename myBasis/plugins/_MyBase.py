@@ -1026,7 +1026,9 @@ class MyBase(sbp.Command, Generic[_I], metaclass=Meta):
 
     def find_within(self, selector: str, region: Region) -> Iterator[Region]:
         """Find all regions matching the given selector within the given region."""
-        yield from filter(region.contains, self.view.find_by_selector(selector))
+        for match in self.view.find_by_selector(selector):
+            if region.contains(match):
+                yield match
 
     def find_iter(self, selector: str, region: Region | None = None) -> Iterator[Region]:
         """Simple wrapper for `find_by_selector` that returns a view instead of a list."""

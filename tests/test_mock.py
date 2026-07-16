@@ -12,7 +12,7 @@ import pytest as pyt
 ### INTERNAL
 import myBasis
 from myBasis.infra import mock
-from myBasis.infra.mock import _sublime
+from myBasis.infra.mock import _sublime, _sublime_plugin
 
 
 ############
@@ -38,6 +38,47 @@ class TestIsLive:
         mock.install()
         assert mock.IS_LIVE is False
         assert sys.modules['sublime'] is _sublime
+
+
+class TestPortableMockContracts:
+    """The shipped mocks expose the typed Sublime API used by downstream CI."""
+
+    def test_command_input_description_defaults_to_empty(self):
+        assert _sublime_plugin.Command().input_description() == ''
+
+    def test_context_bases_expose_properties(self):
+        window = _sublime.Window()
+        view = window.new_file()
+
+        window_command = _sublime_plugin.WindowCommand(window)
+        view_listener = _sublime_plugin.ViewEventListener(view)
+
+        assert window_command.window is window
+        assert view_listener.view is view
+        assert type(window_command).window.fset is None
+        assert type(view_listener).view.fset is None
+
+    def test_open_file_tracks_name_and_contents(self, tmp_path: Path):
+        path = tmp_path / 'example.txt'
+        path.write_bytes(b'\xef\xbb\xbfalpha\r\nbeta\xff\rgamma')
+
+        view = _sublime.Window().open_file(str(path))
+
+        assert view.file_name() == str(path)
+        assert view.substr(_sublime.Region(0, view.size())) == 'alpha\nbeta\ufffd\ngamma'
+        assert view.rowcol(8) == (1, 2)
+        assert view.text_point(2, 3) == 15
+        assert [(line.begin(), line.end()) for line in view.lines(_sublime.Region(0, 17))] == [
+            (0, 5),
+            (6, 11),
+            (12, 17),
+        ]
+
+    def test_folders_returns_string_paths(self, tmp_path: Path):
+        window = _sublime.Window()
+        window.set_project_data({'folders': [{'path': str(tmp_path)}]})
+
+        assert window.folders() == [str(tmp_path)]
 
 
 class TestInferPaths:

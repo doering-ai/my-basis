@@ -35,6 +35,10 @@ class Command:
         s = _re.sub(r'(.)([A-Z][a-z]+)', r'\1_\2', cls_name)
         return _re.sub(r'([a-z0-9])([A-Z])', r'\1_\2', s).lower()
 
+    def input_description(self) -> str:
+        """Return the default command-palette input description."""
+        return ''
+
 
 class TextCommand(Command):
     view: View
@@ -59,10 +63,12 @@ class TextCommand(Command):
 
 
 class WindowCommand(Command):
-    window: Window
-
     def __init__(self, window: Window) -> None:
-        self.window = window
+        self._window = window
+
+    @property
+    def window(self) -> Window:
+        return self._window
 
     def run(self, **kwargs: Any) -> None:
         pass
@@ -99,10 +105,12 @@ class EventListener:
 
 
 class ViewEventListener:
-    view: View
-
     def __init__(self, view: View) -> None:
-        self.view = view
+        self._view = view
+
+    @property
+    def view(self) -> View:
+        return self._view
 
     @classmethod
     def is_applicable(cls, settings: Any) -> bool:

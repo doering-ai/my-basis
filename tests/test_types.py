@@ -3,6 +3,7 @@
 ############
 ### STANDARD
 from __future__ import annotations
+from typing import Any
 from typing_extensions import Annotated
 
 ### EXTERNAL
@@ -77,8 +78,9 @@ class TestTypesMixinFields:
         class _Model(pyd.BaseModel):
             val: TypesMixin.RegexField
 
+        invalid: Any = '\\d+'
         with pyt.raises(pyd.ValidationError):
-            _Model(val='\\d+')
+            _Model(val=invalid)
 
     def test_schemify_is_classmethod_on_mixin(self):
         assert TypesMixin.schemify is schemify

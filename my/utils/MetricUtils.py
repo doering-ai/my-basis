@@ -134,21 +134,41 @@ class MetricUtils(_UtilsBase):
         logger: lg.Logger,
         is_dev: bool = True,
         app: Any | None = None,
+        export_logs: bool = False,
+        system_metrics: bool = False,
         **kwargs: Any,
     ) -> None:
         """Configure Logfire observability and logging.
 
         Args:
-            fire_token: Logfire API token.
+            fire_token: Logfire API token; an empty value falls back to `LOGFIRE_TOKEN`
+                and permits an OTLP-only destination.
             package: Package name for service identification.
             logger: Logger to attach Logfire handler to.
             is_dev: If True, use development mode with console output (default: True).
             app: Optional ASGI app to instrument.
+            export_logs: Attach the Python logging handler for already-scrubbed event names.
+            system_metrics: Enable Logfire's per-process system metrics instrumentation.
             **kwargs: Additional configuration options for Logfire.
         Raises:
-            AssertionError: If fire_token or package is missing.
+            ValueError: If the service identity/destination is missing or a privacy control
+                is weakened.
         """
-        assert fire_token and package, 'Tried to initialize fire logging w/o token or package.'
+        if not package:
+            raise ValueError('Telemetry service package is required.')
+        token = fire_token or os.getenv('LOGFIRE_TOKEN', '')
+        otlp_destination = any(
+            os.getenv(name)
+            for name in ('OTEL_EXPORTER_OTLP_ENDPOINT', 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT')
+        )
+        if not token and not otlp_destination:
+            raise ValueError('No telemetry destination configured.')
+        if 'scrubbing' in kwargs and not isinstance(kwargs['scrubbing'], fire.ScrubbingOptions):
+            raise ValueError('Telemetry privacy controls cannot be weakened.')
+        if 'inspect_arguments' in kwargs and kwargs['inspect_arguments'] is not False:
+            raise ValueError('Telemetry privacy controls cannot be weakened.')
+        if 'send_to_logfire' in kwargs and kwargs['send_to_logfire'] != 'if-token-present':
+            raise ValueError('Telemetry destination policy cannot be weakened.')
 
         try:
             name = impm.metadata(package)['Name']
@@ -158,15 +178,18 @@ class MetricUtils(_UtilsBase):
             version = '0.0.0'
 
         # I. Choose basic configuration settings
-        settings: dict = dict(
-            token=fire_token,
-            service_name=name,
+        settings: dict[str, Any] = dict(
+            service_name=os.getenv('OTEL_SERVICE_NAME') or name,
             service_version=version,
-            environment='development' if is_dev else 'production',
-            send_to_logfire=not is_dev,
-            scrubbing=False,
-            inspect_arguments=True,
+            environment=os.getenv('OTEL_DEPLOYMENT_ENVIRONMENT')
+            or ('development' if is_dev else 'production'),
+            console=False,
+            send_to_logfire='if-token-present',
+            inspect_arguments=False,
+            distributed_tracing=False,
         )
+        if token:
+            settings['token'] = token
         if is_dev:
             settings['console'] = fire.ConsoleOptions(
                 min_log_level='debug',
@@ -175,26 +198,37 @@ class MetricUtils(_UtilsBase):
             )
         if kwargs:
             settings |= kwargs
-        fire.configure(**settings)
 
-        # II. Register special handlers
-        # II.i. Automatically record performance metrics
-        fire.instrument_system_metrics()
-        # fire.log_slow_async_callbacks() # NOTE: not for now?
-        # fire.instrument_pydantic() # NOTE: done in pyproject.toml
+        logfire_handler: lg.Handler | None = None
+        try:
+            fire.configure(**settings)
 
-        # II.ii. Register logfire w/ the default python logger
-        logfire_handler = fire.LogfireLoggingHandler()
-        logfire_handler.setLevel(lg.DEBUG if is_dev else lg.INFO)
-        logger.addHandler(logfire_handler)
+            # II. Register special handlers
+            # II.i. Automatically record performance metrics only when explicitly requested
+            if system_metrics:
+                fire.instrument_system_metrics()
+            # fire.log_slow_async_callbacks() # NOTE: not for now?
+            # fire.instrument_pydantic() # NOTE: done in pyproject.toml
 
-        # II.iii. Register logfire with our ASGI HTTPS app
-        if app is not None:
-            # see opentelemetry-python-contrib.readthedocs.io/en/latest/instrumentation
-            # Check if aiohtpp is present:
-            if 'aiohttp' in sys.modules:
-                fire.instrument_aiohttp_client()
-            app.asgi_app = fire.instrument_asgi(app.asgi_app)
+            # II.ii. Register logfire w/ the default python logger
+            if export_logs:
+                logfire_handler = fire.LogfireLoggingHandler()
+                logfire_handler.setLevel(lg.DEBUG if is_dev else lg.INFO)
+                logger.addHandler(logfire_handler)
+
+            # II.iii. Register logfire with our ASGI HTTPS app
+            if app is not None:
+                # see opentelemetry-python-contrib.readthedocs.io/en/latest/instrumentation
+                # Check if aiohttp is present:
+                if 'aiohttp' in sys.modules:
+                    fire.instrument_aiohttp_client()
+                app.asgi_app = fire.instrument_asgi(app.asgi_app)
+        except Exception:
+            if logfire_handler is not None:
+                logger.removeHandler(logfire_handler)
+            with ctx.suppress(Exception):
+                fire.shutdown(timeout_millis=1_000, flush=False)
+            raise
 
     @classmethod
     @_guard
@@ -219,6 +253,8 @@ class MetricUtils(_UtilsBase):
         app: Any | None = None,
         maxsize: int = 2**26,  # 64 MB
         maxcount: int = 2**10,  # 1024 backups
+        export_logs: bool = False,
+        system_metrics: bool = False,
         **fire_kwargs: Any,
     ) -> lg.Logger:
         """Configure comprehensive logging (Python file logging + Logfire).
@@ -232,6 +268,8 @@ class MetricUtils(_UtilsBase):
             app: Optional ASGI app to instrument.
             maxsize: Maximum log file size in bytes (default: 64 MB).
             maxcount: Maximum number of backup files (default: 1024).
+            export_logs: Export already-scrubbed Python log records through Logfire.
+            system_metrics: Enable per-process system metrics instrumentation.
             **fire_kwargs: Additional Logfire configuration options.
         Returns:
             Configured Logger instance (cached per package).
@@ -241,7 +279,9 @@ class MetricUtils(_UtilsBase):
             package = cls.get_package_name()
 
         if package in cls.LOGGERS:
-            return cls.LOGGERS[package]
+            cached = cls.LOGGERS[package]
+            cached.warning('Logging already configured; later setup options were not applied.')
+            return cached
 
         logger = cls.setup_py_logging(
             logdir=logdir,
@@ -253,17 +293,19 @@ class MetricUtils(_UtilsBase):
             maxcount=maxcount,
         )
 
-        if fire_token:
+        try:
             cls.setup_fire_logging(
                 fire_token=fire_token,
                 package=package,
                 is_dev=is_dev,
                 logger=logger,
                 app=app,
+                export_logs=export_logs,
+                system_metrics=system_metrics,
                 **fire_kwargs,
             )
-        else:
-            logger.warning('No Fire token provided -- skipping logfire setup.')
+        except Exception:
+            logger.warning('Remote telemetry setup failed; continuing without export.')
 
         cls.LOGGERS[package] = logger
         return logger

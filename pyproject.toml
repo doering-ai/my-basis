@@ -53,7 +53,7 @@ myst = ["mdformat-front-matters>=2.0.0", "mdformat-myst>=0.3.0"]
 metrics = [
   "opentelemetry-instrumentation-aiohttp-client>=0.57b0",
   "opentelemetry-instrumentation-asgi>=0.57b0",
-  "logfire[system-metrics]>=4.3.5",
+  "logfire[system-metrics]>=4.37.0",
   "pandas>=2.3.2",
 ]
 google = [

@@ -7,12 +7,14 @@ from pathlib import Path
 from time import perf_counter_ns
 from typing import Any, ClassVar
 from types import FunctionType
+from urllib.parse import urlsplit
 import contextlib as ctx
 import functools as ft
 import importlib.metadata as impm
 import logging as lg
 import logging.handlers as lgh
 import os
+import re
 import subprocess as sbp
 import sys
 import warnings
@@ -56,6 +58,14 @@ class MetricUtils(_UtilsBase):
     WARNINGS_SETUP: ClassVar[bool] = False
     METRICS_SETUP: ClassVar[bool] = False
     LOGGERS: ClassVar[dict[str, lg.Logger]] = {}
+    TELEMETRY_READY: ClassVar[set[str]] = set()
+    SAFE_FIRE_KWARGS: ClassVar[frozenset[str]] = frozenset(
+        {'inspect_arguments', 'scrubbing', 'send_to_logfire'}
+    )
+    TELEMETRY_IDENTITY: ClassVar[re.Pattern[str]] = re.compile(r'[A-Za-z0-9][A-Za-z0-9._/-]{0,127}')
+    LOCAL_OTLP_HOSTS: ClassVar[frozenset[str]] = frozenset(
+        {'127.0.0.1', '::1', 'host.containers.internal', 'localhost', 'otel-collector'}
+    )
 
     @staticmethod
     def _guard[F: FunctionType](fn: F) -> F:
@@ -71,6 +81,94 @@ class MetricUtils(_UtilsBase):
     # -----------
     # `1` LOGGING
     # -----------
+    @classmethod
+    def _validate_fire_configuration(
+        cls,
+        package: str,
+        is_dev: bool,
+        kwargs: dict[str, Any],
+    ) -> tuple[str, str, str]:
+        """Validate privacy, identity, and destination before changing global providers."""
+        unknown = kwargs.keys() - cls.SAFE_FIRE_KWARGS
+        if unknown:
+            names = ', '.join(sorted(unknown))
+            raise ValueError(f'Unsupported telemetry configuration: {names}.')
+
+        if 'scrubbing' in kwargs:
+            scrubbing = kwargs['scrubbing']
+            known_fields = {'callback', 'extra_patterns'}
+            if (
+                not isinstance(scrubbing, fire.ScrubbingOptions)
+                or vars(scrubbing).keys() - known_fields
+                or scrubbing.callback is not None
+            ):
+                raise ValueError('Telemetry privacy controls cannot be weakened.')
+        if kwargs.get('inspect_arguments', False) is not False:
+            raise ValueError('Telemetry privacy controls cannot be weakened.')
+        if kwargs.get('send_to_logfire', 'if-token-present') != 'if-token-present':
+            raise ValueError('Telemetry destination policy cannot be weakened.')
+
+        try:
+            service_name = impm.metadata(package)['Name']
+            version = impm.version(package)
+        except impm.PackageNotFoundError:
+            service_name = package
+            version = '0.0.0'
+        service_name = os.getenv('OTEL_SERVICE_NAME') or service_name
+        environment = os.getenv('OTEL_DEPLOYMENT_ENVIRONMENT') or (
+            'development' if is_dev else 'production'
+        )
+        for field, value in (
+            ('OTEL_SERVICE_NAME', service_name),
+            ('OTEL_DEPLOYMENT_ENVIRONMENT', environment),
+        ):
+            if not cls.TELEMETRY_IDENTITY.fullmatch(value):
+                raise ValueError(f'{field} is not a bounded telemetry identity.')
+
+        for field in ('OTEL_EXPORTER_OTLP_ENDPOINT', 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT'):
+            if not (raw_endpoint := os.getenv(field)):
+                continue
+            endpoint = urlsplit(raw_endpoint)
+            host = endpoint.hostname or ''
+            is_local = host in cls.LOCAL_OTLP_HOSTS
+            is_gitlab = bool(re.fullmatch(r'[0-9]+\.gitlab-o11y\.com', host))
+            if (
+                endpoint.scheme not in {'http', 'https'}
+                or not host
+                or endpoint.username is not None
+                or endpoint.password is not None
+                or endpoint.query
+                or endpoint.fragment
+                or not (is_local or is_gitlab)
+                or (is_gitlab and endpoint.scheme != 'https')
+            ):
+                raise ValueError(f'{field} is not an approved telemetry destination.')
+
+        return service_name, version, environment
+
+    @classmethod
+    def _fire_settings(
+        cls,
+        package: str,
+        is_dev: bool,
+        kwargs: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Build the closed, content-safe Logfire configuration surface."""
+        service_name, version, environment = cls._validate_fire_configuration(
+            package, is_dev, kwargs
+        )
+        settings: dict[str, Any] = dict(
+            service_name=service_name,
+            service_version=version,
+            environment=environment,
+            console=False,
+            send_to_logfire='if-token-present',
+            inspect_arguments=False,
+            distributed_tracing=False,
+        )
+        settings |= kwargs
+        return settings
+
     @classmethod
     @_guard
     def setup_py_logging(
@@ -163,31 +261,8 @@ class MetricUtils(_UtilsBase):
         )
         if not token and not otlp_destination:
             raise ValueError('No telemetry destination configured.')
-        if 'scrubbing' in kwargs and not isinstance(kwargs['scrubbing'], fire.ScrubbingOptions):
-            raise ValueError('Telemetry privacy controls cannot be weakened.')
-        if 'inspect_arguments' in kwargs and kwargs['inspect_arguments'] is not False:
-            raise ValueError('Telemetry privacy controls cannot be weakened.')
-        if 'send_to_logfire' in kwargs and kwargs['send_to_logfire'] != 'if-token-present':
-            raise ValueError('Telemetry destination policy cannot be weakened.')
-
-        try:
-            name = impm.metadata(package)['Name']
-            version = impm.version(package)
-        except impm.PackageNotFoundError:
-            name = package
-            version = '0.0.0'
-
         # I. Choose basic configuration settings
-        settings: dict[str, Any] = dict(
-            service_name=os.getenv('OTEL_SERVICE_NAME') or name,
-            service_version=version,
-            environment=os.getenv('OTEL_DEPLOYMENT_ENVIRONMENT')
-            or ('development' if is_dev else 'production'),
-            console=False,
-            send_to_logfire='if-token-present',
-            inspect_arguments=False,
-            distributed_tracing=False,
-        )
+        settings = cls._fire_settings(package, is_dev, kwargs)
         if token:
             settings['token'] = token
         if is_dev:
@@ -196,39 +271,36 @@ class MetricUtils(_UtilsBase):
                 span_style='indented',
                 show_project_link=False,
             )
-        if kwargs:
-            settings |= kwargs
+        fire.configure(**settings)
 
-        logfire_handler: lg.Handler | None = None
-        try:
-            fire.configure(**settings)
-
-            # II. Register special handlers
-            # II.i. Automatically record performance metrics only when explicitly requested
-            if system_metrics:
+        # II. Register special handlers
+        # II.i. Automatically record performance metrics only when explicitly requested
+        if system_metrics:
+            try:
                 fire.instrument_system_metrics()
-            # fire.log_slow_async_callbacks() # NOTE: not for now?
-            # fire.instrument_pydantic() # NOTE: done in pyproject.toml
+            except Exception:
+                logger.warning('System telemetry instrumentation failed.')
+        # fire.log_slow_async_callbacks() # NOTE: not for now?
+        # fire.instrument_pydantic() # NOTE: done in pyproject.toml
 
-            # II.ii. Register logfire w/ the default python logger
-            if export_logs:
+        # II.ii. Register logfire w/ the default python logger
+        if export_logs:
+            try:
                 logfire_handler = fire.LogfireLoggingHandler()
                 logfire_handler.setLevel(lg.DEBUG if is_dev else lg.INFO)
                 logger.addHandler(logfire_handler)
+            except Exception:
+                logger.warning('Python log export setup failed.')
 
-            # II.iii. Register logfire with our ASGI HTTPS app
-            if app is not None:
+        # II.iii. Register logfire with our ASGI HTTPS app
+        if app is not None:
+            try:
                 # see opentelemetry-python-contrib.readthedocs.io/en/latest/instrumentation
-                # Check if aiohttp is present:
                 if 'aiohttp' in sys.modules:
                     fire.instrument_aiohttp_client()
                 app.asgi_app = fire.instrument_asgi(app.asgi_app)
-        except Exception:
-            if logfire_handler is not None:
-                logger.removeHandler(logfire_handler)
-            with ctx.suppress(Exception):
-                fire.shutdown(timeout_millis=1_000, flush=False)
-            raise
+            except Exception:
+                logger.warning('Application telemetry instrumentation failed.')
 
     @classmethod
     @_guard
@@ -278,9 +350,27 @@ class MetricUtils(_UtilsBase):
         if not package:
             package = cls.get_package_name()
 
+        cls._validate_fire_configuration(package, is_dev, fire_kwargs)
         if package in cls.LOGGERS:
             cached = cls.LOGGERS[package]
-            cached.warning('Logging already configured; later setup options were not applied.')
+            if package in cls.TELEMETRY_READY:
+                cached.warning('Logging already configured; later setup options were not applied.')
+                return cached
+            try:
+                cls.setup_fire_logging(
+                    fire_token=fire_token,
+                    package=package,
+                    is_dev=is_dev,
+                    logger=cached,
+                    app=app,
+                    export_logs=export_logs,
+                    system_metrics=system_metrics,
+                    **fire_kwargs,
+                )
+            except Exception:
+                cached.warning('Remote telemetry setup failed; continuing without export.')
+            else:
+                cls.TELEMETRY_READY.add(package)
             return cached
 
         logger = cls.setup_py_logging(
@@ -306,6 +396,8 @@ class MetricUtils(_UtilsBase):
             )
         except Exception:
             logger.warning('Remote telemetry setup failed; continuing without export.')
+        else:
+            cls.TELEMETRY_READY.add(package)
 
         cls.LOGGERS[package] = logger
         return logger

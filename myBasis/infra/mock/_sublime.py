@@ -393,6 +393,30 @@ MOCK_COMMANDS: dict = {}
 _WINDOWS: list = []
 
 
+def _find_text_command(name: str) -> 'type | None':
+    """Find a `TextCommand` subclass whose `name()` matches the given command name.
+
+    Scans all subclasses of `sublime_plugin.TextCommand` (recursively), so that
+    plugin commands like `HeaderizeCommand` are discoverable by their snake_case
+    command name (e.g. ``'headerize'``).
+    """
+    import sublime_plugin as sbp
+
+    def _all_subclasses(cls: type) -> 'Iterator[type]':
+        for sub in cls.__subclasses__():
+            yield sub
+            yield from _all_subclasses(sub)
+
+    for cls in _all_subclasses(sbp.TextCommand):
+        try:
+            dummy = cls.__new__(cls)
+            if dummy.name() == name:
+                return cls
+        except Exception:
+            continue
+    return None
+
+
 class View:
     """Mock view backed by a Buffer.
 
@@ -654,6 +678,10 @@ class View:
             self._change_count += 1
         elif name == 'append':
             self._buf.insert(self._buf.size(), args.get('characters', ''))
+            self._change_count += 1
+        elif handler := _find_text_command(name):
+            instance = handler(self)
+            instance.run(Edit(0), **args)
             self._change_count += 1
         # Unknown commands are silently ignored.
 

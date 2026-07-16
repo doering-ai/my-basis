@@ -118,6 +118,32 @@ class TestRegexStore:
         assert store.keys() == []
         assert store.values() == []
 
+    def test_top_level_matchers_forward_the_engine_timeout(self, monkeypatch) -> None:
+        """RegexStore cannot bypass the unattended-processing ReDoS deadline."""
+        calls: list[tuple[str, dict[str, float]]] = []
+
+        class PatternProbe:
+            def search(self, _text: str, **kwargs: float):
+                calls.append(('search', kwargs))
+                return None
+
+            def finditer(self, _text: str, **kwargs: float):
+                calls.append(('finditer', kwargs))
+                return iter(())
+
+        module = inspect.getmodule(RegexStore)
+        assert module is not None
+        monkeypatch.setattr(module, 'REGEX_TIMEOUT', 0.25)
+        store = RegexStore.new(dict(lazy_load=False), probe=r'probe')
+        store.patterns['probe'] = PatternProbe()  # type: ignore[unsupported-operation]
+
+        assert not store.search('probe', 'input')
+        assert list(store.finditer('probe', 'input')) == []
+        assert calls == [
+            ('search', {'timeout': 0.25}),
+            ('finditer', {'timeout': 0.25}),
+        ]
+
     @pyt.mark.parametrize(
         'options, match, expected',
         [

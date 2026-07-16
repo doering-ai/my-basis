@@ -69,6 +69,8 @@ type MatchFunction = Literal['match', 'fullmatch', 'full', 'search', 'polymatch'
 # ---------
 DEBUG = True
 NO_FLAG = RegexFlag(0)
+#: Deadline for every public regex search path used in unattended processing.
+REGEX_TIMEOUT: float = 10.0
 
 type LockField = Annotated[Lock, ut.pyd_schemify(Lock)]
 
@@ -506,7 +508,7 @@ class RegexStore(pyd.BaseModel):
             MatchData object with the first successful match's data, or empty if none matched.
         """
         for name in names:
-            if _match := getattr(self.patterns[name], func)(text):
+            if _match := getattr(self.patterns[name], func)(text, timeout=REGEX_TIMEOUT):
                 return self.parse(_match, name)
         return MatchData()
 
@@ -983,7 +985,7 @@ class RegexStore(pyd.BaseModel):
             yield from map(parse, text.rgx_iterator(rgx, **kwargs))
         else:
             assert not kwargs, f'Unexpected kwargs {kwargs} for plain-string "{text[:25]}..."'
-            yield from map(parse, rgx.finditer(text))
+            yield from map(parse, rgx.finditer(text, timeout=REGEX_TIMEOUT))
 
     def findall(self, name: str, text: str | Buffer, **kwargs: Any) -> list[MatchData]:
         """Find all non-overlapping matches of the pattern in text.

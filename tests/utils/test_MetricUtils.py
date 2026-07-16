@@ -93,6 +93,139 @@ class TestMetricUtils:
         with pyt.raises(ValueError, match='destination policy'):
             cls.setup_fire_logging('synthetic-token', 'test-package', logger, send_to_logfire=True)
 
+    def test_setup_fire_logging_rejects_callback_scrubbing(self, monkeypatch: pyt.MonkeyPatch):
+        """A custom callback cannot restore or redirect scrubbed content."""
+        monkeypatch.setattr(metric_module.fire, 'configure', lambda **_: None)
+        scrubbing = metric_module.fire.ScrubbingOptions(callback=lambda match: match)
+
+        with pyt.raises(ValueError, match='privacy'):
+            cls.setup_fire_logging(
+                'synthetic-token',
+                'test-package',
+                lg.getLogger('test-custom-scrubbing'),
+                scrubbing=scrubbing,
+            )
+
+    def test_setup_fire_logging_rejects_unknown_scrubbing_fields(
+        self, monkeypatch: pyt.MonkeyPatch
+    ):
+        """A Logfire upgrade cannot add an unreviewed scrubbing escape hatch."""
+        monkeypatch.setattr(metric_module.fire, 'configure', lambda **_: None)
+        scrubbing = metric_module.fire.ScrubbingOptions()
+        vars(scrubbing)['future_disable_scrubbing'] = True
+
+        with pyt.raises(ValueError, match='privacy'):
+            cls.setup_fire_logging(
+                'synthetic-token',
+                'test-package',
+                lg.getLogger('test-future-scrubbing'),
+                scrubbing=scrubbing,
+            )
+
+    def test_setup_fire_logging_rejects_unknown_options(self, monkeypatch: pyt.MonkeyPatch):
+        """The privacy boundary is a closed allowlist across Logfire upgrades."""
+        monkeypatch.setattr(metric_module.fire, 'configure', lambda **_: None)
+
+        with pyt.raises(ValueError, match='Unsupported telemetry configuration'):
+            cls.setup_fire_logging(
+                'synthetic-token',
+                'test-package',
+                lg.getLogger('test-unknown-option'),
+                future_content_capture=True,
+            )
+
+    @pyt.mark.parametrize(
+        'name,value',
+        [
+            ('OTEL_SERVICE_NAME', 'service name with spaces'),
+            ('OTEL_DEPLOYMENT_ENVIRONMENT', 'production\nforged=true'),
+            ('OTEL_SERVICE_NAME', 'x' * 129),
+        ],
+    )
+    def test_setup_fire_logging_rejects_unbounded_identity(
+        self,
+        monkeypatch: pyt.MonkeyPatch,
+        name: str,
+        value: str,
+    ):
+        """Environment identity cannot inject or explode telemetry cardinality."""
+        monkeypatch.setenv(name, value)
+        monkeypatch.setattr(metric_module.fire, 'configure', lambda **_: None)
+
+        with pyt.raises(ValueError, match='bounded telemetry identity'):
+            cls.setup_fire_logging(
+                'synthetic-token',
+                'test-package',
+                lg.getLogger('test-unsafe-identity'),
+            )
+
+    @pyt.mark.parametrize(
+        'endpoint',
+        [
+            'http://attacker.example:4318',
+            'http://70447876.gitlab-o11y.com/v1/traces',
+            'https://user:secret@70447876.gitlab-o11y.com/v1/traces',
+            'https://70447876.gitlab-o11y.com/v1/traces?tenant=forged',
+        ],
+    )
+    def test_setup_fire_logging_rejects_unapproved_otlp_destination(
+        self, monkeypatch: pyt.MonkeyPatch, endpoint: str
+    ):
+        """Application exporters can target only local collectors or the GitLab group."""
+        monkeypatch.setenv('OTEL_EXPORTER_OTLP_ENDPOINT', endpoint)
+        monkeypatch.setattr(metric_module.fire, 'configure', lambda **_: None)
+
+        with pyt.raises(ValueError, match='approved telemetry destination'):
+            cls.setup_fire_logging(
+                '',
+                'test-package',
+                lg.getLogger('test-unsafe-endpoint'),
+            )
+
+    def test_setup_fire_logging_accepts_gitlab_group_destination(
+        self, monkeypatch: pyt.MonkeyPatch
+    ):
+        """The human-gated GitLab.com group endpoint remains an approved fan-out target."""
+        configured: dict[str, object] = {}
+        monkeypatch.setenv(
+            'OTEL_EXPORTER_OTLP_ENDPOINT',
+            'https://70447876.gitlab-o11y.com/v1/traces',
+        )
+        monkeypatch.setattr(
+            metric_module.fire,
+            'configure',
+            lambda **kwargs: configured.update(kwargs),
+        )
+
+        cls.setup_fire_logging(
+            '',
+            'test-package',
+            lg.getLogger('test-gitlab-endpoint'),
+            is_dev=False,
+        )
+
+        assert configured['service_name'] == 'test-package'
+
+    def test_setup_logging_surfaces_privacy_validation(self, monkeypatch: pyt.MonkeyPatch):
+        """Invalid privacy controls fail before local logger state is changed."""
+        setup_calls: list[bool] = []
+        monkeypatch.setattr(
+            cls,
+            'setup_py_logging',
+            staticmethod(lambda **_: setup_calls.append(True)),
+        )
+
+        with pyt.raises(ValueError, match='privacy'):
+            cls.setup_logging(
+                logdir=Path(),
+                is_dev=False,
+                fire_token='synthetic-token',
+                package='test-package',
+                scrubbing=False,
+            )
+
+        assert setup_calls == []
+
     def test_setup_fire_logging_sensitive_features_are_opt_in(self, monkeypatch: pyt.MonkeyPatch):
         """Hosted logs and per-process host metrics require an explicit caller choice."""
         system_metrics: list[bool] = []
@@ -118,22 +251,25 @@ class TestMetricUtils:
         assert system_metrics == [True]
         assert len(logger.handlers) == 1
 
-    def test_setup_fire_logging_cleans_up_a_partial_failure(self, monkeypatch: pyt.MonkeyPatch):
-        """Post-configure instrumentation failure cannot leave active global providers."""
-        shutdown: list[dict[str, object]] = []
+    def test_setup_fire_logging_isolates_optional_instrumentation_failure(
+        self, monkeypatch: pyt.MonkeyPatch, caplog: pyt.LogCaptureFixture
+    ):
+        """Optional metrics cannot tear down the configured trace provider."""
+        configured: list[bool] = []
         logger = lg.getLogger('test-partial-telemetry')
         logger.handlers.clear()
-        monkeypatch.setattr(metric_module.fire, 'configure', lambda **_: None)
+        monkeypatch.setattr(
+            metric_module.fire,
+            'configure',
+            lambda **_: configured.append(True),
+        )
         monkeypatch.setattr(
             metric_module.fire,
             'instrument_system_metrics',
             lambda: (_ for _ in ()).throw(RuntimeError('provider failure')),
         )
-        monkeypatch.setattr(
-            metric_module.fire, 'shutdown', lambda **kwargs: shutdown.append(kwargs)
-        )
 
-        with pyt.raises(RuntimeError, match='provider failure'):
+        with caplog.at_level(lg.WARNING):
             cls.setup_fire_logging(
                 'synthetic-token',
                 'test-package',
@@ -142,16 +278,19 @@ class TestMetricUtils:
                 system_metrics=True,
             )
 
-        assert shutdown == [{'timeout_millis': 1_000, 'flush': False}]
-        assert logger.handlers == []
+        assert configured == [True]
+        assert 'System telemetry instrumentation failed.' in caplog.text
+        assert 'provider failure' not in caplog.text
 
     def test_setup_logging_warns_when_cached_options_are_ignored(
         self, caplog: pyt.LogCaptureFixture
     ):
         """Idempotent setup makes its first-configuration-wins rule visible."""
         logger = lg.getLogger('test-cached-telemetry')
-        original = cls.LOGGERS
+        original_loggers = cls.LOGGERS
+        original_ready = cls.TELEMETRY_READY
         cls.LOGGERS = {'test-package': logger}
+        cls.TELEMETRY_READY = {'test-package'}
         try:
             with caplog.at_level(lg.WARNING):
                 result = cls.setup_logging(
@@ -162,7 +301,8 @@ class TestMetricUtils:
                     system_metrics=True,
                 )
         finally:
-            cls.LOGGERS = original
+            cls.LOGGERS = original_loggers
+            cls.TELEMETRY_READY = original_ready
 
         assert result is logger
         assert 'later setup options were not applied' in caplog.text
@@ -173,8 +313,10 @@ class TestMetricUtils:
         """An unavailable telemetry backend cannot crash an otherwise healthy app."""
         logger = lg.getLogger('test-telemetry-degrade')
         logger.handlers.clear()
-        original = cls.LOGGERS
+        original_loggers = cls.LOGGERS
+        original_ready = cls.TELEMETRY_READY
         cls.LOGGERS = {}
+        cls.TELEMETRY_READY = set()
         monkeypatch.setattr(cls, 'setup_py_logging', staticmethod(lambda **_: logger))
 
         def fail(**_: object) -> None:
@@ -190,12 +332,57 @@ class TestMetricUtils:
                     package='test-package',
                 )
         finally:
-            cls.LOGGERS = original
+            cls.LOGGERS = original_loggers
+            cls.TELEMETRY_READY = original_ready
 
         assert result is logger
         assert 'Remote telemetry setup failed; continuing without export.' in caplog.text
         assert 'synthetic-secret' not in caplog.text
         assert 'private.example' not in caplog.text
+
+    def test_setup_logging_retries_remote_setup(self, monkeypatch: pyt.MonkeyPatch):
+        """A transient exporter failure does not make local logger caching permanent."""
+        logger = lg.getLogger('test-telemetry-retry')
+        logger.handlers.clear()
+        setup_py_calls: list[bool] = []
+        setup_fire_calls: list[bool] = []
+        original_loggers = cls.LOGGERS
+        original_ready = cls.TELEMETRY_READY
+        cls.LOGGERS = {}
+        cls.TELEMETRY_READY = set()
+        monkeypatch.setattr(
+            cls,
+            'setup_py_logging',
+            staticmethod(lambda **_: setup_py_calls.append(True) or logger),
+        )
+
+        def flaky_fire(**_: object) -> None:
+            setup_fire_calls.append(True)
+            if len(setup_fire_calls) == 1:
+                raise RuntimeError('collector unavailable')
+
+        monkeypatch.setattr(cls, 'setup_fire_logging', staticmethod(flaky_fire))
+        try:
+            first = cls.setup_logging(
+                logdir=Path(),
+                is_dev=False,
+                fire_token='synthetic-token',
+                package='test-package',
+            )
+            second = cls.setup_logging(
+                logdir=Path(),
+                is_dev=False,
+                fire_token='synthetic-token',
+                package='test-package',
+            )
+            assert 'test-package' in cls.TELEMETRY_READY
+        finally:
+            cls.LOGGERS = original_loggers
+            cls.TELEMETRY_READY = original_ready
+
+        assert first is second is logger
+        assert setup_py_calls == [True]
+        assert setup_fire_calls == [True, True]
 
     def test_setup_warnings(self):
         original = cls.WARNINGS_SETUP

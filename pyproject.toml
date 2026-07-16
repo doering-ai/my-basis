@@ -115,6 +115,7 @@ permissive-ignores = true
 search-path = ['.']
 
 [tool.pyrefly.errors]
+untyped-import = false
 missing-source = false
 implicit-any = false
 unannotated-parameter = false

@@ -102,7 +102,7 @@ class StaticPrompt(pyd.BaseModel, arbitrary_types_allowed=True):
     def _setup_method(namespace: dict[str, Any], name: str, method: Callable) -> None:
         namespace[name] = ft.update_wrapper(method, getattr(TextHandler, name))
 
-    def _generate_namespace(self, command: _MyViewCommand) -> tuple[dict, type[InputHandler]]:
+    def _generate_namespace(self, command: Any) -> tuple[dict, type[InputHandler]]:
         namespace: dict = dict(command=command)
         _setup = ft.partial(self._setup_method, namespace)
 
@@ -137,7 +137,7 @@ class StaticPrompt(pyd.BaseModel, arbitrary_types_allowed=True):
         # IV. Setup the next input
         if _successor := self.successor:
             if isinstance(_successor, StaticPrompt):
-                fn = lambda *_, **__: _successor.generate_input_handler(command, self._args)()
+                fn = lambda *_, **__: _successor.generate_input_handler(command, self.raw_args)()
             elif isinstance(_successor, InputHandler):
                 fn = lambda *_, **__: _successor
             elif isinstance(_successor, type):
@@ -159,7 +159,7 @@ class StaticPrompt(pyd.BaseModel, arbitrary_types_allowed=True):
     # ------------------
     # `*` Public Methods
     # ------------------
-    def generate_input_handler(self, command: _MyViewCommand, raw_args: dict) -> type[InputHandler]:
+    def generate_input_handler(self, command: Any, raw_args: dict) -> type[InputHandler]:
         """Programatically define a new subclass of TextInputHandler based on this specification."""
         self.raw_args = raw_args
         namespace, base = self._generate_namespace(command)

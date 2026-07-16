@@ -38,7 +38,7 @@ class TestConstruction:
 
     def test_requires_generator(self):
         with pyt.raises(pyd.ValidationError):
-            DynamicPrompt(keyword='pick')
+            DynamicPrompt.model_validate({'keyword': 'pick'})
 
     def test_accepts_callable_generator(self):
         dp = DynamicPrompt(keyword='pick', generator=lambda: ['a'])

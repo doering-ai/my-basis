@@ -3,7 +3,7 @@
 ############
 ### STANDARD
 from __future__ import annotations
-from typing import Any
+from typing import Any, cast
 import asyncio
 import logging
 import time
@@ -23,6 +23,8 @@ from myBasis import (
     Comment,
 )
 from myBasis.plugins._MyBase import Meta, _CustomNamespace, LineComment, Indent
+
+_Edit = cast('Any', sb.Edit)
 
 
 ############
@@ -63,7 +65,7 @@ class _TestViewCmd(_MyViewCommand[_SimpleArgs]):
         """Neither the name nor a leading view/edit/window param -> never autobound."""
         return f'{x}{y}'
 
-    def is_enabled(self, view: sb.View) -> bool:
+    def is_enabled(self, **kwargs: Any) -> bool:
         return True
 
 
@@ -306,7 +308,7 @@ class TestMetaDoBindMethod:
         autobinds: `*args` carries no meaningful name, so it is skipped when scanning for
         the first binding-relevant parameter, and `view` -- the next one -- qualifies."""
 
-        def process(self, *args: Any, view: sb.View = None) -> None:
+        def process(self, *args: Any, view: sb.View | None = None) -> None:
             pass
 
         assert Meta.do_bind_method(process, 'process', True, {'run', 'description'})
@@ -356,7 +358,7 @@ class TestMetaCacheArgs:
         assert cmd.window is window
 
     def test_caches_edit(self, make_view: sb.View):
-        edit = sb.Edit(make_view)
+        edit = _Edit(make_view)
         cmd = _TestViewCmd.__new__(_TestViewCmd)
         cmd._edit = None
         Meta.cache_args(cmd, (edit,), {})
@@ -817,7 +819,7 @@ class TestAutobindEndToEnd:
     def test_process_edit_caches_edit(self, make_view: sb.View):
         """The edit handle is cached by the wrapper alone — the body never touches `self.edit`."""
         cmd = _AutobindViewCmd(make_view)
-        edit = sb.Edit(make_view)
+        edit = _Edit(make_view)
         assert not cmd.has_edit()
         cmd.process_edit(edit)
         assert cmd.captured_edit is edit
@@ -827,7 +829,7 @@ class TestAutobindEndToEnd:
     def test_unlisted_method_is_not_wrapped(self, make_view: sb.View):
         """Methods outside the explicit autobind list must stay unwrapped."""
         cmd = _AutobindViewCmd(make_view)
-        edit = sb.Edit(make_view)
+        edit = _Edit(make_view)
         cmd.unlisted_edit(edit)
         assert cmd.captured_edit is edit
         assert not cmd.has_edit(), 'unlisted methods must not cache their arguments'
@@ -837,7 +839,7 @@ class TestAutobindEndToEnd:
         still bound when its leading parameter is named `edit` — signature-based implicit
         binding, in addition to base-class method names."""
         cmd = _TestViewCmd(make_view)
-        edit = sb.Edit(make_view)
+        edit = _Edit(make_view)
         assert not cmd.has_edit()
         cmd.process_edit(edit)
         assert cmd.captured_edit is edit, 'the method body must still receive the edit token'
@@ -880,7 +882,7 @@ class TestAutobindEndToEnd:
     def test_run_caches_edit_positionally(self, make_view: sb.View):
         """`run` itself caches sublime handles from its positional args."""
         cmd = _TestViewCmd(make_view)
-        edit = sb.Edit(make_view)
+        edit = _Edit(make_view)
         cmd.run(edit)
         assert cmd.has_edit()
         assert cmd.edit is edit
@@ -892,7 +894,7 @@ class TestMyBaseOperationalSurface:
     TEXT = 'alpha\n  beta\n  gamma\ndelta'
 
     def _loaded_cmd(self, view: sb.View, text: str | None = None) -> _TestViewCmd:
-        view.insert(sb.Edit(view), 0, self.TEXT if text is None else text)
+        view.insert(_Edit(view), 0, self.TEXT if text is None else text)
         return _TestViewCmd(view)
 
     # ---- error handling ----
@@ -941,19 +943,19 @@ class TestMyBaseOperationalSurface:
 
     def test_write_inserts_at_empty_region(self, make_view: sb.View):
         cmd = self._loaded_cmd(make_view, 'ad')
-        cmd.edit = sb.Edit(make_view)
+        cmd.edit = _Edit(make_view)
         cmd.write(1, 'bc')
         assert cmd.read() == 'abcd'
 
     def test_write_replaces_region(self, make_view: sb.View):
         cmd = self._loaded_cmd(make_view, 'aXXd')
-        cmd.edit = sb.Edit(make_view)
+        cmd.edit = _Edit(make_view)
         cmd.write(sb.Region(1, 3), 'bc')
         assert cmd.read() == 'abcd'
 
     def test_write_accepts_tuple(self, make_view: sb.View):
         cmd = self._loaded_cmd(make_view, 'aXd')
-        cmd.edit = sb.Edit(make_view)
+        cmd.edit = _Edit(make_view)
         cmd.write((1, 2), 'b')
         assert cmd.read() == 'abd'
 
@@ -1063,7 +1065,7 @@ class TestMyBaseOperationalSurface:
     # ---- context & settings ----
     def test_with_context_edit_restores(self, make_view: sb.View):
         cmd = _TestViewCmd(make_view)
-        edit = sb.Edit(make_view)
+        edit = _Edit(make_view)
         with cmd.with_context(edit=edit):
             assert cmd.edit is edit
         assert not cmd.has_edit()

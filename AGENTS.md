@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 `mySublimeBasis` is a shared library for developing SublimeText 4 plugins.
 It provides typed base classes, infrastructure utilities, and mock modules so that plugin code can be imported and used outside the live SublimeText runtime.
 
-It is the foundational library in a small ecosystem of ST packages: its mock layer (`IS_LIVE`) is the key innovation that [`myTest`](https://gitlab.com/doering-ai/sublime/test) builds on to provide pytest integration for ST plugin development.
+It is the foundational library in a small ecosystem of ST packages: its mock layer (`IS_LIVE`) is the key innovation that [`myTest`](https://gitlab.com/doering-ai/sublime/pytest) builds on to provide pytest integration for ST plugin development.
 Several other packages depend on `myBasis` at runtime and/or `myTest` for testing.
 See [`SUBLIME_DEV_REPORT.md`](../syntaxes/SUBLIME_DEV_REPORT.md) for a full analysis of the ecosystem, the broader ST plugin development landscape, and Package Control supply-chain security.
 

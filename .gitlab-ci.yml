@@ -30,7 +30,7 @@ variables:
   PACKAGE: myBasis
   # basis has no Containerfile of its own; jobs run inside the shared Sublime test-harness
   # image built and pushed by the sibling `test` project (ST runtime + task + uv).
-  MAIN_POD: registry.gitlab.com/doering-ai/sublime/mytest:latest
+  MAIN_POD: registry.gitlab.com/doering-ai/sublime/pytest:latest
   SECRET_DETECTION_ENABLED: 'true'
   UV_CACHE_DIR: .uv-cache
   USER: my

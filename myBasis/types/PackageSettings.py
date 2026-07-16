@@ -3,10 +3,11 @@
 ############
 ### STANDARD
 from __future__ import annotations
-from typing import ClassVar, Generator
+from typing import ClassVar, Generator, cast
 from typing_extensions import Self
 import contextlib as ctx
 import functools as ft
+import json
 
 ### EXTERNAL
 import pydantic as pyd
@@ -21,8 +22,8 @@ from ..infra.utils import ut
 ### DATA ###
 ############
 _REGISTRY = dict()
-#: PKG names already claimed by a subclass definition (instances register in `_REGISTRY`).
-_DEFINED: set[str] = set()
+#: PKG names mapped to the defining module/qualified name for safe reload detection.
+_DEFINED: dict[str, tuple[str, str]] = {}
 
 
 ############
@@ -42,12 +43,11 @@ class PackageSettings(pyd.BaseModel):
     def __init_subclass__(cls, *args, **kwargs) -> None:
         if not (pkg := getattr(cls, 'PKG', '')):
             raise TypeError(f'Settings model "{cls.__name__}" must define a `PKG` class variable.')
-        if pkg in _DEFINED:
-            # Allow re-registration when the module is reloaded (e.g. by
-            # AutomaticPackageReloader). The new class definition replaces
-            # the old one silently.
-            _DEFINED.discard(pkg)
-        _DEFINED.add(pkg)
+        identity = (cls.__module__, cls.__qualname__)
+        if (existing := _DEFINED.get(pkg)) is not None and existing != identity:
+            raise TypeError(f'Settings package {pkg!r} is already registered by {existing!r}.')
+        # Reloading the same module-level class preserves its identity and is safe.
+        _DEFINED[pkg] = identity
 
     @classmethod
     def new(cls, settings: sb.Settings | None = None) -> Self:
@@ -57,10 +57,10 @@ class PackageSettings(pyd.BaseModel):
                 settings = sb.load_settings(f'{cls.PKG}.sublime-settings')
             _get = ft.partial(cls._get, settings)
             data = {key: val for key in cls.normkeys() if (val := _get(key))}
-            inst = cls(**data)
+            inst = cls.model_validate(data)
             inst._root = settings
             cls.REGISTRY[cls.PKG] = inst
-        return cls.REGISTRY[cls.PKG]
+        return cast('Self', cls.REGISTRY[cls.PKG])
 
     @classmethod
     def _get(cls, settings: sb.Settings, key: str) -> object | None:
@@ -133,8 +133,8 @@ class PackageSettings(pyd.BaseModel):
     @classmethod
     def write_schema(cls) -> dict:
         """Create a JSON schema for this settings class and save it to the local package."""
-        text = cls.model_json_schema()
-        # text = ut.pretty_json(schema)
+        schema = cls.model_json_schema()
         file = PATHS.pkgs / cls.PKG / 'settings-schema.json'
         assert file.parent.exists(), f'Package not found at {PATHS.pkgs}.'
-        file.write_text(text)
+        file.write_text(json.dumps(schema, indent=2) + '\n')
+        return schema

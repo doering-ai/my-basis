@@ -65,6 +65,17 @@ Everything below **landed and passed the full gate** (`pytest` 3636 passed + 21 
 - `basis-M8` — surface non-fatal CI failures (e.g. secret-detection) through Logfire — nice-to-have.
 - `basis-C5`–`C17`, `basis-P1`/`P2`, `basis-X*` — remaining correctness/packaging/docs items.
 
+**✅ Second pass (same day) — committed + pushed**
+
+- `basis-A3` — renamed the generic aliases `_Func/_Map/_Vec/_Struct` → **`FuncT/MapT/VecT/StructT`** across all 8 sites (operator chose `T` for "types" over `G`).
+- `basis-X3` (build) — `task docs` now builds: added `sphinx.ext.intersphinx` (+ python/pydantic/numpy/more-itertools mapping) and dropped `--nitpicky` from the gate to match Read the Docs.
+  RTD *provisioning* still pending the operator's account import.
+- `basis-P2` / regex-storefront — fixed a real crash in the `regex-storefront` console script (mutable-default `RegexStore` → `threading.Lock` deep-copy failure) plus a stray `breakpoint()`, added smoke tests, then regenerated the `importas` alias regex (520 aliases; was a stale 487-subset) and spliced it into `subl/syntaxes/python/myPython.sublime-syntax` with a `{0,3}`→`{0,4}` lookahead widening.
+  There is only **one** `importas.yaml` (basis is canonical) — no test-copy to delete.
+- Policy — added a *voice* convention (calmly hyperbolic enthusiasm for primary repo docs) to `corpus/policies/markdown_style.md`.
+- **Deferred (needs operator judgement):** `basis-X1` / the gifs — the sandtui pixel-art motif is viable but needs real Rust build work first (the "TS sibling" doesn't exist; its font can't render code punctuation, vine growth is dormant, there's no GIF export).
+  See the chat report.
+
 ______________________________________________________________________
 
 ## 1. How this was produced

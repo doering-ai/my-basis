@@ -44,6 +44,7 @@ extensions = [
     'sphinx.ext.autodoc',
     # 'sphinx.ext.apidoc',
     'sphinx.ext.napoleon',
+    'sphinx.ext.intersphinx',
     # 'sphinx.ext.viewcode',
     'myst_parser',
     # 'sphinx_last_updated_by_git',  # https://github.com/mgeier/sphinx-last-updated-by-git
@@ -72,6 +73,19 @@ exclude_patterns = [
 suppress_warnings = [
     'myst.strikethrough',
 ]
+
+# ------------
+# Intersphinx
+# ------------
+# Resolve cross-references to stdlib/third-party types in autodoc signatures (pathlib.Path,
+# datetime, collections.abc, pydantic, numpy, ...). Without these the nitpicky (`-n -W`) build
+# fails: every external type in a docstring signature becomes an unresolved "target not found".
+intersphinx_mapping = {
+    'python': ('https://docs.python.org/3', None),
+    'pydantic': ('https://docs.pydantic.dev/latest', None),
+    'numpy': ('https://numpy.org/doc/stable', None),
+    'more-itertools': ('https://more-itertools.readthedocs.io/en/stable', None),
+}
 
 # ------
 # Python

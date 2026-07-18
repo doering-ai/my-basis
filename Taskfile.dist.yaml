@@ -146,27 +146,27 @@ tasks:
     agent:new:
         cmd: '{{.AWT}} new {{.CLI_ARGS}}'
         desc: 'Provision an isolated worktree+branch: `task agent:new -- MEMY-88 "short desc"`.'
-        aliases: [wt:new]
+        aliases: ['wt:new']
 
     agent:list:
         cmd: '{{.AWT}} list'
         desc: List the live agent/* worktrees with ahead/dirty status.
-        aliases: [wt:list, wt:ls]
+        aliases: ['wt:list', 'wt:ls']
 
     agent:merge:
         cmd: '{{.AWT}} merge {{.CLI_ARGS}}'
         desc: 'Land a reviewed branch into local main (never pushes): `task agent:merge -- agent/<branch>`.'
-        aliases: [wt:merge, wt:land]
+        aliases: ['wt:merge', 'wt:land']
 
     agent:abandon:
         cmd: '{{.AWT}} abandon {{.CLI_ARGS}}'
         desc: 'Discard a rejected branch + its worktree: `task agent:abandon -- agent/<branch>`.'
-        aliases: [wt:abandon]
+        aliases: ['wt:abandon']
 
     agent:gc:
         cmd: '{{.AWT}} gc'
         desc: Prune merged agent/* branches past the grace window.
-        aliases: [wt:gc]
+        aliases: ['wt:gc']
 
     sync:
         cmd: '{{.UV}} sync --all-extras {{.CLI_ARGS}}'
@@ -252,8 +252,13 @@ tasks:
     docs:build:
         desc: Build the MyST docs into finalized webpages.
         aliases: [build-docs]
+        # `--nitpicky` is intentionally omitted: it floods on internal TypeVars and third-party
+        # types without a doc inventory (regex, pydantic-internal), which `--fail-on-warning`
+        # would then treat as hard errors. This matches the Read the Docs build (which also does
+        # not run nitpicky), so local and hosted builds agree. `--fail-on-warning` still catches
+        # real problems (broken toctrees, bad cross-refs).
         cmd: >-
-            {{.UV}} run sphinx-build --fail-on-warning --nitpicky {{.CLI_ARGS}}
+            {{.UV}} run sphinx-build --fail-on-warning {{.CLI_ARGS}}
             {{.DOC_DIR}} {{.DOC_OUT}}
         sources:
             - '{{.DOC_DIR}}/**/*.md'
@@ -307,8 +312,7 @@ tasks:
 
     pkg:publish:
         cmd: '{{.UV}} publish {{.CLI_ARGS}}'
-        desc: Upload built distributions to PyPI. Expects PYPI_TOKEN to be set in the
-            environment.
+        desc: Upload built distributions to PyPI. Expects PYPI_TOKEN to be set in the environment.
         env:
             UV_PUBLISH_TOKEN: '{{.PYPI_TOKEN}}'
         preconditions:

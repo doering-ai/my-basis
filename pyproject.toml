@@ -31,19 +31,16 @@ urls.Documentation = "https://my-basis.readthedocs.io"
 ### II. DEPENDENCIES ###
 ########################
 dependencies = [
-  "dotenv>=0.9.9",
-  "identify>=2.6.19",
   "jinja2>=3.1.6",
   "mdformat>=0.7.22",
   "more-itertools>=10.7.0",
   "numpy>=2.4.1",
   "pydantic>=2.11.7",
   "python-dateutil>=2.9.0.post0",
+  "python-dotenv>=1.0.1",
   "regex>=2024.4.28",
   "srsly>=2.5.1",
   "tomli-w>=1.2.0",
-  "toolz>=1.1.0",
-  "tqdm>=4.67.1",
   "unidecode>=1.4.0",
 ]
 
@@ -103,9 +100,9 @@ docs = [
   "sphinx-notfound-page>=1.1.0",       # Custom 404 page for missing docs
 ]
 
-# [tool.uv]
+[tool.uv]
 # This 10-day buffer is a critical cybersafety measure; do not remove without an alternative!
-# exclude-newer = "10 days"
+exclude-newer = "10 days"
 
 # [tool.uv.exclude-newer-package]
 # Put any dependencies that you're working on/with in this list to exempt them from the buffer
@@ -156,11 +153,6 @@ ignore_errors = true
 # ------
 [tool.pyrefly]
 project-includes = ["my/**/*.py*", "tests/**/*.py*"]
-# Idx/IdxSpec are an unintegrated, half-finished subpackage: not exported from
-# `my/types/__init__.py`, and they import a pre-rename package name (`myBasis`) and a
-# `.enums` module that doesn't exist. Their fate (finish or delete) is basis-08's call, not
-# this task's -- exclude them rather than gate on dead imports.
-project-excludes = ["my/types/Idx.py", "my/types/IdxSpec.py"]
 min-severity = 'warn'
 python-version = '3.13'
 check-unannotated-defs = true
@@ -187,9 +179,7 @@ unannotated-attribute = 'error'
 # - missing-attribute: dynamically-typed 3rd-party surfaces (googleapiclient's `Resource`
 #   built at runtime, pyratatui's still-incomplete stubs, `importlib.resources.abc.Traversable`
 #   missing `exists()` in typeshed) plus Flag/Enum multi-class dispatch in MyEnum; also
-#   `tests/types/test_Predicate.py`'s `pred.serialize(...)` xfail spec (basis-06), restored on
-#   purpose for a method that doesn't exist yet -- self-clears once `Predicate.serialize` lands;
-#   also `tests/utils/test_MetricUtils.py`'s `ut.measure_context` (MEMY-165, record-only): `my/
+#   `tests/utils/test_MetricUtils.py`'s `ut.measure_context` (MEMY-165, record-only): `my/
 #   __init__.py` re-exports `Utils` as the package's `utils` attribute, shadowing the actual
 #   `my.utils` submodule at that name, so pyrefly's static view of `import my.utils as ut`
 #   resolves to the `Utils` class (no `measure_context`) while the runtime `ut` is genuinely the
@@ -331,10 +321,6 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 'test_*.py' = ['D']
 '*_test.py' = ['D']
-# Deprecation shims re-export their target subpackage's `__all__` by reference
-# (`[*_typing.__all__]`), which ruff can't statically prove is all-strings.
-'my/text/__init__.py' = ['PLE0604']
-'my/type/__init__.py' = ['PLE0604']
 
 [tool.ruff.lint.flake8-pytest-style]
 parametrize-names-type = "csv"

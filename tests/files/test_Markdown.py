@@ -703,6 +703,29 @@ class TestMarkdown:
         nodes = cls.parse('')
         assert nodes == []
 
+    def test_parse__code_fence_hash_not_header(self):
+        # Regression: a `#` comment inside a fenced code block must stay prose, not be mistaken
+        # for a header (which fabricated a phantom node and misnested the sections after it).
+        text = (
+            '# Title\n\nIntro.\n\n'
+            '```python\n# this is a comment\ndef f():\n    pass\n```\n\n'
+            '## Section Two\n\nMore.\n'
+        )
+        nodes = cls.parse(text)
+        assert len(nodes) == 1
+        assert nodes[0].title == 'Title'
+        # `## Section Two` is a real child; the fenced `# comment` is not a node at all.
+        assert [child.title for child in nodes[0].nodes] == ['Section Two']
+        # The fence (including its `#` comment) is preserved verbatim in the title node's prose.
+        assert '# this is a comment' in str(nodes[0].prose)
+
+    def test_parse__tilde_fence_hash_not_header(self):
+        text = '# T\n\n~~~\n### not a header\n~~~\n\n## Real\n\nx\n'
+        nodes = cls.parse(text)
+        assert len(nodes) == 1
+        assert [child.title for child in nodes[0].nodes] == ['Real']
+        assert '### not a header' in str(nodes[0].prose)
+
     def test_from_yaml(self):
         node = cls.new(
             title='Config',

@@ -23,6 +23,16 @@ from ..regex import RegexStore
 
 
 ############
+### DATA ###
+############
+#: Placeholder substituted for `#` at the start of fenced-code-block lines during header
+#: scanning, so a `# comment` inside a ``` fence isn't mistaken for a real header. Chosen as a
+#: character that never appears in real markdown and can't match the `^#{1,6}` header pattern;
+#: callers restore it to `#` on the text they keep. See `Markdown._mask_fences`.
+_FENCE_SENTINEL = '\x00'
+
+
+############
 ### BODY ###
 ############
 class Markdown(pyd.BaseModel):
@@ -616,12 +626,48 @@ class Markdown(pyd.BaseModel):
     # -------------
     # `*1` Standard
     # -------------
+    @staticmethod
+    def _mask_fences(text: str) -> str:
+        """Neutralize `#` at the start of lines inside fenced code blocks.
+
+        The header scanner keys on `^#{1,6} +`, which otherwise mistakes a `# comment` line
+        inside a ```` ``` ```` / `~~~` code fence for a real header -- fabricating phantom nodes
+        and misnesting the sections that follow. This replaces each leading `#` run on a fenced
+        line with an equal-length run of `_FENCE_SENTINEL`, preserving every character offset so
+        regex match spans stay valid. Callers restore the sentinel to `#` on the text they keep.
+
+        Args:
+            text: The raw markdown source to mask.
+        Returns:
+            The source with fenced-block leading hashes replaced by the sentinel.
+        """
+        if _FENCE_SENTINEL in text:
+            return text  # pathological input already contains the sentinel; skip masking
+        out: list[str] = []
+        fence = ''  # the opening fence char (`` ` `` or `~`) while inside a block, else empty
+        for line in text.splitlines(keepends=True):
+            marker = line.lstrip()[:3]
+            is_fence_line = marker in ('```', '~~~')
+            if not fence:
+                if is_fence_line:
+                    fence = marker[0]
+                out.append(line)
+            elif is_fence_line and marker[0] == fence:
+                fence = ''  # a matching closing fence
+                out.append(line)
+            else:  # a content line inside an open fence: mask any column-0 `#` run
+                hashes = len(line) - len(line.lstrip('#'))
+                out.append(_FENCE_SENTINEL * hashes + line[hashes:] if hashes else line)
+        return ''.join(out)
+
     @classmethod
     def parse(cls, text: str | Buffer, base_level: int = 0) -> list[Self]:
         """Parse markdown text into a hierarchical tree structure.
 
         Recognizes headers, tags, indices, and prose to build nested Markdown nodes.
-        Automatically handles "Notes" sections by parsing them as YAML.
+        Automatically handles "Notes" sections by parsing them as YAML. Lines inside fenced code
+        blocks are ignored by the header scanner, so a `#` comment in a code fence is kept as
+        prose rather than misread as a header.
 
         Args:
             text: Markdown text or Buffer to parse.
@@ -629,17 +675,18 @@ class Markdown(pyd.BaseModel):
         Returns:
             List of top-level Markdown nodes with nested children.
         """
+        masked = cls._mask_fences(str(text))
         nodes = deque(
             cls.new(
                 # Data
-                title=match.at('title'),
-                prose=match.at('prose'),
+                title=match.at('title').replace(_FENCE_SENTINEL, '#'),
+                prose=match.at('prose').replace(_FENCE_SENTINEL, '#'),
                 # Metadata
                 level=len(match.at('marks')),
                 tags=match['tag'],
                 idx=match.at('idx'),
             )
-            for match in Markdown.RGXS.finditer('node', text)
+            for match in Markdown.RGXS.finditer('node', masked)
         )
         return cls._stack_nodes(nodes, level=base_level)
 
@@ -649,7 +696,10 @@ class Markdown(pyd.BaseModel):
 
     def reparse_prose(self) -> None:
         """Identify and parse newly-created header nodes embedded in this node's raw prose."""
-        if first_node := Markdown.RGXS.search('node', self.prose):
+        # Search the fence-masked prose so a `#` inside a code fence can't be taken for a header;
+        # offsets are preserved, so the match start still indexes into the original prose.
+        masked = self._mask_fences(str(self.prose))
+        if first_node := Markdown.RGXS.search('node', masked):
             node_text = self.prose[first_node.start :]
             self.prose.drop((first_node.start, len(self.prose)))
             self.add_node(type(self).parse(node_text, base_level=1), left=True)

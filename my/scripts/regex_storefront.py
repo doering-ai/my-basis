@@ -39,7 +39,7 @@ class Storefront(pyd.BaseModel):
 
     _ACTIONS: ClassVar[dict[str, Action]] = _ACTIONS
 
-    store: RegexStore = RegexStore.new()
+    store: RegexStore = pyd.Field(default_factory=RegexStore.new)
 
     actions: list[str] = []
     target: Path | None = None
@@ -95,7 +95,6 @@ class Storefront(pyd.BaseModel):
         assert len(branches) > 0, f'Invalid source file {self.source}.'
         print(f'Loaded {len(branches)} branches from {self.source.name}')
         self.store['storefront'] = ('<|>', branches)
-        breakpoint()
         _ = self.store.load
 
         new_expr = str(self.store.patterns['storefront'].pattern)

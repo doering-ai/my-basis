@@ -17,8 +17,8 @@ import more_itertools as mi
 
 ### INTERNAL
 from ..infra.types import (
-    _Map,
-    _Vec,
+    MapT,
+    VecT,
     Stream,
     String,
     Scalar,
@@ -253,10 +253,10 @@ class TypeCheck[T0, T1](_TypingBase, pyd.BaseModel):
 
     @overload
     @classmethod
-    def check_all[V](cls, data: _Map, tvar: TypeArg[V]) -> TypeIs[_Map[Any, V]]: ...
+    def check_all[V](cls, data: MapT, tvar: TypeArg[V]) -> TypeIs[MapT[Any, V]]: ...
     @overload
     @classmethod
-    def check_all[V](cls, data: _Vec, tvar: TypeArg[V]) -> TypeIs[_Vec[V]]: ...
+    def check_all[V](cls, data: VecT, tvar: TypeArg[V]) -> TypeIs[VecT[V]]: ...
     @overload
     @classmethod
     def check_all[V](cls, data: Iterable, tvar: TypeArg[V]) -> TypeIs[Iterable[V]]: ...

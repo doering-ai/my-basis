@@ -33,7 +33,7 @@ from ..infra.types import (
     Scalars,
     Atoms,
     Atom,
-    _Vec,
+    VecT,
     Vec,
     Iter,
     Map,
@@ -1087,7 +1087,7 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
     def try_method[T](
         self,
         obj: object,
-        methods: str | _Vec[str],
+        methods: str | VecT[str],
         *args,
         _tvar: type[T],
         _strict: Literal[True],
@@ -1098,7 +1098,7 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
     def try_method(
         self,
         obj: object,
-        methods: str | _Vec[str],
+        methods: str | VecT[str],
         *args,
         _tvar: None = None,
         _strict: Literal[True],
@@ -1109,7 +1109,7 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
     def try_method[T](
         self,
         obj: object,
-        methods: str | _Vec[str],
+        methods: str | VecT[str],
         *args,
         _tvar: type[T],
         **kwargs,
@@ -1117,13 +1117,13 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
 
     @overload
     def try_method(
-        self, obj: object, methods: str | _Vec[str], *args, **kwargs
+        self, obj: object, methods: str | VecT[str], *args, **kwargs
     ) -> object | None: ...
 
     def try_method[T](
         self,
         obj: object,
-        methods: str | _Vec[str],
+        methods: str | VecT[str],
         *args,
         _tvar: type[T] | None = None,
         _strict: bool = False,

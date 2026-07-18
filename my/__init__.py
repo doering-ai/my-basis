@@ -35,10 +35,10 @@ Note:
 """
 
 from .infra.types import (
-    _Func,
-    _Map,
-    _Vec,
-    _Struct,
+    FuncT,
+    MapT,
+    VecT,
+    StructT,
     Atom,
     Atoms,
     Stream,
@@ -75,6 +75,8 @@ from .utils import (
     semantic_utils,
     SyntaxUtils,
     syntax_utils,
+    MetricUtils,
+    metric_utils,
 )
 from .caches import Cache, NestedCache, PickleCache, FileCache
 from .typing import (
@@ -119,10 +121,10 @@ from .files import Markdown
 
 __all__ = [
     # /infra/
-    '_Func',
-    '_Map',
-    '_Vec',
-    '_Struct',
+    'FuncT',
+    'MapT',
+    'VecT',
+    'StructT',
     'Atom',
     'Atoms',
     'Stream',
@@ -147,6 +149,8 @@ __all__ = [
     # /utils/
     'iter_utils',
     'IterUtils',
+    'metric_utils',
+    'MetricUtils',
     'semantic_utils',
     'SemanticUtils',
     'syntax_utils',

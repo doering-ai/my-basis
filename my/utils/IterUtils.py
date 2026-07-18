@@ -30,11 +30,11 @@ import more_itertools as mi
 from ..infra.types import (
     Vec,
     Map,
-    _Map,
+    MapT,
     Model,
     String,
     Struct,
-    _Struct,
+    StructT,
 )
 from ._UtilsBase import _UtilsBase
 
@@ -69,7 +69,7 @@ class IterUtils(_UtilsBase):
     @classmethod
     def map_items[K: Hashable = Hashable, V = Any](
         cls,
-        value: _Map[K, V],
+        value: MapT[K, V],
     ) -> list[tuple[K, V]]:
         """Extract key-value pairs from mapping-like or tuple sequence objects.
 
@@ -174,7 +174,7 @@ class IterUtils(_UtilsBase):
     @classmethod
     def find_key[K: Hashable, V](
         cls,
-        items: _Map[K, V],
+        items: MapT[K, V],
         predicate: Callable[[V], bool] | V = bool,
         default: K | None = None,
     ) -> K | None:
@@ -262,7 +262,7 @@ class IterUtils(_UtilsBase):
     @classmethod
     def map_condense[K: Hashable, V](
         cls,
-        items: _Map[K, V],
+        items: MapT[K, V],
         pred: Pred[V] = bool,
     ) -> Iterator[tuple[K, V]]:
         """Filter a mapping by a predicate function on values.
@@ -303,7 +303,7 @@ class IterUtils(_UtilsBase):
 
     @overload
     @classmethod
-    def get_any[K: Hashable, V](cls, data: _Map[K, V], *args: Pred[K]) -> dict[K, V]: ...
+    def get_any[K: Hashable, V](cls, data: MapT[K, V], *args: Pred[K]) -> dict[K, V]: ...
     @overload
     @classmethod
     def get_any[K: Hashable, V](cls, data: Model, *args: Pred[K]) -> dict[str, Any]: ...
@@ -332,12 +332,12 @@ class IterUtils(_UtilsBase):
     @overload
     @classmethod
     def get_first[K, V](
-        cls, data: _Map[K, V], *args: K | Callable[[K], bool], default: V, unique: bool = False
+        cls, data: MapT[K, V], *args: K | Callable[[K], bool], default: V, unique: bool = False
     ) -> V: ...
     @overload
     @classmethod
     def get_first[K, V](
-        cls, data: _Map[K, V], *args: K | Callable[[K], bool], unique: bool = False
+        cls, data: MapT[K, V], *args: K | Callable[[K], bool], unique: bool = False
     ) -> V | None: ...
     @overload
     @classmethod
@@ -404,10 +404,10 @@ class IterUtils(_UtilsBase):
     def normalize(cls, data: String) -> str: ...
     @overload
     @classmethod
-    def normalize[K: Hashable, V](cls, data: _Map[K, V]) -> dict[K, V]: ...
+    def normalize[K: Hashable, V](cls, data: MapT[K, V]) -> dict[K, V]: ...
     @overload
     @classmethod
-    def normalize[V](cls, data: Iterable[V] | _Struct[V]) -> list[V]: ...
+    def normalize[V](cls, data: Iterable[V] | StructT[V]) -> list[V]: ...
     @overload
     @classmethod
     def normalize[V](cls, data: V) -> V: ...
@@ -451,7 +451,7 @@ class IterUtils(_UtilsBase):
 
     @classmethod
     def safe[K: Hashable = str, V = str](
-        cls, container: _Map[K, V | Map | None], *keys: K
+        cls, container: MapT[K, V | Map | None], *keys: K
     ) -> V | None:
         """Safely access nested map values with multiple keys.
 

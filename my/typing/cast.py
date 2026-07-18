@@ -51,8 +51,8 @@ import dateutil.parser
 from ..infra.types import (
     TYPESET,
     _Iter,
-    _Vec,
-    _Map,
+    VecT,
+    MapT,
     Stream,
     String,
     Scalar,
@@ -321,10 +321,10 @@ class TypeCast(_TypingBase):
     def normalize(cls, data: String) -> str: ...
     @overload
     @classmethod
-    def normalize[V](cls, data: _Vec[V] | _Iter[V]) -> list[V]: ...
+    def normalize[V](cls, data: VecT[V] | _Iter[V]) -> list[V]: ...
     @overload
     @classmethod
-    def normalize[K: Hashable, V](cls, data: _Map[K, V]) -> dict[K, V]: ...
+    def normalize[K: Hashable, V](cls, data: MapT[K, V]) -> dict[K, V]: ...
     @overload
     @classmethod
     def normalize[V](cls, data: V) -> V: ...

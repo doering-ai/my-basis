@@ -51,10 +51,10 @@ Atom = String | Scalar | Time | Enum
 # ---- Structs ----
 
 Vec = list | tuple | Set | deque | array | range
-type _Vec[V] = list[V] | tuple[V, ...] | Set[V] | deque[V] | array | range
+type VecT[V] = list[V] | tuple[V, ...] | Set[V] | deque[V] | array | range
 
 Map = Mapping[Hashable, Any] | Iterable[tuple[Hashable, Any]] | ItemsView
-type _Map[K: Hashable, V] = Mapping[K, V] | Iterable[tuple[K, V]] | ItemsView[K, V]
+type MapT[K: Hashable, V] = Mapping[K, V] | Iterable[tuple[K, V]] | ItemsView[K, V]
 
 Dataclass = object
 Model = pyd.BaseModel | Dataclass
@@ -64,11 +64,11 @@ Iter = Iterable | AsyncIterable
 type _Iter[T] = Iterable[T] | AsyncIterable[T]
 
 Struct = Vec | Map | Model
-type _Struct[V, K: Hashable = Any] = _Vec[V] | _Map[K, V] | _Iter[V] | Model
+type StructT[V, K: Hashable = Any] = VecT[V] | MapT[K, V] | _Iter[V] | Model
 
 # ---- Misc ----
 Func = FunctionType | BuiltinFunctionType
-type _Func[**PSpec, R = Any] = Callable[PSpec, R]
+type FuncT[**PSpec, R = Any] = Callable[PSpec, R]
 
 Object = Atom | Struct | Func
 

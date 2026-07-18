@@ -16,7 +16,7 @@ from copy import deepcopy
 import pydantic as pyd
 
 ### INTERNAL
-from ..infra.types import Vec, Map, Maps, Atom, Struct, _Map, _Vec
+from ..infra.types import Vec, Map, Maps, Atom, Struct, MapT, VecT
 from ..utils import ut
 from ..typing import Typist, MyType, ty
 
@@ -122,7 +122,7 @@ class Predicate(pyd.BaseModel):
 
     @classmethod
     def _abbreviate(
-        cls, data: _Map[str, list[str] | dict]
+        cls, data: MapT[str, list[str] | dict]
     ) -> dict[str, PredicateLeaf | list[PredicateLeaf] | dict]:
         """Recursively simplify one-element arrays into strings."""
         ret: dict[str, Any] = {}
@@ -395,7 +395,7 @@ class Predicate(pyd.BaseModel):
         """Remove all values from this predicate that aren't present in the other."""
         if not other:
             self.data.clear()
-        elif ty.check(other, _Vec[str]):
+        elif ty.check(other, VecT[str]):
             for key in self.keyset - set(other):
                 del self.data[key]
         else:
@@ -409,7 +409,7 @@ class Predicate(pyd.BaseModel):
         """Remove values from this predicate that are present in the other."""
         if not other:
             return self
-        elif ty.check(other, _Vec[str]):
+        elif ty.check(other, VecT[str]):
             for key in self.keyset & set(other):
                 del self.data[key]
         elif items := ty.cast(other, dict[str, list[str]]):

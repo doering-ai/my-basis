@@ -3,7 +3,6 @@
 ############
 ### STANDARD
 from collections.abc import Hashable
-import more_itertools as mi
 
 ### EXTERNAL
 import pydantic as pyd
@@ -59,6 +58,13 @@ class Cache[Key: Hashable, Value](pyd.BaseModel):
         return list(self.data.values())
 
     def prune(self, n: int) -> None:
-        """Remove the `n` oldest items from the cache."""
-        for key in mi.take(n, self.data.keys()):
-            del self.data[key]
+        """Remove the `n` oldest items from the cache (front of the insertion order).
+
+        Snapshots the keys before mutating: a live `dict.keys()` view raises if another thread
+        inserts or evicts mid-iteration, and a bare `del` raises if a key was already evicted by a
+        concurrent prune. Iterating a list snapshot and using `pop(..., None)` makes pruning safe
+        under concurrent access without a lock, since individual dict operations are atomic under
+        the GIL.
+        """
+        for key in list(self.data)[:n]:
+            self.data.pop(key, None)

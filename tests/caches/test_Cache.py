@@ -180,6 +180,42 @@ class TestCache:
         for i in range(5):
             assert f'key_{i}' not in cache
 
+    def test_prune__tolerates_already_evicted_key(self):
+        # `prune` must not raise if a key it planned to drop is gone by the time it pops it
+        # (the concurrent-eviction race). Simulate the collision deterministically: prune more
+        # than exist so the snapshot outlives the data.
+        cache = cls(maxsize=100, bucket_size=10)
+        for i in range(5):
+            cache[i] = i
+        cache.prune(10)  # n > len(cache): must simply empty it, never KeyError
+        assert len(cache) == 0
+
+    def test_prune__concurrent_hammer_never_raises(self):
+        # Regression for the lockless-cache data race: many threads inserting into a small cache
+        # drive constant pruning; pre-fix this raised `KeyError`/`RuntimeError` from
+        # `del`-while-iterating. Post-fix (snapshot + `pop(default)`) it is crash-free.
+        import threading
+
+        cache = cls(maxsize=64, bucket_size=16)
+        errors: list[BaseException] = []
+
+        def worker(base: int) -> None:
+            try:
+                for i in range(3000):
+                    cache[(base, i)] = i
+                    _ = cache[(base, i)]
+            except BaseException as exc:
+                errors.append(exc)
+
+        threads = [threading.Thread(target=worker, args=(b,)) for b in range(8)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert not errors, f'concurrent access raised: {errors[:3]}'
+        assert len(cache) <= cache.maxsize
+
     # ---------------
     # `*1` Properties
     # ---------------

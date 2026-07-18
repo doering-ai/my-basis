@@ -5,13 +5,21 @@
 from typing import Any, cast
 from collections.abc import Hashable, Iterator
 import functools as ft
-import more_itertools as mi
 import math
 
 ### EXTERNAL
 import pydantic as pyd
 
 ### INTERNAL
+
+
+############
+### DATA ###
+############
+#: Sentinel distinguishing "key absent" from a legitimately-stored falsy/None value, so
+#: concurrent-safe `pop(key, _MISSING)` eviction can count real removals without a membership
+#: pre-check (which would race with a concurrent delete).
+_MISSING: Any = object()
 
 
 ############
@@ -104,8 +112,7 @@ class NestedCache[Keys: tuple, Value](pyd.BaseModel):
 
         key, *keys = keys
         if self.depth == 1:
-            if key in self.data:
-                del self.data[key]
+            if self.data.pop(key, _MISSING) is not _MISSING:
                 self.size -= 1
                 return 1
         else:
@@ -113,7 +120,7 @@ class NestedCache[Keys: tuple, Value](pyd.BaseModel):
                 ret = self.children[key].delete(keys)
                 if ret > 0:
                     if not self.children[key].size:
-                        del self.children[key]
+                        self.children.pop(key, None)
                     self.size -= ret
                     return ret
         return 0
@@ -165,9 +172,12 @@ class NestedCache[Keys: tuple, Value](pyd.BaseModel):
         assert n > 0, 'Prune count must be positive'
         count = 0
         if self.depth == 1:
-            for key in mi.take(n, self.data.keys()):
-                del self.data[key]
-                count += 1
+            # Snapshot keys before mutating (a live `dict.keys()` view raises if another thread
+            # evicts mid-iteration) and pop with a sentinel so a key already removed by a
+            # concurrent prune is skipped rather than raising -- lockless and crash-free.
+            for key in list(self.data)[:n]:
+                if self.data.pop(key, _MISSING) is not _MISSING:
+                    count += 1
         else:
             for child in self.children.values():
                 if not child:

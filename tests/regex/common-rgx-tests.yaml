@@ -300,9 +300,13 @@ year:
     - {text: '2030', year: '2030'}
     - {text: '2040', year: '2040'}
     - {text: '2099', year: '2099'}
+    # Century pivot at 50 (operator decision): `yy > 50` -> 1900s, `yy <= 50` -> 2000s.
     - {text: "'24", year: '2024'}
-    - {text: "'99", year: '2099'}
+    - {text: "'99", year: '1999'}
     - {text: "'01", year: '2001'}
+    - {text: "'50", year: '2050'}
+    - {text: "'51", year: '1951'}
+    - {text: "'00", year: '2000'}
     - {text: '999', year: '999'}
     - {text: '500', year: '500'}
     # Negative:

@@ -75,6 +75,35 @@ Everything below **landed and passed the full gate** (`pytest` 3636 passed + 21 
 - Policy — added a *voice* convention (calmly hyperbolic enthusiasm for primary repo docs) to `corpus/policies/markdown_style.md`.
 - **Deferred (needs operator judgement):** `basis-X1` / the gifs — the sandtui pixel-art motif is viable but needs real Rust build work first (the "TS sibling" doesn't exist; its font can't render code punctuation, vine growth is dormant, there's no GIF export).
   See the chat report.
+  **(Superseded 2026-07-18: the gifs were built via a Node/`@napi-rs/canvas` pipeline in `apps/doering-ai`; two hero clips — `ty.cast` and `Markdown.parse` — are now wired into the README.)**
+
+**✅ Third pass — 2026-07-18 (C-series correctness/security core, orchestrated Sonnet worktree wave)**
+
+Six isolated worktrees (one per file-cluster), each an independent Sonnet agent that reproduced → fixed → regression-tested → ran the full suite; merged into `main` after review.
+Final gate: **3681 passed** (baseline 3639 + 42 new regression tests) · `pyrefly` 0 errors · `ruff` clean.
+
+- `basis-C1` / `basis-C2` ⭐ — **shell-injection RCEs removed** from `SystemUtils.print_in_color()` and `Command.execute()`/`execute_async()`: no more `shell=True` string interpolation; explicit argv (`create_subprocess_exec` on the async path).
+  Regression tests encode the actual `$(touch marker)` exploit.
+- `basis-C8` — SystemUtils logging: module logger (not root), `**kwargs`, materialized `map` messages.
+- `basis-C9` / `C10` / `C12` — `ty.cast`: element coercion in the scalar-wrap fallback (`['3']` → `[3]`), `Annotated[...]` unwrap, cyclic-data → `Decline` (not `RecursionError`).
+  MEMY-325 no-split preserved.
+- `basis-C6` — `Markdown` notes/frontmatter now render (were discarded outside the Jinja block under `{% extends %}`).
+- `basis-C13` / `C15` — `NestedCache` child-config propagation; atomic `PickleCache.write()` + documented pickle trust boundary.
+- `basis-C11` / `C14` / `C16` — `MyEnum.write()` empty-string; truthful `nested_replace()` tuple return; `MetricUtils.setup_metrics()` rm-crash + sub-ms drop.
+- `basis-C5` — `year` **and** the ISO-date `y` block opened through the 21st century (twin year-bomb closed); `md_url` balanced inner parens.
+- `basis-C17` — regex timeout enforced on `Filesystem`'s raw-pattern search (an 8 s hang before the fix).
+- `basis-X1` (docs subset) — README truth-fixes: `B6` (claimed "not published"; live on PyPI since 0.8.1), `B7` (wrong `list[str]` example), the refuted dep-scale figure, restored PyPI badges.
+- `basis-X2` — CHANGELOG: added Unreleased + the missing 0.8.2 entry.
+
+**🧭 Rejected / deferred with evidence (stop-and-report discipline held):**
+
+- `basis-C7`(a) — the import-time `os.environ` snapshot is **intentional design** (the suite patches `Environment._ENVIRON`, not `os.environ`; `set()` is the sanctioned mutation path).
+  Only the `set()`-cache-staleness half was a bug — fixed.
+- `basis-C5` (century pivot) — ⚠ **operator decision:** apostrophe-years always resolve `20xx` (`'99` → 2099).
+  A pivot threshold (`'99` → 1999) is a product call, not a regex bug; left as-is pending a ruling.
+
+**Remaining (Wave 2, structural — deliberately not run blind in parallel):** `basis-A1` (de-shadow `my.utils`), `basis-P1` (un-claim top-level `data`), `basis-D4`–`D6` (lazy facade).
+Plus machinery `basis-M5` (version bump at release), test hardening `basis-T1`/`T2`, docs `basis-X5`/`X6`.
 
 ______________________________________________________________________
 

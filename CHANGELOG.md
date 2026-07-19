@@ -4,6 +4,54 @@ All notable changes to `my-basis` are documented here.
 The project has no prior tagged release -- `0.2.0` is the first tag, closing out a multi-month typing/subpackage overhaul that landed while the version stayed pinned at `0.1.0`.
 Where a change is a behavior break rather than an internal fix, it's called out explicitly; mechanism and rationale live in the cited commit bodies, not repeated here.
 
+## [Unreleased]
+
+The release-readiness pass toward a confident 1.0: a cluster of reproduced security and correctness fixes (each landed with a regression test), the `py.typed` marker, and dependency/packaging cleanup.
+
+### Security
+
+- Removed a shell-injection RCE from `SystemUtils.print_in_color()` and `Command.execute()`/`execute_async()`: caller text was interpolated into a `shell=True` command string, so `$(...)`/backtick payloads executed.
+  Both now run via an explicit argv with no shell (`create_subprocess_exec` on the async path).
+- Enforced the `RegexStore` timeout on `Filesystem`'s raw-pattern search, which had bypassed the guard and could hang on a catastrophic-backtracking pattern.
+- `Markdown` header scanning is now fence-aware: a `#` comment inside a fenced code block is no longer mistaken for a header.
+- Cache pruning (`Cache`/`NestedCache`) is concurrency-safe -- it snapshots keys and `pop(..., None)`s instead of deleting while iterating.
+- Telemetry defaults deny content capture, and the shared Logfire/OpenTelemetry setup no longer leaks a privacy boundary.
+
+### Changed
+
+- **Breaking (pre-1.0):** renamed the generic type aliases `_Func`/`_Map`/`_Vec`/`_Struct` to `FuncT`/`MapT`/`VecT`/`StructT`, so no leading-underscore names appear in `__all__`.
+- `ty.cast` no longer splits scalar strings on delimiters in container casts: `cast('a,b,c', list[str])` is `['a,b,c']`, not `['a', 'b', 'c']` (explicit over implicit).
+
+### Fixed
+
+- `ty.cast` coerces the element type in the scalar-wrap fallback (`cast('3', list[int])` -> `[3]`, not `['3']`), unwraps `Annotated[...]` targets (was returning `None`), and declines cyclic data with `Decline` instead of a bare `RecursionError`.
+- `Markdown` notes/frontmatter now render instead of being silently discarded (they were emitted outside the Jinja block under `{% extends %}`).
+- `NestedCache` propagates its configured `max_size`/`bucket_size` to child caches.
+- `PickleCache.write()` is atomic (temp file + `os.replace`), with the pickle trust boundary documented.
+- `Environment.set()` clears its cache for a previously-unset key (a set-after-absent key stayed stale).
+- `MyEnum.write()` preserves empty-string member values.
+- `SyntaxUtils.nested_replace()` reports `False` when it cannot mutate a tuple (it always returned `True`).
+- `MetricUtils.setup_metrics()` no longer crashes clearing a non-empty metrics directory, and sub-millisecond durations are recorded instead of dropped.
+- `SystemUtils` logging uses a module logger (not root), accepts `**kwargs`, and materializes `map` messages to strings.
+- The `year` regex and the ISO-date `y` block are open through the 21st century (dates from 2027/2030 onward match again); `md_url` captures targets with balanced inner parens.
+- The `regex-storefront` console script no longer crashes on construction (mutable-default `RegexStore`).
+
+### Added
+
+- `my/py.typed` marker: the `Typing :: Typed` classifier is now true, so consumers' type checkers read basis's types instead of `Any`.
+- `FileCache.delete()` for single-item removal.
+
+### Removed
+
+- Unused core dependencies `identify`, `toolz`, `tqdm`; `dotenv` repinned to `python-dotenv`.
+- Dead `Idx`/`IdxSpec` modules and the `my.text`/`my.type` deprecation shims.
+
+### Docs / CI
+
+- README corrected: PyPI publication status, dependency scale, the flagship `cast` example, and the restored PyPI badges.
+- `task docs` builds again (added `sphinx.ext.intersphinx` and its mapping).
+- The Publish job asserts the git tag matches the `pyproject` version.
+
 ## [0.8.3] - 2026-07-11
 
 Performance and security release for MEMY-175 wikiparse polish wave 2.
@@ -19,6 +67,24 @@ Performance and security release for MEMY-175 wikiparse polish wave 2.
 
 - `REGEX_TIMEOUT = 10.0` guard on Buffer's 3 hot iterator `rgx.search()` calls (ReDoS protection).
 - Fixed `md_url` ReDoS vulnerability (cubic backtracking on spaces) via possessive `*+` quantifiers in `common_rgxs.py`.
+
+## [0.8.2] - 2026-07-11
+
+Release-machinery and README polish; no library behavior changes.
+
+### CI/CD
+
+- Added a PyPI OIDC trusted-publishing job and expanded the project URLs.
+- Decoupled Publish from Evaluate, capped job timeouts, and skipped lint on tag pipelines.
+- Normalized `.gitlab-ci.yml` to the house yamlfmt (4-space indent).
+
+### Fixed
+
+- `Predicate`: removed the `serialize` advertisement and its dead xfail tests.
+
+### Docs
+
+- README: dropped stray backticks, fixed the badges, removed the `{align}` directive, and added the logo.
 
 ## [0.8.1] - 2026-07-10
 

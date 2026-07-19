@@ -207,7 +207,10 @@ class Markdown(pyd.BaseModel):
             header=self.header,
             prose=self.prose,
             nodes=[node.model_dump() for node in self.nodes],
-            notes=typist.to_yaml(self.notes),
+            # Empty string (not `typist.to_yaml({})`, which renders the truthy `'{}\n'`) so the
+            # template's `{% if notes %}` guard correctly skips emitting frontmatter/fenced-yaml
+            # for nodes that carry no notes.
+            notes=typist.to_yaml(self.notes) if self.notes else '',
         )
         return ret
 
@@ -736,7 +739,10 @@ class Markdown(pyd.BaseModel):
         """
         body = get_template(self.TEMPLATE).render(data)
         if fix:
-            body = mdformat.text(body)
+            # `front_matters` keeps a leading `---...---` YAML frontmatter block intact; without
+            # it mdformat has no notion of frontmatter and mangles the block into a thematic
+            # break plus a stray header. It's a no-op for documents that don't open with one.
+            body = mdformat.text(body, extensions={'front_matters'})
         return body
 
     def to_string(self, strip_notes: bool = False, fix: bool = True) -> str:

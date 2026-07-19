@@ -764,6 +764,59 @@ class TestMarkdown:
         output = node.to_string(fix=False)
         assert isinstance(output, str)
 
+    @pyt.mark.parametrize('fix', [False, True])
+    def test_to_string__root_notes_render_as_frontmatter(self, fix: bool):
+        """Root-level notes must render as YAML frontmatter, not be silently dropped."""
+        node = cls.new(title='Test', level=1, prose='Test prose', notes={'key': 'value'})
+        output = node.to_string(fix=fix)
+        assert output.startswith('---')
+        assert 'key: value' in output
+        assert output.count('---') >= 2
+        assert '# Test' in output
+        assert 'Test prose' in output
+
+    @pyt.mark.parametrize('fix', [False, True])
+    def test_to_string__no_notes_omits_frontmatter(self, fix: bool):
+        """A node with no notes must not gain spurious frontmatter (empty-dict regression)."""
+        node = cls.new(title='Test', level=1, prose='Test prose')
+        output = node.to_string(fix=fix)
+        assert '---' not in output
+        assert '{}' not in output
+
+    @pyt.mark.parametrize('fix', [False, True])
+    def test_to_string__child_notes_render_as_fenced_yaml(self, fix: bool):
+        """Non-root notes must render as a fenced yaml block following the child's header."""
+        node = cls.new(
+            title='Parent',
+            level=1,
+            prose='parent prose',
+            nodes=[{'title': 'Child', 'prose': 'child prose', 'notes': {'k2': 'v2'}}],
+        )
+        output = node.to_string(fix=fix)
+        assert '```yaml' in output
+        assert 'k2: v2' in output
+        assert 'Child' in output
+
+    @pyt.mark.parametrize('fix', [False, True])
+    def test_to_string__child_no_notes_omits_fenced_yaml(self, fix: bool):
+        """A child node with no notes must not gain a spurious fenced yaml block."""
+        node = cls.new(
+            title='Parent',
+            level=1,
+            prose='parent prose',
+            nodes=[{'title': 'Child', 'prose': 'child prose'}],
+        )
+        output = node.to_string(fix=fix)
+        assert '```yaml' not in output
+        assert '{}' not in output
+
+    def test_to_string__strip_notes_omits_frontmatter(self):
+        """`strip_notes=True` must exclude notes/frontmatter from the rendered output."""
+        node = cls.new(title='Test', level=1, prose='Test prose', notes={'key': 'value'})
+        output = node.to_string(strip_notes=True, fix=False)
+        assert '---' not in output
+        assert 'key: value' not in output
+
     def test_str(self):
         node = cls.new(title='Test')
         assert isinstance(str(node), str)

@@ -24,7 +24,7 @@ class InfraPaths(pyd.BaseModel, arbitrary_types_allowed=True):
     """A model containing important paths within the package."""
 
     my: Path = files('my')  # type: ignore
-    data: Path = files('data')  # type: ignore
+    data: Path = files('my.data')  # type: ignore
     templates: Path = data / 'templates'
 
 
@@ -47,7 +47,7 @@ DELIM = ' // '
 # To change settings, just modify the mutable object identified by this reference
 JINJA = jn.Environment(
     # loader=jn.FileSystemLoader(INFRA_PATHS.templates),
-    loader=jn.PackageLoader('data', 'templates'),
+    loader=jn.PackageLoader('my.data', 'templates'),
     trim_blocks=True,
     lstrip_blocks=True,
 )

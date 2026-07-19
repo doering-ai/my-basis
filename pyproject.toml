@@ -114,9 +114,8 @@ exclude-newer = "10 days"
 requires = ["uv_build>=0.11.7,<0.12"]
 build-backend = "uv_build"
 [tool.uv.build-backend]
-module-name = ["my", "data"]
+module-name = ["my"]
 module-root = ""
-namespace = true
 
 [project.scripts]
 regex-storefront = "my.scripts.regex_storefront:main"

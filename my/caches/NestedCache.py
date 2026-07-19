@@ -88,7 +88,11 @@ class NestedCache[Keys: tuple, Value](pyd.BaseModel):
             self.size += ret
         else:
             if key not in self.children:
-                self.children[key] = NestedCache(signature=self.signature[1:])
+                self.children[key] = NestedCache(
+                    signature=self.signature[1:],
+                    max_size=self.max_size,
+                    bucket_size=self.bucket_size,
+                )
             ret = self.children[key].set(keys, value)
             self.size += ret
 

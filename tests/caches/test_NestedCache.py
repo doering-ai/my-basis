@@ -481,3 +481,14 @@ class TestNestedCache:
         child = cache.children[1]
         assert child.signature == (str, float)
         assert child.depth == 2
+
+    def test_child_cache_inherits_config(self):
+        """Test that child caches propagate the parent's max_size/bucket_size, not defaults."""
+        cache = cls(signature=(int, int), max_size=10, bucket_size=2)
+        cache.set((1, 2), 'value')
+
+        child = cache.children[1]
+        assert child.max_size == 10
+        assert child.bucket_size == 2
+        assert child.max_size != cls.model_fields['max_size'].default
+        assert child.bucket_size != cls.model_fields['bucket_size'].default

@@ -7,18 +7,18 @@
 
 ![Pipeline Status](https://img.shields.io/gitlab/pipeline-status/doering-ai/libs/basis?branch=main) ![Test Coverage](https://img.shields.io/gitlab/pipeline-coverage/doering-ai/libs/basis?branch=main) [![License](https://img.shields.io/gitlab/license/doering-ai/libs/basis)](/LICENSE)
 
-<!-- Not live yet -- restore once the package is published to ReadTheDocs/PyPI:
-[![Documentation](https://app.readthedocs.org/projects/my-basis/badge)](https://my-basis.readthedocs.io)
-![Python Version](https://img.shields.io/pypi/pyversions/my-basis)
-[![PyPI Wheel](https://img.shields.io/pypi/wheel/my-basis)](https://pypi.org/project/my-basis)
-[![PyPI Types](https://img.shields.io/pypi/types/my-basis)](https://pypi.org/project/my-basis)
+[![PyPI Version](https://img.shields.io/pypi/v/my-basis)](https://pypi.org/project/my-basis) ![Python Version](https://img.shields.io/pypi/pyversions/my-basis) [![PyPI Wheel](https://img.shields.io/pypi/wheel/my-basis)](https://pypi.org/project/my-basis)
+
+<!-- Not live yet -- restore once provisioned:
+[![Documentation](https://app.readthedocs.org/projects/my-basis/badge)](https://my-basis.readthedocs.io)   ReadTheDocs -- not yet provisioned
+[![PyPI Types](https://img.shields.io/pypi/types/my-basis)](https://pypi.org/project/my-basis)   accurate once the py.typed release ships
 -->
 
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit)](https://github.com/pre-commit/pre-commit) [![pyrefly](https://img.shields.io/endpoint?url=https://pyrefly.org/badge.json)](https://github.com/facebook/pyrefly) [![ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
 The myBasis Python package contains a variety of utilities generally centered around the topics of text processing, functional programming, and runtime type coercion.
 This broad scope is somewhat unusual, as any given application will likely only need a small subset of the contents; for this reason, it is intended for use in applications where dependency purity isn't very important, such as personal projects, local development scripts, offline data-processing projects, and prototypes.
-As a metric, the package imports 32 dependencies totalling around ~250 MB in uncompressed `.venv/lib/` files.
+As a rough sense of scale: a bare `pip install my-basis` pulls a couple dozen distributions (on the order of ~80 MB unpacked); turning on the optional extras (`metrics`, `google`, …) can push a full environment past ~290 MB.
 
 ______________________________________________________________________
 
@@ -45,8 +45,8 @@ ______________________________________________________________________
 
 ## Install
 
-`my-basis` is not yet published to PyPI.
-Every consumer in this ecosystem depends on it the same way: as an editable local path added via `uv`.
+`my-basis` is published to PyPI, so `pip install my-basis` (or `uv add my-basis`) works today — but it's **pre-1.0 and still moving**, so pin a version if you take it that way.
+Within this ecosystem, though, every sibling project consumes it the same way: as an editable local path wired through `uv`, so a change here is felt everywhere immediately, with no release round-trip.
 
 ```toml
 # pyproject.toml
@@ -70,7 +70,7 @@ from my import ty, MyType
 
 # Cast: coerce arbitrary data into a target type, best-effort.
 ty.cast('42', int)                              # -> 42
-ty.cast('a,b,c', list[str])                     # -> ['a', 'b', 'c']
+ty.cast(['1', '2', '3'], list[int])             # -> [1, 2, 3]   (every element coerced)
 ty.cast({'a': '1', 'b': '2'}, dict[str, int])   # -> {'a': 1, 'b': 2}
 
 # Check: does this value already conform to a type, without coercing it?

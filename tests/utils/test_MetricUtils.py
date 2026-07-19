@@ -418,6 +418,35 @@ class TestMetricUtils:
     # -----------
     # `4` METRICS
     # -----------
+    def test_setup_metrics__clears_directory_without_crashing(
+        self, tmp_path: Path, monkeypatch: pyt.MonkeyPatch
+    ):
+        """Regression: `setup_metrics()` must clear a non-empty metrics directory.
+
+        The old code ran `sbp.run(f'rm -rf {metrics}/*')` -- a single string handed to
+        `subprocess.run` *without* `shell=True`, so Python tried (and failed) to exec a
+        program literally named `"rm -rf <path>/*"`, raising `FileNotFoundError` every
+        time the directory already held files. This also covers a nested subdirectory,
+        which the old shell-glob form wouldn't have recursed into either.
+        """
+        pyt.importorskip('pandas')
+        metrics_dir = (tmp_path / 'metrics').resolve()
+        metrics_dir.mkdir()
+        (metrics_dir / 'stale.db').write_text('old')
+        nested = metrics_dir / 'nested'
+        nested.mkdir()
+        (nested / 'inner.db').write_text('old')
+
+        monkeypatch.setenv('PROMETHEUS_MULTIPROC_DIR', str(metrics_dir))
+        original_setup = cls.METRICS_SETUP
+        cls.METRICS_SETUP = False
+        try:
+            cls.setup_metrics(metrics_dir, lg.getLogger('test-setup-metrics-clear'))
+        finally:
+            cls.METRICS_SETUP = original_setup
+
+        assert list(metrics_dir.iterdir()) == []
+
     def test_instrument_sync(self):
         counter = {'test_func': 0}
 

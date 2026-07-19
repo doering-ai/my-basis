@@ -15,7 +15,7 @@ import logging as lg
 import logging.handlers as lgh
 import os
 import re
-import subprocess as sbp
+import shutil
 import sys
 import warnings
 import inspect
@@ -447,7 +447,11 @@ class MetricUtils(_UtilsBase):
             metrics.mkdir(exist_ok=True, parents=True)
         elif files := list(metrics.iterdir()):
             logger.info(f'Clearing {len(files)} files from {metrics}.')
-            sbp.run(f'rm -rf {metrics}/*')
+            for entry in files:
+                if entry.is_dir() and not entry.is_symlink():
+                    shutil.rmtree(entry)
+                else:
+                    entry.unlink()
         MetricUtils.METRICS_SETUP = True
 
     @classmethod

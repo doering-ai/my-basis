@@ -40,7 +40,12 @@ COMMON_RGXS = RegexStore.new(
         ],
         RegexStore.format_url,
     ),
-    md_url=r'(?<![!\[])\[ *+(?P<alias>[^\]\n]+?) *+\]\((?P<target>[^\)\n]+?)\)',
+    #: Recursive helper matching parenthesis-balanced content (e.g. `foo_(bar)_baz`), so `md_url`
+    #: below doesn't truncate a link target at its first inner `)` -- see the `(?R)`-recursive
+    #: `parens` pattern in `Buffer.RGXS` for the sibling idiom on the simpler `regex_dict` system;
+    #: this is the RegexStore-DSL equivalent, invoked as a subroutine via `(?P>_balanced_parens)`.
+    _balanced_parens=r'(?:[^()\n]|\((?P>_balanced_parens)\))*+',
+    md_url=r'(?<![!\[])\[ *+(?P<alias>[^\]\n]+?) *+\]\((?P<target>(?P>_balanced_parens))\)',
     # Numeric patterns
     _roman_numeral=[
         r'(?i)(?<![[:alnum:]])(?=[IVXLCDM])',
@@ -92,8 +97,11 @@ COMMON_RGXS = RegexStore.new(
         r'\b',
     ),
     season=r'(?i),? ?\b(?:fall|autumn|winter|spring|summer)\b,? ?',
+    #: Bounded to `20\d\d` (not a bare `\d{4}`) so the pattern still declines to match obvious
+    #: nonsense like `3456` or `9999` -- but open-ended within the 21st century, unlike the old
+    #: `20[01]\d|202[0-6]` split, which silently stopped matching any year from 2027 onward.
     year=(
-        r'(?<![[:alnum:]])(?:1?\d\d\d|20[01]\d|202[0-6]|\'\d\d)(?=$|[\W_a-p])',
+        r'(?<![[:alnum:]])(?:1?\d\d\d|20\d\d|\'\d\d)(?=$|[\W_a-p])',
         lambda s: f'20{s[1:]}' if s.startswith("'") else s,
     ),
     epoch=r',? ?(?:(?:B\.?)?C\.?\.?E|A\.?D\.?)',

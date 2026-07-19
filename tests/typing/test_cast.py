@@ -2,7 +2,7 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import Any, Literal, cast as type_cast
+from typing import Annotated, Any, Literal, cast as type_cast
 from collections.abc import Sequence, Collection
 from collections import Counter, deque
 from datetime import date, datetime, time, timedelta, UTC
@@ -19,7 +19,7 @@ from my.infra import Time
 from my.types import Buffer, Span
 from my.regex import MatchData, GroupKind
 from my.typing import CastFlags, TypeCast, Typist
-from my.typing.cast import CastPreset, Transform
+from my.typing.cast import CastPreset, Decline, Transform
 from ..conftest import type_ids
 
 ############
@@ -647,8 +647,9 @@ class TestCast:
         # The transform still splits -- its own captured `flags.splits` is untouched.
         assert transform() == [1, 2]
         # Meanwhile, a brand-new cast (which resolves a fresh snapshot) correctly sees the change:
-        # with splits now False the string is wrapped as a single element instead of being split.
-        assert typist.cast('1.2', list[int]) == ['1.2']
+        # with splits now False the string is wrapped as a single (int-coerced) element instead
+        # of being split into two.
+        assert typist.cast('1.2', list[int]) == [1]
 
     @pyt.fixture
     def clear_dispatch_cache(self) -> abc.Iterator[None]:
@@ -806,6 +807,31 @@ class TestCast:
         """
         assert typist.cast(data, target) == expected
 
+    # ---- C9 regression: the `wraps` fallback must coerce the wrapped element ----
+
+    @pyt.mark.parametrize(
+        'data, target, expected',
+        [
+            # No delimiter in `data` -- the `wraps` fallback (not a `splits` path) wraps the bare
+            # scalar, and must coerce it to the declared element type instead of leaving a `str`
+            # sitting inside a non-`str`-element container.
+            ('3', list[int], [3]),
+            ('3', tuple[int, ...], (3,)),
+            ('3', set[int], {3}),
+            ('3', deque[int], deque([3])),
+            # MEMY-325 must still hold: a string-element target wraps (never splits) the scalar,
+            # and coercing the element to `str` is a NOOP so the whole string survives intact.
+            ('a,b,c', list[str], ['a,b,c']),
+        ],
+    )
+    def test_cast__wraps_coerces_element(self, data: str, target: type, expected: object):
+        """`wraps` must coerce the wrapped scalar, not just stash it in a list unconverted.
+
+        Previously `_string_to_vec`'s `wraps` fallback returned ``[text]`` verbatim, so
+        ``cast('3', list[int])`` produced ``['3']`` -- a `str` living inside a `list[int]`.
+        """
+        assert typist.cast(data, target) == expected
+
     # ---- MEMY-326 regression: AutocastModel must accept >=3-char field names ----
 
     def test_cast__autocast_model_long_field_names(self):
@@ -826,3 +852,35 @@ class TestCast:
         assert f.name == 'alice'
         assert f.age == 30
         assert f.email == 'a@example.com'
+
+    # ---- C10 regression: `Annotated[...]` targets must unwrap to their underlying type ----
+
+    def test_cast__annotated_target_unwraps(self):
+        """Casting to an `Annotated[T, ...]` target must coerce against `T`, not return `None`.
+
+        `MyType` already resolves `Annotated[int, 'meta']`'s `main`/`origin` onto the wrapped
+        `int`, but leaves `root` holding the stale, un-unwrapped alias -- so `Transform._t1`
+        (which reads `.root`) used to `Decline` every candidate transform and `cast()` returned
+        `None` for any `Annotated` target.
+        """
+        assert typist.cast('42', Annotated[int, 'meta']) == 42
+
+    # ---- C12 regression: cyclic data must not crash with a bare `RecursionError` ----
+
+    def test_cast__cyclic_data_declines(self):
+        """Casting a self-referential dict/list must raise `Decline`, not `RecursionError`.
+
+        `Transform.__init__` eagerly, structurally walks `data` via `normalize()` before any
+        transform gets a chance to run -- a self-referential structure sent that walk into
+        infinite recursion, crashing the whole process with a bare `RecursionError` instead of
+        the package's own "cannot cast" signal.
+        """
+        cyclic: dict[str, object] = {}
+        cyclic['self'] = cyclic
+        with pyt.raises(Decline):
+            typist.cast(cyclic, dict)
+
+        cyclic_list: list = []
+        cyclic_list.append(cyclic_list)
+        with pyt.raises(Decline):
+            typist.cast(cyclic_list, list)

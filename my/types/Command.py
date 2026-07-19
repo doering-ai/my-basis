@@ -152,6 +152,54 @@ class Command(pyd.BaseModel):
                     ret.append(f'{key} {quoted}')
         return ret
 
+    def _exec_key(self, key: str) -> str:
+        """Format a kwarg key into a flag name, mirroring `named_args`'s key formatting."""
+        if not self.options.preserve_underscores and '_' in key:
+            key = key.replace('_', '-')
+        return ('-' if self.options.single_dashes or len(key) == 1 else '--') + key
+
+    @property
+    def _exec_named_args(self) -> list[str]:
+        """Convert keyword arguments to raw argv flag tokens (no shell quoting).
+
+        Unlike `named_args`, each value is its own argv entry (e.g. `['--count', '5']`, not
+        `['--count 5']`), since there is no shell here to split a quoted token back apart.
+
+        Returns:
+            Flag tokens ready to hand straight to a `shell=False` invocation.
+        """
+        ret: list[str] = []
+        for key, val in self.kwargs.items():
+            key = self._exec_key(key)
+            if isinstance(val, bool) and val:
+                ret.append(key)
+            elif self.options.flag_assignment:
+                ret.append(f'{key}={val}')
+            else:
+                ret.extend([key, str(val)])
+        return ret
+
+    @property
+    def _exec_positional_args(self) -> list[str]:
+        """Convert positional arguments to raw argv tokens (no shell quoting)."""
+        return [str(a) for a in self.args]
+
+    @property
+    def _argv(self) -> list[str]:
+        """Assemble this command's raw argv list for direct (non-shell) execution.
+
+        Returns:
+            Argument vector -- command name first -- safe to pass straight to `subprocess`/
+            `asyncio` with `shell=False`; no value here is ever re-parsed by a shell.
+        """
+        parts = [self.command]
+        if self.args or self.kwargs:
+            sections = [self._exec_named_args, self._exec_positional_args]
+            if self.options.named_args_last:
+                sections = [sections[1], sections[0]]
+            parts.extend(mi.flatten(sections))
+        return parts
+
     # -------------------
     # `+` Primary Methods
     # -------------------
@@ -189,40 +237,102 @@ class Command(pyd.BaseModel):
         return bool(self.command or self.args)
 
     def execute(self) -> Result:
-        """Execute a shell command synchronously.
+        """Execute a command synchronously via direct argv invocation (no shell).
+
+        Note:
+            Runs with `shell=False`, so argument values are handed to the OS exactly as given
+            and are never re-parsed by a shell -- this is what prevents `$(...)`/backtick
+            command-substitution injection from within an argument's contents.
 
         Returns:
             (`return_code`, `stdout`, `stderr`).
         """
-        cmd = self.assemble()
-        ret = sbp.run(cmd, capture_output=True, text=True, shell=True, cwd=self.options.cwd)
-        return Command.Result(
-            ret.returncode or 0,
-            (ret.stdout or '').strip(),
-            (ret.stderr or '').strip(),
-        )
+        self.assemble()  # side effect only: prints the human-readable form when `verbose` is set
+        argv = self._argv
+
+        if self.options.pipe:
+            first = sbp.run(argv, capture_output=True, text=True, cwd=self.options.cwd)
+            second = sbp.run(
+                self.options.pipe._argv,
+                input=first.stdout,
+                capture_output=True,
+                text=True,
+                cwd=self.options.cwd,
+            )
+            return Command.Result(
+                second.returncode or 0,
+                (second.stdout or '').strip(),
+                ((first.stderr or '') + (second.stderr or '')).strip(),
+            )
+        elif self.options.out:
+            with Path(self.options.out).open('a') as fh:
+                ret = sbp.run(argv, stdout=fh, stderr=sbp.PIPE, text=True, cwd=self.options.cwd)
+            return Command.Result(ret.returncode or 0, '', (ret.stderr or '').strip())
+        else:
+            ret = sbp.run(argv, capture_output=True, text=True, shell=False, cwd=self.options.cwd)
+            return Command.Result(
+                ret.returncode or 0,
+                (ret.stdout or '').strip(),
+                (ret.stderr or '').strip(),
+            )
 
     async def execute_async(self) -> Result:
-        """Execute a shell command asynchronously.
+        """Execute a command asynchronously via direct argv invocation (no shell).
+
+        Note:
+            Uses `create_subprocess_exec` (never `_shell`), so argument values are handed to
+            the OS exactly as given and are never re-parsed by a shell -- this is what
+            prevents `$(...)`/backtick command-substitution injection from within an
+            argument's contents.
 
         Returns:
             (`return_code`, `stdout`, `stderr`).
         """
-        cmd = self.assemble()
-        subprocess = await aio.create_subprocess_shell(
-            cmd,
-            stdout=aio.subprocess.PIPE,
-            stderr=aio.subprocess.PIPE,
-            shell=True,
-            cwd=self.options.cwd,
-        )
-        stdout, stderr = await subprocess.communicate()
+        self.assemble()  # side effect only: prints the human-readable form when `verbose` is set
+        argv = self._argv
 
-        return Command.Result(
-            subprocess.returncode or 0,
-            (stdout or b'').decode().strip(),
-            (stderr or b'').decode().strip(),
-        )
+        if self.options.pipe:
+            first = await aio.create_subprocess_exec(
+                *argv, stdout=aio.subprocess.PIPE, stderr=aio.subprocess.PIPE, cwd=self.options.cwd
+            )
+            first_out, first_err = await first.communicate()
+
+            second_argv = self.options.pipe._argv
+            second = await aio.create_subprocess_exec(
+                *second_argv,
+                stdin=aio.subprocess.PIPE,
+                stdout=aio.subprocess.PIPE,
+                stderr=aio.subprocess.PIPE,
+                cwd=self.options.cwd,
+            )
+            second_out, second_err = await second.communicate(input=first_out)
+
+            return Command.Result(
+                second.returncode or 0,
+                (second_out or b'').decode().strip(),
+                ((first_err or b'') + (second_err or b'')).decode().strip(),
+            )
+        elif self.options.out:
+            with Path(self.options.out).open('a') as fh:  # noqa: ASYNC230 -- tiny one-shot open
+                subprocess = await aio.create_subprocess_exec(
+                    *argv, stdout=fh, stderr=aio.subprocess.PIPE, cwd=self.options.cwd
+                )
+                _, stderr = await subprocess.communicate()
+            return Command.Result(subprocess.returncode or 0, '', (stderr or b'').decode().strip())
+        else:
+            subprocess = await aio.create_subprocess_exec(
+                *argv,
+                stdout=aio.subprocess.PIPE,
+                stderr=aio.subprocess.PIPE,
+                cwd=self.options.cwd,
+            )
+            stdout, stderr = await subprocess.communicate()
+
+            return Command.Result(
+                subprocess.returncode or 0,
+                (stdout or b'').decode().strip(),
+                (stderr or b'').decode().strip(),
+            )
 
     async def __call__(self) -> Result:
         """Execute the command asynchronously when the instance is called."""

@@ -163,6 +163,26 @@ class TestSystemUtils:
         captured = capsys.readouterr()
         assert 'colored text' in captured.out
 
+    def test_print_in_color__no_shell_injection(self, tmp_path):
+        """A `$(...)` command substitution in `text` must NOT be executed by a shell.
+
+        Regression test for a shell-injection RCE: `text` used to be interpolated directly
+        into a `zsh -c '...'` string run with `shell=True`, so a value like
+        `$(touch marker)` would execute the embedded command. It must now reach `print -P`
+        purely as an argv value.
+        """
+        marker = tmp_path / 'marker'
+        cls.print_in_color(f'$(touch {marker})')
+        assert not marker.exists()
+
+    def test_print_in_color__color_output_unchanged(self, capsys):
+        """Normal zsh-colorized text still expands via `print -P` after the argv-based fix."""
+        colored = cls.zsh_colorize('Hello', 'red')
+        cls.print_in_color(colored)
+        captured = capsys.readouterr()
+        assert '\x1b[31m' in captured.out
+        assert 'Hello' in captured.out
+
     # -------------------
     # `.` Confirm & Module
     # -------------------
@@ -392,6 +412,20 @@ class TestSystemUtils:
         """Test log method executes without raising."""
         cls.log('test', 'message')
 
+    def test_log__materializes_map_message(self, caplog):
+        """Regression test: `log()` used to pass a live `map` object as the log message.
+
+        That rendered as the useless `<map object at 0x...>` instead of the joined text --
+        the message must now be a real, materialized string.
+        """
+        with caplog.at_level(logging.DEBUG):
+            cls.log('hello', 'world', _level=logging.INFO)
+        assert caplog.records
+        message = caplog.records[-1].getMessage()
+        assert 'hello' in message
+        assert 'world' in message
+        assert 'map object' not in message
+
     def test_info(self):
         """Test info method logs at INFO level."""
         cls.info('info message', kwargs={})
@@ -403,6 +437,15 @@ class TestSystemUtils:
     def test_warn(self):
         """Test warn method logs at WARNING level."""
         cls.warn('warn message', kwargs={})
+
+    @pyt.mark.parametrize('method', ['info', 'error', 'warn'])
+    def test_log_methods__callable_without_kwargs(self, method: str):
+        """Regression test: `info`/`error`/`warn` declared a bare `kwargs` parameter.
+
+        That made `kwargs` a *required* keyword-only argument instead of `**kwargs`, so the
+        documented call form -- calling with no `kwargs=` at all -- raised a TypeError.
+        """
+        getattr(cls, method)('message without an explicit kwargs=')
 
     # --------------
     # `*2` File I/O

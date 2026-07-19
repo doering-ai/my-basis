@@ -167,6 +167,21 @@ class TestCommand:
         assert code != 0
         assert stderr != ''
 
+    def test_execute__no_shell_injection(self, tmp_path):
+        """A `$(...)` command substitution in an argument must NOT be executed by a shell.
+
+        Regression test for a shell-injection RCE: `execute()` used to assemble a shell
+        string (via the unsafe `_shell_quote`) and run it with `shell=True`, so an argument
+        like `$(touch marker)` would execute the embedded command. It must now reach the
+        child process purely as an argv value.
+        """
+        marker = tmp_path / 'marker'
+        cmd = cls.new('echo', f'$(touch {marker})')
+        code, stdout, _ = cmd.execute()
+        assert code == 0
+        assert not marker.exists()
+        assert str(marker) in stdout
+
     @pyt.mark.asyncio
     async def test_execute_async(self):
         """Test async command execution."""
@@ -183,6 +198,21 @@ class TestCommand:
         code, _, stderr = await cmd.execute_async()
         assert code != 0
         assert stderr != ''
+
+    @pyt.mark.asyncio
+    async def test_execute_async__no_shell_injection(self, tmp_path):
+        """Async counterpart of `test_execute__no_shell_injection`.
+
+        Regression test for a shell-injection RCE: `execute_async()` used to run the
+        assembled shell string via `create_subprocess_shell(..., shell=True)`. It must now
+        use `create_subprocess_exec` so a `$(...)` payload is never handed to a shell.
+        """
+        marker = tmp_path / 'marker'
+        cmd = cls.new('echo', f'$(touch {marker})')
+        code, stdout, _ = await cmd.execute_async()
+        assert code == 0
+        assert not marker.exists()
+        assert str(marker) in stdout
 
     @pyt.mark.asyncio
     async def test_call(self):
@@ -213,6 +243,42 @@ class TestCommand:
         assert code == 0
         # The -n flag prevents echo from adding a newline, but output should still contain 'test'
         assert 'test' in stdout
+
+    def test_execute__with_pipe(self):
+        """Test execute() piping into a second command via native (non-shell) chaining."""
+        cmd = cls.new('echo', 'hello world', options=dict(pipe=cls.new('grep', 'world')))
+        code, stdout, stderr = cmd.execute()
+        assert code == 0
+        assert 'hello world' in stdout
+        assert stderr == ''
+
+    def test_execute__with_out(self, tmp_path):
+        """Test execute() redirecting output to a file via native (non-shell) redirection."""
+        outfile = tmp_path / 'out.txt'
+        cmd = cls.new('echo', 'to file', options=dict(out=str(outfile)))
+        code, stdout, _ = cmd.execute()
+        assert code == 0
+        assert stdout == ''
+        assert 'to file' in outfile.read_text()
+
+    @pyt.mark.asyncio
+    async def test_execute_async__with_pipe(self):
+        """Test execute_async() piping into a second command via native (non-shell) chaining."""
+        cmd = cls.new('echo', 'hello world', options=dict(pipe=cls.new('grep', 'world')))
+        code, stdout, stderr = await cmd.execute_async()
+        assert code == 0
+        assert 'hello world' in stdout
+        assert stderr == ''
+
+    @pyt.mark.asyncio
+    async def test_execute_async__with_out(self, tmp_path):
+        """Test execute_async() redirecting output to a file via native (non-shell) redirect."""
+        outfile = tmp_path / 'out.txt'
+        cmd = cls.new('echo', 'to file async', options=dict(out=str(outfile)))
+        code, stdout, _ = await cmd.execute_async()
+        assert code == 0
+        assert stdout == ''
+        assert 'to file async' in outfile.read_text()
 
     # ----------------
     # Edge Cases Tests

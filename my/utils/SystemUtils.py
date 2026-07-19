@@ -64,7 +64,7 @@ FileParam = String | Path | None
 RawJsonData = str | int | float | bool | list | dict | None
 
 F = TypeVar('F', bound=Atom | Struct)
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
 ############
@@ -251,13 +251,20 @@ class SystemUtils(_UtilsBase):
         """Print colored text using zsh prompt expansion.
 
         Note:
-            Requires zsh to be available in the system PATH.
+            Requires zsh to be available in the system PATH. `text` is passed as an argv
+            value (never interpolated into a shell string), so it reaches `print -P` via
+            `$1` and cannot trigger `$(...)`/backtick command substitution.
 
         Args:
             text: Text with zsh color codes already present.
             **kwargs: Additional arguments for `print()`.
         """
-        ret = sbp.run(f'zsh -c \'print -P "{text}"\'', capture_output=True, text=True, shell=True)
+        ret = sbp.run(
+            ['zsh', '-c', 'print -P -- "$1"', 'zsh', text],
+            capture_output=True,
+            text=True,
+            shell=False,
+        )
         print((ret.stdout or '').strip('\n'), **kwargs)
 
     @staticmethod
@@ -470,20 +477,21 @@ class SystemUtils(_UtilsBase):
     @classmethod
     def log(cls, *args: Any, _level: int = 0, **kwargs: Any) -> None:
         """Log the provided collection of strings, applying common-sense transformations."""
-        cls.LOGGER.log(_level, map(str, mi.collapse(args or [''], base_type=str)))
+        message = ' '.join(map(str, mi.collapse(args or [''], base_type=str)))
+        cls.LOGGER.log(_level, message)
 
     @classmethod
-    def info(cls, *args: Any, kwargs: Any) -> None:
+    def info(cls, *args: Any, **kwargs: Any) -> None:
         """Log the provided collection of strings at the INFO level."""
         cls.log(args, _level=logging.INFO, **kwargs)
 
     @classmethod
-    def error(cls, *args: Any, kwargs: Any) -> None:
+    def error(cls, *args: Any, **kwargs: Any) -> None:
         """Log the provided collection of strings at the ERROR level."""
         cls.log(args, _level=logging.ERROR, **kwargs)
 
     @classmethod
-    def warn(cls, *args: Any, kwargs: Any) -> None:
+    def warn(cls, *args: Any, **kwargs: Any) -> None:
         """Log the provided collection of strings at the WARNING level."""
         cls.log(args, _level=logging.WARN, **kwargs)
 

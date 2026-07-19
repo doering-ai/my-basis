@@ -105,6 +105,21 @@ Final gate: **3681 passed** (baseline 3639 + 42 new regression tests) · `pyrefl
 **Remaining (Wave 2, structural — deliberately not run blind in parallel):** `basis-A1` (de-shadow `my.utils`), `basis-P1` (un-claim top-level `data`), `basis-D4`–`D6` (lazy facade).
 Plus machinery `basis-M5` (version bump at release), test hardening `basis-T1`/`T2`, docs `basis-X5`/`X6`.
 
+**✅ Fourth pass — 2026-07-19 (operator decisions on A1/P1/C5; two Sonnet worktrees + one launcher docs edit)**
+
+Final gate: **3699 passed** · `pyrefly` 0 errors · `ruff` clean.
+
+- `basis-A1` — **resolved as docs, not a code change (operator ruling).** The `utils = ut = Utils` aggregation is intentional (means and other consumers do `from my import utils as ut` and call ~11 aggregated methods); dropping `utils` would break them.
+  Documented the design in `my/utils/__init__.py` and pinned it with a guard test (`tests/utils/test_utils_facade.py`).
+- `basis-P1` — **`data/` nested under `my` (`my.data`) (operator chose "nest").** `git mv` + anchor rewire in `my/infra/constants.py`; `module-name = ["my"]`, `namespace` dropped.
+  Wheel verified to ship `my/data/` (templates + yamls + snapshots) with no top-level `data/`.
+  Incidental: fixes a previously-broken `docs/conf.py` template path.
+  Follow-up: `my/data/snapshots/test_RegexStore.ambr` is a dead orphan (real syrupy snapshots live in `tests/regex/__snapshots__/`) — safe to delete.
+- `basis-C5` (century pivot) — **pivot at 50 (operator ruling): `'YY > 50` → 1900s (`'99` → 1999), `≤ 50` → 2000s (`'50` → 2050).** Was unconditionally `20YY`.
+
+**Still open for a future dedicated effort:** `basis-D4`–`D6` (lazy facade — highest value/risk, needs a cross-consumer import smoke test), `basis-M5` (version bump at release), `basis-T1`/`T2`, `basis-X5`/`X6`.
+Consumer-adoption watch (all pinned to the `stable` tag today, so not live): the `Command` `pipe`/`out` rewrite (`out` preserves append; `pipe` now sequential-buffered) and the C9/C14 behavior changes.
+
 ______________________________________________________________________
 
 ## 1. How this was produced

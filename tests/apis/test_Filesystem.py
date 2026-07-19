@@ -6,12 +6,15 @@ from __future__ import annotations
 from typing import Any
 from collections.abc import MutableSequence
 from pathlib import Path
+import importlib
+import time
 
 ### EXTERNAL
 import pytest as pyt
+import regex as re
 
 ### INTERNAL
-from my.apis.Filesystem import Filesystem, Convention, NOWHERE
+from my.apis.Filesystem import Filesystem, Convention, NOWHERE, RGXS
 from my.types import Platform
 from ..conftest import boolmap, Patch
 
@@ -136,6 +139,32 @@ class TestFilesystem:
         """Test pyproject.toml is recognized as a leaf project indicator."""
         self._setup_paths(tmp_path, *paths)
         assert bool(cls._check_for_project_root(tmp_path)) == expected
+
+    def test_check_for_project_root__enforces_timeout_on_raw_pattern(
+        self, tmp_path: Path, patch: Patch
+    ):
+        """Test that the raw `RGXS['leaf']` accessor still respects a timeout.
+
+        Regression test: `RGXS['leaf']`/`RGXS['branch']` hand back the bare compiled pattern
+        (subscripting a `RegexStore` bypasses its own timeout-guarded `search()`), so
+        `_check_for_project_root` must pass `timeout=` explicitly at its call sites. Before that
+        fix, swapping in a pathological (catastrophic-backtracking) pattern here would hang
+        indefinitely -- confirmed separately to still be running past 8 seconds on this exact
+        input with no `timeout=` at all. With the fix, it raises `TimeoutError` almost instantly.
+        """
+        # `import my.apis.Filesystem as x` (and pytest's dotted-string `setattr` form, which
+        # resolves the same way) would both bind to the `Filesystem` *class* here, not the
+        # module -- `my/apis/__init__.py` re-exports the class under the submodule's own name,
+        # shadowing it on the `my.apis` package. `importlib.import_module` bypasses that.
+        fs_module = importlib.import_module('my.apis.Filesystem')
+        patch.setattr(fs_module, 'REGEX_TIMEOUT', 0.2)
+        patch.setitem(RGXS.patterns, 'leaf', re.compile(r'(a|a)+b'))
+        (tmp_path / ('a' * 30 + 'c')).write_text('x')
+
+        start = time.monotonic()
+        with pyt.raises(TimeoutError):
+            cls._check_for_project_root(tmp_path)
+        assert time.monotonic() - start < 5, 'timeout should fire well before this bound'
 
     # ------------------
     # `*` Public Methods

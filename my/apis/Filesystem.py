@@ -110,6 +110,12 @@ RGXS = RegexStore.new(
     platform=r'',
 )
 
+#: Timeout (seconds) for searches against raw patterns pulled off `RGXS` (e.g. `RGXS['leaf']`).
+#: Subscripting a `RegexStore` hands back the bare compiled pattern, bypassing the store's own
+#: timeout-guarded `search()`/`match()` -- so call sites that go this route must pass this
+#: explicitly. Mirrors `RegexStore.REGEX_TIMEOUT` / `Buffer.REGEX_TIMEOUT`.
+REGEX_TIMEOUT: float = 10.0
+
 #: A sentinel value that communicates a failure of some kind, or an unininitialized register.
 NOWHERE = Path()
 
@@ -163,9 +169,16 @@ class Filesystem(pyd.BaseModel):
     def _check_for_project_root(cls, folder: pyd.DirectoryPath) -> str | None:
         """Check if the given folder contains common project root indicators."""
         leaves, branches = ut.partition(folder.iterdir(), Path.is_dir)
-        if match := RGXS['leaf'].search('\n'.join(map(Path.as_posix, leaves))):
+        # `RGXS['leaf']`/`RGXS['branch']` are raw compiled patterns (see `REGEX_TIMEOUT` above),
+        # so `timeout=` must be passed explicitly here to keep this guarded against pathological
+        # input -- unlike `RGXS.search(...)`, which enforces it internally.
+        if match := RGXS['leaf'].search(
+            '\n'.join(map(Path.as_posix, leaves)), timeout=REGEX_TIMEOUT
+        ):
             return match[1]
-        elif match := RGXS['branch'].search('\n'.join(map(Path.as_posix, branches))):
+        elif match := RGXS['branch'].search(
+            '\n'.join(map(Path.as_posix, branches)), timeout=REGEX_TIMEOUT
+        ):
             return match[1]
         return None
 

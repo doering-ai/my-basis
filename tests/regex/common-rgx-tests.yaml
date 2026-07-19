@@ -92,6 +92,10 @@ md_url:
     - {text: '[my site](www.example.org/page)', alias: my site, target: www.example.org/page}
     - {text: '[ spaces ](http://test.com)', alias: spaces, target: 'http://test.com'}
     - {text: '[one\ntwo](url)', func: search, alias: 'one\ntwo', target: url}
+    # Regression: a target containing a balanced inner `)` used to get truncated at the first
+    # `)`, chopping Wikipedia-style URLs like `.../wiki/Foo_(bar)` down to `.../wiki/Foo_(bar`.
+    - {text: '[wiki link](https://en.wikipedia.org/wiki/Python_(programming_language))', alias: wiki
+        link, target: 'https://en.wikipedia.org/wiki/Python_(programming_language)'}
     # Negative (image syntax):
     - ['![image](url.png)']
     # Negative (not markdown links):
@@ -289,15 +293,18 @@ year:
     - {text: '1776', year: '1776'}
     - {text: '2001', year: '2001'}
     - {text: '2026', year: '2026'}
+    # Regression: the upper bound used to be hardcoded to `202[0-6]`, silently rejecting any
+    # year from 2027 onward -- now open-ended through the 21st century (`20\d\d`).
+    - {text: '2027', year: '2027'}
+    - {text: '2030', year: '2030'}
+    - {text: '2040', year: '2040'}
+    - {text: '2099', year: '2099'}
     - {text: "'24", year: '2024'}
     - {text: "'99", year: '2099'}
     - {text: "'01", year: '2001'}
     - {text: '999', year: '999'}
     - {text: '500', year: '500'}
     # Negative:
-    - ['2027']
-    - ['2030']
-    - ['2040']
     - ['20245']
     - ['12345']
 

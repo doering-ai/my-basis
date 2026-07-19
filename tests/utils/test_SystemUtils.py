@@ -412,6 +412,20 @@ class TestSystemUtils:
         """Test log method executes without raising."""
         cls.log('test', 'message')
 
+    def test_log__materializes_map_message(self, caplog):
+        """Regression test: `log()` used to pass a live `map` object as the log message.
+
+        That rendered as the useless `<map object at 0x...>` instead of the joined text --
+        the message must now be a real, materialized string.
+        """
+        with caplog.at_level(logging.DEBUG):
+            cls.log('hello', 'world', _level=logging.INFO)
+        assert caplog.records
+        message = caplog.records[-1].getMessage()
+        assert 'hello' in message
+        assert 'world' in message
+        assert 'map object' not in message
+
     def test_info(self):
         """Test info method logs at INFO level."""
         cls.info('info message', kwargs={})
@@ -423,6 +437,15 @@ class TestSystemUtils:
     def test_warn(self):
         """Test warn method logs at WARNING level."""
         cls.warn('warn message', kwargs={})
+
+    @pyt.mark.parametrize('method', ['info', 'error', 'warn'])
+    def test_log_methods__callable_without_kwargs(self, method: str):
+        """Regression test: `info`/`error`/`warn` declared a bare `kwargs` parameter.
+
+        That made `kwargs` a *required* keyword-only argument instead of `**kwargs`, so the
+        documented call form -- calling with no `kwargs=` at all -- raised a TypeError.
+        """
+        getattr(cls, method)('message without an explicit kwargs=')
 
     # --------------
     # `*2` File I/O

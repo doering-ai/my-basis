@@ -64,7 +64,7 @@ FileParam = String | Path | None
 RawJsonData = str | int | float | bool | list | dict | None
 
 F = TypeVar('F', bound=Atom | Struct)
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
 ############
@@ -477,20 +477,21 @@ class SystemUtils(_UtilsBase):
     @classmethod
     def log(cls, *args: Any, _level: int = 0, **kwargs: Any) -> None:
         """Log the provided collection of strings, applying common-sense transformations."""
-        cls.LOGGER.log(_level, map(str, mi.collapse(args or [''], base_type=str)))
+        message = ' '.join(map(str, mi.collapse(args or [''], base_type=str)))
+        cls.LOGGER.log(_level, message)
 
     @classmethod
-    def info(cls, *args: Any, kwargs: Any) -> None:
+    def info(cls, *args: Any, **kwargs: Any) -> None:
         """Log the provided collection of strings at the INFO level."""
         cls.log(args, _level=logging.INFO, **kwargs)
 
     @classmethod
-    def error(cls, *args: Any, kwargs: Any) -> None:
+    def error(cls, *args: Any, **kwargs: Any) -> None:
         """Log the provided collection of strings at the ERROR level."""
         cls.log(args, _level=logging.ERROR, **kwargs)
 
     @classmethod
-    def warn(cls, *args: Any, kwargs: Any) -> None:
+    def warn(cls, *args: Any, **kwargs: Any) -> None:
         """Log the provided collection of strings at the WARNING level."""
         cls.log(args, _level=logging.WARN, **kwargs)
 

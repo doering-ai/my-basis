@@ -15,7 +15,7 @@ import logging as lg
 import logging.handlers as lgh
 import os
 import re
-import subprocess as sbp
+import shutil
 import sys
 import warnings
 import inspect
@@ -39,7 +39,7 @@ except ImportError:
 ############
 ### DATA ###
 ############
-type Metrics = OpenTelemetryCounter | dict[str, int] | pd.Series
+type Metrics = OpenTelemetryCounter | dict[str, float] | pd.Series
 
 
 ############
@@ -447,24 +447,32 @@ class MetricUtils(_UtilsBase):
             metrics.mkdir(exist_ok=True, parents=True)
         elif files := list(metrics.iterdir()):
             logger.info(f'Clearing {len(files)} files from {metrics}.')
-            sbp.run(f'rm -rf {metrics}/*')
+            for entry in files:
+                if entry.is_dir() and not entry.is_symlink():
+                    shutil.rmtree(entry)
+                else:
+                    entry.unlink()
         MetricUtils.METRICS_SETUP = True
 
     @classmethod
     @_guard
     def _measure(cls, name: str, counter: Metrics, start: int):
-        """Record elapsed time in milliseconds to a counter.
+        """Record elapsed time in fractional milliseconds to a counter.
+
+        Uses fractional milliseconds (not truncated/rounded integers) so that
+        sub-millisecond durations still accumulate correctly across many calls,
+        rather than being silently dropped.
 
         Args:
             name: Metric name (used for dict/Series counters).
             counter: Counter object (OpenTelemetry, dict, or pandas Series).
             start: Start time from perf_counter_ns().
         """
-        if dur_ms := (perf_counter_ns() - start) // 1_000_000:
-            if isinstance(counter, OpenTelemetryCounter):
-                counter.add(dur_ms)
-            else:
-                counter[name] = counter.get(name, 0) + dur_ms
+        dur_ms = (perf_counter_ns() - start) / 1_000_000
+        if isinstance(counter, OpenTelemetryCounter):
+            counter.add(dur_ms)
+        else:
+            counter[name] = counter.get(name, 0) + dur_ms
 
     @classmethod
     @_guard
@@ -502,7 +510,7 @@ class MetricUtils(_UtilsBase):
     @classmethod
     @ctx.contextmanager
     @_guard
-    def measure_context(cls, name: str, counter: dict[str, int]):
+    def measure_context(cls, name: str, counter: dict[str, float]):
         """Context manager to measure execution time of a code block.
 
         Timing is recorded even if the block raises, so a slow-then-crashing path still shows

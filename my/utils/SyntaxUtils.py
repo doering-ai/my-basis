@@ -151,6 +151,11 @@ class SyntaxUtils(_UtilsBase):
         Supports sequences (list, tuple, deque, set), mappings (dict), and Pydantic
         models. Recursively traverses nested structures up to depth limit.
 
+        A tuple is immutable, so a value found directly among a tuple's own elements
+        cannot be replaced in place; that case reports `False` rather than a false
+        success. Mutable containers (list, dict, model, ...) nested *inside* a tuple
+        are still replaced normally, since the tuple's reference to them is untouched.
+
         Args:
             obj: Collection or Pydantic model to search within.
             old: Value to find and replace.
@@ -168,9 +173,10 @@ class SyntaxUtils(_UtilsBase):
                     obj[index] = new
                     return True
                 elif isinstance(obj, tuple):
-                    index = obj.index(old)
-                    obj = (*obj[:index], new, *obj[index + 1 :])
-                    return True
+                    # Tuples are immutable: rebinding the local `obj` can't propagate a
+                    # replacement back to the caller's reference, so no mutation actually
+                    # occurs here. Report `False` rather than falsely claiming success.
+                    return False
                 elif isinstance(obj, set):
                     obj.remove(old)
                     obj.add(new)

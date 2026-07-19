@@ -129,13 +129,10 @@ class Environment(pyd.BaseModel):
             AssertionError: If key doesn't match naming convention.
         """
         self.validate_name(key)
-        if cur := self.get(key):
-            if cur == value:
-                return
-            else:
-                Environment._get.cache_clear()
-                Environment._path.cache_clear()
-                Environment._flag.cache_clear()
+        if self.get(key) != value:
+            Environment._get.cache_clear()
+            Environment._path.cache_clear()
+            Environment._flag.cache_clear()
 
         Environment._ENVIRON[key] = value
 

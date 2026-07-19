@@ -418,8 +418,68 @@ class TestMetricUtils:
     # -----------
     # `4` METRICS
     # -----------
+    def test_setup_metrics__clears_directory_without_crashing(
+        self, tmp_path: Path, monkeypatch: pyt.MonkeyPatch
+    ):
+        """Regression: `setup_metrics()` must clear a non-empty metrics directory.
+
+        The old code ran `sbp.run(f'rm -rf {metrics}/*')` -- a single string handed to
+        `subprocess.run` *without* `shell=True`, so Python tried (and failed) to exec a
+        program literally named `"rm -rf <path>/*"`, raising `FileNotFoundError` every
+        time the directory already held files. This also covers a nested subdirectory,
+        which the old shell-glob form wouldn't have recursed into either.
+        """
+        pyt.importorskip('pandas')
+        metrics_dir = (tmp_path / 'metrics').resolve()
+        metrics_dir.mkdir()
+        (metrics_dir / 'stale.db').write_text('old')
+        nested = metrics_dir / 'nested'
+        nested.mkdir()
+        (nested / 'inner.db').write_text('old')
+
+        monkeypatch.setenv('PROMETHEUS_MULTIPROC_DIR', str(metrics_dir))
+        original_setup = cls.METRICS_SETUP
+        cls.METRICS_SETUP = False
+        try:
+            cls.setup_metrics(metrics_dir, lg.getLogger('test-setup-metrics-clear'))
+        finally:
+            cls.METRICS_SETUP = original_setup
+
+        assert list(metrics_dir.iterdir()) == []
+
+    def test_measure__records_sub_millisecond_duration(self):
+        """Regression: sub-millisecond durations must not be silently dropped.
+
+        The old code computed `dur_ms = (perf_counter_ns() - start) // 1_000_000`
+        (integer floor division) and skipped the counter update entirely via
+        `if dur_ms:` whenever that truncated to `0` -- so a call taking, say, 0.7ms
+        recorded nothing. Fractional milliseconds fix both the truncation and the
+        skip, so the measurement lands as a small positive value instead of vanishing.
+        """
+        pyt.importorskip('pandas')
+        counter: dict[str, float] = {}
+        start = time.perf_counter_ns() - 700_000  # ~0.7ms in the past
+        cls._measure('fast_op', counter, start)
+
+        assert 'fast_op' in counter
+        assert 0 < counter['fast_op'] < 1
+
+    def test_measure__sub_millisecond_durations_accumulate(self):
+        """Many sub-millisecond calls must sum, not repeatedly vanish to zero.
+
+        Under the old integer-floor-and-skip behavior, a hot loop of fast calls would
+        leave the counter at `0` forever, no matter how many times it was measured.
+        """
+        pyt.importorskip('pandas')
+        counter: dict[str, float] = {}
+        for _ in range(5):
+            start = time.perf_counter_ns() - 300_000  # ~0.3ms in the past, each call
+            cls._measure('hot_path', counter, start)
+
+        assert counter['hot_path'] > 0
+
     def test_instrument_sync(self):
-        counter = {'test_func': 0}
+        counter: dict[str, float] = {'test_func': 0}
 
         def test_func():
             return sum(range(100))
@@ -432,7 +492,7 @@ class TestMetricUtils:
 
     @pyt.mark.asyncio
     async def test_instrument_async(self):
-        counter = {'async_test': 0}
+        counter: dict[str, float] = {'async_test': 0}
 
         async def async_test():
             return 42
@@ -472,10 +532,9 @@ class TestMetricUtils:
         is entered -- both directly off the owning class (`MetricUtils.measure_context`) and
         through the `my.utils` module facade via `ft.partial` (the exact pattern `wikiparse`
         uses). This asserts the timing side effect (`cls._measure` writing into `counter`)
-        actually fires, not just that no exception was raised -- a `pass`-bodied block measures
-        0ns and would pass even with `dur_ms == 0` skipping the write entirely.
+        actually fires with a real, measurable duration, not just that no exception was raised.
         """
-        counter: dict[str, int] = {'blk': 0}
+        counter: dict[str, float] = {'blk': 0}
         measure = make_measure(counter)
 
         with measure('blk'):
@@ -490,7 +549,7 @@ class TestMetricUtils:
             pyt.param({'blk': 0}, id='seeded'),
         ],
     )
-    def test_measure_context_unseeded_counter_no_keyerror(self, counter: dict[str, int]):
+    def test_measure_context_unseeded_counter_no_keyerror(self, counter: dict[str, float]):
         """`_measure` must not raise `KeyError` when `name` isn't pre-seeded in `counter`.
 
         Regression test for MEMY-165: `counter[name] += dur_ms` assumes `name` is already a key
@@ -512,7 +571,7 @@ class TestMetricUtils:
         silently dropped on exactly the paths (slow-then-crashing code) where a caller
         debugging via metrics would want it most.
         """
-        counter: dict[str, int] = {'blk': 0}
+        counter: dict[str, float] = {'blk': 0}
 
         def _sleep_then_raise() -> None:
             time.sleep(0.01)

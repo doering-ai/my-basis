@@ -134,6 +134,18 @@ class TestEnvironment:
         env_instance.set('SAME_VAR', 'value')  # Should not clear caches
         assert env_instance.get('SAME_VAR') == 'value'
 
+    def test_set__clears_cache_for_previously_unset_key(self, env_instance: Environment):
+        """Regression: `set()` must clear the cache for a key that was never set before.
+
+        A key absent from `_ENVIRON` reads back as `''` (falsy), so the old
+        `if cur := self.get(key):` guard skipped the cache-clear whenever the key being
+        set had no prior value -- the cached `''` stuck around forever even though
+        `_ENVIRON` held the freshly-set value underneath it.
+        """
+        assert env_instance.get('NEVER_BEFORE_SET_KEY') == ''  # populates the `_get` cache
+        env_instance.set('NEVER_BEFORE_SET_KEY', 'now_set')
+        assert env_instance.get('NEVER_BEFORE_SET_KEY') == 'now_set'
+
     @pyt.mark.parametrize(
         'invalid_key',
         [

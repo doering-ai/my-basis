@@ -187,8 +187,9 @@ class TestSyntaxUtils:
             ([1, 2, 3], 4, 99, False, [1, 2, 3]),
             # Test nested lists
             ([[1, 2], [3, 4]], 3, 99, True, [[1, 2], [99, 4]]),
-            # Test tuples (immutable, so returns True but doesn't modify original)
-            ((1, 2, 3), 2, 99, True, (1, 2, 3)),
+            # Test tuples (immutable, so no in-place replacement is possible; must
+            # honestly report `False` rather than falsely claiming success)
+            ((1, 2, 3), 2, 99, False, (1, 2, 3)),
             # Test sets
             ({1, 2, 3}, 2, 99, True, {1, 99, 3}),
             # Test deques
@@ -209,6 +210,30 @@ class TestSyntaxUtils:
         result = cls.nested_replace(obj, old, new)
         assert result == expected_result
         assert obj == expected_obj
+
+    def test_nested_replace__tuple_no_op(self):
+        """Regression: a direct match inside a bare tuple cannot be replaced in place.
+
+        Tuples are immutable, so the old code rebound the local `obj` name to a new
+        tuple and returned `True` -- a claim of success the caller could never observe,
+        since the caller's own reference to the original tuple was left untouched.
+        """
+        obj = (1, 2, 3)
+        result = cls.nested_replace(obj, 2, 99)
+        assert result is False
+        assert obj == (1, 2, 3)
+
+    def test_nested_replace__tuple_with_mutable_child_is_real_replacement(self):
+        """A mutable child nested inside a tuple can still be replaced truthfully.
+
+        The tuple container itself is never mutated, but its *reference* to the inner
+        list is unaffected by that immutability, so the list can be updated in place
+        and the overall call should honestly report `True`.
+        """
+        obj = ([1, 2, 3],)
+        result = cls.nested_replace(obj, 2, 99)
+        assert result is True
+        assert obj == ([1, 99, 3],)
 
     def test_nested_replace_pydantic(self):
         model = SimpleModel(name='Alice', age=30, CONSTANT='test')

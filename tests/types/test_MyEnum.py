@@ -40,6 +40,11 @@ class Perm(MyEnum, Flag):
     EXECUTE = auto()
 
 
+class Tag(MyEnum):
+    NONE = ''
+    SOME = 'some'
+
+
 class CustomAliasEnum(MyEnum):
     ALPHA = 'alpha'
     BETA = 'b'
@@ -189,6 +194,21 @@ class TestMyEnum:
         result = enum_value.write()
         assert result == expected
         assert str(enum_value) == expected
+
+    def test_write__empty_string_value(self):
+        """Regression: `write()` must round-trip an empty-string member value.
+
+        `if self.value and isinstance(self.value, str):` treats `''` as falsy, so it fell
+        through to `self.name.lower()` and wrote `'none'` instead of `''`. The truthiness
+        check must be dropped so any string value -- including `''` -- takes this branch.
+        """
+        assert Tag.NONE.write() == ''
+        assert str(Tag.NONE) == ''
+        assert Tag.SOME.write() == 'some'
+
+    def test_read__empty_string_round_trip(self):
+        """`read()` must recover the same member from `write()`'s empty-string output."""
+        assert Tag.read(Tag.NONE.write()) == Tag.NONE
 
     # -------------
     # 3. OPERATIONS

@@ -93,7 +93,7 @@ class MyEnum(Enum):
         Returns:
             String value, lowercase name, or pipe-separated flags for Flag enums.
         """
-        if self.value and isinstance(self.value, str):
+        if isinstance(self.value, str):
             return self.value
         elif self.name:
             return self.name.lower()

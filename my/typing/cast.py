@@ -276,7 +276,15 @@ class TypeCast(_TypingBase):
             Cast data if successful, None otherwise.
         """
         resolved = CastFlags.resolve(flags)
-        res = Transform(data, target, source, flags=resolved)()
+        try:
+            res = Transform(data, target, source, flags=resolved)()
+        except RecursionError as err:
+            # Cyclic *data* (a dict/list containing itself) sends the eager, structural
+            # `normalize()` walk in `Transform.__init__` into infinite recursion -- long before
+            # any transform gets a chance to decline it. Surface the package's own "cannot cast"
+            # signal (`Decline`, the same exception a transform raises to refuse a pair) instead
+            # of letting a bare `RecursionError` blow past this boundary.
+            raise Decline(f'cannot cast cyclic data to {target!r}') from err
         if res is not None:
             return res
         elif not isinstance(default, Empty):
@@ -514,6 +522,14 @@ class Transform[T0, T1]:
     def _t1(self) -> type[T1]:
         ret = self.t1.root
         if not isinstance(ret, type):
+            if not self.t1.origin and isinstance(self.t1.main, type):
+                # A MONO special form (e.g. `Annotated[int, ...]`) already resolved its `main`
+                # onto the wrapped concrete type during parsing -- only `root` is left holding
+                # the stale, un-unwrapped alias. Fall back to the type that's already been
+                # unwrapped instead of declining a target that *is* concrete underneath its
+                # wrapper. `origin` stays falsy here (unlike a genuine parametrized generic such
+                # as `list[str]`, whose `origin` is `list`), so this can't misfire on those.
+                return self.t1.main
             # See `_t0`: a parametrized/non-type target has no plain-class root to build from.
             raise Decline(f'no concrete root type for t1: {self.t1}')
         return ret
@@ -758,7 +774,15 @@ class Transform[T0, T1]:
                 )
 
         if self.flags.wraps:
-            return [text]
+            # Coerce the wrapped scalar to the target's element type (`'3' -> [3]` for
+            # `list[int]`), rather than leaving the raw string sitting inside a typed container.
+            # NOTE(MEMY-325): a string-element target (e.g. `list[str]`) round-trips through
+            # `self.to(str)` as a NOOP, so the "don't split a scalar string" guarantee above is
+            # untouched -- this only fixes up *non*-string element types. A total coercion
+            # failure (e.g. `'hello' -> list[int]`) falls through to the more general
+            # `_atom_to_vec`, which wraps the same way -- matched here rather than re-guarded, to
+            # keep the two siblings' fallback behavior consistent.
+            return [self.to(self.t1.vals)] if self.t1.vals else [text]
 
     @register
     def _scalar_to_string[S: Scalar, T: String](self: Transform) -> str | None:

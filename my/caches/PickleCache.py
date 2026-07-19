@@ -7,6 +7,8 @@ from collections.abc import Hashable, Coroutine, Callable, Iterable
 from datetime import datetime, timedelta
 from pathlib import Path
 import pickle as pkl
+import tempfile
+import os
 
 # External imports
 import pydantic as pyd
@@ -80,9 +82,27 @@ class PickleCache[Key: Hashable, Value](pyd.BaseModel):
         return self.data
 
     def write(self) -> None:
-        """Write current data to pickle file and update timestamps."""
-        with Path.open(self.file, 'wb') as ptr:
-            pkl.dump(self.data, ptr)
+        """Write current data to pickle file and update timestamps.
+
+        Writes to a temporary file in the same directory and atomically renames it into
+        place, so a crash or kill mid-write can never leave a torn/partially-written
+        pickle file at `file`.
+
+        TRUST BOUNDARY:
+            Only unpickle data you trust. `read()` calls `pickle.loads()` on whatever
+            bytes are on disk at `file` -- unpickling arbitrary/untrusted data can
+            execute arbitrary code. Treat this cache's file as trusted storage, not a
+            format for exchanging data with other parties.
+        """
+        fd, tmp_name = tempfile.mkstemp(dir=self.file.parent, prefix=f'.{self.file.name}.')
+        tmp_path = Path(tmp_name)
+        try:
+            with os.fdopen(fd, 'wb') as ptr:
+                pkl.dump(self.data, ptr)
+            tmp_path.replace(self.file)
+        except BaseException:
+            tmp_path.unlink(missing_ok=True)
+            raise
         self.last_read = self.last_write = ut.posix()
 
     def __getitem__(self, key: Key) -> Value:

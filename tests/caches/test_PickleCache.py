@@ -6,6 +6,7 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any
 import pickle as pkl
+import os
 
 ### EXTERNAL
 import pytest as pyt
@@ -13,6 +14,7 @@ import pytest as pyt
 ### INTERNAL
 from my.caches import PickleCache
 from my.utils import ut
+from ..conftest import Patch
 
 ############
 ### DATA ###
@@ -203,6 +205,48 @@ class TestPickleCache:
         with cache.file.open('rb') as f:
             loaded = pkl.load(f)
         assert loaded == {'new': 'data'}
+
+    def test_write__atomic_no_partial_file_on_failure(self, cache: PickleCache, patch: Patch):
+        """Test that a mid-write failure leaves the prior file intact, with no temp file left."""
+        cache.data = {'good': 'data'}
+        cache.write()
+        original_bytes = cache.file.read_bytes()
+
+        def _boom(*args: Any, **kwargs: Any) -> None:
+            raise RuntimeError('simulated crash')
+
+        cache.data = {'this': 'never lands'}
+        patch.setattr(pkl, 'dump', _boom)
+        with pyt.raises(RuntimeError, match='simulated crash'):
+            cache.write()
+
+        # The original file must survive the failed write, byte-for-byte.
+        assert cache.file.read_bytes() == original_bytes
+        with cache.file.open('rb') as f:
+            assert pkl.load(f) == {'good': 'data'}
+
+        # No stray temp file left behind in the cache's directory.
+        assert list(cache.file.parent.iterdir()) == [cache.file]
+
+    def test_write__uses_atomic_replace(self, cache: PickleCache, patch: Patch):
+        """Test that write() stages data via a temp file and os.replace, not a direct write."""
+        replace_calls = []
+        original_replace = os.replace
+
+        def _tracking_replace(src: Any, dst: Any) -> None:
+            # The source must be a temp file distinct from the destination, and it must
+            # already hold the fully-written data by the time the rename happens.
+            assert Path(src) != cache.file
+            assert pkl.loads(Path(src).read_bytes()) == {'key': 'value'}
+            replace_calls.append((src, dst))
+            original_replace(src, dst)
+
+        cache.data = {'key': 'value'}
+        patch.setattr(os, 'replace', _tracking_replace)
+        cache.write()
+
+        assert len(replace_calls) == 1
+        assert cache.file.exists()
 
     # ------------------
     # `*` Public Methods

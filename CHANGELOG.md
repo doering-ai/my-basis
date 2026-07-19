@@ -21,6 +21,9 @@ The release-readiness pass toward a confident 1.0: a cluster of reproduced secur
 
 - **Breaking (pre-1.0):** renamed the generic type aliases `_Func`/`_Map`/`_Vec`/`_Struct` to `FuncT`/`MapT`/`VecT`/`StructT`, so no leading-underscore names appear in `__all__`.
 - `ty.cast` no longer splits scalar strings on delimiters in container casts: `cast('a,b,c', list[str])` is `['a,b,c']`, not `['a', 'b', 'c']` (explicit over implicit).
+- **Breaking:** two-digit apostrophe-years now pivot at 50 -- `'YY` greater than 50 resolves to the 1900s (`'99` -> 1999), 50 or below to the 2000s (`'50` -> 2050); previously every `'YY` became `20YY`.
+- **Breaking (packaging):** the bundled resource package is nested under `my` (`my.data`) and no longer installs a top-level `data` namespace, closing a site-packages name collision.
+  Resources are still reached through `INFRA_PATHS.data`; only code that imported the top-level `data` package directly is affected.
 
 ### Fixed
 
@@ -51,6 +54,7 @@ The release-readiness pass toward a confident 1.0: a cluster of reproduced secur
 - README corrected: PyPI publication status, dependency scale, the flagship `cast` example, and the restored PyPI badges.
 - `task docs` builds again (added `sphinx.ext.intersphinx` and its mapping).
 - The Publish job asserts the git tag matches the `pyproject` version.
+- Documented the intentional `utils = Utils` aggregation (`my.utils` is the facade class, deliberately shadowing the submodule) and pinned it with a guard test, so it is not "de-shadowed" by mistake.
 
 ## [0.8.3] - 2026-07-11
 

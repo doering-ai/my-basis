@@ -163,6 +163,26 @@ class TestSystemUtils:
         captured = capsys.readouterr()
         assert 'colored text' in captured.out
 
+    def test_print_in_color__no_shell_injection(self, tmp_path):
+        """A `$(...)` command substitution in `text` must NOT be executed by a shell.
+
+        Regression test for a shell-injection RCE: `text` used to be interpolated directly
+        into a `zsh -c '...'` string run with `shell=True`, so a value like
+        `$(touch marker)` would execute the embedded command. It must now reach `print -P`
+        purely as an argv value.
+        """
+        marker = tmp_path / 'marker'
+        cls.print_in_color(f'$(touch {marker})')
+        assert not marker.exists()
+
+    def test_print_in_color__color_output_unchanged(self, capsys):
+        """Normal zsh-colorized text still expands via `print -P` after the argv-based fix."""
+        colored = cls.zsh_colorize('Hello', 'red')
+        cls.print_in_color(colored)
+        captured = capsys.readouterr()
+        assert '\x1b[31m' in captured.out
+        assert 'Hello' in captured.out
+
     # -------------------
     # `.` Confirm & Module
     # -------------------

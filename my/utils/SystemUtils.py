@@ -251,13 +251,20 @@ class SystemUtils(_UtilsBase):
         """Print colored text using zsh prompt expansion.
 
         Note:
-            Requires zsh to be available in the system PATH.
+            Requires zsh to be available in the system PATH. `text` is passed as an argv
+            value (never interpolated into a shell string), so it reaches `print -P` via
+            `$1` and cannot trigger `$(...)`/backtick command substitution.
 
         Args:
             text: Text with zsh color codes already present.
             **kwargs: Additional arguments for `print()`.
         """
-        ret = sbp.run(f'zsh -c \'print -P "{text}"\'', capture_output=True, text=True, shell=True)
+        ret = sbp.run(
+            ['zsh', '-c', 'print -P -- "$1"', 'zsh', text],
+            capture_output=True,
+            text=True,
+            shell=False,
+        )
         print((ret.stdout or '').strip('\n'), **kwargs)
 
     @staticmethod

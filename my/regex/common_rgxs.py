@@ -58,7 +58,7 @@ COMMON_RGXS = RegexStore.new(
     # -----------------
     # ISO Date Patterns
     # -----------------
-    y=r'[01]?\d{3}|20[012]\d|\d\d',
+    y=r'[01]?\d{3}|20\d\d|\d\d',
     m=r'0?[1-9]|1[0-2]',
     d=r'0[1-9]|[12]?\d|3[0-1]',
     _date=r'\b(?P>y)[-\/.](?P>m)(?:[-\/.](?P>d))?\b',  # Preferred ymd only

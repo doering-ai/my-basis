@@ -167,6 +167,9 @@ no-access = 'error'
 unused-ignore = 'error'
 unannotated-attribute = 'error'
 
+# No diagnostic baseline: `task eval:typecheck` is the ratchet. Keep intentional violations
+# line-local so a new instance of the same diagnostic kind still fails the gate.
+
 # -------
 # Linting
 # -------

@@ -2,7 +2,7 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import Self
+from typing import Any, Self, cast
 from enum import Enum, Flag
 import more_itertools as mi
 import functools as ft
@@ -59,9 +59,9 @@ class MyEnum(Enum):
         # I. Check against key names
         if isinstance(value, str):
             uval = value.upper().strip()
-            if value.isdigit():
-                # I.i. Cast numbers for int flags
-                value = int(value)
+            if uval.isdigit():
+                # I.i. Cast numeric strings after trimming surrounding whitespace.
+                value = int(uval)
             elif uval in members:
                 # I.ii. Find by name
                 return members[uval]
@@ -74,7 +74,7 @@ class MyEnum(Enum):
 
         # II. Handle int flags
         if isinstance(value, int) and issubclass(cls, Flag):
-            return cls(value)
+            return cast('Self', cls(value))
 
         # III. Immediate check against values (instead of keys)
         if type(value) is cls.vtype() and (key := ut.find_key(members, lambda v: v.value == value)):
@@ -82,8 +82,10 @@ class MyEnum(Enum):
 
         # IV. Handle lists of values
         if isinstance(value, list):
-            assert issubclass(cls, Flag)
-            return cls(sum(val.value for val in map(cls.read, value)))
+            if not issubclass(cls, Flag):
+                raise ValueError(f'{cls.__name__} does not support combined values.')
+            read = getattr(cls, 'read')
+            return cast('Self', cls(sum(val.value for val in map(read, value))))
 
         raise ValueError(f'Invalid {cls.__name__} value: {value}')
 
@@ -98,9 +100,7 @@ class MyEnum(Enum):
         elif self.name:
             return self.name.lower()
         elif isinstance(self, Flag):
-            return '|'.join(
-                [flag.name for flag in type(self) if flag.name and self.value & flag.value]
-            )
+            return '|'.join(flag.name.lower() for flag in self if flag.name)
         else:
             return str(self)
 
@@ -112,21 +112,22 @@ class MyEnum(Enum):
 
     def __sub__(self, other: Self | str | int | list) -> Self:
         cls = self.__class__
-        if issubclass(cls, Flag) and isinstance(other, cls):
-            return self & ~other  # type: ignore
-
         if not isinstance(other, cls):
             other = cls.read(other)
-        return cls(self.value - other.value)  # type: ignore
+        if isinstance(self, Flag):
+            return cast('Self', self & ~cast('Any', other))
+        return cast('Self', cls(self.value - other.value))
 
     def __isub__(self, other: Self | str | int | list) -> Self:
         return self - other
 
     def __add__(self, other: Self | str | int | list) -> Self:
         cls = self.__class__
-        if issubclass(cls, Flag) and isinstance(other, cls):
-            return self | other  # type:ignore
-        return cls(self.value + other.value)  # type: ignore
+        if not isinstance(other, cls):
+            other = cls.read(other)
+        if isinstance(self, Flag):
+            return cast('Self', self | cast('Any', other))
+        return cast('Self', cls(self.value + other.value))
 
     def __iadd__(self, other: Self | str | int | list) -> Self:
         return self + other
@@ -137,7 +138,7 @@ class MyEnum(Enum):
         if not isinstance(self, Flag):
             return [self]
         else:
-            return list(self) or []
+            return [cast('Self', flag) for flag in self]
 
     @property
     def base(self) -> Self:

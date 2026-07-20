@@ -13,12 +13,11 @@ built-in types with domain-specific functionality. These types are designed to i
 with Pydantic for validation and serialization.
 
 ```{toctree}
----
-maxdepth: 2
----
+:maxdepth: 2
 types.Buffer
 types.Command
 types.MyEnum
+types.Platform
 types.Predicate
 types.Span
 types.UniqueId

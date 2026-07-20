@@ -85,7 +85,7 @@ class Command(pyd.BaseModel):
     def new(
         cls,
         command: str,
-        *args: object,
+        *args: str,
         options: dict | Options | None = None,
         **kwargs: Any,
     ) -> Self:

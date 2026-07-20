@@ -19,6 +19,9 @@ The release-readiness pass toward a confident 1.0: a cluster of reproduced secur
 
 ### Changed
 
+- The `apis` and `files` facade leaves now load lazily (PEP 562 `__getattr__`): a bare `import my` no longer imports them or runs `apis`'s import-time side effects, cutting `import my` from ~1690 to ~1440 modules (~18% faster).
+  One consequence: `Environment` snapshots `os.environ` on first `env` access rather than at `import my`.
+  `from my import env` / `Markdown` / etc. are unchanged; `from my import *` and `hasattr(my, name)` still force the lazy names to load.
 - **Breaking (pre-1.0):** renamed the generic type aliases `_Func`/`_Map`/`_Vec`/`_Struct` to `FuncT`/`MapT`/`VecT`/`StructT`, so no leading-underscore names appear in `__all__`.
 - `ty.cast` no longer splits scalar strings on delimiters in container casts: `cast('a,b,c', list[str])` is `['a,b,c']`, not `['a', 'b', 'c']` (explicit over implicit).
 - **Breaking:** two-digit apostrophe-years now pivot at 50 -- `'YY` greater than 50 resolves to the 1900s (`'99` -> 1999), 50 or below to the 2000s (`'50` -> 2050); previously every `'YY` became `20YY`.

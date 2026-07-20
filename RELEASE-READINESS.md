@@ -137,6 +137,19 @@ Three disjoint-file Sonnet worktree agents (extras/imports, docs, tests), each g
 
 **Still open:** `basis-D4`–`D6` (lazy facade — the maintainer's named priority; the one structural item, deferred to run as a careful sequenced change with a facade smoke test) and `basis-M5` (version bump at release, operator-gated).
 
+**✅ Sixth pass — 2026-07-20 (D4/D5 lazy facade — the maintainer's named priority)**
+
+Sequenced after the fifth pass so it rebased onto the finished tree; combined gate on `main`: **3753 passed** · `ruff` clean · `pyrefly` 0 errors.
+
+- `basis-D4` / `basis-D5` ⭐ — **the lazy facade landed.** `apis` and `files` are the only *leaf* subpackages (nothing else under `my/` imports them — verified), so `my/__init__.py` now defers them to first attribute access via a PEP 562 `__getattr__`, with a `TYPE_CHECKING` block so checkers and autocomplete still see the names.
+  Measured on the all-extras venv, bare `import my` drops from **1688 → 1437 modules** (~415ms → ~341ms, ~18%) and no longer pulls `googleapiclient`/`mdformat`/`dotenv`/`my.apis`/`my.files` or runs `apis`'s import-time side effects (`load_dotenv`, the `os.environ` snapshot, Filesystem path resolution — now on first access to `env`/`fs`).
+  A 25-case subprocess smoke test (`tests/test_lazy_facade.py`) pins the deferral and the resolution contract (identity `env is ENV` / `fs is FS is PATHS`, `from my import *`, `AttributeError` on a missing name).
+  A grep of all 11 consumers found none using `hasattr(my, …)` / `vars(my)` / reflection that laziness would defeat; every consumer uses `from my import <name>`, which the `__getattr__` resolves.
+  **Behavior note:** the `os.environ` snapshot now fires when `env` is first touched rather than at `import my` — intrinsic to removing the side effect (D5), and it reaches consumers only at `stable`-tag adoption.
+
+**Still open after the sixth pass:** `basis-D6` is *partially* delivered — the `google`/`googleapiclient` tax is deferred for free (it lives in the now-lazy `apis`) — but two eager heavy imports remain as clean, separate follow-ups: (1) the `logfire`/`pandas` block in `MetricUtils` (eager `utils`; the `import logfire` is the ~34% pydantic-plugin cascade — an invasive hot-module refactor with a `[metrics]`-users-only payoff), and (2) the module-level Jinja env in `my/infra/constants.py` (pulls `jinja2` and stats the templates dir at import; deferring it needs a decision on the public `JINJA` re-export).
+Plus `basis-M5` (version bump at release, operator-gated).
+
 ______________________________________________________________________
 
 ## 1. How this was produced

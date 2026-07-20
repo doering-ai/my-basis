@@ -24,9 +24,12 @@ The release-readiness pass toward a confident 1.0: a cluster of reproduced secur
 - **Breaking:** two-digit apostrophe-years now pivot at 50 -- `'YY` greater than 50 resolves to the 1900s (`'99` -> 1999), 50 or below to the 2000s (`'50` -> 2050); previously every `'YY` became `20YY`.
 - **Breaking (packaging):** the bundled resource package is nested under `my` (`my.data`) and no longer installs a top-level `data` namespace, closing a site-packages name collision.
   Resources are still reached through `INFRA_PATHS.data`; only code that imported the top-level `data` package directly is affected.
+- `mdformat-front-matters` moved from the `[myst]` extra to core `dependencies`: `Markdown.render()`'s default template emits YAML frontmatter, so the plugin is required for correct core rendering (see Fixed).
 
 ### Fixed
 
+- `Markdown.render(fix=True)` no longer breaks on a core-only install: the default template emits a `---...---` frontmatter block and `mdformat` raises on the then-unavailable `front_matters` extension; the plugin is now a core dependency.
+- The optional-dependency `ImportError`s name the correct extra with an install hint: `GoogleSheet` reports `[google]` (was a copy-pasted `[metrics]`), `MetricUtils` reports `[metrics]`, both without the bogus `utils.` prefix.
 - `ty.cast` coerces the element type in the scalar-wrap fallback (`cast('3', list[int])` -> `[3]`, not `['3']`), unwraps `Annotated[...]` targets (was returning `None`), and declines cyclic data with `Decline` instead of a bare `RecursionError`.
 - `Markdown` notes/frontmatter now render instead of being silently discarded (they were emitted outside the Jinja block under `{% extends %}`).
 - `NestedCache` propagates its configured `max_size`/`bucket_size` to child caches.
@@ -55,6 +58,14 @@ The release-readiness pass toward a confident 1.0: a cluster of reproduced secur
 - `task docs` builds again (added `sphinx.ext.intersphinx` and its mapping).
 - The Publish job asserts the git tag matches the `pyproject` version.
 - Documented the intentional `utils = Utils` aggregation (`my.utils` is the facade class, deliberately shadowing the submodule) and pinned it with a guard test, so it is not "de-shadowed" by mistake.
+- Documented the five optional extras (`metrics`/`google`/`myst`/`terminal`/`aiohttp`) in the README with an install table.
+- Added the missing `apis.Filesystem` and `types.Platform` reference pages; the `Typist` page now renders its inherited `cast`/`check`/`match` methods.
+- Corrected the subpackage dependency-tree docstring (added the `infra` root and the `apis`→`regex` / `regex`→`typing` edges).
+
+### Tests
+
+- Hardened the 0.8.3 performance/security claims with real coverage: `Buffer`'s `REGEX_TIMEOUT` firing, `md_url` ReDoS resistance, `pair_list()` cache invalidation, and console-script smoke tests.
+- Made the suite hermetic (`conftest` no longer writes under `~/local/logs`) and stopped the `Environment` tests leaking classvar state across the run.
 
 ## [0.8.3] - 2026-07-11
 

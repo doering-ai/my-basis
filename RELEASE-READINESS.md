@@ -120,6 +120,23 @@ Final gate: **3699 passed** · `pyrefly` 0 errors · `ruff` clean.
 **Still open for a future dedicated effort:** `basis-D4`–`D6` (lazy facade — highest value/risk, needs a cross-consumer import smoke test), `basis-M5` (version bump at release), `basis-T1`/`T2`, `basis-X5`/`X6`.
 Consumer-adoption watch (all pinned to the `stable` tag today, so not live): the `Command` `pipe`/`out` rewrite (`out` preserves append; `pipe` now sequential-buffered) and the C9/C14 behavior changes.
 
+**✅ Fifth pass — 2026-07-20 (D/T/X sections, orchestrated Sonnet worktree wave)**
+
+Three disjoint-file Sonnet worktree agents (extras/imports, docs, tests), each green in isolation, merged into `main`; combined gate: **3728 passed** · `ruff` clean · `pyrefly` 0 errors.
+
+- `basis-D7` — the missing-dependency `ImportError`s now name the *right* extra: `GoogleSheet` reports `[google]` (was a copy-pasted `[metrics]`), `MetricUtils` reports `[metrics]`, both without the bogus `utils.` prefix and with a `pip install my-basis[<extra>]` hint + a docstring pointer.
+  Regression test asserts the `[google]` message.
+- `basis-D8` — **latent core-install crash closed.** The default `Markdown.md.jinja` emits a `---...---` frontmatter block unconditionally, and `mdformat` raises `KeyError` on a requested-but-absent extension, so `Markdown.render(fix=True)` crashed on a bare-core install (where `mdformat-front-matters` lived only in `[myst]`).
+  Promoted `mdformat-front-matters` to core `dependencies`; the wheel METADATA now carries it unconditionally.
+- `basis-D9` — documented all five extras (`metrics`/`google`/`myst`/`terminal`/`aiohttp`) in the README with an install table.
+- `basis-T1` — the 0.8.3 "Performance & Security" claims are now actually tested: `Buffer.REGEX_TIMEOUT` firing on `(a|a)+b`, `md_url` ReDoS resistance (pins the possessive `*+` fix), `pair_list()` cache correctness/identity/invalidation, and a `sync-docs` console-script smoke test.
+- `basis-T2` — `conftest` is hermetic: `MY_LOGS` sinks to a temp dir unconditionally (the fleet-wide `MY_LOGS=~/local/logs` export made the "respect existing" variant non-hermetic), so the suite no longer writes under `~/local`.
+- `basis-T3` — reproduced then fixed: the `set()`-family tests leaked keys into the shared `Environment._ENVIRON` classvar; an autouse snapshot/restore fixture now isolates every test.
+- `basis-X5` — backfilled the missing `apis.Filesystem` and `types.Platform` reference pages and added `:inherited-members: BaseModel` to the `Typist` page so `cast`/`check`/`match` render (scoped to `BaseModel` to keep the `--fail-on-warning` build clean).
+- `basis-X6` — corrected the stale subpackage dependency-tree docstring: added the omitted `infra` root and the `apis`→`regex`/`regex`→`typing` edges, fixed depth, and footnoted `data`/`scripts` rather than fabricating import edges.
+
+**Still open:** `basis-D4`–`D6` (lazy facade — the maintainer's named priority; the one structural item, deferred to run as a careful sequenced change with a facade smoke test) and `basis-M5` (version bump at release, operator-gated).
+
 ______________________________________________________________________
 
 ## 1. How this was produced

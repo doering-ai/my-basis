@@ -5,13 +5,20 @@ r"""Technical Overview of the `my-basis` python package.
 When adding new relative imports to any of the modules in this package, make sure to either respect
 or update this structure (in order to prevent circular dependencies).
 
-- `utils` imports nothing.
-  - `caches` imports `utils`
-    - `typing` imports `utils` and `caches`
-      - `types` imports `utils` and `typing`
-        - `apis` imports `utils` and `types`
-        - `regex` imports `utils` and `types`
-          - `files` imports `utils`, `typing`, `types`, and `regex`
+- `infra` imports nothing -- it's the package's foundational layer.
+  - `utils` imports `infra`.
+    - `caches` imports `utils`.
+      - `typing` imports `infra`, `utils`, and `caches`.
+        - `types` imports `infra`, `utils`, and `typing`.
+          - `regex` imports `infra`, `utils`, `types`, and `typing`.
+            - `apis` imports `infra`, `utils`, `types`, `regex`, and `typing`.
+            - `files` imports `infra`, `utils`, `typing`, `types`, and `regex`.
+
+`data` and `scripts` sit outside this relative-import graph. `data` holds no Python code -- it's a
+resource-only namespace (YAML, Jinja templates) that `infra` reads via `importlib.resources`, not a
+relative import. `scripts` are entry points that consume the finished public API through absolute
+`from my import ...` statements rather than the relative imports tracked above, so nothing in the
+tree depends on them.
 
 ### Contributing
 

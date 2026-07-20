@@ -14,6 +14,7 @@ from collections.abc import (
 from collections import deque
 from copy import deepcopy
 from datetime import datetime
+from dataclasses import asdict, is_dataclass
 from enum import Enum
 from pathlib import Path
 import contextlib as ctx
@@ -33,7 +34,6 @@ from ..infra.types import (
     Scalars,
     Atoms,
     Atom,
-    VecT,
     Vec,
     Iter,
     Map,
@@ -665,13 +665,15 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
             # II.ii. Rely on the model's serializers and treat the result as a dict
             if isinstance(data, pyd.BaseModel):
                 data = data.model_dump(exclude_unset=full, exclude_defaults=full)  # type: ignore
+            elif is_dataclass(data) and not isinstance(data, type):
+                data = asdict(data)
 
         # III. Recurse into collections
         if self.is_struct(data):
             _recur = ft.partial(self.serialize, cases=cases, full=full)
             if self.is_map(data):
                 return ut.val_map(_recur, data)
-            else:
+            elif isinstance(data, Iterable):
                 # Plain `list(data)`, not `self.cast(data, list)` -- casting would normalize
                 # each element (e.g. flattening a nested Model into pairs) before `_recur` gets
                 # a chance to serialize it via its own `serialize()`/`model_dump()` logic.
@@ -1086,7 +1088,7 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
     def try_method[T](
         self,
         obj: object,
-        methods: str | VecT[str],
+        methods: str | Iterable[str],
         *args,
         _tvar: type[T],
         _strict: Literal[True],
@@ -1097,7 +1099,7 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
     def try_method(
         self,
         obj: object,
-        methods: str | VecT[str],
+        methods: str | Iterable[str],
         *args,
         _tvar: None = None,
         _strict: Literal[True],
@@ -1108,7 +1110,7 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
     def try_method[T](
         self,
         obj: object,
-        methods: str | VecT[str],
+        methods: str | Iterable[str],
         *args,
         _tvar: type[T],
         **kwargs,
@@ -1116,13 +1118,13 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
 
     @overload
     def try_method(
-        self, obj: object, methods: str | VecT[str], *args, **kwargs
+        self, obj: object, methods: str | Iterable[str], *args, **kwargs
     ) -> object | None: ...
 
     def try_method[T](
         self,
         obj: object,
-        methods: str | VecT[str],
+        methods: str | Iterable[str],
         *args,
         _tvar: type[T] | None = None,
         _strict: bool = False,

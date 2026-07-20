@@ -41,6 +41,9 @@ Note:
 ```
 """
 
+from typing import TYPE_CHECKING
+import importlib
+
 from .infra.types import (
     FuncT,
     MapT,
@@ -102,7 +105,6 @@ from .typing import (
     tyt,
 )
 from .types import MyEnum, UniqueId, Uid, Span, Buffer, Predicate, Command, Platform
-from .apis import GoogleSheet, Environment, ENV, env, Filesystem, PATHS, FS, fs
 from .regex import (
     RegexStore,
     RegexDebugger,
@@ -123,7 +125,22 @@ from .regex import (
     META_RGXS,
     COMMON_RGXS,
 )
-from .files import Markdown
+
+# -- Lazy facade leaves (PEP 562) --------------------------------------------
+# `apis` and `files` are the only *leaf* subpackages -- nothing else under `my/`
+# imports them -- so they are deferred to first attribute access via `__getattr__`
+# below. This keeps every `import my` that never touches them from paying their
+# import cost, and from triggering `apis`'s import-time side effects (`load_dotenv`,
+# the `os.environ` snapshot, filesystem path resolution). Type checkers and
+# autocomplete still see the names through this `TYPE_CHECKING` block.
+#
+# Honest limits (do not "fix" by making these eager again): `from my import env`
+# still pays the full `apis` import cost at *that* import, and `from my import *`
+# or `hasattr(my, 'env')` force every lazy name to load. The win is for the many
+# consumers that import only eager names (`ut`, `ty`, `Buffer`, ...).
+if TYPE_CHECKING:
+    from .apis import GoogleSheet, Environment, ENV, env, Filesystem, PATHS, FS, fs
+    from .files import Markdown
 
 
 __all__ = [
@@ -228,3 +245,35 @@ __all__ = [
     # /files/
     'Markdown',
 ]
+
+
+#: Facade names deferred to first access, mapped to the submodule that defines each.
+_LAZY_ATTRS: dict[str, str] = {
+    'GoogleSheet': 'my.apis',
+    'Environment': 'my.apis',
+    'ENV': 'my.apis',
+    'env': 'my.apis',
+    'Filesystem': 'my.apis',
+    'PATHS': 'my.apis',
+    'FS': 'my.apis',
+    'fs': 'my.apis',
+    'Markdown': 'my.files',
+}
+
+
+def __getattr__(name: str) -> object:
+    """Lazily resolve the `apis`/`files` facade leaves on first access (PEP 562).
+
+    Resolved values are cached back into the module globals, so subsequent attribute
+    access skips this hook entirely.
+    """
+    module = _LAZY_ATTRS.get(name)
+    if module is None:
+        raise AttributeError(f'module {__name__!r} has no attribute {name!r}')
+    value = getattr(importlib.import_module(module), name)
+    globals()[name] = value
+    return value
+
+
+def __dir__() -> list[str]:
+    return sorted(__all__)

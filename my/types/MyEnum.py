@@ -102,7 +102,7 @@ class MyEnum(Enum):
         elif self.name:
             return self.name.lower()
         elif isinstance(self, Flag):
-            return '|'.join(flag.name.lower() for flag in self if flag.name)
+            return '|'.join(flag.name for flag in self if flag.name)
         else:
             return str(self)
 

@@ -84,7 +84,9 @@ class MyEnum(Enum):
         if isinstance(value, list):
             if not issubclass(cls, Flag):
                 raise ValueError(f'{cls.__name__} does not support combined values.')
-            read = getattr(cls, 'read')
+            # Pyrefly narrows `cls` to `Flag` here and loses the `MyEnum` side of the
+            # multiple-inheritance contract, even though every runtime subclass has `read`.
+            read = cls.read  # pyrefly: ignore[missing-attribute]
             return cast('Self', cls(sum(val.value for val in map(read, value))))
 
         raise ValueError(f'Invalid {cls.__name__} value: {value}')

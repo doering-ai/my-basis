@@ -223,6 +223,27 @@ class TestParseData:
         assert pd.captures['field'] == ['HELLO', 'WORLD']
         assert pd.starts['field'] == [0, 10]
 
+    def test_apply_func_parser__empty_values(self):
+        """Test that an empty field survives an otherwise valid transformation."""
+        pd = cls(captures={'field': []}, starts={'field': []})
+        pd.set_field('field')
+
+        pd.apply_func_parser(str.upper)
+
+        assert pd.captures['field'] == []
+        assert pd.starts['field'] == []
+
+    def test_apply_func_parser__mixed_return_types(self):
+        """Test that inconsistent parser results fail with a stable contract error."""
+        pd = cls(captures={'field': ['a', 'b']}, starts={'field': [0, 1]})
+        pd.set_field('field')
+
+        def parser(value: str) -> dict[str, str] | str:
+            return {'field': value} if value == 'a' else value
+
+        with pyt.raises(TypeError, match='same type'):
+            pd.apply_func_parser(parser)
+
     def test_apply_func_parser__dict_return(self):
         pd = cls(
             captures={'field': ['key:value', 'foo:bar']},

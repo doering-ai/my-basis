@@ -22,7 +22,6 @@ ROOT = Path(__file__).parent.resolve()
 DOC_DIR = '.'
 API_DIR = './api'
 OUT_DIR = './_build'
-STC_DIR = './_static'
 
 SRC_DIR = './../my'
 JNJ_DIR = SRC_DIR + '/data/templates'
@@ -242,7 +241,7 @@ pygments_dark_style = 'monokai'  # specific to `furo` theme
 # html_favicon=
 # html_css_files=
 # html_js_files=
-html_static_path = [str(STC_DIR)]
+# html_static_path=
 # html_extra_path=
 # html_last_updated_fmt=
 # html_last_updated_use_utc=

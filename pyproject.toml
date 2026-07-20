@@ -198,7 +198,6 @@ bad-return = 'warn'
 invalid-argument = 'warn'
 not-iterable = 'warn'
 invalid-yield = 'warn'
-bad-specialization = 'warn'
 not-callable = 'warn'
 bad-argument-count = 'warn'
 # `internal-error`/`unsupported-operation` on `my/typing/MyType.py:560` (`head | (other.root or

@@ -57,8 +57,7 @@ ClassType = TypeVar('ClassType')
 
 FileParam = str | bytes | File | None
 RawJsonData = str | int | float | bool | list | dict | None
-FileData = Atom | Vec | Map | pyd.BaseModel
-F = TypeVar('F', bound=FileData)
+F = TypeVar('F')
 
 
 type CaseKey = type | Callable[[object], bool]  #:

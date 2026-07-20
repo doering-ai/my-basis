@@ -6,4 +6,5 @@
 ```{eval-rst}
 .. autoclass:: my.typing.Typist.Typist
    :members:
+   :inherited-members: BaseModel
 ```

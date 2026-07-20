@@ -13,9 +13,8 @@ currently covers three concerns: environment variable management (`Environment`)
 registration (`Filesystem`), and Google Sheets integration (`GoogleSheet`).
 
 ```{toctree}
----
-maxdepth: 2
----
+:maxdepth: 2
 apis.Environment
+apis.Filesystem
 apis.GoogleSheet
 ```

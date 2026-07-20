@@ -10,6 +10,7 @@ import pydantic as pyd
 ### INTERNAL
 from my.files import Markdown
 from my.types import Buffer
+from my.typing import typist
 
 ############
 ### DATA ###
@@ -774,6 +775,22 @@ class TestMarkdown:
         assert output.count('---') >= 2
         assert '# Test' in output
         assert 'Test prose' in output
+
+    def test_to_string__frontmatter_is_valid_yaml_after_fix(self):
+        """Regression (basis-D8): `mdformat-front-matters` must be present so `fix=True` (the
+        default) formats the block as real, round-trippable YAML frontmatter bounded by `---`
+        lines rather than mangling it into a thematic break plus a stray header -- the failure
+        mode when the `front_matters` extension is requested but its plugin isn't installed.
+        """
+        node = cls.new(title='Test', level=1, prose='Test prose', notes={'key': 'value', 'n': 2})
+        output = node.to_string(fix=True)
+
+        assert output.startswith('---\n')
+        _, _, remainder = output.partition('---\n')
+        yaml_block, closed, body = remainder.partition('---\n')
+        assert closed, 'Frontmatter closing `---` not found (mangled by mdformat?)'
+        assert typist.from_yaml(yaml_block) == {'key': 'value', 'n': 2}
+        assert body.strip().startswith('# Test')
 
     @pyt.mark.parametrize('fix', [False, True])
     def test_to_string__no_notes_omits_frontmatter(self, fix: bool):

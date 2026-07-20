@@ -61,6 +61,20 @@ my-basis = { path = "../libs/basis", editable = true }
 
 Adjust the relative `path` to wherever this repo lives on disk from the consuming project, then run `uv sync`.
 
+### Optional extras
+
+Core stays small on purpose; everything heavier hangs off an extra you opt into with `pip install my-basis[<extra>]` (or `uv add my-basis --extra <extra>`):
+
+| Extra      | Unlocks                                                                                                                                                          |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `metrics`  | `MetricUtils` — Logfire/OpenTelemetry logging, metrics counters, and instrumentation helpers.                                                                    |
+| `google`   | `GoogleSheet` — read/write Google Sheets as pandas `DataFrame`s, with OAuth2 handled for you.                                                                    |
+| `myst`     | MyST markdown syntax (admonitions, directives, ...) in `Markdown.render()`'s formatting pass.                                                                    |
+| `terminal` | The `pyratatui`-backed terminal-art demos under `my/scripts/tuitorii/`.                                                                                          |
+| `aiohttp`  | A convenience pin so `MetricUtils.setup_fire_logging()` can auto-instrument your app's `aiohttp` client when one's already installed — gates nothing on its own. |
+
+Call a `[metrics]` or `[google]` method without installing its extra and you get an actionable `ImportError` naming the exact extra to add, not a bare traceback.
+
 ## Quickstart
 
 The core loop: cast untyped data into a target type, check whether a value already fits one, and introspect a type itself as a `MyType` node.

@@ -47,6 +47,12 @@ class GoogleSheet:
     for their Google Sheets product. They have multiple official python packages, but they all are
     fatally flawed in one way or another.
 
+    ```{important}
+    These methods are only present if the **optional** `google` dependency is installed
+    (`pip install my-basis[google]`). If you try to call them without it, an `ImportError` will
+    be thrown.
+    ```
+
     Authentication is handled automatically via Google's [OAuth2.0 for Web Server Applications](https://developers.google.com/identity/protocols/oauth2/web-server)
     flow, which works by prompting the user to log in via an auto-launched browser window.
     From there, this class handles token caching and refresh, storing credentials in the `creds_dir`
@@ -105,7 +111,9 @@ class GoogleSheet:
         def _wfn(*args: Any, **kwargs: Any):
             if not INSTALLED:
                 name = fn.__name__
-                raise ImportError(f'`utils.{name}()` requires the optional `[metrics]` dependency.')
+                raise ImportError(
+                    f'{name}() requires the optional [google] extra: pip install my-basis[google]'
+                )
             return fn(*args, **kwargs)
 
         return _wfn  # type: ignore

@@ -2,6 +2,7 @@
 ### HEAD ###
 ############
 ### STANDARD
+import inspect
 
 ### EXTERNAL
 import pytest as pyt
@@ -118,3 +119,19 @@ class TestGoogleSheet:
     ):
         result = cls.deserialize_data(values, header=header, index=index)
         pd.testing.assert_frame_equal(result, expected.astype(str), check_dtype=False)
+
+    def test_import_guard_message_names_google_extra(self, monkeypatch: pyt.MonkeyPatch):
+        """Regression (basis-D7): the missing-dependency message must name the `[google]`
+        extra (with an actionable install command), not the copy-pasted `[metrics]`/`utils.`
+        wording borrowed from `MetricUtils`'s sibling guard."""
+        module = inspect.getmodule(cls)
+        assert module is not None
+        monkeypatch.setattr(module, 'INSTALLED', False)
+
+        with pyt.raises(ImportError) as exc_info:
+            cls.shape_to_range((1, 1))
+
+        message = str(exc_info.value)
+        assert 'pip install my-basis[google]' in message
+        assert '[metrics]' not in message
+        assert 'utils.' not in message

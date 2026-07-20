@@ -49,8 +49,9 @@ class MetricUtils(_UtilsBase):
     """Methods deal with logging, telemetry, and other measurement tasks.
 
     ```{important}
-    These methods are only present if the **optional** `metrics` dependency is installed.
-    If you try to call them without it, an `ImportError` will be thrown.
+    These methods are only present if the **optional** `metrics` dependency is installed
+    (`pip install my-basis[metrics]`). If you try to call them without it, an `ImportError` will
+    be thrown.
     ```
     """
 
@@ -73,7 +74,9 @@ class MetricUtils(_UtilsBase):
         def _wfn(*args, **kwargs):
             if not MetricUtils.METRICS_INSTALLED:
                 name = fn.__name__
-                raise ImportError(f'`utils.{name}()` requires the optional `[metrics]` dependency.')
+                raise ImportError(
+                    f'{name}() requires the optional [metrics] extra: pip install my-basis[metrics]'
+                )
             return fn(*args, **kwargs)
 
         return _wfn  # type: ignore

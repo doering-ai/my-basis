@@ -33,6 +33,7 @@ urls.Documentation = "https://my-basis.readthedocs.io"
 dependencies = [
   "jinja2>=3.1.6",
   "mdformat>=0.7.22",
+  "mdformat-front-matters>=2.0.0", # Markdown.render()'s default template emits frontmatter
   "more-itertools>=10.7.0",
   "numpy>=2.4.1",
   "pydantic>=2.11.7",
@@ -47,7 +48,7 @@ dependencies = [
 
 [project.optional-dependencies]
 aiohttp = ["aiohttp>=3.12.15"]
-myst = ["mdformat-front-matters>=2.0.0", "mdformat-myst>=0.3.0"]
+myst = ["mdformat-myst>=0.3.0"]
 metrics = [
   "opentelemetry-instrumentation-aiohttp-client>=0.57b0",
   "opentelemetry-instrumentation-asgi>=0.57b0",

@@ -1144,6 +1144,7 @@ source = { editable = "." }
 dependencies = [
     { name = "jinja2" },
     { name = "mdformat" },
+    { name = "mdformat-front-matters" },
     { name = "more-itertools" },
     { name = "numpy" },
     { name = "pydantic" },
@@ -1173,7 +1174,6 @@ metrics = [
     { name = "pandas" },
 ]
 myst = [
-    { name = "mdformat-front-matters" },
     { name = "mdformat-myst" },
 ]
 terminal = [
@@ -1245,7 +1245,7 @@ requires-dist = [
     { name = "jinja2", specifier = ">=3.1.6" },
     { name = "logfire", extras = ["system-metrics"], marker = "extra == 'metrics'", specifier = ">=4.37.0" },
     { name = "mdformat", specifier = ">=0.7.22" },
-    { name = "mdformat-front-matters", marker = "extra == 'myst'", specifier = ">=2.0.0" },
+    { name = "mdformat-front-matters", specifier = ">=2.0.0" },
     { name = "mdformat-myst", marker = "extra == 'myst'", specifier = ">=0.3.0" },
     { name = "more-itertools", specifier = ">=10.7.0" },
     { name = "numpy", specifier = ">=2.4.1" },

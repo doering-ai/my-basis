@@ -3,6 +3,7 @@
 ############
 ### STANDARD
 from pathlib import Path
+import time
 
 ### EXTERNAL
 import pytest as pyt
@@ -68,3 +69,28 @@ class TestCommonRegexes:
         common_result = COMMON_RGXS['url_detritus'].sub('', target).strip('/. ')
         meta_result = META_RGXS['url_detritus'].sub('', target).strip('/. ')
         assert common_result == meta_result
+
+    def test_md_url__possessive_quantifiers_resist_redos(self):
+        """basis-T1 item 2: pin the 0.8.3 ReDoS fix (possessive ``*+`` quantifiers) for ``md_url``.
+
+        Changelog: "Fixed `md_url` ReDoS vulnerability (cubic backtracking on spaces) via
+        possessive `*+` quantifiers". The pre-fix pattern used plain (backtracking) `*` around
+        the alias body, which let the engine explore cubically many ways to split leading
+        whitespace between the surrounding ` *` group and the lazy `[^\\]\\n]+?` alias whenever
+        the match ultimately failed (no closing `])`) -- confirmed separately: an equivalent
+        non-possessive pattern took ~2.4s on 2,000 pathological spaces (vs. microseconds for the
+        current possessive pattern at even 5x that size). This pins the fix: matching stays fast
+        on a pathological input that would blow straight through the bound below if a future
+        edit reintroduced plain `*` quantifiers here.
+        """
+        text = '[' + (' ' * 5000) + 'unterminated'  # no closing `])` -- forces a full scan
+
+        start = time.monotonic()
+        try:
+            match = COMMON_RGXS['md_url'].search(text, timeout=3.0)
+        except TimeoutError:
+            pyt.fail('md_url exceeded 3s on pathological input -- ReDoS regression')
+        elapsed = time.monotonic() - start
+
+        assert match is None
+        assert elapsed < 1.0, f'md_url took {elapsed:.3f}s on pathological input'

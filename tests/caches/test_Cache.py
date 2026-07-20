@@ -364,11 +364,11 @@ class TestCache:
         """Test cache with mixed types."""
         cache = cls()
         cache[1] = 'int_key'
-        cache['string'] = 123
-        cache[(1, 2, 3)] = ['list', 'value']
-        cache[frozenset([1, 2])] = {'dict': 'value'}
+        cache['string'] = 123  # pyrefly: ignore[unsupported-operation]
+        cache[(1, 2, 3)] = ['list', 'value']  # pyrefly: ignore[unsupported-operation]
+        cache[frozenset([1, 2])] = {'dict': 'value'}  # pyrefly: ignore[unsupported-operation]
 
         assert cache[1] == 'int_key'
-        assert cache['string'] == 123
+        assert cache['string'] == 123  # pyrefly: ignore[bad-index]
         assert cache[(1, 2, 3)] == ['list', 'value']
         assert cache[frozenset([1, 2])] == {'dict': 'value'}

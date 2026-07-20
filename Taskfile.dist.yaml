@@ -190,7 +190,7 @@ tasks:
         aliases: [ch, ruff, check]
 
     eval:typecheck:
-        cmd: '{{.UV}} run pyrefly check {{.CLI_ARGS}}'
+        cmd: '{{.UV}} run pyrefly check --summary=none {{.CLI_ARGS}}'
         desc: Verify types and import structure with `pyrefly check`.
         aliases: [ty, types]
 

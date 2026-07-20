@@ -41,6 +41,7 @@ dependencies = [
   "regex>=2024.4.28",
   "srsly>=2.5.1",
   "tomli-w>=1.2.0",
+  "typing-extensions>=4.15.0",
   "unidecode>=1.4.0",
 ]
 

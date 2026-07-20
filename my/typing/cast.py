@@ -5,6 +5,7 @@
 from __future__ import annotations
 from typing import (
     is_typeddict,
+    cast as type_cast,
     ClassVar,
     Any,
     overload,
@@ -17,7 +18,6 @@ from typing import (
 )
 from collections.abc import (
     Callable,
-    Collection,
     Iterable,
     Iterator,
     AsyncIterator,
@@ -40,6 +40,7 @@ import itertools as it
 import logging
 
 ### EXTERNAL
+from typing_extensions import TypeForm
 import pydantic as pyd
 from pydantic.fields import FieldInfo
 import more_itertools as mi
@@ -105,9 +106,10 @@ _TRANSFORMS: list[TransformEntry] = []
 type CaseKey = type | Callable[[object], bool]  #:
 type CaseVal = Callable[[object], Any]
 type Case = tuple[CaseKey, CaseVal]
+type BranchType = type | tuple[type, ...]
 
 
-type AnyType[T] = type[T] | MyType[T]
+type AnyType[T] = TypeForm[T] | MyType[T]
 type TypeParam = TypeVar | TypeVarTuple | ParamSpec
 TypeParams = (TypeVar, TypeVarTuple, ParamSpec)
 
@@ -212,7 +214,7 @@ class TypeCast(_TypingBase):
     @staticmethod
     def cast[A, B](
         data: A,
-        target: type[B] | MyType[B],
+        target: AnyType[B],
         default: B,
         *,
         flags: CastFlags | CastPreset | None = None,
@@ -221,7 +223,7 @@ class TypeCast(_TypingBase):
     @staticmethod
     def cast[A, B, C](
         data: A,
-        target: type[B] | MyType[B],
+        target: AnyType[B],
         default: C,
         *,
         flags: CastFlags | CastPreset | None = None,
@@ -229,7 +231,7 @@ class TypeCast(_TypingBase):
     @overload
     @staticmethod
     def cast[A, B](
-        data: A, target: type[B] | MyType[B], *, flags: CastFlags | CastPreset | None = None
+        data: A, target: AnyType[B], *, flags: CastFlags | CastPreset | None = None
     ) -> B | None: ...
     @overload
     @staticmethod
@@ -237,14 +239,14 @@ class TypeCast(_TypingBase):
         data: A,
         *,
         source: AnyType[A],
-        target: type[B] | MyType[B],
+        target: AnyType[B],
         flags: CastFlags | CastPreset | None = None,
     ) -> B | None: ...
     @overload
     @staticmethod
     def cast[A, B](
         data: A,
-        target: type[B] | MyType[B],
+        target: AnyType[B],
         *,
         source: AnyType[A] | None = None,
         flex: Literal[True],
@@ -253,7 +255,7 @@ class TypeCast(_TypingBase):
     @staticmethod
     def cast[A, B](
         data: A,
-        target: type[B] | MyType[B],
+        target: AnyType[B],
         default: B | None | Empty = empty,
         source: AnyType[A] | None = None,
         flex: bool = False,
@@ -311,7 +313,7 @@ class TypeCast(_TypingBase):
 
     @classmethod
     def flexcast[A, B](
-        cls, data: A, target: type[B] | MyType[B], flags: CastFlags | CastPreset | None = None
+        cls, data: A, target: AnyType[B], flags: CastFlags | CastPreset | None = None
     ) -> B | A:
         """Cast `data` to `target`, falling back to the original data when the cast fails.
 
@@ -493,7 +495,7 @@ class Transform[T0, T1]:
         self._src_type = type(data)
         normalized = tyt.normalize(data)
         self.data = normalized
-        self.t0 = MyType.new(source) if source else MyType.typeof(normalized)
+        self.t0 = MyType.new(source) if source is not None else MyType.typeof(normalized)
         # Inform concretization with the *pre-normalize* `data` -- `normalize` collapses a `set`
         # (and other non-list Vecs) down to a plain `list`, which would otherwise make an
         # abstract target like `Collection[int]` concretize to `list` instead of `set`.
@@ -1031,17 +1033,24 @@ class Transform[T0, T1]:
         elif len(d) == 1 and (_vt := self.t0.vals) and tym.is_atom_type(_vt):
             # I. Unwrap monotomic lists
             return self.proxy(d[0])
-        elif len(d) >= 3:
-            # II. it's a sequence of 3 or more values, try interpreting the first 3 as time
-            # components. A `TypeError`/`ValueError` means the values don't form a valid
-            # datetime/date/time (wrong arity, out-of-range) -- fall through to `return d`. Any
-            # other exception is unexpected and reaches the dispatch valve.
+        elif len(d) >= 3 and all(isinstance(part, int) for part in d):
+            # II. A numeric sequence can represent datetime/date/time constructor fields.
+            # Wrong arity or out-of-range components decline back to the original list.
+            parts = [part for part in d if isinstance(part, int)]
+
+            def _to_time(target: type[time]) -> time:
+                if len(parts) not in {3, 4}:
+                    raise ValueError('time vectors require 3 or 4 components')
+                hour, minute, second = parts[:3]
+                microsecond = parts[3] if len(parts) == 4 else 0
+                return target(hour, minute, second, microsecond, tzinfo=UTC)
+
             with ctx.suppress(TypeError, ValueError):
                 return self._type_branch(
                     self._t1,
-                    _datetime=lambda _t: _t(*d, tzinfo=UTC),
-                    _date=lambda _t: _t(*d),
-                    _time=lambda _t: _t(*d).replace(tzinfo=UTC),
+                    _datetime=lambda target: target(*parts, tzinfo=UTC),
+                    _date=lambda target: target(*parts),
+                    _time=_to_time,
                 )
         return d
 
@@ -1073,13 +1082,9 @@ class Transform[T0, T1]:
         return data
 
     @register
-    def _vec_to_map[S: Vec, T: Map](self: Transform[S, T]) -> dict | Counter | None:
+    def _vec_to_map[S: Vec, T: Map](self: Transform[S, T]) -> T | None:
         data = self.data
-        if (
-            self.ty.is_map_type(self.t1)
-            and data
-            and all(not isinstance(p, String) and tyc.is_vec(p) and len(p) == 2 for p in data)
-        ):
+        if self.ty.is_map_type(self.t1) and data:
             # I. A list of 2-element pairs -> map items. `normalize` listifies tuples, so
             #    `is_map` (which wants tuple pairs) misses these -- detect them structurally.
             #    Re-cast as a dict so the map->map path coerces keys/values to the target types.
@@ -1087,14 +1092,21 @@ class Transform[T0, T1]:
             #    dict-like `__iter__`) but isn't itself map-shaped; without the gate, recasting
             #    a model instance recurses through `_object_to_model` -> `try_method('new', ...)`
             #    -> `normalize` -> pairs -> here, forever.
-            return self.proxy(dict(map(tuple, data)))
+            pairs = [
+                type_cast('tuple[Any, Any]', tuple(pair))
+                for pair in data
+                if not isinstance(pair, String) and tyc.is_vec(pair) and len(pair) == 2
+            ]
+            if len(pairs) == len(data):
+                return self.proxy(dict(pairs))
 
-        elif issubclass(self.t1.main, Counter):
+        main = self.t1.main
+        if main is not None and issubclass(main, Counter):
             # II. Cast counters, the only map type that takes an iter of single items: coerce
             #     each item to the key type (e.g. 'a.b.c' -> ('a', 'b', 'c')), then count.
             if (kt := self.t1.keys) and kt.main:
-                return Counter(self.ty.multicast(self.data, kt, flags=self.flags))
-            return Counter(self.data)
+                return type_cast('T', Counter(self.ty.multicast(self.data, kt, flags=self.flags)))
+            return type_cast('T', Counter(self.data))
 
     @register
     def _vec_to_iter[S: Vec, T: Iter](self: Transform[S, T]) -> Iterator | AsyncIterator | None:
@@ -1172,8 +1184,8 @@ class Transform[T0, T1]:
         return self.proxy(self.map_items)
 
     @register
-    def _map_to_map[S: Map, T: Map](self: Transform[S, T]) -> Map | None:
-        if not tym.is_map_type(self.t1):
+    def _map_to_map[S: Map, T: Map](self: Transform[S, T]) -> T | None:
+        if not tym.is_map_type(self.t1) or self.t1.main is None:
             # A model target (e.g. a pydantic `BaseModel` subclass like `MatchData`) matches the
             # broad `Map` bound but is not a mapping constructor: the closing `cls(data)` would be
             # `Model(dict)`, which pydantic rejects (`TypeError: takes 1 positional argument`).
@@ -1181,7 +1193,7 @@ class Transform[T0, T1]:
             # dispatch loop's blanket suppress, which then fell through to that transform anyway.)
             return None
         if not (items := ut.map_items(self.data)):
-            return None if items is None else dict()
+            return None if items is None else type_cast('T', dict())
 
         keys, values = map(list, mi.unzip(items))
         # Coerce against the *full* key/value MyType (not `.rtype`, which flattens a nested
@@ -1195,12 +1207,18 @@ class Transform[T0, T1]:
         # Construct the target mapping, handling a couple of special constructors. Use the
         # concrete origin (`.main`, e.g. `dict`), not `._t1` -- a parametrized target like
         # `dict[str, int]` has a generic-alias `root` that isn't a usable constructor/class.
-        cls = self.t1.main
-        if issubclass(cls, defaultdict):
-            return cls(self.t1.vals.main, data) if self.t1.vals else cls(None, data)
-        elif issubclass(cls, ItemsView):
-            return data.items()
-        return cls(data)
+        main = self.t1.main
+        if main is None:
+            return None
+        constructor = type_cast('Callable[..., T]', main)
+        if issubclass(main, defaultdict):
+            factory = type_cast(
+                'Callable[[], Any] | None', self.t1.vals.main if self.t1.vals else None
+            )
+            return constructor(factory, data)
+        elif issubclass(main, ItemsView):
+            return type_cast('T', data.items())
+        return constructor(data)
 
     @register
     def _iter_to_vec[S: Iter, T: Vec](self: Transform[S, T]) -> list | None:
@@ -1344,7 +1362,7 @@ class Transform[T0, T1]:
     # `-2` Non-registered helper methods
     # ----------------------------------
     @classmethod
-    def _derive_container(cls, old: MyType, new_origin: type[Collection]) -> MyType:
+    def _derive_container(cls, old: MyType, new_origin: type) -> MyType:
         """Create a new container type based on an existing one with a different origin.
 
         Args:
@@ -1450,7 +1468,7 @@ class Transform[T0, T1]:
     def _branch[T](
         cls,
         x: object,
-        pred: Callable[[object, type], bool],
+        pred: Callable[[object, BranchType], bool],
         *,
         _datetime: Callable[[Any], T] | None = None,
         _time: Callable[[Any], T] | None = None,
@@ -1474,7 +1492,7 @@ class Transform[T0, T1]:
         two public dispatchers; everything else (table contents, table order, matching loop) was
         byte-for-byte duplicated between them and now lives here once.
         """
-        pairs = [
+        pairs: list[tuple[BranchType, Callable[[Any], T] | None]] = [
             (datetime, _datetime),
             (time, _time),
             (timedelta, _timedelta),
@@ -1491,7 +1509,7 @@ class Transform[T0, T1]:
 
         for tvar, handler in pairs:
             if handler and pred(x, tvar):
-                return handler(x)  # type: ignore
+                return handler(x)
         return None
 
     @classmethod
@@ -1515,7 +1533,7 @@ class Transform[T0, T1]:
     ) -> T | None:
         return cls._branch(
             data,
-            isinstance,
+            lambda value, tvar: isinstance(value, tvar),
             _datetime=_datetime,
             _time=_time,
             _timedelta=_timedelta,
@@ -1550,22 +1568,25 @@ class Transform[T0, T1]:
         _map: Callable[[type[Map]], Map] | None = None,
         **kwargs: Callable[[type], T],
     ) -> T | None:
-        return cls._branch(
-            target,
-            issubclass,
-            _datetime=_datetime,
-            _time=_time,
-            _timedelta=_timedelta,
-            _date=_date,
-            _str=_str,
-            _bytes=_bytes,
-            _int=_int,
-            _float=_float,
-            _bool=_bool,
-            _enum=_enum,
-            _vec=_vec,
-            _map=_map,
-            **kwargs,
+        return type_cast(
+            'T | None',
+            cls._branch(
+                target,
+                lambda value, tvar: isinstance(value, type) and issubclass(value, tvar),
+                _datetime=_datetime,
+                _time=_time,
+                _timedelta=_timedelta,
+                _date=_date,
+                _str=_str,
+                _bytes=_bytes,
+                _int=_int,
+                _float=_float,
+                _bool=_bool,
+                _enum=_enum,
+                _vec=_vec,
+                _map=_map,
+                **kwargs,
+            ),
         )
 
     def _num_to_time[T: Time](self, data: int | float, target: type[T]) -> T | None:
@@ -1601,13 +1622,13 @@ class Transform[T0, T1]:
         if main is None:
             return target
 
-        new_main = None
+        new_main: type | None = None
         if main in ABSTRACT_GENERICS['maps']:
-            new_main = _dt.main if tyc.is_map(data) and (_dt := MyType(type(data))) else dict
+            new_main = type(data) if tyc.is_map(data) else dict
         elif main in ABSTRACT_GENERICS['sets']:
             new_main = set
         elif main in ABSTRACT_GENERICS['vecs']:
-            new_main = _dt.main if tyc.is_vec(data) and (_dt := MyType(type(data))) else list
+            new_main = type(data) if tyc.is_vec(data) else list
 
         if new_main is not None:
             return cls._derive_container(target, new_main)

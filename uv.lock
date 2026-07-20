@@ -1152,6 +1152,7 @@ dependencies = [
     { name = "regex" },
     { name = "srsly" },
     { name = "tomli-w" },
+    { name = "typing-extensions" },
     { name = "unidecode" },
 ]
 
@@ -1259,6 +1260,7 @@ requires-dist = [
     { name = "regex", specifier = ">=2024.4.28" },
     { name = "srsly", specifier = ">=2.5.1" },
     { name = "tomli-w", specifier = ">=1.2.0" },
+    { name = "typing-extensions", specifier = ">=4.15.0" },
     { name = "unidecode", specifier = ">=1.4.0" },
 ]
 provides-extras = ["aiohttp", "myst", "metrics", "google", "terminal"]

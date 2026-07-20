@@ -464,6 +464,18 @@ class TestCast:
         assert reverse == data
 
     @pyt.mark.parametrize(
+        'data, target, expected',
+        [
+            ([2024, 2, 3], date, date(2024, 2, 3)),
+            ([2024, 2, 3, 4, 5, 6], datetime, datetime(2024, 2, 3, 4, 5, 6, tzinfo=UTC)),
+            ([10, 20, 30, 400], time, time(10, 20, 30, 400, tzinfo=UTC)),
+        ],
+    )
+    def test_cast__time_vectors(self, data: list[int], target: type, expected: Time):
+        """Numeric vectors map onto explicit time constructor fields."""
+        assert typist.cast(data, target) == expected
+
+    @pyt.mark.parametrize(
         'data, target, expected', CAST_LITERALS_CASES, ids=type_ids(CAST_LITERALS_CASES)
     )
     def test_cast__literals(self, data: Any, target: type, expected: object):

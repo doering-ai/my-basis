@@ -5,6 +5,7 @@
 from typing import Any
 from collections.abc import Iterable, Callable, Mapping, Sequence, Collection
 from collections import deque, Counter
+import itertools as it
 
 ### EXTERNAL
 import pytest as pyt
@@ -153,6 +154,12 @@ class TestIterUtils:
         """An iterator predicate matches its values instead of calling them."""
         pred = cls.normalize_predicate(iter([1, 3]))
         assert [value for value in range(5) if pred(value)] == [1, 3]
+
+    def test_normalize_predicate__iterator_is_lazy(self):
+        """Normalizing an unbounded iterator neither exhausts nor materializes it."""
+        pred = cls.normalize_predicate(it.count())
+        assert pred(3)
+        assert pred(1)
 
     @pyt.mark.parametrize(
         'items, pred, expected',

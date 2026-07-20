@@ -245,8 +245,24 @@ class IterUtils(_UtilsBase):
             case Container() if not isinstance(pred, (str, bytes, bytearray)):
                 return pred.__contains__
             case Iterator():
-                values = tuple(pred)
-                return values.__contains__
+                iterator = pred
+                values: list[P] = []
+                exhausted = False
+
+                def contains(value: P) -> bool:
+                    nonlocal exhausted
+                    if any(item == value or item is value for item in values):
+                        return True
+                    if exhausted:
+                        return False
+                    for item in iterator:
+                        values.append(item)
+                        if item == value or item is value:
+                            return True
+                    exhausted = True
+                    return False
+
+                return contains
             case _:
                 return lambda v: pred == v or pred is v
 

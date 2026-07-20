@@ -39,7 +39,7 @@ from .types import (
     Objects,
     TYPESET,
 )
-from .constants import INFRA_PATHS, InfraPaths, DELIM, JINJA, get_template
+from .constants import INFRA_PATHS, InfraPaths, DELIM, get_template
 
 __all__ = [
     'Stream',
@@ -82,3 +82,12 @@ __all__ = [
     'JINJA',
     'get_template',
 ]
+
+
+def __getattr__(name: str) -> object:
+    """Lazily surface `constants.JINJA` so `import my` never builds the Jinja env eagerly."""
+    if name == 'JINJA':
+        from . import constants
+
+        return constants.JINJA
+    raise AttributeError(f'module {__name__!r} has no attribute {name!r}')

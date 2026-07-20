@@ -3,16 +3,19 @@
 ############
 ### STANDARD
 from pathlib import Path
+from typing import TYPE_CHECKING
 import functools as ft
 from importlib.resources import files
 
 ### EXTERNAL
-import jinja2 as jn
 import regex as re
 import pydantic as pyd
 
 ### INTERNAL
 # NOTE: do not import anything from this package (to avoid circular imports)
+
+if TYPE_CHECKING:
+    import jinja2 as jn  # typing-only; the runtime import is deferred into `_jinja_env`
 
 # The runtime API deliberately permits changing the default; the stub pins its initial literal.
 re.DEFAULT_VERSION = re.VERSION1  # pyrefly: ignore[bad-assignment]
@@ -45,17 +48,32 @@ DELIM = ' // '
 # -----
 # JINJA
 # -----
-# To change settings, just modify the mutable object identified by this reference
-JINJA = jn.Environment(
-    # loader=jn.FileSystemLoader(INFRA_PATHS.templates),
-    loader=jn.PackageLoader('my.data', 'templates'),
-    trim_blocks=True,
-    lstrip_blocks=True,
-)
+#: Cache for the package Jinja environment, built lazily by `_jinja_env`. Deferred so a
+#: bare `import my` -- which reaches `infra` eagerly -- does not import `jinja2` or stat
+#: the templates directory until a template is actually rendered.
+_JINJA: 'jn.Environment | None' = None
+
+
+def _jinja_env() -> 'jn.Environment':
+    """Build the package Jinja environment once, on first use, and cache it.
+
+    Reach the environment through the module-level `JINJA` attribute (kept for backward
+    compatibility via `__getattr__`) or, preferably, through `get_template()`.
+    """
+    global _JINJA
+    if _JINJA is None:
+        import jinja2 as jn
+
+        _JINJA = jn.Environment(
+            loader=jn.PackageLoader('my.data', 'templates'),
+            trim_blocks=True,
+            lstrip_blocks=True,
+        )
+    return _JINJA
 
 
 @ft.lru_cache(maxsize=128)
-def get_template(template_name: str) -> jn.Template:
+def get_template(template_name: str) -> 'jn.Template':
     """Load and cache a Jinja2 template from the data/templates directory.
 
     Args:
@@ -63,4 +81,11 @@ def get_template(template_name: str) -> jn.Template:
     Returns:
         Compiled Jinja2 template.
     """
-    return JINJA.get_template(template_name)
+    return _jinja_env().get_template(template_name)
+
+
+def __getattr__(name: str) -> object:
+    """Expose the lazily-built Jinja environment as the module-level `JINJA` (PEP 562)."""
+    if name == 'JINJA':
+        return _jinja_env()
+    raise AttributeError(f'module {__name__!r} has no attribute {name!r}')

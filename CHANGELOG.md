@@ -4,9 +4,9 @@ All notable changes to `my-basis` are documented here.
 The project has no prior tagged release -- `0.2.0` is the first tag, closing out a multi-month typing/subpackage overhaul that landed while the version stayed pinned at `0.1.0`.
 Where a change is a behavior break rather than an internal fix, it's called out explicitly; mechanism and rationale live in the cited commit bodies, not repeated here.
 
-## [Unreleased]
+## [0.9.0] - 2026-07-20
 
-The release-readiness pass toward a confident 1.0: a cluster of reproduced security and correctness fixes (each landed with a regression test), the `py.typed` marker, and dependency/packaging cleanup.
+The release-readiness release toward a confident 1.0: a cluster of reproduced security and correctness fixes (each landed with a regression test), the `py.typed` marker, a lazy import facade that roughly halves the module count of a bare `import my`, and dependency/packaging cleanup.
 
 ### Security
 
@@ -22,6 +22,7 @@ The release-readiness pass toward a confident 1.0: a cluster of reproduced secur
 - The `apis` and `files` facade leaves now load lazily (PEP 562 `__getattr__`): a bare `import my` no longer imports them or runs `apis`'s import-time side effects, cutting `import my` from ~1690 to ~1440 modules (~18% faster).
   One consequence: `Environment` snapshots `os.environ` on first `env` access rather than at `import my`.
   `from my import env` / `Markdown` / etc. are unchanged; `from my import *` and `hasattr(my, name)` still force the lazy names to load.
+- The infra Jinja environment is likewise built on first `get_template()` / `JINJA` access instead of at import, so a bare `import my` no longer imports `jinja2` or stats the templates directory.
 - **Breaking (pre-1.0):** renamed the generic type aliases `_Func`/`_Map`/`_Vec`/`_Struct` to `FuncT`/`MapT`/`VecT`/`StructT`, so no leading-underscore names appear in `__all__`.
 - `ty.cast` no longer splits scalar strings on delimiters in container casts: `cast('a,b,c', list[str])` is `['a,b,c']`, not `['a', 'b', 'c']` (explicit over implicit).
 - **Breaking:** two-digit apostrophe-years now pivot at 50 -- `'YY` greater than 50 resolves to the 1900s (`'99` -> 1999), 50 or below to the 2000s (`'50` -> 2050); previously every `'YY` became `20YY`.

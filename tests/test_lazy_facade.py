@@ -73,6 +73,23 @@ class TestLazyFacadeDefersLeaves:
         )
         assert proc.returncode == 0, proc.stderr
 
+    def test_bare_import_defers_jinja2(self):
+        """A bare `import my` does not build the infra Jinja env (so `jinja2` stays unimported)."""
+        proc = _probe(
+            "import my, sys; assert 'jinja2' not in sys.modules, 'jinja2 eagerly imported'"
+        )
+        assert proc.returncode == 0, proc.stderr
+
+    def test_infra_jinja_loads_on_demand(self):
+        """`my.infra.JINJA` still resolves, building `jinja2` only on that first access."""
+        proc = _probe(
+            'import my.infra as infra, sys; '
+            "assert 'jinja2' not in sys.modules; "
+            'assert type(infra.JINJA).__name__ == "Environment"; '
+            "assert 'jinja2' in sys.modules, 'accessing JINJA did not load jinja2'"
+        )
+        assert proc.returncode == 0, proc.stderr
+
     def test_env_access_loads_apis_on_demand(self):
         """Touching `my.env` pulls `apis` in -- deferral, not removal."""
         proc = _probe(

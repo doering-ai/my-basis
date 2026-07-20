@@ -3,6 +3,7 @@
 ############
 ### STANDARD
 from pathlib import Path
+import collections.abc as abc
 import os
 
 ### EXTERNAL
@@ -22,6 +23,28 @@ class TestEnvironment:
     # -------------------
     # `.` Initial Methods
     # -------------------
+    @pyt.fixture(autouse=True)
+    def _isolate_environ(self) -> abc.Iterator[None]:
+        """Snapshot and restore the `_ENVIRON` singleton classvar around every test.
+
+        basis-T3 regression: `temp_env_var` uses `patch.setitem`, which monkeypatch reverts
+        automatically -- but `test_set`, `test_setattr`, `test_setitem`, and
+        `test_set__clears_cache_for_previously_unset_key` call `Environment.set()`/
+        `__setattr__`/`__setitem__` directly, writing straight into the shared classvar dict
+        with no teardown at all. Confirmed empirically: running this file alone leaves
+        `NEW_VAR`, `SETATTR_TEST`, `SETITEM_TEST`, and `NEVER_BEFORE_SET_KEY` permanently
+        present in `Environment._ENVIRON` afterward, for the rest of the pytest session. This
+        autouse fixture restores the pre-test snapshot (and clears the three lookup caches)
+        regardless of which path a test used to mutate state.
+        """
+        snapshot = dict(cls._ENVIRON)
+        yield
+        cls._ENVIRON.clear()
+        cls._ENVIRON.update(snapshot)
+        cls._get.cache_clear()
+        cls._path.cache_clear()
+        cls._flag.cache_clear()
+
     @pyt.fixture
     def env_instance(self, patch: Patch) -> Environment:
         """Create a fresh Environment instance with clean state."""

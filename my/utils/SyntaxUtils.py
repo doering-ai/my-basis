@@ -21,9 +21,6 @@ from ._UtilsBase import _UtilsBase
 from .IterUtils import iter_utils
 
 
-re.DEFAULT_VERSION = re.VERSION1  # type: ignore
-
-
 ############
 ### BODY ###
 ############

@@ -8,12 +8,9 @@ from datetime import datetime
 
 ### EXTERNAL
 import pytest as pyt
-import regex as re
 
 ### INTERNAL
 from my import ut, env
-
-re.DEFAULT_VERSION = re.VERSION1  # type: ignore
 
 ############
 ### DATA ###

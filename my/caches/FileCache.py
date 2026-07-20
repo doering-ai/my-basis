@@ -16,8 +16,6 @@ import srsly
 ### INTERNAL
 from ..utils import ut
 
-re.DEFAULT_VERSION = re.VERSION1
-
 ############
 ### DATA ###
 ############

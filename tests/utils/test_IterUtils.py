@@ -5,6 +5,7 @@
 from typing import Any
 from collections.abc import Iterable, Callable, Mapping, Sequence, Collection
 from collections import deque, Counter
+import itertools as it
 
 ### EXTERNAL
 import pytest as pyt
@@ -149,6 +150,17 @@ class TestIterUtils:
     def test_condense(self, items: Iterable, pred: Callable, expected: list):
         assert cls.condense(items, pred) == expected
 
+    def test_normalize_predicate__iterator_values(self):
+        """An iterator predicate matches its values instead of calling them."""
+        pred = cls.normalize_predicate(iter([1, 3]))
+        assert [value for value in range(5) if pred(value)] == [1, 3]
+
+    def test_normalize_predicate__iterator_is_lazy(self):
+        """Normalizing an unbounded iterator neither exhausts nor materializes it."""
+        pred = cls.normalize_predicate(it.count())
+        assert pred(3)
+        assert pred(1)
+
     @pyt.mark.parametrize(
         'items, pred, expected',
         [
@@ -213,6 +225,11 @@ class TestIterUtils:
     )
     def test_val_map(self, func: Callable, data: Iterable, expected: dict):
         assert cls.val_map(func, data, drop=True) == expected
+
+    def test_val_map__generator_keys(self):
+        """Inspecting a generator for pairs must not exhaust its keys."""
+        data = (value for value in range(1, 4))
+        assert cls.val_map(lambda value: value**2, data) == {1: 1, 2: 4, 3: 9}
 
     @pyt.mark.parametrize(
         'obj, fields, drop, expected',

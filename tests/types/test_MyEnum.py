@@ -89,6 +89,7 @@ class TestMyEnum:
             (Status, '10', Status.PEND),
             (Status, '20', Status.ACTV),
             (Status, '30', Status.COMP),
+            (Status, ' 10 ', Status.PEND),
             # Name-based lookup
             (Color, 'PINK', Color.PINK),
             (Color, 'CLAY', Color.CLAY),
@@ -219,6 +220,7 @@ class TestMyEnum:
             # Basic integer arithmetic
             (Color.PINK, Color.CLAY, Color.BLUE),  # 1 + 2 = 3
             (Status.PEND, Status.ACTV, Status.COMP),  # 10 + 20 = 30
+            (Color.PINK, 2, Color.BLUE),
         ],
     )
     def test_add(self, left, right, expected):
@@ -234,6 +236,7 @@ class TestMyEnum:
         [
             (Color.BLUE, Color.CLAY, Color.PINK),  # 3 - 2 = 1
             (Status.COMP, Status.ACTV, Status.PEND),  # 30 - 20 = 10
+            (Color.BLUE, 2, Color.PINK),
         ],
     )
     def test_sub(self, left, right, expected):
@@ -250,6 +253,7 @@ class TestMyEnum:
             # Flag addition (bitwise OR)
             (Perm.READ, Perm.WRITE, Perm.READ | Perm.WRITE),
             (Perm.READ | Perm.WRITE, Perm.EXECUTE, Perm.READ | Perm.WRITE | Perm.EXECUTE),
+            (Perm.READ, 'WRITE', Perm.READ | Perm.WRITE),
         ],
     )
     def test_add__flag(self, left, right, expected):

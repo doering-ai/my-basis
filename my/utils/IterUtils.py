@@ -66,11 +66,14 @@ class IterUtils(_UtilsBase):
         """
         return ft.reduce(lambda acc, fn: fn(acc), functions, val)
 
+    @overload
     @classmethod
-    def map_items[K: Hashable = Hashable, V = Any](
-        cls,
-        value: MapT[K, V],
-    ) -> list[tuple[K, V]]:
+    def map_items[K: Hashable, V](cls, value: MapT[K, V]) -> list[tuple[K, V]]: ...
+    @overload
+    @classmethod
+    def map_items(cls, value: object) -> list[tuple[Any, Any]]: ...
+    @classmethod
+    def map_items(cls, value: object) -> list[tuple[Any, Any]]:
         """Extract key-value pairs from mapping-like or tuple sequence objects.
 
         Args:
@@ -242,7 +245,24 @@ class IterUtils(_UtilsBase):
             case Container() if not isinstance(pred, (str, bytes, bytearray)):
                 return pred.__contains__
             case Iterator():
-                return lambda v: any(cls.apply(pred, v))
+                iterator = pred
+                values: list[P] = []
+                exhausted = False
+
+                def contains(value: P) -> bool:
+                    nonlocal exhausted
+                    if any(item == value or item is value for item in values):
+                        return True
+                    if exhausted:
+                        return False
+                    for item in iterator:
+                        values.append(item)
+                        if item == value or item is value:
+                            return True
+                    exhausted = True
+                    return False
+
+                return contains
             case _:
                 return lambda v: pred == v or pred is v
 
@@ -510,12 +530,16 @@ class IterUtils(_UtilsBase):
         """
         if not data:
             return {}
-        elif items := cls.map_items(data):
+
+        # Materialize once: `map_items()` must inspect arbitrary iterables, and probing a
+        # generator before iterating it again would silently discard all of its keys.
+        series = list(data.items()) if isinstance(data, Mapping) else list(data)
+        if items := cls.map_items(series):
             # `map_items` also recognizes a plain iterable of 2-tuples as key-value pairs (not
             # just true `Mapping`s), which `is_map` alone would miss.
             ret = {key: func(val) for key, val in items}  # type: ignore
         else:
-            ret = {key: func(key) for key in data}  # type:ignore
+            ret = {key: func(key) for key in series}  # type:ignore
 
         if drop:
             ret = {key: val for key, val in ret.items() if key and val}

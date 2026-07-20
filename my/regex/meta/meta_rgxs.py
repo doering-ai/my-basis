@@ -11,8 +11,6 @@ import regex as re
 from ...utils import ut
 from ...types import Buffer
 
-re.DEFAULT_VERSION = re.VERSION1
-
 ############
 ### DATA ###
 ############

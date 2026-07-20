@@ -2,6 +2,7 @@
 ### HEAD ###
 ############
 ### STANDARD
+from typing import cast
 from collections.abc import Callable
 from regex import Pattern
 
@@ -113,11 +114,18 @@ class ParseData(pyd.BaseModel):
 
         Args:
             parser: Function transforming each captured string.
+        Raises:
+            TypeError: If one invocation returns a mapping and another returns a string.
         """
         results = list(map(parser, self.value))
-        if isinstance(results[0], dict):
+        if not results:
+            self.starts[self.field] = self.start
+            self.captures[self.field] = []
+            return
+
+        if all(isinstance(result, dict) for result in results):
             # I. A regex function that returns new captures
-            dict_results: list[dict[str, str]] = results
+            dict_results = cast('list[dict[str, str]]', results)
             pairs = list(zip(self.start, dict_results, strict=True))
 
             affected_fields = {key for result in dict_results for key in result.keys()}
@@ -126,11 +134,12 @@ class ParseData(pyd.BaseModel):
             for dest in affected_fields:
                 effects = [(start, result[dest]) for start, result in pairs if dest in result]
                 self.interleave(src, dest, effects)
-        else:
+        elif all(isinstance(result, str) for result in results):
             # II. A simple substring function that just returns a new value for this name
-            str_results: list[str] = results
             self.starts[self.field] = self.start
-            self.captures[self.field] = str_results
+            self.captures[self.field] = cast('list[str]', results)
+        else:
+            raise TypeError('Parser results must all have the same type: dict or str.')
 
     # ------------------
     # `*` Public Methods

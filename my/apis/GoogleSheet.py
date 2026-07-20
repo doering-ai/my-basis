@@ -347,7 +347,8 @@ class GoogleSheet:
         if self.gcreds is None:
             self.auth()
 
-        ret = build('sheets', 'v4', credentials=self.gcreds).spreadsheets()
+        service = build('sheets', 'v4', credentials=self.gcreds)
+        ret = getattr(service, 'spreadsheets')()
         assert ret is not None, 'Failed to build Google Sheets API.'
         return ret
 
@@ -356,7 +357,8 @@ class GoogleSheet:
         """Build and return the Google Drive API client for file-level operations."""
         if self.gcreds is None:
             self.auth()
-        ret = build('drive', 'v3', credentials=self.gcreds).files()
+        service = build('drive', 'v3', credentials=self.gcreds)
+        ret = getattr(service, 'files')()
         assert ret is not None, 'Failed to build Google Drive API.'
         return ret
 

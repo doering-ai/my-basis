@@ -68,6 +68,10 @@ class TestSyntaxUtils:
     # -----------------
     # `0` NORMALIZATION
     # -----------------
+    def test_regex_default_version(self):
+        """Test that package initialization selects regex version 1 exactly once."""
+        assert getattr(re, 'DEFAULT_VERSION') is re.VERSION1
+
     @pyt.mark.parametrize(
         'tree, expected',
         [

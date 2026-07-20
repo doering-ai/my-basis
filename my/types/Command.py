@@ -106,7 +106,7 @@ class Command(pyd.BaseModel):
                 if isinstance(pipe, dict):
                     options['pipe'] = cls.new(**pipe)
                 elif isinstance(pipe, Vec):
-                    options['pipe'] = cls.new(*pipe)
+                    options['pipe'] = cls.new(*map(str, pipe))
                 else:
                     options['pipe'] = cls.new(str(pipe))
             options = cls.Options(**options)

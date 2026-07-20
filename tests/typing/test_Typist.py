@@ -5,6 +5,7 @@
 from typing import Any
 from collections.abc import Callable
 from collections import deque
+from dataclasses import dataclass
 
 ### EXTERNAL
 import pytest as pyt
@@ -152,6 +153,16 @@ class TestTypist:
         content = '\n'.join(yaml)
         data = typist.from_yaml(content, tvar)
         assert data == expected
+
+    def test_serialize__dataclass(self):
+        """Dataclasses serialize as mappings instead of being treated as iterables."""
+
+        @dataclass
+        class Record:
+            name: str
+            count: int
+
+        assert typist.serialize(Record('example', 2)) == {'name': 'example', 'count': 2}
 
     @pyt.mark.parametrize(
         'data, expected',

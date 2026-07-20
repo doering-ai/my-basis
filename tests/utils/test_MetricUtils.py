@@ -13,7 +13,7 @@ import time
 import pytest as pyt
 
 ### INTERNAL
-import my.utils as ut
+from my import utils as ut
 from my.utils import MetricUtils
 
 cls = MetricUtils
@@ -389,10 +389,10 @@ class TestMetricUtils:
         try:
             cls.WARNINGS_SETUP = False
             cls.setup_warnings()
-            assert cls.WARNINGS_SETUP is True
+            assert cls.WARNINGS_SETUP
             # Running again should be idempotent
             cls.setup_warnings()
-            assert cls.WARNINGS_SETUP is True
+            assert cls.WARNINGS_SETUP
         finally:
             cls.WARNINGS_SETUP = original
 
@@ -411,7 +411,7 @@ class TestMetricUtils:
         try:
             cls.WARNINGS_SETUP = False
             cls().setup_warnings()
-            assert cls.WARNINGS_SETUP is True
+            assert cls.WARNINGS_SETUP
         finally:
             cls.WARNINGS_SETUP = original
 
@@ -511,12 +511,6 @@ class TestMetricUtils:
                 id='owning_class',
             ),
             pyt.param(
-                # MEMY-165: pyrefly WARNs `missing-attribute` here -- `my/__init__.py`'s
-                # `Utils` re-export shadows the `my.utils` submodule name, so pyrefly's static
-                # view of `ut` resolves to `Utils` (no `measure_context`) even though `ut` is
-                # genuinely the submodule at runtime. Known, intentional facade shadow, not an
-                # upstream stub gap; see the `missing-attribute` note in
-                # `[tool.pyrefly.errors]` (pyproject.toml) for the full rationale.
                 lambda counter: ft.partial(ut.measure_context, counter=counter),
                 id='partial_via_module_facade',
             ),

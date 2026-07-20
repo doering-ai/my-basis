@@ -41,6 +41,7 @@ dependencies = [
   "regex>=2024.4.28",
   "srsly>=2.5.1",
   "tomli-w>=1.2.0",
+  "typing-extensions>=4.15.0",
   "unidecode>=1.4.0",
 ]
 
@@ -166,71 +167,8 @@ no-access = 'error'
 unused-ignore = 'error'
 unannotated-attribute = 'error'
 
-# First pyrefly baseline (2026-07-02): each relaxation below is a *real* remaining finding
-# category, downgraded to 'warn' (still printed, doesn't fail the gate) rather than silenced,
-# so counts are visible for a later task to ratchet back to 'error' as each is paid down.
-# Root causes, grouped:
-# - bad-argument-type, no-matching-overload, bad-assignment: the runtime coercion/dispatch
-#   engine (Typist, Transform, IterUtils, Command) intentionally takes broad unions and
-#   narrows at runtime; plus 3rd-party stub mismatches (srsly/tomllib/pickle/regex expect
-#   narrower types than our IO|Path|bytes union args, and `regex`'s stub types
-#   `DEFAULT_VERSION` as a `Literal` constant even though runtime treats it as assignable).
-# - missing-attribute: dynamically-typed 3rd-party surfaces (googleapiclient's `Resource`
-#   built at runtime, pyratatui's still-incomplete stubs, `importlib.resources.abc.Traversable`
-#   missing `exists()` in typeshed) plus Flag/Enum multi-class dispatch in MyEnum; also
-#   `tests/utils/test_MetricUtils.py`'s `ut.measure_context` (MEMY-165, record-only): `my/
-#   __init__.py` re-exports `Utils` as the package's `utils` attribute, shadowing the actual
-#   `my.utils` submodule at that name, so pyrefly's static view of `import my.utils as ut`
-#   resolves to the `Utils` class (no `measure_context`) while the runtime `ut` is genuinely the
-#   submodule. This is a known, intentional facade shadow -- not an upstream stub gap -- blessed
-#   here rather than fixed; de-shadowing the re-export is a bigger architectural call out of
-#   this finding's scope.
-# - bad-return, invalid-argument, not-iterable: `Self`-typed classmethods colliding with
-#   `Flag`'s multiple inheritance in MyEnum, and `type(self)` iteration over Flag members (a
-#   real stdlib idiom that isn't statically typed as iterable).
-# - invalid-yield, bad-specialization: deep TypeVar-bound tracking in MyType (generator
-#   overload residuals, a giant Union upper bound on `F`) -- basis-09 territory.
-# - not-callable, bad-argument-count: `Transform._map_to_map` constructs via a `cls` resolved
-#   from `MyType.main` at runtime, which pyrefly can't rule out being `type[None]` statically.
-bad-argument-type = 'warn'
-no-matching-overload = 'warn'
-bad-assignment = 'warn'
-missing-attribute = 'warn'
-bad-return = 'warn'
-invalid-argument = 'warn'
-not-iterable = 'warn'
-invalid-yield = 'warn'
-bad-specialization = 'warn'
-not-callable = 'warn'
-bad-argument-count = 'warn'
-# `unnecessary-comparison` false-positives on `tests/utils/test_MetricUtils.py:32`: pyrefly
-# narrows `cls.WARNINGS_SETUP` to `Literal[False]` from an assignment two lines up and doesn't
-# invalidate that narrowing across the intervening `cls.setup_warnings()` call, even though
-# that call is what sets it back to `True`. Real behavior is correct; the checker's narrowing
-# isn't call-aware here.
-unnecessary-comparison = 'warn'
-
-# `internal-error`/`unsupported-operation` on `my/typing/MyType.py:560` (`head | (other.root or
-# Empty)`): pyrefly crashes internally trying to resolve `__or__`/`__ror__` on the `Empty`
-# sentinel type -- reported upstream-worthy, not something our config or source can route
-# around. Scoped to this one file so the rules stay live everywhere else.
-[[tool.pyrefly.sub-config]]
-matches = "my/typing/MyType.py"
-
-[tool.pyrefly.sub-config.errors]
-internal-error = 'warn'
-unsupported-operation = 'warn'
-
-# `tests/caches/test_Cache.py` deliberately feeds wrong-typed keys/values into a strictly
-# generic `Cache[int, str]` to assert that it raises at runtime -- the test's whole point is to
-# violate the declared types, which is structurally incompatible with a static checker. Ignored
-# (not just warned) since this file will *always* trip these two rules by design.
-[[tool.pyrefly.sub-config]]
-matches = "tests/caches/test_Cache.py"
-
-[tool.pyrefly.sub-config.errors]
-unsupported-operation = 'ignore'
-bad-index = 'ignore'
+# No diagnostic baseline: `task eval:typecheck` is the ratchet. Keep intentional violations
+# line-local so a new instance of the same diagnostic kind still fails the gate.
 
 # -------
 # Linting

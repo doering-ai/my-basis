@@ -508,7 +508,8 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
         Yields:
             Parsed MyType instances, with Unpack types expanded.
         """
-        for arg in map(self.parse, args):
+        for raw in args:
+            arg: MyType = self.parse(raw)
             if arg.origin is Unpack:
                 yield from arg.args
             else:
@@ -546,7 +547,7 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
             self.keys, self.vals = args[0] or None, args[1] or None
 
     @classmethod
-    def _join(cls, args: Iterable[TypeArg]) -> type | UnionType:
+    def _join(cls, args: Iterable[TypeArg]) -> Any:
         """Condense multiple type arguments into a single type or union.
 
         Args:
@@ -565,7 +566,7 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
             # would otherwise infer `list[list]` instead of `list[list[int]]`).
             return types.pop().root or Empty
         else:
-            head = types.pop().root or Empty
+            head: Any = types.pop().root or Empty
             for other in types:
                 head = head | (other.root or Empty)
         return head
@@ -857,9 +858,11 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
         if not (main := self.main):
             return
         elif issubclass(main, pyd.BaseModel):
-            yield from map(self.parse, ut.instance_fields(main).values())
+            for field in ut.instance_fields(main).values():
+                yield self.parse(field)
         elif is_typeddict(self.root):
-            yield from map(self.parse, self.root.__annotations__.values())
+            for field in self.root.__annotations__.values():
+                yield self.parse(field)
         elif inspect.isclass(main):
             # if c := getattr(main, '__pydantic_fields__', None):
             if pyd.dataclasses.is_pydantic_dataclass(main):

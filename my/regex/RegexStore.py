@@ -22,7 +22,6 @@ from ..typing import typist
 from .meta import ParseData, Atom, GroupAtom, Regex, Tree, GroupKind, META_RGXS
 from .MatchData import MatchData
 
-re.DEFAULT_VERSION = re.VERSION1  # type: ignore
 RegexFlag = re.RegexFlag
 Match = re.Match[str]
 Pattern = re.Pattern[str]

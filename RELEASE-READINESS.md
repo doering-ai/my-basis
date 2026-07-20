@@ -150,6 +150,22 @@ Sequenced after the fifth pass so it rebased onto the finished tree; combined ga
 **Still open after the sixth pass:** `basis-D6` is *partially* delivered — the `google`/`googleapiclient` tax is deferred for free (it lives in the now-lazy `apis`) — but two eager heavy imports remain as clean, separate follow-ups: (1) the `logfire`/`pandas` block in `MetricUtils` (eager `utils`; the `import logfire` is the ~34% pydantic-plugin cascade — an invasive hot-module refactor with a `[metrics]`-users-only payoff), and (2) the module-level Jinja env in `my/infra/constants.py` (pulls `jinja2` and stats the templates dir at import; deferring it needs a decision on the public `JINJA` re-export).
 Plus `basis-M5` (version bump at release, operator-gated).
 
+**✅ Seventh pass — 2026-07-20 (infra-Jinja deferral, polish sweep, and the 0.9.0 cut)**
+
+Full gate: **3755 passed** · `ruff` clean · `pyrefly` 0 errors · docs build clean · wheel builds at `0.9.0`.
+
+- `basis-D6` (jinja2 half) — **the infra Jinja env is now lazy too.** `my/infra/constants.py` built `JINJA = jn.Environment(PackageLoader(...))` at module scope, and `infra` is eager, so every `import my` imported `jinja2` and statted the templates directory.
+  It is now built on first `get_template()` / `JINJA` access, with a PEP 562 `__getattr__` in both `constants` and the `infra` package keeping `my.infra.JINJA` working.
+  Bare `import my` no longer imports `jinja2`.
+- **`basis-D` is closed.** The single remaining sub-item — deferring the `logfire`/`pandas` block in `MetricUtils` — is *theoretically tractable* (swap the module-level `try: import …` for an `importlib.util.find_spec` availability check plus function-local imports at the `fire.*` / `OpenTelemetryCounter` use-sites), but it is an invasive refactor of a hot module for a `[metrics]`-users-only payoff, so it is intentionally left as a standalone future task rather than gating the release.
+- Polish sweep — removed the dead `my/data/snapshots/test_RegexStore.ambr` orphan (the live syrupy snapshot lives under `tests/regex/__snapshots__/`) and the dead `.pre-commit-config.yaml` (superseded by `prek.toml`).
+  `basis-M6` is partial: the `.yamlfmt`/`.taplo`/`.plumber` configs were left in place, since global edit-hooks may consume them.
+  `basis-M3` is moot — `dist/` is git-ignored, nothing tracked to purge.
+- `basis-M5` — **version bumped `0.8.4` → `0.9.0`**, the `CHANGELOG` `[Unreleased]` section finalized as `[0.9.0] - 2026-07-20`, `uv.lock` synced, and the wheel rebuilt and confirmed at `0.9.0`.
+  The Publish job asserts `tag == version` (`basis-M4`), so the release is queued: **creating and pushing the `v0.9.0` tag is the operator's call** — that tag triggers the OIDC publish job, which is the human release gate.
+
+**Open after 0.9.0 (all non-blocking):** the `MetricUtils` `logfire`/`pandas` deferral (above); CI-judgment items `basis-M8` (MR-pipeline secret detection) and `basis-M9` (scheduled base-image rebuild); and `basis-M2` (green-main convention — already assessed as accept-and-document for the single-maintainer CI-only flow).
+
 ______________________________________________________________________
 
 ## 1. How this was produced

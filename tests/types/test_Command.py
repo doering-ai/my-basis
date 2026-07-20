@@ -50,6 +50,12 @@ class TestCommand:
             ),
             (
                 'cmd',
+                [],
+                dict(options=dict(pipe=['grep', 5])),
+                'cmd | grep 5',
+            ),
+            (
+                'cmd',
                 ['v1'],
                 dict(key_0='v0', options=dict(named_args_last=True)),
                 'cmd v1 --key-0 v0',

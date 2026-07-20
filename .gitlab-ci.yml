@@ -122,9 +122,11 @@ Publish PyPI:
         - cd $CI_PROJECT_DIR
         # Refuse to publish if the tag and the packaged version disagree: `uv build` reads the
         # version from pyproject.toml, not from $CI_COMMIT_TAG, so a tag cut against a stale
-        # version would otherwise upload mislabeled artifacts. Fail loudly instead.
-        - test "v$(uv version --short)" = "$CI_COMMIT_TAG" || { echo "Tag $CI_COMMIT_TAG does
-          not match pyproject v$(uv version --short)"; exit 1; }
+        # version would otherwise upload mislabeled artifacts. Fail loudly instead. NO_COLOR
+        # stops uv from wrapping the version in ANSI codes under an ambient FORCE_COLOR.
+        - PKG_VERSION="$(NO_COLOR=1 uv version --short)"
+        - test "v$PKG_VERSION" = "$CI_COMMIT_TAG" || { echo "Tag $CI_COMMIT_TAG does not match
+          pyproject v$PKG_VERSION"; exit 1; }
     id_tokens:
         PYPI_ID_TOKEN:
             aud: pypi

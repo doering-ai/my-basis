@@ -163,25 +163,33 @@ class TestSystemUtils:
         captured = capsys.readouterr()
         assert 'colored text' in captured.out
 
-    def test_print_in_color__no_shell_injection(self, tmp_path):
-        """A `$(...)` command substitution in `text` must NOT be executed by a shell.
+    def test_print_in_color__no_shell_injection(self, patch, capsys):
+        """Pass command substitutions to zsh as inert argv data, never shell source."""
+        text = '$(touch should-not-run)'
+        mock_result = MagicMock(stdout=f'{text}\n')
+        mock_run = MagicMock(return_value=mock_result)
+        patch.setattr('subprocess.run', mock_run)
 
-        Regression test for a shell-injection RCE: `text` used to be interpolated directly
-        into a `zsh -c '...'` string run with `shell=True`, so a value like
-        `$(touch marker)` would execute the embedded command. It must now reach `print -P`
-        purely as an argv value.
-        """
-        marker = tmp_path / 'marker'
-        cls.print_in_color(f'$(touch {marker})')
-        assert not marker.exists()
+        cls.print_in_color(text)
 
-    def test_print_in_color__color_output_unchanged(self, capsys):
-        """Normal zsh-colorized text still expands via `print -P` after the argv-based fix."""
+        mock_run.assert_called_once_with(
+            ['zsh', '-c', 'print -P -- "$1"', 'zsh', text],
+            capture_output=True,
+            text=True,
+            shell=False,
+        )
+        assert capsys.readouterr().out == f'{text}\n'
+
+    def test_print_in_color__color_output_unchanged(self, patch, capsys):
+        """Print zsh's rendered ANSI output unchanged after argv-based execution."""
+        mock_result = MagicMock(stdout='\x1b[31mHello\x1b[39m\n')
+        patch.setattr('subprocess.run', MagicMock(return_value=mock_result))
+
         colored = cls.zsh_colorize('Hello', 'red')
+        assert colored == '%F{red}Hello%f'
         cls.print_in_color(colored)
-        captured = capsys.readouterr()
-        assert '\x1b[31m' in captured.out
-        assert 'Hello' in captured.out
+
+        assert capsys.readouterr().out == '\x1b[31mHello\x1b[39m\n'
 
     # -------------------
     # `.` Confirm & Module

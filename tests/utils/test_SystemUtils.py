@@ -476,6 +476,20 @@ class TestSystemUtils:
         result = cls.from_file(file)
         assert result == {'key': 'value'}
 
+    def test_from_file__toml(self, tmp_path):
+        """Test from_file loads a TOML file path."""
+        cls._path.cache_clear()
+        file = tmp_path / 'test.toml'
+        file.write_text('key = "value"\n')
+        assert cls.from_file(file) == {'key': 'value'}
+
+    def test_from_file__pickle(self, tmp_path):
+        """Test from_file loads a Pickle file path."""
+        cls._path.cache_clear()
+        file = tmp_path / 'test.pkl'
+        file.write_bytes(pickle.dumps({'key': 'value'}))
+        assert cls.from_file(file) == {'key': 'value'}
+
     def test_from_file__unsupported_type(self, tmp_path):
         """Test from_file raises ValueError for unsupported file type."""
         cls._path.cache_clear()

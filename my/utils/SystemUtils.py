@@ -37,7 +37,6 @@ from ..infra.types import (
     Atom,
     Vec,
     Struct,
-    String,
 )
 from ._UtilsBase import _UtilsBase
 from .TextUtils import text_utils
@@ -60,10 +59,10 @@ Directory = pyd.DirectoryPath
 
 ClassType = TypeVar('ClassType')
 
-FileParam = String | Path | None
+FileParam = str | bytes | Path | None
 RawJsonData = str | int | float | bool | list | dict | None
 
-F = TypeVar('F', bound=Atom | Struct)
+F = TypeVar('F')
 logger = logging.getLogger(__name__)
 
 
@@ -647,12 +646,11 @@ class SystemUtils(_UtilsBase):
             ret = srsly.read_yaml(file)
         else:
             # I.iii. Main Case: Attempt to parse in-memory YAML strings
-            if isinstance(file, bytes):
-                file = file.decode()
-            if file.strip().startswith('```yaml'):
-                file = '\n\n'.join(cls.RGXS['yaml'].findall(file))
+            text = file.decode() if isinstance(file, bytes) else file
+            if text.strip().startswith('```yaml'):
+                text = '\n\n'.join(cls.RGXS['yaml'].findall(text))
 
-            ret = srsly.yaml_loads(file)
+            ret = srsly.yaml_loads(text)
 
         # II. Verify & format the response
         # if isinstance(ret, tvar):
@@ -693,10 +691,12 @@ class SystemUtils(_UtilsBase):
         tvar = cls.ty.specify(tvar)
         if not file:
             return tvar()  # type: ignore
+        elif isinstance(file, Path):
+            cls.validate_file(file)
+            text = file.read_text()
         else:
-            if isinstance(file, bytes):
-                file = file.decode()
-            ret = tomllib.loads(file)
+            text = file.decode() if isinstance(file, bytes) else file
+        ret = tomllib.loads(text)
 
         if isinstance(ret, tvar):
             return ret
@@ -732,10 +732,12 @@ class SystemUtils(_UtilsBase):
         """
         if not file:
             return tvar()  # type: ignore
+        elif isinstance(file, Path):
+            cls.validate_file(file)
+            raw = file.read_bytes()
         else:
-            if isinstance(file, str):
-                file = file.encode()
-            ret = pickle.loads(file)
+            raw = file.encode() if isinstance(file, str) else file
+        ret = pickle.loads(raw)
 
         if isinstance(ret, tvar):
             return ret

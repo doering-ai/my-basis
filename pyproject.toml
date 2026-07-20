@@ -193,22 +193,9 @@ unannotated-attribute = 'error'
 #   from `MyType.main` at runtime, which pyrefly can't rule out being `type[None]` statically.
 bad-argument-type = 'warn'
 no-matching-overload = 'warn'
-missing-attribute = 'warn'
 bad-return = 'warn'
-invalid-yield = 'warn'
 not-callable = 'warn'
 bad-argument-count = 'warn'
-# `internal-error`/`unsupported-operation` on `my/typing/MyType.py:560` (`head | (other.root or
-# Empty)`): pyrefly crashes internally trying to resolve `__or__`/`__ror__` on the `Empty`
-# sentinel type -- reported upstream-worthy, not something our config or source can route
-# around. Scoped to this one file so the rules stay live everywhere else.
-[[tool.pyrefly.sub-config]]
-matches = "my/typing/MyType.py"
-
-[tool.pyrefly.sub-config.errors]
-internal-error = 'warn'
-unsupported-operation = 'warn'
-
 # `tests/caches/test_Cache.py` deliberately feeds wrong-typed keys/values into a strictly
 # generic `Cache[int, str]` to assert that it raises at runtime -- the test's whole point is to
 # violate the declared types, which is structurally incompatible with a static checker. Ignored

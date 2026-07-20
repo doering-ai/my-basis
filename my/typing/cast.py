@@ -1337,7 +1337,7 @@ class Transform[T0, T1]:
     @register
     def _func_to_atom[S: Func, T: Atom](self: Transform[S, T]) -> T | None:
         args, rets = tyc.describe_func(self.data)
-        if len(rets) == 1 and len(args) == 0 and tyc.is_atom_type(rets[0]):
+        if len(rets) == 1 and len(args) == 0 and tym.is_atom_type(rets[0]):
             return self.proxy(self.data())
 
     # ----------------------------------

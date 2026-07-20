@@ -416,6 +416,14 @@ class TestCast:
     def test_cast__atomics(self, data: Any, target: type, expected: object):
         assert typist.cast(data, target) == expected
 
+    def test_cast__zero_argument_function_to_atomic_return(self):
+        """A typed zero-argument function is evaluated for an atomic target."""
+
+        def answer() -> int:
+            return 42
+
+        assert typist.cast(answer, int) == 42
+
     @pyt.mark.parametrize(
         'data, target, expected', CAST_SERIES_CASES, ids=type_ids(CAST_SERIES_CASES)
     )

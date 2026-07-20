@@ -1036,7 +1036,7 @@ class Transform[T0, T1]:
         elif len(d) >= 3 and all(isinstance(part, int) for part in d):
             # II. A numeric sequence can represent datetime/date/time constructor fields.
             # Wrong arity or out-of-range components decline back to the original list.
-            parts = [part for part in d if isinstance(part, int)]
+            parts = d
 
             def _to_time(target: type[time]) -> time:
                 if len(parts) not in {3, 4}:
@@ -1533,7 +1533,7 @@ class Transform[T0, T1]:
     ) -> T | None:
         return cls._branch(
             data,
-            lambda value, tvar: isinstance(value, tvar),
+            isinstance,
             _datetime=_datetime,
             _time=_time,
             _timedelta=_timedelta,

@@ -170,11 +170,10 @@ unannotated-attribute = 'error'
 # category, downgraded to 'warn' (still printed, doesn't fail the gate) rather than silenced,
 # so counts are visible for a later task to ratchet back to 'error' as each is paid down.
 # Root causes, grouped:
-# - bad-argument-type, no-matching-overload, bad-assignment: the runtime coercion/dispatch
-#   engine (Typist, Transform, IterUtils, Command) intentionally takes broad unions and
-#   narrows at runtime; plus 3rd-party stub mismatches (srsly/tomllib/pickle/regex expect
-#   narrower types than our IO|Path|bytes union args, and `regex`'s stub types
-#   `DEFAULT_VERSION` as a `Literal` constant even though runtime treats it as assignable).
+# - bad-argument-type, no-matching-overload: the runtime coercion/dispatch engine (Typist,
+#   Transform, IterUtils, Command) intentionally takes broad unions and narrows at runtime;
+#   plus 3rd-party stub mismatches (srsly/tomllib/pickle expect narrower types than our
+#   IO|Path|bytes union arguments).
 # - missing-attribute: dynamically-typed 3rd-party surfaces (googleapiclient's `Resource`
 #   built at runtime, pyratatui's still-incomplete stubs, `importlib.resources.abc.Traversable`
 #   missing `exists()` in typeshed) plus Flag/Enum multi-class dispatch in MyEnum; also
@@ -194,7 +193,6 @@ unannotated-attribute = 'error'
 #   from `MyType.main` at runtime, which pyrefly can't rule out being `type[None]` statically.
 bad-argument-type = 'warn'
 no-matching-overload = 'warn'
-bad-assignment = 'warn'
 missing-attribute = 'warn'
 bad-return = 'warn'
 invalid-argument = 'warn'

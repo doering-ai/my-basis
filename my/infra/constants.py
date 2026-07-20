@@ -14,7 +14,8 @@ import pydantic as pyd
 ### INTERNAL
 # NOTE: do not import anything from this package (to avoid circular imports)
 
-re.DEFAULT_VERSION = re.VERSION1  # type: ignore
+# The runtime API deliberately permits changing the default; the stub pins its initial literal.
+re.DEFAULT_VERSION = re.VERSION1  # pyrefly: ignore[bad-assignment]
 
 
 ############

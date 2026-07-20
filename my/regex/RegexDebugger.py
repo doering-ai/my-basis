@@ -17,8 +17,6 @@ from .meta import GroupKind, Atom, Regex, GroupAtom
 from .MatchData import MatchData
 from .RegexStore import RegexStore, RegexBuffer
 
-re.DEFAULT_VERSION = re.VERSION1  # type: ignore
-
 
 ############
 ### BODY ###

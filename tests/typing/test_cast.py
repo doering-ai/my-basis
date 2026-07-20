@@ -422,7 +422,11 @@ class TestCast:
         def answer() -> int:
             return 42
 
+        def enabled() -> bool:
+            return True
+
         assert typist.cast(answer, int) == 42
+        assert typist.cast(enabled, bool) is True
 
     @pyt.mark.parametrize(
         'data, target, expected', CAST_SERIES_CASES, ids=type_ids(CAST_SERIES_CASES)

@@ -5,6 +5,8 @@
 from typing import Any
 import itertools as it
 import functools as ft
+import importlib
+import time
 
 ### EXTERNAL
 import pytest as pyt
@@ -14,7 +16,7 @@ import regex as re
 ### INTERNAL
 from my.types import Span
 from my.types.Buffer import Buffer, PairMode
-from ..conftest import boolmap
+from ..conftest import boolmap, Patch
 
 ############
 ### DATA ###
@@ -151,6 +153,36 @@ class TestBuffer:
             else:
                 raise ValueError(f'Unexpected match: {text}')
         assert buf.text[0] == 'start  middle  end'
+
+    @pyt.mark.parametrize(
+        'method_name',
+        ['rgx_iterator', 'raw_pair_iterator', 'find_chads'],
+    )
+    def test_regex_timeout__guards_hot_iterators(self, patch: Patch, method_name: str):
+        """`REGEX_TIMEOUT` really aborts catastrophic backtracking in each hot iterator.
+
+        basis-T1 item 1: `Buffer.REGEX_TIMEOUT` guards 3 `rgx.search()` call sites (ReDoS
+        protection) -- `rgx_iterator`, `raw_pair_iterator` (which also drives `pair_iterator`/
+        `pair_list`/`find_pair_match`), and `find_chads`. This proves the guard is real, not
+        just declared: with the module constant patched low, feeding a genuinely catastrophic
+        pattern (`(a|a)+b`, confirmed separately to still be running past 2s with no `timeout=`
+        at all) raises `TimeoutError` well within the patched deadline instead of hanging.
+        """
+        # `import my.types.Buffer as x` (and pytest's dotted-string `setattr` form, which
+        # resolves the same way) would bind to the `Buffer` *class* here, not the module --
+        # `my/types/__init__.py` re-exports `Buffer` under the submodule's own name, shadowing
+        # it on the `my.types` package. `importlib.import_module` bypasses that.
+        buffer_module = importlib.import_module('my.types.Buffer')
+        patch.setattr(buffer_module, 'REGEX_TIMEOUT', 0.2)
+
+        evil = re.compile(r'(a|a)+b')
+        buf = cls.new('a' * 30 + '!')
+        method = getattr(buf, method_name)
+
+        start = time.monotonic()
+        with pyt.raises(TimeoutError):
+            list(method(evil))
+        assert time.monotonic() - start < 5, 'timeout should fire well before this bound'
 
     @pyt.mark.parametrize(
         'source, span, delta, expected_pre, expected_post',
@@ -301,3 +333,46 @@ class TestBuffer:
         empty_buffer = cls()
         with pyt.raises(AssertionError, match='Position 1 is out of bounds'):
             empty_buffer.linespan(1)
+
+    def test_pair_list__returns_correct_pairs(self):
+        """`pair_list()` materializes the same tuples as iterating `pair_iterator()` directly."""
+        rgx = re.compile(r'(?P<start>{{)|(?P<end>}})')
+        text = 'a {{ b }} c {{ d }} e'
+        expected = list(cls.new(text).pair_iterator(rgx))
+
+        result = cls.new(text).pair_list(rgx)
+        assert result == expected
+        assert [body for _, _, body, _ in result] == [' b ', ' d ']
+
+    def test_pair_list__caches_by_identity(self):
+        """Repeated calls with the same pattern/mode/bounds return the identical cached list."""
+        rgx = re.compile(r'(?P<start>{{)|(?P<end>}})')
+        buf = cls.new('a {{ b }} c')
+
+        first = buf.pair_list(rgx)
+        second = buf.pair_list(rgx)
+        assert first is second
+
+    def test_pair_list__invalidates_on_mutation(self):
+        """basis-T1 item 3: a version-bumping mutation forces a re-scan, not stale cached pairs.
+
+        `Buffer._version` increments on every `_replace_span`, which also clears `_pair_cache`
+        (see `_replace_span`) -- so a subsequent `pair_list()` call must recompute rather than
+        return the pre-mutation list.
+        """
+        rgx = re.compile(r'(?P<start>{{)|(?P<end>}})')
+        buf = cls.new('a {{ b }} c {{ d }} e')
+
+        before = buf.pair_list(rgx)
+        assert len(before) == 2
+        version_before = buf._version
+
+        # Drop the first pair entirely; this replaces a non-empty span, bumping `_version`.
+        span, _, _, _ = before[0]
+        buf.drop(span)
+        assert buf._version != version_before
+
+        after = buf.pair_list(rgx)
+        assert after is not before
+        assert len(after) == 1
+        assert after[0][2] == ' d '

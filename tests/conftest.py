@@ -5,6 +5,8 @@
 from __future__ import annotations
 from collections.abc import Callable
 from datetime import datetime
+from pathlib import Path
+import tempfile
 
 ### EXTERNAL
 import pytest as pyt
@@ -15,7 +17,13 @@ from my import ut, env
 ############
 ### DATA ###
 ############
-MY_LOGS = env.path('MY_LOGS', '~/local/logs', mkdir=True)
+# Hermetic by construction: always sink test logs to a fresh per-session temp dir instead of
+# `~/local/logs`. Deliberately does NOT fall back to an ambient `$MY_LOGS` -- on a fleet-configured
+# dev box (see CLAUDE.md's environment table) that var is *always* exported, pointed at exactly
+# `~/local/logs`, for the real `my` application's own logging, not this test suite. Honoring it
+# "when set" would therefore never actually be hermetic here: confirmed empirically that a test
+# run left `~/local/logs`'s mtime freshly touched. A temp dir sidesteps that ambiguity entirely.
+MY_LOGS = Path(tempfile.mkdtemp(prefix='basis-test-logs-'))
 
 ############
 ### BODY ###

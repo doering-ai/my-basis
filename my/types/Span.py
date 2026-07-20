@@ -3,7 +3,7 @@
 ############
 ### STANDARD
 from __future__ import annotations
-from typing import ClassVar, Self, overload
+from typing import ClassVar, Self, cast, overload
 from collections.abc import Iterable
 
 ### EXTERNAL
@@ -79,7 +79,8 @@ class Span[T: Real](tuple[T, T]):
         x0, x1 = cls._new_impl(arg0, main)  # type: ignore[bad-specialization]
         if isinstance(x0, (int, float)) and isinstance(x1, (int, float)):
             assert x0 <= x1, f'Invalid span: {x0} > {x1}'
-        return super().__new__(cls, (x0, x1))  # type: ignore
+        # Pyrefly cannot bind tuple's element TypeVar through a generic tuple subclass.
+        return cast('Span[S]', super().__new__(cls, [x0, x1]))  # pyrefly: ignore[bad-argument-type]
 
     @classmethod
     def _fast(cls, a: int, b: int) -> Span[int]:
@@ -95,7 +96,10 @@ class Span[T: Real](tuple[T, T]):
         Returns:
             A Span without any validation overhead.
         """
-        return super().__new__(cls, (a, b))
+        return cast(
+            'Span[int]',
+            super().__new__(cls, [a, b]),  # pyrefly: ignore[bad-argument-type]
+        )
 
     @classmethod
     def _new_impl[S: Real](

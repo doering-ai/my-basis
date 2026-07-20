@@ -26,8 +26,10 @@ sphinx:
 #   - pdf
 #   - epub
 
-# Optional but recommended, declare the Python requirements required to build your documentation
-# https://docs.readthedocs.io/en/stable/guides/reproducible-builds.html
+# Sync the locked docs dependency group with Read the Docs' native uv integration
 python:
     install:
-        - requirements: docs/requirements.txt
+        - method: uv
+          command: sync
+          groups:
+              - docs

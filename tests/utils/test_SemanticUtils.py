@@ -3,7 +3,7 @@
 ############
 ### STANDARD
 from typing import Literal
-from importlib.resources import files
+from pathlib import Path
 
 ### EXTERNAL
 import pytest as pyt
@@ -26,7 +26,7 @@ class TestSemanticUtils:
         Returns:
             A list of `(category, plural, singular)` tuples.
         """
-        file = files('tests.utils') / 'plural-tests.yaml'
+        file = Path(__file__).with_name('plural-tests.yaml')
         assert file.exists(), f'Test data file not found: {file}'
         data: dict[str, list[list[str]]] = typist.from_file(file)
         return [(category, item[0], item[1]) for category, items in data.items() for item in items]

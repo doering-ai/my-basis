@@ -564,7 +564,8 @@ class TestSystemUtils:
     def test_from_json__unsupported_type(self):
         """Test from_json raises ValueError for unsupported input type."""
         with pyt.raises(ValueError, match='Unsupported input type'):
-            cls.from_json(object())
+            # Deliberately violate the public type contract to exercise runtime validation.
+            cls.from_json(object())  # pyrefly: ignore[bad-argument-type]
 
     # ---------------
     # `*2` is_pathy

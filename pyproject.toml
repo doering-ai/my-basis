@@ -201,13 +201,6 @@ invalid-yield = 'warn'
 bad-specialization = 'warn'
 not-callable = 'warn'
 bad-argument-count = 'warn'
-# `unnecessary-comparison` false-positives on `tests/utils/test_MetricUtils.py:32`: pyrefly
-# narrows `cls.WARNINGS_SETUP` to `Literal[False]` from an assignment two lines up and doesn't
-# invalidate that narrowing across the intervening `cls.setup_warnings()` call, even though
-# that call is what sets it back to `True`. Real behavior is correct; the checker's narrowing
-# isn't call-aware here.
-unnecessary-comparison = 'warn'
-
 # `internal-error`/`unsupported-operation` on `my/typing/MyType.py:560` (`head | (other.root or
 # Empty)`): pyrefly crashes internally trying to resolve `__or__`/`__ror__` on the `Empty`
 # sentinel type -- reported upstream-worthy, not something our config or source can route

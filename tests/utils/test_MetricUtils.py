@@ -389,10 +389,10 @@ class TestMetricUtils:
         try:
             cls.WARNINGS_SETUP = False
             cls.setup_warnings()
-            assert cls.WARNINGS_SETUP is True
+            assert cls.WARNINGS_SETUP
             # Running again should be idempotent
             cls.setup_warnings()
-            assert cls.WARNINGS_SETUP is True
+            assert cls.WARNINGS_SETUP
         finally:
             cls.WARNINGS_SETUP = original
 
@@ -411,7 +411,7 @@ class TestMetricUtils:
         try:
             cls.WARNINGS_SETUP = False
             cls().setup_warnings()
-            assert cls.WARNINGS_SETUP is True
+            assert cls.WARNINGS_SETUP
         finally:
             cls.WARNINGS_SETUP = original
 

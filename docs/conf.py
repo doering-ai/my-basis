@@ -71,6 +71,10 @@ exclude_patterns = [
 # myst-parser.readthedocs.io/en/latest/configuration.html#myst-warnings
 suppress_warnings = [
     'myst.strikethrough',
+    # Signature xrefs aren't load-bearing here (see `default_role`); without this, two documented
+    # classes sharing a nested-class name (`RegexStore.Options` vs `Command.Options`) turn every
+    # `Options` annotation into a fatal "more than one target" warning under --fail-on-warning.
+    'ref.python',
 ]
 
 # ------------

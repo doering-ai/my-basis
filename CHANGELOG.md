@@ -4,6 +4,30 @@ All notable changes to `my-basis` are documented here.
 The project has no prior tagged release -- `0.2.0` is the first tag, closing out a multi-month typing/subpackage overhaul that landed while the version stayed pinned at `0.1.0`.
 Where a change is a behavior break rather than an internal fix, it's called out explicitly; mechanism and rationale live in the cited commit bodies, not repeated here.
 
+## [Unreleased]
+
+The documentation campaign: every non-trivial public feature now carries an executed, doctest-locked example (roughly 330 `Examples:` blocks across ~700 rendered signatures), the README is rewritten around a full export map, and the campaign's verification pass surfaced a batch of small correctness fixes, each landed with a regression test.
+
+### Documentation
+
+- Docstrings normalized package-wide to the house Google style, with a single canonical reST-literal example shape; the handful of pre-existing examples (some rendering broken through `eval-rst`) were folded into it.
+- Every docs leaf page now lists its methods explicitly in source order with section groups mirroring the source banners; the `cast`/`check`/`match` chambers and `Metatype` gained their own pages instead of hiding behind `Typist`.
+- A new `tests/test_examples.py` sweeps every module's doctests as part of the ordinary suite, so an example that stops matching reality fails CI rather than rotting silently; connection-gated examples opt out inline via `# doctest: +SKIP`.
+- README rewritten for the released library: a grouped more-itertools-style table of the full public surface (linked into the rendered docs), a seven-stop subpackage tour with executed snippets, and corrected caveats (`requires-python >= 3.13`, live `py.typed` badge).
+
+### Fixed
+
+- `SystemUtils.confirm(default_no=True)` returned the *inverse* of the user's answer; answering `y` now confirms, and empty input falls to the default.
+- `IterUtils.exclusive_elements` dropped every value present in `rhs` instead of subtracting per-occurrence; it is now the ordered multiset difference its docs always described.
+- `SemanticUtils.roman_to_decimal` crashed with `KeyError` on lowercase numerals despite a case-insensitive validation regex; it now parses either case.
+- `FileCache`'s JSON name index required whitespace after the colon, which its own default (srsly) writer never emits -- shards written by `_default_writer` re-indexed as empty on a fresh instance, making persisted items silently unreachable.
+- `Command.exa(..., _cwd=...)` silently dropped the working-directory override unless an `Options` instance was already passed alongside it.
+- `ty.invocable`/`ty.invoke` always failed for functions from modules using `from __future__ import annotations` (PEP 563 string annotations were compared as the literal `str` type); signatures are now resolved with `eval_str=True`, falling back gracefully for names that only exist under `TYPE_CHECKING`.
+- `TypeCast.read_scalars(..., bool)` returned raw regex match objects instead of booleans.
+- `Filesystem.is_relative_to` used a string-prefix check, so sibling directories sharing a prefix (`/srv/app2` vs `/srv/app`) counted as nested; it now compares whole path segments.
+- `GoogleSheet.mtime` lacked the `@_import_guard` decorator, hitting a mock instead of the actionable `[google]`-extra `ImportError` its siblings raise.
+- `TypeMatch.is_map_type`/`is_struct_type` overloads subscripted `type[]` with parametrized aliases, which the typing spec disallows (and which broke autodoc signature rendering); they now narrow to the bare base classes.
+
 ## [0.9.0] - 2026-07-20
 
 The release-readiness release toward a confident 1.0: a cluster of reproduced security and correctness fixes (each landed with a regression test), the `py.typed` marker, a lazy import facade that roughly halves the module count of a bare `import my`, and dependency/packaging cleanup.

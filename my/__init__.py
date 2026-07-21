@@ -38,7 +38,6 @@ Note:
     In my usage, it is code that conforms to the design standards set out by the physical and
     interface design academies(/industries), especially the work of Don Norman.
     The most relevant are Consistency, Simplicity, Mapping, Visibility, Constraints, and Feedback.
-```
 """
 
 from typing import TYPE_CHECKING

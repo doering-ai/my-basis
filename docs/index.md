@@ -12,16 +12,14 @@ It's aimed at Python developers of all kinds, but it's especially worth a perusa
 
 - ...looking for a clean, easily-extensible way to interact with **Google Sheets**.
 
-- ...interested in generic **caching mechanisms** in order to satisfy the guilty pleasure of premature optimzation.
+- ...interested in generic **caching mechanisms** in order to satisfy the guilty pleasure of premature optimization.
 
 - ...looking for some **code snippets** to lift out of this repo directly, saving you an import!
 
 The package is organized into seven subpackages, which are (in rough order from most- to least-general):
 
 ```{toctree}
----
-maxdepth: 2
----
+:maxdepth: 2
 1. My Utilities <utils>
 2. Type Casting <typing>
 3. Useful Types <types>

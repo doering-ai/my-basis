@@ -60,10 +60,16 @@
   set document(title: title, author: if agent != none { agent } else { () })
   set page(
     paper: "us-letter",
+    fill: colors.paper,
     margin: (x: 1.1in, y: 1in),
     numbering: "1",
     footer: context {
-      set text(font: fonts.sans, size: 0.8em, fill: colors.muted)
+      set text(
+        font: fonts.mono,
+        size: 0.68em,
+        tracking: 0.03em,
+        fill: colors.muted,
+      )
       grid(
         columns: (1fr, auto),
         align: (left, right),

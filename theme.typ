@@ -1,48 +1,57 @@
 // theme.typ — the house look: palette, fonts, and the base document styling.
 //
 // Design grounding (policies/design-principles.md): the theme is a *conceptual model*
-// made visible (N-02, N-05) with restrained constraint (N-06) — one accent, a serif
-// body for reading at length, a sans for structure, generous measure. It harmonizes
-// with the furo palette the Latent Library already serves, so a report reads the same
-// whether you meet it as compiled PDF/SVG or as furo HTML.
+// made visible (N-02, N-05) with restrained constraint (N-06) — a serif body for
+// reading at length, mono kickers for structure, one blue accent, generous measure.
 //
-// Typst output is a single fixed rendering, so only the *light* furo palette applies
-// here; furo's own HTML handles dark mode downstream.
+// The vibe is lifted from the `odyssey` page (ai/src/pages/odyssey.astro): a warm,
+// editorial, Quanta-style register — Charter serif on warm-sand paper, Monaspace-Neon
+// kickers/chips, a single Radix-blue accent, airy line-height. Fonts name the odyssey
+// faces *first* and fall back to embedded typst faces (Libertinus Serif, DejaVu Sans
+// Mono), so a report is odyssey-authentic where those fonts exist and still compiles
+// identically on a bare collector/ingest host.
+//
+// Typst output is a single fixed rendering (light); the Latent Library's furo HTML
+// handles dark mode downstream.
 
 // --------------------------------------------------------------------------
-// Palette — furo-harmonized (see furo.css: brand #0a4bff, content #2757dd).
+// Palette — Radix "sand" warm neutrals + one Radix-blue accent, with muted
+// editorial semantic hues (shared with the codex report palette so authored and
+// converted reports read as one corpus).
 // --------------------------------------------------------------------------
 #let colors = (
-  brand: rgb("#0a4bff"), // furo --color-brand-primary (light)
-  link: rgb("#2757dd"), // furo --color-brand-content (light)
-  ink: rgb("#131416"), // primary text
-  muted: rgb("#5b5f66"), // secondary text, captions, metadata
-  rule: rgb("#d7dae0"), // hairlines, borders
-  surface: rgb("#f5f6f8"), // subtle panel / code fill
-  // Admonition accents — the conventional furo/GitHub hues, text-contrast-safe.
-  note: rgb("#0a4bff"),
-  tip: rgb("#1a7f37"),
-  hint: rgb("#1a7f37"),
-  important: rgb("#8250df"),
-  warning: rgb("#9a6700"),
-  attention: rgb("#9a6700"),
-  caution: rgb("#bc4c00"),
-  danger: rgb("#cf222e"),
-  error: rgb("#b30000"),
-  admonition: rgb("#57606a"),
+  brand: rgb("#0090ff"), // Radix blue-9 — the odyssey accent
+  link: rgb("#0d74ce"), // Radix blue-11 — link text, contrast-safe on paper
+  ink: rgb("#21201c"), // Radix sand-12 — warm near-black body text
+  muted: rgb("#60646c"), // odyssey metadata gray — captions, kickers
+  rule: rgb("#dad9d6"), // Radix sand-6 — hairlines, borders
+  surface: rgb("#f1f0ef"), // Radix sand-3 — subtle panel / code fill
+  paper: rgb("#fdfdfc"), // Radix sand-1 — warm page background
+  // Admonition accents — muted editorial hues that sit on warm-sand paper.
+  note: rgb("#246a8d"), // muted teal-blue
+  tip: rgb("#1b7f5c"), // muted green
+  hint: rgb("#1b7f5c"),
+  important: rgb("#6e56cf"), // muted violet
+  warning: rgb("#a66312"), // muted amber
+  attention: rgb("#a66312"),
+  caution: rgb("#bc4c00"), // muted orange
+  danger: rgb("#ae3f43"), // muted red
+  error: rgb("#ae3f43"),
+  admonition: rgb("#60646c"), // neutral sand
 )
 
 // Accent lookup for a callout/genre kind, defaulting to the neutral admonition slate.
 #let accent-of(kind) = colors.at(kind, default: colors.admonition)
 
 // --------------------------------------------------------------------------
-// Fonts — embedded-first with system fallbacks, so a report compiles the same
-// on any host (the collector/ingest hosts included).
+// Fonts — odyssey faces first, embedded typst faces as reproducible fallbacks.
+// The serif carries prose AND headings (editorial register); mono carries code,
+// kickers, chips, and metadata. `sans` is kept as a serif alias for back-compat.
 // --------------------------------------------------------------------------
 #let fonts = (
-  body: "Libertinus Serif", // embedded in typst
-  sans: ("Noto Sans", "Liberation Sans", "Libertinus Serif"), // headings, labels; embedded-serif fallback keeps it reproducible on bare hosts
-  mono: ("DejaVu Sans Mono", "Liberation Mono"), // code
+  body: ("Charter", "Georgia", "Libertinus Serif"), // odyssey serif; Libertinus embedded
+  sans: ("Charter", "Georgia", "Libertinus Serif"), // alias → serif (headings are serif here)
+  mono: ("Monaspace Neon", "DejaVu Sans Mono", "Liberation Mono"), // code + kickers + chips
   math: "New Computer Modern Math", // embedded
 )
 
@@ -52,22 +61,26 @@
 // --------------------------------------------------------------------------
 #let apply-base(body) = {
   set text(font: fonts.body, size: 11pt, lang: "en", fill: colors.ink)
-  set par(justify: true, leading: 0.72em, spacing: 1.15em)
+  set par(justify: true, leading: 0.8em, spacing: 1.25em)
   show math.equation: set text(font: fonts.math)
 
-  // Headings: sans, tight, with a hairline settling the top-level ones.
-  show heading: set text(font: fonts.sans, weight: "semibold")
-  show heading.where(level: 1): set text(size: 1.4em)
-  show heading.where(level: 2): set text(size: 1.18em)
-  show heading.where(level: 3): set text(size: 1.02em, style: "italic")
+  // Headings: serif, editorial — bold, a touch larger; H3 settles to italic.
+  show heading: set text(font: fonts.body, weight: "bold", fill: colors.ink)
+  show heading.where(level: 1): set text(size: 1.5em)
+  show heading.where(level: 2): set text(size: 1.22em)
+  show heading.where(level: 3): set text(
+    size: 1.05em,
+    style: "italic",
+    weight: "semibold",
+  )
 
   // Links carry the accent; monospace picks up the code face.
   show link: set text(fill: colors.link)
-  show raw: set text(font: fonts.mono, size: 0.92em)
+  show raw: set text(font: fonts.mono, size: 0.9em)
   show raw.where(block: true): it => block(
     width: 100%,
     fill: colors.surface,
-    inset: (x: 10pt, y: 8pt),
+    inset: (x: 11pt, y: 9pt),
     radius: 4pt,
     stroke: 0.5pt + colors.rule,
     it,
@@ -82,13 +95,14 @@
 // is the labeled envelope emitted by `report`.
 // --------------------------------------------------------------------------
 #let genre-chip(genre) = box(
-  fill: accent-of(genre).lighten(84%),
-  inset: (x: 6pt, y: 2pt),
+  fill: accent-of(genre).lighten(88%),
+  inset: (x: 6pt, y: 2.5pt),
   radius: 3pt,
   text(
-    font: fonts.sans,
-    size: 0.72em,
-    fill: accent-of(genre).darken(12%),
+    font: fonts.mono,
+    size: 0.66em,
+    tracking: 0.08em,
+    fill: accent-of(genre).darken(10%),
     weight: "medium",
     upper(genre),
   ),
@@ -102,15 +116,21 @@
   genre: none,
 ) = {
   set align(left)
-  text(font: fonts.sans, size: 1.9em, weight: "bold", fill: colors.ink, title)
+  text(font: fonts.body, size: 2.0em, weight: "bold", fill: colors.ink, title)
   if tagline != none {
     linebreak()
-    v(0.2em)
-    text(font: fonts.sans, size: 1.05em, fill: colors.muted, tagline)
+    v(0.25em)
+    text(
+      font: fonts.body,
+      size: 1.08em,
+      style: "italic",
+      fill: colors.muted,
+      tagline,
+    )
   }
-  v(0.5em)
-  // metadata line
-  set text(font: fonts.sans, size: 0.85em, fill: colors.muted)
+  v(0.55em)
+  // metadata kicker line — mono, tracked, muted (the odyssey kicker register).
+  set text(font: fonts.mono, size: 0.72em, tracking: 0.04em, fill: colors.muted)
   let bits = ()
   if agent != none {
     bits.push(text(fill: colors.ink, weight: "medium", agent))
@@ -123,5 +143,5 @@
   }
   v(0.4em)
   line(length: 100%, stroke: 0.75pt + colors.rule)
-  v(0.6em)
+  v(0.7em)
 }

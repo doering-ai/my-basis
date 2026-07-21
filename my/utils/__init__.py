@@ -39,7 +39,7 @@ from .MetricUtils import MetricUtils, metric_utils  # <- system (<- text <- iter
 
 
 class Utils(IterUtils, TextUtils, SystemUtils, SemanticUtils, SyntaxUtils, MetricUtils):
-    """A class combining all of the the utility classes into one convenient static interface."""
+    """A class combining all of the utility classes into one convenient static interface."""
 
     # `TextUtils` and `SystemUtils` each declare their own `RGXS` ClassVar; plain multiple
     # inheritance would let MRO order silently shadow one with the other (whichever base is

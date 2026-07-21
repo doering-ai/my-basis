@@ -38,6 +38,14 @@ class SyntaxUtils(_UtilsBase):
 
         Args:
             tree: Nested dictionary tree to fill.
+        Examples:
+            Backfill empty leaves at any depth::
+
+                >>> from my import ut
+                >>> tree = {'a': None, 'b': {'c': None}}
+                >>> ut.fill_tree(tree)
+                >>> tree
+                {'a': {}, 'b': {'c': {}}}
         """
         for key, val in tree.items():
             if isinstance(val, dict):
@@ -53,6 +61,12 @@ class SyntaxUtils(_UtilsBase):
             tree: Tree structure (dict of dicts, or leaf value).
         Returns:
             Total count of leaf nodes (non-dict values).
+        Examples:
+            Count the leaves, not the branches::
+
+                >>> from my import ut
+                >>> ut.tree_size({'a': {'b': 1, 'c': 2}, 'd': 3})
+                3
         """
         return sum(map(cls.tree_size, tree.values())) if isinstance(tree, dict) else 1
 
@@ -61,17 +75,29 @@ class SyntaxUtils(_UtilsBase):
     # --------------
     @staticmethod
     def pyd_schemify(tvar: type) -> pyd.GetPydanticSchema:
-        """Create Pydantic schema validator for instance type checking.
+        r"""Create Pydantic schema validator for instance type checking.
 
         Args:
             tvar: Type to create validator for.
         Returns:
             GetPydanticSchema validator for use with Annotated types.
+        Examples:
+            Let a Pydantic model carry compiled patterns::
+
+                >>> from typing import Annotated
+                >>> import pydantic, regex
+                >>> from my import ut
+                >>> class Cfg(pydantic.BaseModel):
+                ...     rgx: Annotated[regex.Pattern, ut.pyd_schemify(regex.Pattern)]
+                >>> Cfg(rgx=regex.compile(r'\d+')).rgx.pattern
+                '\\d+'
         """
         return pyd.GetPydanticSchema(lambda _, __: pyd_schema.is_instance_schema(cls=tvar))
 
     # Regex
+    #: Pydantic-ready annotation for compiled `regex` patterns.
     RegexField = Annotated[re.Pattern, pyd_schemify(re.Pattern)]
+    #: Pydantic-ready annotation for `regex` match objects.
     MatchField = Annotated[re.Match, pyd_schemify(re.Match)]
 
     # --------------
@@ -85,6 +111,16 @@ class SyntaxUtils(_UtilsBase):
             cls: Pydantic BaseModel class to inspect.
         Returns:
             Dictionary mapping lowercase field names to their type annotations.
+        Examples:
+            Inspect a model's instance fields::
+
+                >>> import pydantic
+                >>> from my import ut
+                >>> class User(pydantic.BaseModel):
+                ...     name: str
+                ...     age: int = 0
+                >>> ut.instance_fields(User)
+                {'name': <class 'str'>, 'age': <class 'int'>}
         """
         if issubclass(cls, pyd.BaseModel):
             annotations = {field: info.annotation for field, info in cls.model_fields.items()}
@@ -114,6 +150,15 @@ class SyntaxUtils(_UtilsBase):
             cls: Pydantic BaseModel class to inspect.
         Returns:
             Dictionary mapping field aliases to their type annotations.
+        Examples:
+            Aliases replace raw field names where declared::
+
+                >>> import pydantic
+                >>> from my import ut
+                >>> class Row(pydantic.BaseModel):
+                ...     full_name: str = pydantic.Field(alias='fullName')
+                >>> ut.instance_aliases(Row)
+                {'fullName': <class 'str'>}
         """
         if not issubclass(cls, pyd.BaseModel):
             return SyntaxUtils.instance_fields(cls)
@@ -161,6 +206,17 @@ class SyntaxUtils(_UtilsBase):
             max_depth: Maximum recursion depth.
         Returns:
             True if value was found and replaced, False otherwise.
+        Examples:
+            Replace a value wherever it hides; immutable tuples report failure::
+
+                >>> from my import ut
+                >>> data = {'a': [1, 2, {'b': 'old'}]}
+                >>> ut.nested_replace(data, 'old', 'new')
+                True
+                >>> data
+                {'a': [1, 2, {'b': 'new'}]}
+                >>> ut.nested_replace(('x',), 'x', 'y')
+                False
         """
         children: Collection[Collection | pyd.BaseModel] | None = None
         if isinstance(obj, Vecs):
@@ -214,6 +270,13 @@ class SyntaxUtils(_UtilsBase):
             root: Root directory for relative import path calculation.
         Returns:
             Imported ModuleType object.
+        Examples:
+            Import `src/pkg/mod.py` as the module `pkg.mod`::
+
+                >>> from pathlib import Path
+                >>> from my import ut
+                >>> ut.import_module(Path('src/pkg/mod.py'), Path('src'))  # doctest: +SKIP
+                <module 'pkg.mod' from 'src/pkg/mod.py'>
         """
         pathstr = file.with_suffix('').relative_to(root).as_posix().replace('/', '.')
         return imp.import_module(pathstr)
@@ -231,6 +294,21 @@ class SyntaxUtils(_UtilsBase):
         Args:
             inst: Object instance to clear cached properties from.
             *properties: Property names to clear. If empty, uses inst.CACHED_PROPERTIES.
+        Examples:
+            Invalidate a `functools.cached_property`::
+
+                >>> import functools
+                >>> from my import ut
+                >>> class Report:
+                ...     @functools.cached_property
+                ...     def total(self):
+                ...         return sum(range(5))
+                >>> report = Report()
+                >>> report.total
+                10
+                >>> ut.clear_cached_properties(report, 'total')
+                >>> 'total' in report.__dict__
+                False
         """
         if not properties and hasattr(inst, 'CACHED_PROPERTIES'):
             properties = tuple(getattr(inst, 'CACHED_PROPERTIES'))

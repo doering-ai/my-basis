@@ -26,6 +26,10 @@
 ```
 
 ```{eval-rst}
+.. automethod:: my.utils.IterUtils.IterUtils.type_partition
+```
+
+```{eval-rst}
 .. automethod:: my.utils.IterUtils.IterUtils.bucket
 ```
 
@@ -48,6 +52,14 @@
 ```
 
 ```{eval-rst}
+.. automethod:: my.utils.IterUtils.IterUtils.normalize_predicate
+```
+
+```{eval-rst}
+.. automethod:: my.utils.IterUtils.IterUtils.predicate
+```
+
+```{eval-rst}
 .. automethod:: my.utils.IterUtils.IterUtils.map_condense
 ```
 
@@ -57,6 +69,18 @@
 
 ```{eval-rst}
 .. automethod:: my.utils.IterUtils.IterUtils.get_any
+```
+
+```{eval-rst}
+.. automethod:: my.utils.IterUtils.IterUtils.get_first
+```
+
+```{eval-rst}
+.. automethod:: my.utils.IterUtils.IterUtils.normalize
+```
+
+```{eval-rst}
+.. automethod:: my.utils.IterUtils.IterUtils.safe
 ```
 
 ## `III` Application
@@ -70,7 +94,15 @@
 ```
 
 ```{eval-rst}
+.. automethod:: my.utils.IterUtils.IterUtils.apply
+```
+
+```{eval-rst}
 .. automethod:: my.utils.IterUtils.IterUtils.inverse_map
+```
+
+```{eval-rst}
+.. automethod:: my.utils.IterUtils.IterUtils.indexof
 ```
 
 ## `IV` Execution
@@ -127,8 +159,16 @@
 .. automethod:: my.utils.IterUtils.IterUtils.common_elements
 ```
 
+```{eval-rst}
+.. automethod:: my.utils.IterUtils.IterUtils.exclusive_elements
+```
+
 ## `VII` Modification
 
 ```{eval-rst}
 .. automethod:: my.utils.IterUtils.IterUtils.drop_at
+```
+
+```{eval-rst}
+.. automethod:: my.utils.IterUtils.IterUtils.drop_duplicates
 ```

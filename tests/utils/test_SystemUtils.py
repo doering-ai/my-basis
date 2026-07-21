@@ -214,14 +214,24 @@ class TestSystemUtils:
         assert cls.confirm('Proceed?') is False
 
     def test_confirm__yes_default_no(self, patch):
-        """Test confirm with default_no=True and user types 'y'."""
+        """Test confirm with default_no=True and user types 'y' (regression: was inverted)."""
         patch.setattr('builtins.input', lambda *a: 'y')
-        assert cls.confirm('Proceed?', default_no=True) is False
+        assert cls.confirm('Proceed?', default_no=True) is True
 
     def test_confirm__no_default_no(self, patch):
-        """Test confirm with default_no=True and user types 'n'."""
+        """Test confirm with default_no=True and user types 'n' (regression: was inverted)."""
         patch.setattr('builtins.input', lambda *a: 'n')
-        assert cls.confirm('Proceed?', default_no=True) is True
+        assert cls.confirm('Proceed?', default_no=True) is False
+
+    def test_confirm__empty_default_no(self, patch):
+        """Test that empty input falls to the default: no."""
+        patch.setattr('builtins.input', lambda *a: '')
+        assert cls.confirm('Proceed?', default_no=True) is False
+
+    def test_confirm__empty_default_yes(self, patch):
+        """Test that empty input falls to the default: yes."""
+        patch.setattr('builtins.input', lambda *a: '')
+        assert cls.confirm('Proceed?') is True
 
     @pyt.mark.parametrize(
         'modules, expected',

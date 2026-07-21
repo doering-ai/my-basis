@@ -42,6 +42,7 @@ from ._UtilsBase import _UtilsBase
 ############
 ### DATA ###
 ############
+#: A flexible predicate: a literal value to equal, a container of values, or a callable check.
 type Pred[V, R = bool] = V | Iterable[V] | Callable[[V], R]
 
 
@@ -49,7 +50,15 @@ type Pred[V, R = bool] = V | Iterable[V] | Callable[[V], R]
 ### BODY ###
 ############
 class IterUtils(_UtilsBase):
-    """Utility functions for working with iterators, sequences, mappings, and other containers."""
+    """Utility functions for working with iterators, sequences, mappings, and other containers.
+
+    Examples:
+        Every method is reachable through the combined `ut` facade::
+
+            >>> from my import ut
+            >>> ut.partition([1, 2, 3, 4], lambda v: v % 2 == 0)
+            ([1, 3], [2, 4])
+    """
 
     # ----------------
     # `0` CONSTRUCTION
@@ -63,6 +72,12 @@ class IterUtils(_UtilsBase):
             *functions: Functions to apply in sequence.
         Returns:
             Final transformed value after applying all functions.
+        Examples:
+            Pipe a value through successive transforms::
+
+                >>> from my import ut
+                >>> ut.build('  Hi  ', str.strip, str.lower)
+                'hi'
         """
         return ft.reduce(lambda acc, fn: fn(acc), functions, val)
 
@@ -80,6 +95,14 @@ class IterUtils(_UtilsBase):
             value: Object to extract items from (dict, mapping, or sequence of 2-tuples).
         Returns:
             List of (key, value) tuples, or empty list if extraction fails.
+        Examples:
+            Accept both mappings and pair sequences::
+
+                >>> from my import ut
+                >>> ut.map_items({'a': 1, 'b': 2})
+                [('a', 1), ('b', 2)]
+                >>> ut.map_items([('a', 1), ('b', 2)])
+                [('a', 1), ('b', 2)]
         """
         if not value:
             pass
@@ -100,6 +123,12 @@ class IterUtils(_UtilsBase):
             pred: Predicate function (True items go to second list).
         Returns:
             Tuple of (`fails`, `passes`) (NOTE that fails come first!).
+        Examples:
+            Partition odds from evens::
+
+                >>> from my import ut
+                >>> ut.partition([1, 2, 3, 4], lambda x: x % 2 == 0)
+                ([1, 3], [2, 4])
         """
         misses, hits = map(list, mi.partition(pred, items))
         return misses, hits
@@ -117,6 +146,12 @@ class IterUtils(_UtilsBase):
             Dict with predicate names as keys, plus 'rest' for unmatched items.
         Raises:
             AssertionError: If 'rest' is used as a predicate key name.
+        Examples:
+            Route items into named buckets, with leftovers under 'rest'::
+
+                >>> from my import ut
+                >>> ut.multi_partition(range(6), even=lambda x: x % 2 == 0, big=lambda x: x > 3)
+                {'even': [0, 2, 4], 'big': [5], 'rest': [1, 3]}
         """
         assert 'rest' not in preds.keys(), 'Cannot use key "rest" in multi_partition()'
 
@@ -132,7 +167,21 @@ class IterUtils(_UtilsBase):
     def type_partition[T0, T1](
         cls, container: Iterable[T0 | T1], t0: type[T0], t1: type[T1]
     ) -> tuple[list[T0], list[T1]]:
-        """Partition a container into two lists based on type."""
+        """Partition a container into two lists based on type.
+
+        Args:
+            container: Iterable of mixed-type items.
+            t0: Type collected into the first list.
+            t1: Type collected into the second list.
+        Returns:
+            Tuple of (items of type t0, items of type t1); items of neither type are dropped.
+        Examples:
+            Separate ints from strings::
+
+                >>> from my import ut
+                >>> ut.type_partition([1, 'a', 2, 'b'], int, str)
+                ([1, 2], ['a', 'b'])
+        """
         ret = cls.multi_partition(
             container,
             t0=lambda x: isinstance(x, t0),
@@ -151,6 +200,12 @@ class IterUtils(_UtilsBase):
             pred: Function returning bucket key for each item.
         Returns:
             Defaultdict mapping bucket keys to lists of items.
+        Examples:
+            Group words by first letter::
+
+                >>> from my import ut
+                >>> dict(ut.bucket(['apple', 'avocado', 'banana'], lambda w: w[0]))
+                {'a': ['apple', 'avocado'], 'b': ['banana']}
         """
         buckets = mi.bucket(items, pred)
         return defaultdict(list, {key: list(buckets[key]) for key in buckets})
@@ -170,6 +225,16 @@ class IterUtils(_UtilsBase):
             predicate: Predicate function or value to match (default: bool for truthiness).
         Returns:
             Index of first match, or -1 if not found.
+        Examples:
+            Locate by truthiness, predicate, or literal value::
+
+                >>> from my import ut
+                >>> ut.find([0, 0, 3, 5])
+                2
+                >>> ut.find(['x', 'y', 'z'], 'y')
+                1
+                >>> ut.find([0, 0])
+                -1
         """
         predicate = predicate if callable(predicate) else predicate.__eq__
         return next(mi.locate(container, predicate), -1)
@@ -189,6 +254,14 @@ class IterUtils(_UtilsBase):
             default: Default value to return if no match found (default: None).
         Returns:
             First matching key, or default if none found.
+        Examples:
+            Find the key of the first matching value::
+
+                >>> from my import ut
+                >>> ut.find_key({'a': 0, 'b': 2, 'c': 3}, lambda v: v > 1)
+                'b'
+                >>> ut.find_key({'a': 0}, lambda v: v > 1, default='n/a')
+                'n/a'
         """
         if not callable(predicate):
             cmp_obj = predicate
@@ -205,6 +278,12 @@ class IterUtils(_UtilsBase):
             items: Items to check.
         Returns:
             First item found in container, or None.
+        Examples:
+            Take the first item the container admits::
+
+                >>> from my import ut
+                >>> ut.next_in({'b', 'c'}, ['a', 'b', 'c'])
+                'b'
         """
         return next(filter(container.__contains__, items), None)
 
@@ -225,6 +304,14 @@ class IterUtils(_UtilsBase):
             pred: Predicate function (default: bool for truthiness).
         Returns:
             List of items matching predicate.
+        Examples:
+            Drop falsy values, or filter by an explicit predicate::
+
+                >>> from my import ut
+                >>> ut.condense([0, 1, '', 'x', None])
+                [1, 'x']
+                >>> ut.condense([1, 2, 3, 4], lambda x: x % 2)
+                [1, 3]
         """
         return list(cls.predicate(items, pred))
 
@@ -234,6 +321,18 @@ class IterUtils(_UtilsBase):
 
         Args:
             pred: Predicate to normalize (value, iterable, or function).
+        Returns:
+            A one-argument function returning a boolean.
+        Examples:
+            Turn a container into a membership test, and a value into an equality test::
+
+                >>> from my import ut
+                >>> fn = ut.normalize_predicate([1, 2])
+                >>> fn(1), fn(5)
+                (True, False)
+                >>> eq = ut.normalize_predicate(3)
+                >>> eq(3), eq(4)
+                (True, False)
         """
         # NOTE: `Func` is a union alias, so it can't be a `match` class pattern; guard on callable.
         # A bare class (e.g. the default `pred=bool`) is itself callable, and is meant to be
@@ -273,6 +372,14 @@ class IterUtils(_UtilsBase):
         Args:
             items: Iterable to filter.
             *preds: Predicates to apply (value, iterable, or function).
+        Yields:
+            Items satisfying every given predicate.
+        Examples:
+            Keep only items that pass all predicates::
+
+                >>> from my import ut
+                >>> list(ut.predicate([1, 2, 3, 4], lambda x: x > 1, lambda x: x < 4))
+                [2, 3]
         """
         fns = list(map(cls.normalize_predicate, preds))
         # NOTE: not `all(cls.apply(fns, item))` -- `apply` already drops falsy results before
@@ -292,6 +399,12 @@ class IterUtils(_UtilsBase):
             pred: Predicate function applied to values (default: bool for truthiness).
         Yields:
             (key, value) tuples where value satisfies the predicate.
+        Examples:
+            Keep entries with truthy values::
+
+                >>> from my import ut
+                >>> list(ut.map_condense({'a': 0, 'b': 2, 'c': ''}))
+                [('b', 2)]
         """
         fn = cls.normalize_predicate(pred)
         yield from ((k, v) for k, v in cls.map_items(items) if fn(v))
@@ -317,6 +430,16 @@ class IterUtils(_UtilsBase):
                 otherwise return whatever partial matches were found (default: True).
         Returns:
             Dict with requested keys that exist, or {} if `mandatory` and any key is missing.
+        Examples:
+            All-or-nothing extraction, unless `mandatory` is disabled::
+
+                >>> from my import ut
+                >>> ut.get_all({'a': 1, 'b': 2, 'c': 3}, 'a', 'b')
+                {'a': 1, 'b': 2}
+                >>> ut.get_all({'a': 1}, 'a', 'z')
+                {}
+                >>> ut.get_all({'a': 1}, 'a', 'z', mandatory=False)
+                {'a': 1}
         """
         ret = cls.get_any(data, *args)
         return ret if not mandatory or len(ret) == len(args) else {}
@@ -332,14 +455,20 @@ class IterUtils(_UtilsBase):
         """Extract multiple keys from a dictionary or model.
 
         Note:
-            Remember, a predicate is: {py}`V | Iterable[V] | Callable[[V], R]`.
+            Remember, a predicate is: `V | Iterable[V] | Callable[[V], R]`.
             In this case, `R` is locked to `bool`.
 
         Args:
-            data: sources of key-value pairs, to be extracted.
-            *args: Keys or , to extract.
+            data: Source of key-value pairs, to be extracted.
+            *args: Keys or predicates to extract.
         Returns:
             Dict with requested keys that exist.
+        Examples:
+            Collect whichever keys are present::
+
+                >>> from my import ut
+                >>> ut.get_any({'a': 1, 'b': 2}, 'a', 'z')
+                {'a': 1}
         """
         if ret := cls.ty.cast(data, dict):
             fns = tuple(map(cls.normalize_predicate, args))
@@ -379,6 +508,11 @@ class IterUtils(_UtilsBase):
     ) -> object | None:
         """Get value for first matching value from the container.
 
+        Note:
+            `data` must be a mapping or a live iterator (e.g. `iter([...])`); despite the
+            `Iterable` overloads, a plain non-iterator sequence falls through every branch
+            and returns None.
+
         Args:
             data: Structure to search.
             *args: Keys to try in order.
@@ -388,6 +522,14 @@ class IterUtils(_UtilsBase):
             Value of first matching key, or default.
         Raises:
             ValueError: If unique=True and multiple keys match.
+        Examples:
+            Match keys by predicate, falling back to a default::
+
+                >>> from my import ut
+                >>> ut.get_first({'alpha': 1, 'beta': 2}, lambda k: k.startswith('b'))
+                2
+                >>> ut.get_first({'a': 1}, 'z', default=0)
+                0
         """
         preds = tuple(map(cls.normalize_predicate, args))
         if isinstance(data, AsyncIterator):
@@ -433,7 +575,20 @@ class IterUtils(_UtilsBase):
     def normalize[V](cls, data: V) -> V: ...
     @classmethod
     def normalize(cls, data: object) -> object:
-        """Normalize the input data into a more workable form for casting."""
+        """Normalize the input data into a more workable form for casting.
+
+        Args:
+            data: Value to normalize; containers are normalized recursively.
+        Returns:
+            A str/dict/list-shaped equivalent, with byte-strings decoded and times cast to UTC;
+            atoms (None, types, enums, models, ...) pass through untouched.
+        Examples:
+            Decode byte-strings and rebuild containers::
+
+                >>> from my import ut
+                >>> ut.normalize({'a': (1, 2), 'b': b'x'})
+                {'a': [1, 2], 'b': 'x'}
+        """
         # NOTE: `String`/`Map`/`Vec`/`Iter` are union aliases, so they can't be `match` class
         # patterns; dispatch with the equivalent `is_*` predicates instead. Conversions are done
         # directly here (NOT via `cls.ty.cast`), since `cast` itself normalizes its input first --
@@ -480,6 +635,14 @@ class IterUtils(_UtilsBase):
             *keys: Sequence of keys to traverse.
         Returns:
             Value at nested location if all keys exist, else None.
+        Examples:
+            Traverse nested keys without raising::
+
+                >>> from my import ut
+                >>> ut.safe({'a': {'b': 1}}, 'a', 'b')
+                1
+                >>> ut.safe({'a': {'b': 1}}, 'a', 'z') is None
+                True
         """
         cur: V | dict[K, Any] | None = dict(container)
 
@@ -527,6 +690,14 @@ class IterUtils(_UtilsBase):
             drop: If True, drop falsy values from result (default: False).
         Returns:
             Dictionary with function applied to values (or to items if data is simple iterable).
+        Examples:
+            Map over a mapping's values, or build a dict from bare keys::
+
+                >>> from my import ut
+                >>> ut.val_map(str.upper, {'a': 'x', 'b': 'y'})
+                {'a': 'X', 'b': 'Y'}
+                >>> ut.val_map(len, ['hi', 'there'])
+                {'hi': 2, 'there': 5}
         """
         if not data:
             return {}
@@ -555,6 +726,12 @@ class IterUtils(_UtilsBase):
             drop: If True, drop falsy values and use default='' (default: False).
         Returns:
             Dict mapping field names to attribute values.
+        Examples:
+            Snapshot attributes into a dict::
+
+                >>> from my import ut
+                >>> ut.attr_map(complex(3, 4), ['real', 'imag'])
+                {'real': 3.0, 'imag': 4.0}
         """
         fn = ft.partial(getattr, obj, **(dict(default='') if drop else dict()))
         return cls.val_map(fn, {f: f for f in fields}, drop)
@@ -574,6 +751,12 @@ class IterUtils(_UtilsBase):
             **kwargs: Keyword arguments to pass to each function.
         Yields:
             Non-falsy results from function applications.
+        Examples:
+            Fan one input out over several functions::
+
+                >>> from my import ut
+                >>> list(ut.apply([str.upper, str.title], 'hi there'))
+                ['HI THERE', 'Hi There']
         """
         if not isinstance(functions, Iterable):
             functions = [functions]
@@ -594,18 +777,40 @@ class IterUtils(_UtilsBase):
 
         Args:
             functions: Functions to apply.
-            predicate: Predicate with which to filter results (default: `bool()` for truthiness).
+            predicate: Predicate with which to filter results (pass None for plain truthiness).
             *args: Positional arguments to pass to each function.
             **kwargs: Keyword arguments to pass to each function.
         Yields:
-            Non-falsy results from function applications.
+            Results for which the predicate holds.
+        Examples:
+            Apply many functions to one argument list::
+
+                >>> from my import ut
+                >>> list(ut.inverse_map([min, max], None, [3, 1, 4]))
+                [1, 4]
         """
         pred = predicate or (lambda x: x)
         yield from (ret for func in functions if pred(ret := func(*args, **kwargs)))
 
     @classmethod
     def indexof[T](cls, iterable: Sequence[T], *preds: Callable[[T], bool] | T) -> int:
-        """Return the first index in the given iterable that satisfies the predicate."""
+        """Return the first index in the given iterable that satisfies the predicate.
+
+        Args:
+            iterable: Sequence to search.
+            *preds: Plain functions (e.g. lambdas) used as predicates; any other value --
+                including builtin or bound callables -- is instead compared by equality.
+        Returns:
+            Index of the first item matching any predicate, or -1 if none match.
+        Examples:
+            Search by predicate or by literal value::
+
+                >>> from my import ut
+                >>> ut.indexof(['a', 'bb', 'ccc'], lambda s: len(s) > 1)
+                1
+                >>> ut.indexof(['a', 'bb'], 'bb')
+                1
+        """
         _preds = tuple(
             (pred if (callable(pred) and isinstance(pred, FunctionType)) else pred.__eq__)
             for pred in preds
@@ -624,6 +829,15 @@ class IterUtils(_UtilsBase):
             func: Function returning (num_changes, transformed_value).
         Returns:
             Wrapped function that repeats until num_changes is 0.
+        Examples:
+            Halve a number until it goes odd, counting the passes::
+
+                >>> from my import ut
+                >>> @ut.repeat_until_complete
+                ... def halve_evens(_, n):
+                ...     return (1, n // 2) if n % 2 == 0 else (0, n)
+                >>> halve_evens(None, 40)
+                (3, 5)
         """
 
         @ft.wraps(func)
@@ -663,6 +877,14 @@ class IterUtils(_UtilsBase):
             *args: Items that must all be present.
         Returns:
             True if all items present, False otherwise or if container empty.
+        Examples:
+            Require every item::
+
+                >>> from my import ut
+                >>> ut.has_all({'a', 'b', 'c'}, 'a', 'b')
+                True
+                >>> ut.has_all({'a'}, 'a', 'z')
+                False
         """
         return cls._has(container, *args, mode='all')
 
@@ -675,6 +897,12 @@ class IterUtils(_UtilsBase):
             *args: Items to check for (any match succeeds).
         Returns:
             True if any item present, False otherwise or if container empty.
+        Examples:
+            Any one match suffices::
+
+                >>> from my import ut
+                >>> ut.has_any(['a', 'b'], 'b', 'z')
+                True
         """
         return cls._has(container, *args, mode='any')
 
@@ -687,6 +915,12 @@ class IterUtils(_UtilsBase):
             *args: Items that should comprise the entire collection.
         Returns:
             True if container contains exactly these items.
+        Examples:
+            Exact membership, order-independent::
+
+                >>> from my import ut
+                >>> ut.has_only(['b', 'a'], 'a', 'b')
+                True
         """
         if isinstance(container, str):
             n_args = sum(map(len, args))  # type: ignore[bad-argument-type]
@@ -702,6 +936,12 @@ class IterUtils(_UtilsBase):
             *args: Items that must all be absent.
         Returns:
             True if no items present, False otherwise.
+        Examples:
+            Require total absence::
+
+                >>> from my import ut
+                >>> ut.has_none({'a'}, 'x', 'y')
+                True
         """
         return not cls.has_any(container, *args)
 
@@ -714,6 +954,12 @@ class IterUtils(_UtilsBase):
             *args: Items that must be in all containers.
         Returns:
             True if every container has all items, False otherwise or if empty.
+        Examples:
+            Every container must contain every item::
+
+                >>> from my import ut
+                >>> ut.all_has_all([{'a', 'b'}, {'a', 'b', 'c'}], 'a', 'b')
+                True
         """
         return all(cls.has_all(cont, *args) for cont in containers) if containers else False
 
@@ -726,6 +972,12 @@ class IterUtils(_UtilsBase):
             *args: Items that must all be in at least one container.
         Returns:
             True if at least one container has all items, False otherwise or if empty.
+        Examples:
+            One container with every item suffices::
+
+                >>> from my import ut
+                >>> ut.any_has_all([{'a'}, {'a', 'b'}], 'a', 'b')
+                True
         """
         return any(cls.has_all(cont, *args) for cont in containers) if containers else False
 
@@ -738,6 +990,12 @@ class IterUtils(_UtilsBase):
             *args: Items (at least one must be in each container).
         Returns:
             True if every container has at least one item, False otherwise or if empty.
+        Examples:
+            Every container needs at least one of the items::
+
+                >>> from my import ut
+                >>> ut.all_has_any([{'a'}, {'b'}], 'a', 'b')
+                True
         """
         return all(cls.has_any(cont, *args) for cont in containers) if containers else False
 
@@ -750,6 +1008,12 @@ class IterUtils(_UtilsBase):
             *args: Items to look for.
         Returns:
             True if at least one container has at least one item, False otherwise or if empty.
+        Examples:
+            Any overlap at all suffices::
+
+                >>> from my import ut
+                >>> ut.any_has_any([{'x'}, {'y'}], 'y', 'z')
+                True
         """
         return any(cls.has_any(cont, *args) for cont in containers) if containers else False
 
@@ -764,6 +1028,12 @@ class IterUtils(_UtilsBase):
             *strings: Strings to compare.
         Returns:
             Longest common prefix string.
+        Examples:
+            Extract the common start::
+
+                >>> from my import ut
+                >>> ut.shared_prefix('flowchart', 'flow', 'flower')
+                'flow'
         """
         return ''.join(mi.longest_common_prefix(strings))
 
@@ -775,6 +1045,12 @@ class IterUtils(_UtilsBase):
             *strings: Strings to compare.
         Returns:
             Longest common suffix string.
+        Examples:
+            Extract the common ending::
+
+                >>> from my import ut
+                >>> ut.shared_suffix('walking', 'running')
+                'ing'
         """
         return ''.join(reversed(list(mi.longest_common_prefix(map(reversed, strings)))))
 
@@ -788,15 +1064,17 @@ class IterUtils(_UtilsBase):
 
         Treats repeated elements according to their counts in each sequence.
 
-        ```python
-        assert common_elements([9, 1, 3, 9, 9], [1, 9, 9]) == [9, 1, 9]
-        ```
-
         Args:
             lhs: First sequence or set.
             rhs: Second sequence or set.
         Returns:
             List of common elements. For sequences, includes duplicates.
+        Examples:
+            Duplicates survive only as often as both sides carry them::
+
+                >>> from my import ut
+                >>> ut.common_elements([9, 1, 3, 9, 9], [1, 9, 9])
+                [9, 1, 9]
         """
         if isinstance(lhs, set) or isinstance(rhs, set):
             return list(set(lhs) & set(rhs))
@@ -815,27 +1093,31 @@ class IterUtils(_UtilsBase):
         lhs: S,
         rhs: Iterable[H],
     ) -> S:
-        """Return a version of the first sequence with only values NOT found in the second.
+        """Return a version of the first sequence with the second's values subtracted from it.
 
-        Treats repeated elements according to their counts in each sequence.
-
-        ```python
-        assert common_elements([9, 1, 3, 9, 9], [1, 9, 9]) == [3, 9]
-        ```
+        The complement of `common_elements()`: an ordered multiset difference, where each
+        occurrence in `rhs` cancels exactly one matching occurrence in `lhs`.
 
         Args:
-            lhs: First sequence or set.
-            rhs: Second sequence or set.
+            lhs: First sequence.
+            rhs: Iterable of values to exclude, one occurrence at a time.
         Returns:
-            List of exclusive elements.
+            A sequence of the same type as `lhs`, containing only unexcluded occurrences.
+        Examples:
+            Subtract per-occurrence -- one of the three nines survives::
+
+                >>> from my import ut
+                >>> ut.exclusive_elements([9, 1, 3, 9, 9], [1, 9, 9])
+                [3, 9]
         """
         tvar = type(lhs)
         counter = Counter(rhs)
         ret = []
         for value in lhs:
-            if counter[value] <= 0:
-                ret.append(value)
+            if counter[value] > 0:
                 counter[value] -= 1
+            else:
+                ret.append(value)
         return tvar(ret)  # type: ignore
 
     # ----------------
@@ -850,6 +1132,12 @@ class IterUtils(_UtilsBase):
             mask: Indices to drop.
         Returns:
             List with elements at masked indices removed.
+        Examples:
+            Remove by index::
+
+                >>> from my import ut
+                >>> ut.drop_at(['a', 'b', 'c', 'd'], [1, 3])
+                ['a', 'c']
         """
         if not mask:
             return list(data)
@@ -860,7 +1148,15 @@ class IterUtils(_UtilsBase):
         """Remove duplicate elements from a list, preserving order.
 
         Args:
-            data: Iterable to process.
+            data: Mutable sequence to deduplicate in place.
+        Examples:
+            Deduplicate a list in place::
+
+                >>> from my import ut
+                >>> items = [1, 2, 1, 3, 2]
+                >>> ut.drop_duplicates(items)
+                >>> items
+                [1, 2, 3]
         """
         seen: set = set()
         to_drop = []
@@ -874,9 +1170,6 @@ class IterUtils(_UtilsBase):
             for index in reversed(to_drop):
                 del data[index]
 
-    # -----
-    # OTHER
-    # -----
-
 
 iter_utils = IterUtils
+"""An alias of `IterUtils`, cased so as to imply static usage."""

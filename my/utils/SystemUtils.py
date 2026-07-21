@@ -105,6 +105,12 @@ class SystemUtils(_UtilsBase):
             val: Unix timestamp (int/float), datetime object, or None for current time.
         Returns:
             Timezone-aware datetime in UTC.
+        Examples:
+            Everything becomes an aware UTC datetime::
+
+                >>> from my import ut
+                >>> ut.posix(0)
+                datetime.datetime(1970, 1, 1, 0, 0, tzinfo=datetime.timezone.utc)
         """
         if val is None:
             return datetime.now(UTC)
@@ -121,6 +127,12 @@ class SystemUtils(_UtilsBase):
             val: Unix timestamp (int/float), datetime object, or None.
         Returns:
             Timedelta representing elapsed time, or zero if val is falsy.
+        Examples:
+            Falsy inputs yield a zero delta::
+
+                >>> from my import ut
+                >>> ut.posix_since(None)
+                datetime.timedelta(0)
         """
         if not val:
             return timedelta(0)
@@ -140,6 +152,13 @@ class SystemUtils(_UtilsBase):
             True if all paths are valid directories.
         Raises:
             AssertionError: If any path is invalid or not a directory.
+        Examples:
+            Existing directories pass::
+
+                >>> from pathlib import Path
+                >>> from my import ut
+                >>> ut.validate_dir(Path('/tmp'))
+                True
         """
         for path in paths:
             assert path and path.exists() and path.is_dir(), f'Invalid directory: {path.as_posix()}'
@@ -155,6 +174,16 @@ class SystemUtils(_UtilsBase):
             True if all paths are valid files.
         Raises:
             AssertionError: If any path is invalid or not a file.
+        Examples:
+            Only real files pass::
+
+                >>> import tempfile
+                >>> from pathlib import Path
+                >>> from my import ut
+                >>> file = Path(tempfile.mkdtemp()) / 'data.txt'
+                >>> _ = file.write_text('hi')
+                >>> ut.validate_file(file)
+                True
         """
         for path in paths:
             assert path and path.exists() and path.is_file(), f'Invalid file: {path.as_posix()}'
@@ -170,6 +199,13 @@ class SystemUtils(_UtilsBase):
             new: Replacement path component.
         Returns:
             New Path with substitution applied, or original if old not found.
+        Examples:
+            Swap a single component::
+
+                >>> from pathlib import Path
+                >>> from my import ut
+                >>> ut.path_sub(Path('/repo/src/app.py'), 'src', 'lib')
+                PosixPath('/repo/lib/app.py')
         """
         parts = path.parts
         if old in parts:
@@ -192,13 +228,19 @@ class SystemUtils(_UtilsBase):
 
     @classmethod
     def terminal_linewrap(cls, text: str, indent: int = 0) -> str:
-        """Wrap text to fit within terminal width.
+        r"""Wrap text to fit within terminal width.
 
         Args:
             text: Text to wrap.
             indent: Number of characters to reserve for indentation (default: 0).
         Returns:
             Text wrapped to terminal width minus indent.
+        Examples:
+            Re-wrap prose to the current terminal (width varies by session)::
+
+                >>> from my import ut
+                >>> ut.terminal_linewrap('A very long paragraph ...')  # doctest: +SKIP
+                'A very long\nparagraph ...'
         """
         return textwrap.fill(
             text_utils.unwrap_paragraphs(text), width=cls.get_terminal_width() - indent
@@ -206,7 +248,16 @@ class SystemUtils(_UtilsBase):
 
     @staticmethod
     def auto_confirm() -> None:
-        """Enable auto-confirmation mode for all confirmation prompts."""
+        """Enable auto-confirmation mode for all confirmation prompts.
+
+        Examples:
+            Make every subsequent `confirm()` return True (skipped: flips global state)::
+
+                >>> from my import ut
+                >>> ut.auto_confirm()      # doctest: +SKIP
+                >>> ut.confirm('Proceed?')  # doctest: +SKIP
+                True
+        """
         SystemUtils.AUTO_CONFIRM = True
 
     @staticmethod
@@ -217,7 +268,7 @@ class SystemUtils(_UtilsBase):
         italic: bool = False,
         underline: bool = False,
     ) -> str:
-        """Wrap text in zsh color codes with optional styles.
+        r"""Wrap text in zsh color codes with optional styles.
 
         Args:
             text: Text to colorize.
@@ -227,6 +278,14 @@ class SystemUtils(_UtilsBase):
             underline: If True, apply underline style (default: False).
         Returns:
             Colorized text with zsh codes, or original text if color is empty.
+        Examples:
+            Wrap text in zsh prompt-expansion codes, plus ANSI styling::
+
+                >>> from my import ut
+                >>> ut.zsh_colorize('hi', 'red')
+                '%F{red}hi%f'
+                >>> ut.zsh_colorize('hi', 'red', bold=True)
+                '\x1b[1m%F{red}hi%f\x1b[22m'
         """
         # I. Validate arguments
         if not (text and color):
@@ -257,6 +316,12 @@ class SystemUtils(_UtilsBase):
         Args:
             text: Text with zsh color codes already present.
             **kwargs: Additional arguments for `print()`.
+        Examples:
+            Render zsh color codes to the terminal::
+
+                >>> from my import ut
+                >>> ut.print_in_color(ut.zsh_colorize('done', 'green'))  # doctest: +SKIP
+                done
         """
         ret = sbp.run(
             ['zsh', '-c', 'print -P -- "$1"', 'zsh', text],
@@ -275,17 +340,38 @@ class SystemUtils(_UtilsBase):
             default_no: If True, default to 'no' (default: False defaults to 'yes').
         Returns:
             True if user confirms, False otherwise. Always True if auto-confirm enabled.
+        Examples:
+            Prompt interactively (unless `auto_confirm()` was enabled)::
+
+                >>> from my import ut
+                >>> ut.confirm('Overwrite?')  # doctest: +SKIP
+                Overwrite? [Y/n] y
+                True
         """
         if SystemUtils.AUTO_CONFIRM:
             return True
         elif default_no:
-            return not input(f'{prompt} [y/N] ').lower().strip().startswith('y')
+            return input(f'{prompt} [y/N] ').lower().strip().startswith('y')
         else:
             return not input(f'{prompt} [Y/n] ').lower().strip().startswith('n')
 
     @staticmethod
     def is_installed(*modules: str) -> bool:
-        """Check if specified Python modules are installed."""
+        """Check if specified Python modules are installed.
+
+        Args:
+            *modules: Importable module names to check.
+        Returns:
+            True if every module imports cleanly, False otherwise.
+        Examples:
+            Probe for optional dependencies::
+
+                >>> from my import ut
+                >>> ut.is_installed('json')
+                True
+                >>> ut.is_installed('not_a_module')
+                False
+        """
         try:
             for module in modules:
                 __import__(module)
@@ -295,7 +381,20 @@ class SystemUtils(_UtilsBase):
 
     @staticmethod
     def mock_if_uninstalled(target: str, *dependencies: str) -> bool:
-        """Mock the target module if any of the specified dependencies are not installed."""
+        """Mock the target module if any of the specified dependencies are not installed.
+
+        Args:
+            target: Module name to replace with a MagicMock in `sys.modules`.
+            *dependencies: Modules that must all be installed to leave the target untouched.
+        Returns:
+            True if all dependencies are installed, False if the target was mocked.
+        Examples:
+            Stub out an optional integration when its backend is missing::
+
+                >>> from my import ut
+                >>> ut.mock_if_uninstalled('my_pkg.viz', 'matplotlib')  # doctest: +SKIP
+                False
+        """
         if not SystemUtils.is_installed(*dependencies):
             sys.modules[target] = MagicMock()
             return False
@@ -381,6 +480,15 @@ class SystemUtils(_UtilsBase):
             **kwargs: Additional keyword arguments to pass to `print()`.
         Returns:
             The constructed multiline string.
+        Examples:
+            Compose a titled block; `quiet` returns it without printing::
+
+                >>> from my import ut
+                >>> out = ut.multiprint('a', 'b', title='Letters:', quiet=True)
+                >>> print(out, end='')
+                Letters:
+                    a
+                    b
         """
         # I. Preprocess items into lines
         lines = list(
@@ -429,6 +537,16 @@ class SystemUtils(_UtilsBase):
             mark: Character(s) to use for the fence lines.
             width: Total width of the fence lines. Leave empty to try to infer terminal width.
             indent: Number of spaces to indent the fence lines.
+        Examples:
+            Fence a noisy block of output::
+
+                >>> from my import ut
+                >>> with ut.debug_fence('start', width=20):
+                ...     print('body')
+                --------------------
+                ------ start -------
+                body
+                --------------------
         """
         if indent:
             width -= indent
@@ -470,12 +588,34 @@ class SystemUtils(_UtilsBase):
             raw: A path which may or may not be absolute, existent, or even valid.
         Returns:
             Ideally a resolved version of that same path, else the same one.
+        Examples:
+            Expand and resolve; unusable input collapses to the `NOWHERE` sentinel::
+
+                >>> from my import ut
+                >>> ut.path('~/notes.txt').is_absolute()
+                True
+                >>> ut.path(None)
+                PosixPath('.')
         """
         return cls._path(str(raw or ''))
 
     @classmethod
     def log(cls, *args: Any, _level: int = 0, **kwargs: Any) -> None:
-        """Log the provided collection of strings, applying common-sense transformations."""
+        """Log the provided collection of strings, applying common-sense transformations.
+
+        Nested iterables are flattened and stringified before joining, so `info()`, `warn()`, and
+        `error()` all accept loosely-structured arguments.
+
+        Args:
+            *args: Values (or nested iterables of values) to join into one message.
+            _level: Numeric logging level to emit at.
+            **kwargs: Reserved for logger compatibility; currently unused.
+        Examples:
+            Compose one message from loose parts::
+
+                >>> from my import ut
+                >>> ut.info('loaded', [1, 2], 'records')  # doctest: +SKIP
+        """
         message = ' '.join(map(str, mi.collapse(args or [''], base_type=str)))
         cls.LOGGER.log(_level, message)
 
@@ -494,9 +634,9 @@ class SystemUtils(_UtilsBase):
         """Log the provided collection of strings at the WARNING level."""
         cls.log(args, _level=logging.WARN, **kwargs)
 
-    # --------
-    # FILE I/O
-    # --------
+    # ------------
+    # `3` FILE I/O
+    # ------------
     @overload
     @classmethod
     def from_file(cls, file: FileParam) -> dict: ...
@@ -522,6 +662,16 @@ class SystemUtils(_UtilsBase):
             cast: If True, try to coerce unexpected types before raising an error.
         Returns:
             Loaded and cast data from the file.
+        Examples:
+            Round-trip a mapping through YAML on disk::
+
+                >>> import tempfile
+                >>> from pathlib import Path
+                >>> from my import ut
+                >>> file = Path(tempfile.mkdtemp()) / 'cfg.yaml'
+                >>> ut.to_file({'name': 'basis', 'tags': ['a', 'b']}, file)
+                >>> ut.from_file(file)
+                {'name': 'basis', 'tags': ['a', 'b']}
         """
         if not file:
             raise ValueError('No file provided.')
@@ -548,6 +698,16 @@ class SystemUtils(_UtilsBase):
         Args:
             data: The data to save.
             file: Path to the file to save. Note that raw strings are NOT allowed here.
+        Examples:
+            The suffix picks the serialization format::
+
+                >>> import tempfile
+                >>> from pathlib import Path
+                >>> from my import ut
+                >>> file = Path(tempfile.mkdtemp()) / 'data.json'
+                >>> ut.to_file([1, 2], file)
+                >>> ut.from_json(file, list)
+                [1, 2]
         """
         if not file:
             return
@@ -590,6 +750,14 @@ class SystemUtils(_UtilsBase):
             cast: If False, data that doesn't match the expected return type raises an error.
         Returns:
             Loaded and cast data from the file/string.
+        Examples:
+            Parse a raw string, casting to the requested type::
+
+                >>> from my import ut
+                >>> ut.from_json('{"a": 1}')
+                {'a': 1}
+                >>> ut.from_json('[1, 2]', list)
+                [1, 2]
         """
         if not file:
             return tvar()  # type: ignore
@@ -610,7 +778,21 @@ class SystemUtils(_UtilsBase):
 
     @classmethod
     def is_pathy(cls, text: str) -> bool:
-        """Heuristic check for whether a string looks like a file path."""
+        """Heuristic check for whether a string looks like a file path.
+
+        Args:
+            text: Candidate string.
+        Returns:
+            True if the string is path-length and contains path-like markers.
+        Examples:
+            Separate paths from prose::
+
+                >>> from my import ut
+                >>> ut.is_pathy('~/notes/todo.md')
+                True
+                >>> ut.is_pathy('hello')
+                False
+        """
         return bool(4 < len(text) < 255 and cls.RGXS['pathy'].search(text))
 
     @overload
@@ -626,7 +808,12 @@ class SystemUtils(_UtilsBase):
         tvar: type[F] = dict,  # ty:ignore[invalid-parameter-default]
         cast: bool = True,
     ) -> F:
-        """Load data from YAML file or string, then cast to target type. See `from_file()`.
+        r"""Load data from YAML file or string, then cast to target type. See `from_file()`.
+
+        Note:
+            Passing a markdown-fenced string (starting with three backticks and `yaml`) currently
+            raises `KeyError: 'yaml'` -- the fence-extraction branch references an RGXS pattern
+            that is not defined. Strip fences before calling.
 
         Args:
             file: Path to the file to load, or raw YAML string/bytes.
@@ -635,6 +822,12 @@ class SystemUtils(_UtilsBase):
             cast: If False, data that doesn't match the expected return type raises an error.
         Returns:
             Loaded and cast data from the file/string.
+        Examples:
+            Parse an in-memory YAML string::
+
+                >>> from my import ut
+                >>> ut.from_yaml('a: 1\nb: [x, y]')
+                {'a': 1, 'b': ['x', 'y']}
         """
         # I. Parse the content using an external library
         if not file:
@@ -687,6 +880,12 @@ class SystemUtils(_UtilsBase):
             cast: If False, data that doesn't match the expected return type raises an error.
         Returns:
             Loaded and cast data from the file/string.
+        Examples:
+            Parse an in-memory TOML string::
+
+                >>> from my import ut
+                >>> ut.from_toml('x = 1')
+                {'x': 1}
         """
         tvar = cls.ty.specify(tvar)
         if not file:
@@ -729,6 +928,12 @@ class SystemUtils(_UtilsBase):
             cast: If False, data that doesn't match the expected return type raises an error.
         Returns:
             Loaded and cast data from the file/string.
+        Examples:
+            Round-trip through Pickle bytes::
+
+                >>> from my import ut
+                >>> ut.from_pickle(ut.to_pickle([1, 2]), list)
+                [1, 2]
         """
         if not file:
             return tvar()  # type: ignore
@@ -756,6 +961,15 @@ class SystemUtils(_UtilsBase):
             **kwargs: Additional keyword arguments to pass to `srsly.yaml_dumps()`.
         Returns:
             YAML string representation of the data.
+        Examples:
+            Serialize with the project's block-style indentation::
+
+                >>> from my import ut
+                >>> print(ut.to_yaml({'a': 1, 'b': [1, 2]}), end='')
+                a: 1
+                b:
+                    - 1
+                    - 2
         """
         obj = cls.ty.serialize(data)
         text = cls.YAML_CONFIG.dump(obj, **kwargs)
@@ -780,6 +994,14 @@ class SystemUtils(_UtilsBase):
             **kwargs: Additional keyword arguments to pass to `srsly.json_dumps()`.
         Returns:
             JSON string representation of the data.
+        Examples:
+            Serialize with 4-space indentation::
+
+                >>> from my import ut
+                >>> print(ut.to_json({'a': 1}))
+                {
+                    "a":1
+                }
         """
         obj = cls.ty.serialize(data)
         if 'indent' not in kwargs:
@@ -801,6 +1023,12 @@ class SystemUtils(_UtilsBase):
             **kwargs: Additional keyword arguments to pass to `tomli_w.dumps()`.
         Returns:
             TOML string representation of the data.
+        Examples:
+            Serialize a mapping::
+
+                >>> from my import ut
+                >>> print(ut.to_toml({'x': 1}), end='')
+                x = 1
         """
         obj = cls.ty.serialize(data)
 
@@ -828,6 +1056,12 @@ class SystemUtils(_UtilsBase):
             **kwargs: Additional keyword arguments to pass to `pickle.dumps()`.
         Returns:
             Pickle byte representation of the data.
+        Examples:
+            Feed the bytes straight back to `from_pickle()`::
+
+                >>> from my import ut
+                >>> ut.from_pickle(ut.to_pickle({'a': 1}))
+                {'a': 1}
         """
         obj = cls.ty.serialize(data)
         return pickle.dumps(obj, **kwargs)
@@ -858,7 +1092,18 @@ class SystemUtils(_UtilsBase):
 
     @classmethod
     def serialize(cls, data: object, full: bool = False) -> Any:
-        """Thin wrapper around `Typist.serialize()` -- see there for usage info."""
+        """Thin wrapper around `Typist.serialize()` -- see there for usage info.
+
+        Examples:
+            Reduce rich types to JSON-friendly forms::
+
+                >>> from datetime import datetime, UTC
+                >>> from my import ut
+                >>> ut.serialize({3, 1, 2})
+                [1, 2, 3]
+                >>> ut.serialize(datetime(2026, 1, 1, tzinfo=UTC))
+                '2026-01-01T00:00:00'
+        """
         return cls.ty.serialize(data, full=full)
 
 

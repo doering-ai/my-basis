@@ -26,12 +26,16 @@ if TYPE_CHECKING:
 ### BODY ###
 ############
 class _UtilsBase:
+    """Shared base class wiring a late-bound `Typist` instance into every utility class."""
+
     ty: ClassVar[Typist]
 
     @staticmethod
     def set_typist(ty: Typist) -> None:
+        """Install the shared `Typist` instance used by every utility class."""
         _UtilsBase.ty = ty
 
     @staticmethod
     def typist() -> Typist:
+        """Return the shared `Typist` instance."""
         return _UtilsBase.ty

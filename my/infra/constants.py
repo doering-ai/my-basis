@@ -27,8 +27,13 @@ re.DEFAULT_VERSION = re.VERSION1  # pyrefly: ignore[bad-assignment]
 class InfraPaths(pyd.BaseModel, arbitrary_types_allowed=True):
     """A model containing important paths within the package."""
 
+    #: Root directory of the installed `my` package.
     my: Path = files('my')  # type: ignore
+
+    #: The bundled resource directory, `my/data`.
     data: Path = files('my.data')  # type: ignore
+
+    #: The bundled Jinja template directory, `my/data/templates`.
     templates: Path = data / 'templates'
 
 
@@ -42,6 +47,7 @@ INFRA_PATHS: InfraPaths = InfraPaths()
 # ---------
 # CONSTANTS
 # ---------
+#: The package-wide separator used when joining rendered fragments (e.g. `Span` collections).
 DELIM = ' // '
 
 

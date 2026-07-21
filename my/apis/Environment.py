@@ -65,7 +65,7 @@ class Environment(pyd.BaseModel):
     directory expansion, and automatic path resolution.
 
     2. The ``flags`` property interprets environment variables as int flags, recognizing common
-    truthy values like ``true``, ``yes``,and ``ON`` as ``1`` for use w/ booleans.
+    truthy values like ``true``, ``yes``, and ``ON`` as ``1`` for use w/ booleans.
 
     .. note::
        All environment variable names must be uppercase to be recognized by the interface.
@@ -82,7 +82,7 @@ class Environment(pyd.BaseModel):
         truthy=r'(?i:t(rue)?|y(es)?|enable[d]?|on)',
     )
 
-    # Override thse so that no sensitive info is automatically printed by loggers
+    # Override these so that no sensitive info is automatically printed by loggers
     def __str__(self) -> str:
         return 'Environment(...)'
 
@@ -107,7 +107,28 @@ class Environment(pyd.BaseModel):
         return ret
 
     def get(self, key: str, default: str = '') -> str:
-        """Get an environment variable as a string, with optional default."""
+        """Get an environment variable as a string, with optional default.
+
+        Equivalent to attribute (`env.MY_VAR`) or item (`env['MY_VAR']`) access, which return
+        the empty string for unset variables.
+
+        Args:
+            key: Environment variable name.
+            default: Value to return when the variable is unset.
+        Returns:
+            The variable's value, with any `$VAR`/`${VAR}` references interpolated.
+        Examples:
+            Read a variable with attribute access or an explicit fallback::
+
+                >>> from my.apis import env
+                >>> env.set('DEMO_GREETING', 'hello world')
+                >>> env.DEMO_GREETING
+                'hello world'
+                >>> env.get('DEMO_MISSING', 'fallback')
+                'fallback'
+                >>> env['DEMO_MISSING']
+                ''
+        """
         return Environment._get(key, default)
 
     # -------
@@ -122,11 +143,21 @@ class Environment(pyd.BaseModel):
     def set(self, key: str, value: str) -> None:
         """Set an environment variable, clearing caches if value changes.
 
+        Equivalent to attribute (`env.MY_VAR = ...`) or item (`env['MY_VAR'] = ...`) assignment.
+
         Args:
             key: Variable name (must be uppercase with underscores).
             value: Variable value.
         Raises:
             AssertionError: If key doesn't match naming convention.
+        Examples:
+            Assign via the method or plain attribute syntax::
+
+                >>> from my.apis import env
+                >>> env.set('DEMO_TOPIC', 'docs')
+                >>> env.DEMO_TOPIC = 'sphinx docs'
+                >>> env.DEMO_TOPIC
+                'sphinx docs'
         """
         self.validate_name(key)
         if self.get(key) != value:
@@ -145,7 +176,17 @@ class Environment(pyd.BaseModel):
 
     @ft.cached_property
     def paths(self) -> Environment._PathEnv:
-        """A cached property allowing for ergonomic dot-notation access to coerced path vars."""
+        """A cached property allowing for ergonomic dot-notation access to coerced path vars.
+
+        Examples:
+            Read an interpolated variable directly as a `Path`::
+
+                >>> from my.apis import env
+                >>> env.set('DEMO_BASE', '/srv/app')
+                >>> env.set('DEMO_LOGS', '$DEMO_BASE/logs')
+                >>> env.paths.DEMO_LOGS
+                PosixPath('/srv/app/logs')
+        """
         return self._PathEnv()
 
     @ft.lru_cache(maxsize=2**8)
@@ -170,7 +211,17 @@ class Environment(pyd.BaseModel):
             default: Default path if variable not set.
             mkdir: Whether to create directory if it doesn't exist.
         Returns:
-            Resolved absolute path.
+            Resolved absolute path, or the `Path('/')` sentinel when both the variable and
+            the default are empty.
+        Examples:
+            Resolve a set variable, and fall back to the sentinel for an unset one::
+
+                >>> from my.apis import env
+                >>> env.set('DEMO_LOGS', '/srv/app/logs')
+                >>> env.path('DEMO_LOGS')
+                PosixPath('/srv/app/logs')
+                >>> env.path('DEMO_UNSET')
+                PosixPath('/')
         """
         return Environment._path(key, str(default), mkdir)
 
@@ -183,7 +234,21 @@ class Environment(pyd.BaseModel):
 
     @ft.cached_property
     def flags(self) -> Environment._FlagEnv:
-        """A cached property allowing for ergonomic dot-notation access to coerced flag vars."""
+        """A cached property allowing for ergonomic dot-notation access to coerced flag vars.
+
+        Examples:
+            Read truthy strings and integers as int flags::
+
+                >>> from my.apis import env
+                >>> env.set('DEMO_VERBOSE', 'yes')
+                >>> env.set('DEMO_WORKERS', '4')
+                >>> env.flags.DEMO_VERBOSE
+                1
+                >>> env.flags.DEMO_WORKERS
+                4
+                >>> bool(env.flags.DEMO_UNSET)
+                False
+        """
         return self._FlagEnv()
 
     @ft.lru_cache(maxsize=256)
@@ -205,9 +270,10 @@ class Environment(pyd.BaseModel):
             return default
 
     def flag(self, key: str, default: int = 0) -> int:
-        """Get environment variable as an integer flag, or 0 if no set or coercable.
+        """Get an environment variable as an integer flag, falling back when unset or unrecognized.
 
-        Recognizes: `t|true|y|yes|enable|enabled|on` as 1.
+        Recognizes (case-insensitively): `t|true|y|yes|enable|enabled|on` as 1, plus any string
+        of digits (optionally negative) as its integer value.
 
         Args:
             key: Environment variable name (must be uppercase).
@@ -216,6 +282,15 @@ class Environment(pyd.BaseModel):
             Any integer.
         Raises:
             AssertionError: If key is empty or not uppercase.
+        Examples:
+            Unrecognized values yield the default::
+
+                >>> from my.apis import env
+                >>> env.set('DEMO_OFF', 'nope')
+                >>> env.flag('DEMO_OFF')
+                0
+                >>> env.flag('DEMO_OFF', default=-1)
+                -1
         """
         return Environment._flag(key, default)
 
@@ -224,7 +299,20 @@ class Environment(pyd.BaseModel):
     # ---------
     @ft.cached_property
     def is_dev(self) -> bool:
-        """Check if environment is in development mode, based on the `$MY_MODE` var."""
+        """Check if environment is in development mode, based on the `$MY_MODE` var.
+
+        Any value starting with `dev` counts, as does leaving `$MY_MODE` unset entirely.
+        Cached on first access per instance.
+
+        Examples:
+            A fresh instance reflects the current `$MY_MODE`::
+
+                >>> from my.apis import Environment
+                >>> demo = Environment()
+                >>> demo.set('MY_MODE', 'development')
+                >>> demo.is_dev
+                True
+        """
         return self.get('MY_MODE', 'dev').lower().startswith('dev')
 
     def __contains__(self, key: object) -> bool:
@@ -238,6 +326,14 @@ class Environment(pyd.BaseModel):
             key: String to validate.
         Returns:
             True if key contains only uppercase, digits, and underscores.
+        Examples:
+            Only uppercase names pass; `validate_name()` asserts the same predicate::
+
+                >>> from my.apis import env
+                >>> env.is_valid_name('MY_VAR')
+                True
+                >>> env.is_valid_name('my_var')
+                False
         """
         return bool(Environment.RGXS.fullmatch('name', key))
 
@@ -260,6 +356,13 @@ class Environment(pyd.BaseModel):
             val: A string, e.g. `${HOME}/data/${DATASET}`.
         Returns:
             Interpolated string, e.g. `/home/user/data/mnist`.
+        Examples:
+            Both `$VAR` and `${VAR}` references are expanded::
+
+                >>> from my.apis import env
+                >>> env.set('DEMO_BASE', '/srv/app')
+                >>> env.interpolate('${DEMO_BASE}/data')
+                '/srv/app/data'
         """
         buf = Buffer.new(val)
         for match in Environment.RGXS.finditer('interpolation', buf):

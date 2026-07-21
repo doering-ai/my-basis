@@ -6,7 +6,7 @@
   title: "A Sample House Report",
   agent: "claude",
   date: "2026-07-21",
-  genre: "references",
+  genre: "reference",
   tagline: "exercising every @dtm/basis surface",
   extra: (sid: "MEMY-599"),
 )

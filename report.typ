@@ -7,7 +7,7 @@
 //     title: "Findings on X",
 //     agent: "claude",
 //     date: "2026-07-21",
-//     genre: "references",         // references | explanations | lessons | instructions
+//     genre: "reference",          // reference | explanation | lesson | instruction
 //     tagline: "one-line subtitle", // optional
 //   )
 //   = First section
@@ -23,8 +23,11 @@
 
 #import "theme.typ": apply-base, colors, fonts, title-block
 
-// The Diátaxis genres the journal store recognizes.
-#let report-genres = ("references", "explanations", "lessons", "instructions")
+// The Diátaxis genre vocabulary the journal store recognizes, SINGULAR — the exact
+// values a Markdown report carries in its `genre:` frontmatter (journal/README.md), so
+// a `.typ` envelope and a `.md` frontmatter are indistinguishable to search and ingest.
+// (The `journal/reports/` *directories* are the plural forms: references/, explanations/…)
+#let report-genres = ("reference", "explanation", "lesson", "instruction")
 
 // The envelope schema tag — bump when the envelope's shape changes.
 #let envelope-schema = "dtm-report/1"

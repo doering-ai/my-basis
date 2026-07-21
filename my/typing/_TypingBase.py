@@ -43,4 +43,4 @@ class _TypingBase(pyd.BaseModel):
 
     @classmethod
     def setup(cls) -> None:
-        pass
+        """Run one-time subclass initialization; a no-op here, overridden by `TypeCast`."""

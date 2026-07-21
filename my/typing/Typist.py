@@ -90,7 +90,7 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
 
     The features of Typist that most diverge from what's capable with the standard library rely
     on the ``parse()`` method, which decomposes a given type so that other methods can intelligently
-    handly each part in turn. By far the most likely usecase is for containers such as
+    handle each part in turn. By far the most likely usecase is for containers such as
     ``dict[str, int]`` (which becomes the tuple ``(dict, str, int)``) and ``list[int]`` (which
     becomes ``(list, int, None)``), but it's useful for other generics, unions (e.g.
     ``string | int``), and special non-type forms (e.g. ``Annotated`` and ``Literal``).
@@ -159,10 +159,11 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
 
     .. rubric:: VI. Invocation
 
-    Finally, ``invoke()`` provides safe function calling with automatic type casting of arguments
-    and return values. It inspects function signatures to determine expected types, casts provided
-    arguments accordingly, and casts the return value to the annotated return type. This enables
-    seamless integration of typed functions into dynamic workflows.
+    Finally, ``invoke()`` provides safe function calling: it inspects the target's signature to
+    bind the given arguments (unpacking a lone mapping or sequence argument when that helps),
+    type-checks the binding against the annotations, and only then calls the function --
+    returning None instead of raising when no safe call can be made. This enables seamless
+    integration of typed functions into dynamic workflows.
     """
 
     # Static Global Members
@@ -249,6 +250,13 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
         Returns:
             A mapping of cast-flag names to booleans, suitable for ``Typist(**preset(...))`` or for
             assigning onto an existing instance.
+        Examples:
+            Build a stricter, private Typist alongside the permissive global one::
+
+                >>> from my import Typist
+                >>> strict = Typist(**Typist.preset('strict'))
+                >>> strict.wraps
+                False
         """
         return CastFlags.preset(level).model_dump()
 
@@ -262,6 +270,13 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
         The global singleton defaults to the ``flex`` tier -- every loose coercion enabled -- in
         keeping with the package's permissive "vibe typing" stance. Tighten it per-process by
         assigning a stricter ``preset()`` bundle onto the returned instance.
+
+        Examples:
+            The packaged aliases ``ty`` and ``typist`` are this same instance::
+
+                >>> from my import ty, Typist
+                >>> Typist.inst() is ty
+                True
         """
         if not hasattr(cls, '_INST'):
             cls._INST = cls(**cls.preset('flex'))
@@ -412,7 +427,15 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
 
     @staticmethod
     def specify(tvar: type[F]) -> type[F]:
-        """Convert a type variable to its generic form if it's a generic alias."""
+        """Convert a type variable to its generic form if it's a generic alias.
+
+        Examples:
+            Strip the parameters off a generic alias::
+
+                >>> from my import ty
+                >>> ty.specify(list[int])
+                <class 'list'>
+        """
         return getattr(tvar, '__origin__', tvar)
 
     # ------------------
@@ -423,7 +446,15 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
     # ------------
     @staticmethod
     def parse(tvar: Any) -> MyType:
-        """Parse a type annotation into a MyType instance. See `MyType.parse()` for details."""
+        """Parse a type annotation into a MyType instance. See `MyType.parse()` for details.
+
+        Examples:
+            Decompose a parameterized generic into its parts::
+
+                >>> from my import ty
+                >>> ty.parse(dict[str, int]).summarize()
+                (<class 'dict'>, <class 'str'>, <class 'int'>)
+        """
         return MyType.parse(tvar)
 
     # ---------------
@@ -431,7 +462,17 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
     # ---------------
     @classmethod
     def all_are[T](cls, iterable: Iterable, tvar: type[T]) -> TypeGuard[Iterable[T]]:
-        """Check if all values in an iterable match a type variable."""
+        """Check if all values in an iterable match a type variable.
+
+        Examples:
+            Assert the contents of a container, wholly or partially::
+
+                >>> from my import ty
+                >>> ty.all_are([1, 2, 3], int)
+                True
+                >>> ty.any_are([1, 'a'], str)
+                True
+        """
         return all(cls.check(value, tvar) for value in list(iterable))
 
     @classmethod
@@ -448,6 +489,14 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
             intersect: If True, check for intersection; if False, check for subset.
         Returns:
             True if the instances' types match.
+        Examples:
+            Compare two values' full (inferred) types::
+
+                >>> from my import ty
+                >>> ty.match_instances([1, 2], [3])
+                True
+                >>> ty.match_instances([1], ['x'])
+                False
         """
         return self.match(MyType.typeof(t0), MyType.typeof(t1), intersect)
 
@@ -465,6 +514,12 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
         Returns:
             1. A list with the rest.
             2. A list of only items that are (subclasses of) the first type.
+        Examples:
+            Split mixed data by type::
+
+                >>> from my import ty
+                >>> ty.type_partition([1, 'a', 2, 'b'], int)
+                (['a', 'b'], [1, 2])
         """
         myty = MyType.parse(tvar)
         if not myty:
@@ -479,6 +534,14 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
             container: The type to search within.
         Returns:
             True if target is used within container's type structure.
+        Examples:
+            Search nested annotations for a type::
+
+                >>> from my import ty
+                >>> ty.seek_usage(int, dict[str, list[int]])
+                True
+                >>> ty.seek_usage(bytes, dict[str, list[int]])
+                False
         """
         t0 = MyType.parse(target)
         t1 = MyType.parse(container)
@@ -504,7 +567,15 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
     # `*3` COERCION
     # -------------
     def flex_deserialize(self, values: Sequence[str] | str) -> list[Atom]:
-        """Convert a list of strings to their most appropriate Atomic types."""
+        """Convert a list of strings to their most appropriate Atomic types.
+
+        Examples:
+            Give each string its own best-fit scalar type::
+
+                >>> from my import ty
+                >>> ty.flex_deserialize(['1', '2.5', 'yes', 'word'])
+                [1, 2.5, True, 'word']
+        """
         values = [values] if isinstance(values, str) else list(map(str, values))
         new_types = [
             next(
@@ -532,6 +603,18 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
             tvar: Optional explicit type to cast to (inferred from obj if None).
         Returns:
             True if successful, False if casting failed.
+        Examples:
+            Set a typed attribute from a stringly value::
+
+                >>> import pydantic as pyd
+                >>> from my import ty
+                >>> class Point(pyd.BaseModel):
+                ...     x: int = 0
+                >>> point = Point()
+                >>> ty.setattr(point, 'x', '9')
+                True
+                >>> point.x
+                9
         """
         # I. Infer the type to cast to, when possible
         if tvar is None:
@@ -561,6 +644,14 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
             Cast data of the target type.
         Raises:
             TypeError: If casting fails.
+        Examples:
+            Repair the shape mismatches that JSON/YAML files commonly produce::
+
+                >>> from my import ty
+                >>> ty.cast_file_data(5, list)
+                [5]
+                >>> ty.cast_file_data({'content': [1]}, list)
+                [1]
         """
         val = None
         # I. Edge Cases
@@ -637,10 +728,24 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
         - All **models** are converted to dicts using their ``model_dump()`` method.
 
         Args:
-            data: The source data to serialize. Passing more than one obviously creates a list.
+            data: The source data to serialize.
             full: If True, include unset/default fields for pydantic models.
             cases: Optional special-case handlers, keyed by type or predicate, that trigger at
                 all depths.
+        Returns:
+            The simplified data, recursively composed of dicts, lists, and atoms.
+        Examples:
+            Simplify nested data into serialization-ready shape::
+
+                >>> from datetime import date
+                >>> from my import ty
+                >>> ty.serialize({'when': date(2026, 7, 21), 'tags': ('a', 'b')})
+                {'when': '2026-07-21', 'tags': ['a', 'b']}
+
+            Override any depth with a special-case handler::
+
+                >>> ty.serialize({'pi': 3.7}, cases={float: round})
+                {'pi': 4}
         """
         # 0. If the caller specified a special handler, call that instead
         for key, handler in (cases or {}).items():
@@ -697,8 +802,14 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
             copy: If True, make a deep copy of the base before merging.
             sort: If True, sort lists after merging.
             dups: If False, remove duplicates from lists after merging.
-        Return:
+        Returns:
             Merged dictionary.
+        Examples:
+            Merge nested structures instead of overwriting them::
+
+                >>> from my import ty
+                >>> ty.assemble({'a': [1], 'b': {'x': 1}}, {'a': [2], 'b': {'y': 2}})
+                {'a': [1, 2], 'b': {'x': 1, 'y': 2}}
         """
         if base is None:
             base = {}  # type: ignore
@@ -748,11 +859,23 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
     def distill(self, models: list[dict], exclude: set[str] | None = None) -> dict:
         """Recursively extract common fields from multiple models; the inverse of `assemble()`.
 
+        Note that the input dictionaries are mutated in place: every extracted field is removed
+        from them, leaving only their unique remainders behind.
+
         Args:
             models: List of dictionaries to distill.
             exclude: Set of field names to exclude from distillation (used during recursion).
         Returns:
             Distilled dictionary of shared fields.
+        Examples:
+            Pull the shared fields out, leaving each model's remainder in place::
+
+                >>> from my import ty
+                >>> models = [{'lang': 'py', 'v': 1}, {'lang': 'py', 'v': 2}]
+                >>> ty.distill(models)
+                {'lang': 'py'}
+                >>> models
+                [{'v': 1}, {'v': 2}]
         """
         assert len(models) > 1, f'At least two models are required to distill, got {len(models)}.'
 
@@ -822,7 +945,17 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
     @overload
     def from_yaml(self, file: FileParam, tvar: type[F], cast: bool = True) -> F: ...
     def from_yaml(self, file: FileParam, tvar: type = dict, cast: bool = True) -> Any:
-        """Load & cast data from a YAML file or string. See ``ut.from_yaml()``."""
+        """Load & cast data from a YAML file or string. See ``ut.from_yaml()``.
+
+        Examples:
+            Parse a string (or file path) and coerce the result in one step::
+
+                >>> from my import ty
+                >>> ty.from_yaml('a: [1, 2]')
+                {'a': [1, 2]}
+                >>> ty.from_yaml('[1, 2]', list[int])
+                [1, 2]
+        """
         return ut.from_yaml(file, tvar, cast)
 
     @overload
@@ -846,7 +979,15 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
         return ut.to_file(data, file)
 
     def to_yaml(self, data: Atom | Struct, wrap: bool = False, **kwargs) -> str:
-        """Serialize data to a YAML string. See ``ut.to_yaml()``."""
+        r"""Serialize data to a YAML string. See ``ut.to_yaml()``.
+
+        Examples:
+            Serialize a structure straight to text (`to_json` and `to_toml` work alike)::
+
+                >>> from my import ty
+                >>> ty.to_yaml({'a': [1, 2]})
+                'a:\n    - 1\n    - 2\n'
+        """
         return ut.to_yaml(data, wrap, **kwargs)
 
     def to_json(self, data: Atom | Struct, wrap: bool = False, **kwargs) -> str:
@@ -883,6 +1024,14 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
             *methods: Method names to search for in order.
         Returns:
             First found callable method, or None if none found.
+        Examples:
+            Take the first match, in argument order::
+
+                >>> from my import ty
+                >>> ty.get_method([], 'push', 'append').__name__
+                'append'
+                >>> ty.get_method([], 'push') is None
+                True
         """
         for method in methods:
             if (fn := getattr(obj, method, None)) is not None and callable(fn):
@@ -902,16 +1051,38 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
             sig: The function or signature to inspect.
             *args: Positional arguments to validate.
             **kwargs: Keyword arguments to validate.
+        String annotations (PEP 563, i.e. modules using ``from __future__ import annotations``)
+        are resolved before checking; a name that cannot be resolved at runtime (e.g. a
+        TYPE_CHECKING-only import) leaves the raw string in place, which then fails validation.
+
+        Args (annotations) are *checked*, never cast.
 
         Returns:
-            A tuple of (args, kwargs) that can be used to call the function if binding succeeds,
+            The bound arguments to call the function with if binding and type-checking succeed,
             or None if the function cannot be called with the given arguments.
+        Examples:
+            Bind and type-check without calling::
+
+                >>> from my import ty
+                >>> def area(width: int, height: int) -> int:
+                ...     return width * height
+                >>> ty.invocable(area, 4, 5)
+                <BoundArguments (width=4, height=5)>
+                >>> ty.invocable(area, 'x', 5) is None
+                True
         """
         # I. Coerce to signature if needed
         if not isinstance(sig, inspect.Signature):
             assert callable(sig), f'Invalid function provided: {sig}'
             try:
-                sig = inspect.signature(sig)
+                try:
+                    sig = inspect.signature(sig, eval_str=True)
+                except NameError:
+                    # A string annotation that won't resolve at runtime (TYPE_CHECKING-only
+                    # import, forward ref to a not-yet-defined name): keep the raw signature
+                    # rather than refusing outright -- its string annotations fail the type
+                    # check below, matching the pre-`eval_str` behavior for such functions.
+                    sig = inspect.signature(sig)
             except (ValueError, TypeError):
                 # Some builtins (`dict`, `int`, ...) have no introspectable signature -- Python
                 # raises `ValueError: no signature found for builtin type`. "Can't read its
@@ -993,13 +1164,24 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
     def upper_cast[V](
         self, data: object, tvar: type[V] | Any, flags: CastFlags | CastPreset | None = None
     ) -> V | Any | None:
-        """Attempt to cast/coerce the  data to the given type, returning None if unsuccessful.
+        """Attempt to cast/coerce the data to the given type, returning None if unsuccessful.
+
+        Compared to plain `cast`, this facade also concretizes abstract targets and tries the
+        best-fitting members of a union target first.
 
         Args:
             data: The source data to cast.
             tvar: The target type to cast to.
             flags: An explicit ``CastFlags`` snapshot (or preset-level name); resolved once here so
                 every option attempted below shares the same flag set. See ``TypeCast.cast``.
+        Returns:
+            The cast data on success, None otherwise.
+        Examples:
+            Pick the best-fitting member of a union target::
+
+                >>> from my import ty
+                >>> ty.upper_cast('42', int | list[int])
+                42
         """
         # I. Return null if the target is invalid
         if data is None or tvar in {None, Any}:
@@ -1043,21 +1225,31 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
     ) -> V | None:
         """Attempt to call a function with the given arguments.
 
-        This method first validates the arguments using invocable(), then calls the function
-        if validation succeeds.
+        This method first validates the arguments using `invocable()` -- binding them to the
+        signature (unpacking a lone mapping or sequence argument when that helps) and
+        type-checking the binding -- then calls the function only if validation succeeds. The
+        arguments are *checked*, never cast.
 
         Args:
             func: The function to call.
             *args: Positional arguments to pass to the function.
             _strict: If set, this method will raise a ValueError rather than returning None.
             **kwargs: Keyword arguments to pass to the function.
-
         Returns:
-            A tuple of (success, result) where success is True if the call succeeded,
-            and result is the return value of the function (or None if it failed).
-
+            The function's return value, or None if the call could not be made (or itself
+            failed).
         Raises:
             ValueError: If ``_strict`` is set and the function doesn't exist or couldn't be called.
+        Examples:
+            Call safely, unpacking a lone sequence across the parameters::
+
+                >>> from my import ty
+                >>> def area(width: int, height: int) -> int:
+                ...     return width * height
+                >>> ty.invoke(area, [4, 5])
+                20
+                >>> ty.invoke(area, 'x', 5) is None
+                True
         """
         # I. Check if the function can be called with the given arguments
         if not func:
@@ -1130,7 +1322,27 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
         _strict: bool = False,
         **kwargs,
     ) -> T | object | None:
-        """A thin wrapper that calls `get_method()`, then `invoke()` if successful."""
+        """A thin wrapper that calls `get_method()`, then `invoke()` if successful.
+
+        Args:
+            obj: The object to search for methods.
+            methods: One or more method names to try, in order.
+            *args: Positional arguments to pass to the found method.
+            _tvar: An optional type to cast the result to (results already of that type pass
+                through untouched).
+            _strict: If set, raise a ValueError rather than returning None on any failure.
+            **kwargs: Keyword arguments to pass to the found method.
+        Returns:
+            The (possibly cast) result, or None if no method was found or the call failed.
+        Examples:
+            Probe for a method and call it in one step::
+
+                >>> from my import ty
+                >>> ty.try_method('hi there', 'split')
+                ['hi', 'there']
+                >>> ty.try_method(42, 'split') is None
+                True
+        """
         if isinstance(methods, str):
             methods = (methods,)
 

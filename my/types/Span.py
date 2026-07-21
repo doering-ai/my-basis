@@ -34,7 +34,32 @@ class Span[T: Real](tuple[T, T]):
 
     The class provides flexible construction from strings like `"10-20"` or abbreviated forms like
     `"432-3"` (interpreted as 432-433). The `parse()` classmethod handles smart abbreviation
-    expansion, where trailing digits inherit leading digits from the start position.
+    expansion, where trailing digits inherit leading digits from the start position. Note that
+    `str()` renders the *inclusive* form -- `Span(3, 9)` becomes `'3-8'` -- which is what `parse()`
+    expects back.
+
+    Examples:
+        Construct spans from points, pairs, or strings::
+
+            >>> from my import Span
+            >>> Span(3, 9)
+            Span(3, 9)
+            >>> Span('10-20')
+            Span(10, 20)
+
+        Shift a span by an integer and test containment::
+
+            >>> Span(3, 9) + 1
+            Span(4, 10)
+            >>> 5 in Span(3, 9)
+            True
+            >>> (8, 12) in Span(3, 9)
+            True
+
+        Render the inclusive string form::
+
+            >>> str(Span(3, 9))
+            '3-8'
     """
 
     DELIM_RGX: ClassVar[re.Pattern] = re.compile(r' ?[-,\/]+ ?')
@@ -107,6 +132,7 @@ class Span[T: Real](tuple[T, T]):
         data: String | Scalar | Span[S] | Iterable[Scalar] | Empty | None,
         tvar: type[S],
     ) -> tuple[S, S]:
+        """Coerce the raw constructor argument into a validated (start, end) tuple."""
         zero = tvar()
         if data in {empty, None}:
             # I. Null-equivelant args result in a set of zeros, which are falsey
@@ -229,6 +255,12 @@ class Span[T: Real](tuple[T, T]):
             other: Span to test for intersection.
         Returns:
             True if the spans overlap.
+        Examples:
+            Test a partial overlap::
+
+                >>> from my import Span
+                >>> Span(3, 9).intersects((8, 12))
+                True
         """
         return other in self
 
@@ -239,6 +271,12 @@ class Span[T: Real](tuple[T, T]):
             other: Span to join with.
         Returns:
             New span from the minimum start to maximum end.
+        Examples:
+            Join two overlapping spans::
+
+                >>> from my import Span
+                >>> Span(3, 9).join((7, 15))
+                Span(3, 15)
         """
         return type(self)(min(self[0], other[0]), max(self[1], other[1]))
 
@@ -249,7 +287,13 @@ class Span[T: Real](tuple[T, T]):
         Args:
             *args: Spans to serialize.
         Returns:
-            String with spans separated by DELIM.
+            String with spans separated by `DELIM`.
+        Examples:
+            Serialize two spans (inclusive display form)::
+
+                >>> from my import Span
+                >>> Span.serialize(Span(1, 3), Span(8, 12))
+                '1-2 // 8-11'
         """
         return DELIM.join(map(str, args))
 
@@ -258,15 +302,26 @@ class Span[T: Real](tuple[T, T]):
         """Parse a span from text with smart abbreviation handling.
 
         Handles formats like:
-        - "10-20": Full range
-        - "432-3": Abbreviated end (becomes 432-433)
-        - "1475-33": Abbreviated end with rollover (becomes 1475-1533)
-        - "42": Single position (becomes 42-43)
+
+        - `"10-20"`: Full range
+        - `"432-3"`: Abbreviated end (becomes 432-433)
+        - `"1475-33"`: Abbreviated end with rollover (becomes 1475-1533)
+        - `"42"`: Single position (becomes 42-43)
 
         Args:
             text: String to parse.
         Returns:
             Parsed Span, or empty Span (0, 0) if parsing fails.
+        Examples:
+            Expand abbreviated inclusive ranges into half-open spans::
+
+                >>> from my import Span
+                >>> Span.parse('432-3')
+                Span(432, 434)
+                >>> Span.parse('1475-33')
+                Span(1475, 1534)
+                >>> Span.parse('42')
+                Span(42, 43)
         """
         segments = cls.DELIM_RGX.split(text)
         if len(segments) == 2 and all(map(str.isdigit, segments)):
@@ -295,6 +350,12 @@ class Span[T: Real](tuple[T, T]):
             *args: Spans to merge.
         Returns:
             Sorted list of non-overlapping spans covering the same positions.
+        Examples:
+            Collapse overlapping spans::
+
+                >>> from my import Span
+                >>> Span.merge((0, 5), (3, 9), (12, 15))
+                [Span(0, 9), Span(12, 15)]
         """
         spans = list(sorted(set(map(cls, args))))
         i = 0

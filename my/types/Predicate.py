@@ -38,14 +38,39 @@ type PredicateLeaf = str | int | float | bool | datetime
 class Predicate(pyd.BaseModel):
     """A Pydantic model wrapping `dict[str, list[str]]` for string-based "vibe-typing" usage.
 
-    It accepts input from various sources: dictionaries, JSON strings, lists of colon-separated
-    strings, or other Predicates. The validator normalizes all inputs to the canonical
-    dictionary-of-lists format, optionally deduplicating values.
+    It accepts input from various sources: dictionaries, Pydantic models, JSON-ish dictionary
+    strings, iterables of key-value pairs, or other Predicates. The constructor normalizes all
+    inputs to the canonical dictionary-of-lists format, optionally deduplicating values.
 
     Serialization supports nested dictionary structures using dot notation in keys. A field like
     `"user.name"` becomes `{"user": {"name": value}}` in the output. This makes Predicate suitable
     for representing structured data that originates as flat key-value pairs but needs hierarchical
-    output.
+    output. Note that serialization (including `repr()`) also *abbreviates*: single-element lists
+    collapse to bare values, and scalar-looking strings are decast (e.g. `'1'` becomes `1`).
+
+    Examples:
+        Build a predicate and inspect its fields::
+
+            >>> from my import Predicate
+            >>> pred = Predicate.new({'tags': ['py', 'docs'], 'user.name': 'robb'})
+            >>> pred
+            {'tags': ['py', 'docs'], 'user.name': 'robb'}
+            >>> pred['tags']
+            ['py', 'docs']
+            >>> 'tags' in pred
+            True
+            >>> pred.size
+            3
+
+        Combine predicates with set-like operators::
+
+            >>> pred = Predicate.new({'a': ['x1', 'x2'], 'b': 'x3'})
+            >>> pred + {'c': 'x4'}
+            {'a': ['x1', 'x2'], 'b': 'x3', 'c': 'x4'}
+            >>> pred - {'a': ['x1']}
+            {'a': 'x2', 'b': 'x3'}
+            >>> pred & ['a']
+            {'a': ['x1', 'x2']}
     """
 
     RGXS: ClassVar[dict[str, re.Pattern]] = ut.regex_dict(
@@ -83,7 +108,27 @@ class Predicate(pyd.BaseModel):
         overwrite: bool = False,
         **kwargs,
     ) -> Self:
-        """Construct a new Predicate instance, flexibly coercing most mapping-like objects."""
+        """Construct a new Predicate instance, flexibly coercing most mapping-like objects.
+
+        Args:
+            *args: Mapping-like sources to merge: dicts, Pydantic models, JSON-ish dictionary
+                strings, iterables of key-value pairs, and/or other Predicates.
+            duplicates: Whether to allow duplicate values within a field's list.
+            overwrite: The default overwriting behavior for later `write()` calls.
+            **kwargs: Additional field-value pairs to merge, as keyword arguments.
+        Returns:
+            A new Predicate with empty fields and values filtered out.
+        Examples:
+            Coerce several source shapes at once::
+
+                >>> from my import Predicate
+                >>> Predicate.new({'lang': 'python'})
+                {'lang': 'python'}
+                >>> Predicate.new([('lang', ['python', 'rust'])])
+                {'lang': ['python', 'rust']}
+                >>> Predicate.new('{"lang": "python"}', level='expert')
+                {'lang': 'python', 'level': 'expert'}
+        """
         ret = cls(duplicates=duplicates, overwrite=overwrite)
         for arg in (*args, kwargs):
             ret._process_arg(arg)
@@ -243,14 +288,35 @@ class Predicate(pyd.BaseModel):
     # `+` Primary Methods
     # -------------------
     def to_yaml(self, **kwargs) -> str:
-        """Serialize the Predicate to a YAML string."""
+        """Serialize the Predicate to a YAML string, expanding dotted keys into nesting.
+
+        Examples:
+            Serialize a predicate with a dotted key::
+
+                >>> from my import Predicate
+                >>> pred = Predicate.new({'tags': ['py', 'docs'], 'user.name': 'robb'})
+                >>> print(pred.to_yaml(), end='')
+                tags:
+                    - py
+                    - docs
+                user:
+                    name: robb
+        """
         node_items = [(tuple(key.split('.')), val) for key, val in self.data.items()]
         tree = self._deepen(node_items, None, None)
         return ut.to_yaml(self._abbreviate(tree))
 
     @classmethod
     def from_yaml(cls, text: str, **kwargs) -> Predicate:
-        """Create a Predicate from a YAML string."""
+        r"""Create a Predicate from a YAML string.
+
+        Examples:
+            Round-trip a field through YAML::
+
+                >>> from my import Predicate
+                >>> Predicate.from_yaml('lang:\n- python\n- rust\n')
+                {'lang': ['python', 'rust']}
+        """
         return cls.new(ut.from_yaml(text), **kwargs)
 
     def write(self, field: str, value: Atom | Struct, overwrite: bool | None = None):
@@ -261,6 +327,17 @@ class Predicate(pyd.BaseModel):
             value: The value to write.
             overwrite: Whether to overwrite existing values. If `None`, uses the instance's
                 `overwrite` setting.
+        Examples:
+            Append to a field, then overwrite it::
+
+                >>> from my import Predicate
+                >>> pred = Predicate.new({'k': 'a'})
+                >>> pred.write('k', 'b')
+                >>> pred
+                {'k': ['a', 'b']}
+                >>> pred.write('k', 'c', overwrite=True)
+                >>> pred
+                {'k': 'c'}
         """
         overwrite = self.overwrite if overwrite is None else overwrite
         for key, val in self._cast_arg(field, value, self.duplicates):
@@ -501,7 +578,15 @@ class Predicate(pyd.BaseModel):
         return self.data.pop(field, default)
 
     def at(self, field: str, default: str = '') -> str:
-        """Get the last unique value associated with a field, or a default if none exist."""
+        """Get the last unique value associated with a field, or a default if none exist.
+
+        Examples:
+            Fetch the most recent value of a field::
+
+                >>> from my import Predicate
+                >>> Predicate.new({'k': ['a', 'b']}).at('k')
+                'b'
+        """
         if field in self:
             for i, val in enumerate(reversed(self.data[field])):
                 if val and not any(pval.endswith(val) for pval in self.data[field][: i - 1]):
@@ -529,6 +614,15 @@ class Predicate(pyd.BaseModel):
         Args:
             field: The field to add the value to.
             value: The value to add, which will be cast to a string and added if not present.
+        Examples:
+            Add values, ignoring duplicates::
+
+                >>> from my import Predicate
+                >>> pred = Predicate.new({'s': ['a']})
+                >>> pred.add_to_set('s', 'b')
+                >>> pred.add_to_set('s', 'a')
+                >>> pred
+                {'s': ['a', 'b']}
         """
         new = ty.cast(value, list[str])
         if new is None:

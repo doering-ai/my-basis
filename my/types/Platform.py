@@ -39,7 +39,28 @@ def auto() -> int:
 ### BODY ###
 ############
 class Platform(IntFlag):
-    """An enumeration of supported platforms."""
+    """An enumeration of supported platforms, as combinable bitwise flags.
+
+    The desktop members are `GNU`, `MAC`, and `DOS`; the mobile members `IOS` and `ANDROID` are
+    defined as unions that include `MOBILE` and their parent desktop family, so flag containment
+    checks read naturally. `NONE`, `OLD`, and `ERR` cover the degenerate cases.
+
+    Examples:
+        Test family membership via flag containment::
+
+            >>> from my import Platform
+            >>> Platform.MAC in Platform.IOS
+            True
+            >>> Platform.MOBILE in Platform.ANDROID
+            True
+            >>> Platform.DOS in Platform.IOS
+            False
+
+        Detect the platform of the current host (e.g. on a Linux machine)::
+
+            >>> Platform.local()
+            <Platform.GNU: 4>
+    """
 
     NONE = 0
     MOBILE = auto()
@@ -55,7 +76,11 @@ class Platform(IntFlag):
 
     @classmethod
     def local(cls) -> Platform:
-        """Detect the current platform."""
+        """Detect the current platform, caching the result for subsequent calls.
+
+        Returns:
+            The member matching `platform.system()`, or `NONE` if nothing matches.
+        """
         global _LOCAL
         if not _LOCAL:
             uid = platform.system().lower().strip()

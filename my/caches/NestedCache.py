@@ -31,6 +31,21 @@ class NestedCache[Keys: tuple, Value](pyd.BaseModel):
     Supports arbitrary nesting depth determined by the signature tuple length.
     Each level maintains LRU ordering. Pruning is distributed proportionally
     across child caches based on their sizes.
+
+    Examples:
+        Store and retrieve values under two-level key paths::
+
+            >>> from my import NestedCache
+            >>> cache = NestedCache(signature=(str, int))
+            >>> cache[('user', 1)] = 'robb'
+            >>> cache.set(('user', 2), 'ada')
+            1
+            >>> cache[('user', 1)]
+            'robb'
+            >>> len(cache)
+            2
+            >>> cache.delete(('user', 2))
+            1
     """
 
     signature: tuple[type, ...]
@@ -44,7 +59,7 @@ class NestedCache[Keys: tuple, Value](pyd.BaseModel):
 
     @ft.cached_property
     def depth(self) -> int:
-        """The length of all items in this cache."""
+        """The number of key levels in this cache (i.e. the length of its signature)."""
         return len(self.signature)
 
     def __getitem__(self, keys: list | tuple) -> Value | None:

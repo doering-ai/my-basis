@@ -243,6 +243,13 @@ class TestCommand:
         assert 'test run async' in stdout
         assert stderr == ''
 
+    @pyt.mark.asyncio
+    async def test_exa__cwd_without_options(self, tmp_path):
+        """Regression: `_cwd` applies even when no `options` instance accompanies it."""
+        code, stdout, _ = await cls.exa('pwd', _cwd=tmp_path)
+        assert code == 0
+        assert stdout.strip() == str(tmp_path)
+
     def test_run__with_flags(self):
         """Test run with keyword arguments converted to flags."""
         code, stdout, _ = cls.run('echo', 'test', n=True)

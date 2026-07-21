@@ -203,6 +203,14 @@ class TestFileCache:
         cache.prune()
         assert 'abcfile.json' in [file.name for file in cache_dir.rglob('*')]
 
+    def test_reindex__default_writer_roundtrip(self, cache: FileCache[str], cache_dir: Path):
+        """Regression: shards from `_default_writer` re-index readable on a fresh instance."""
+        cache['group', 'abcfile_newitem'] = 'value'
+        cache.prune()
+
+        fresh = FileCache[str](directory=cache_dir, max_size=100)
+        assert fresh.read('group', 'abcfile_newitem') == 'value'
+
     def test_flush(self, cache: FileCache[str], cache_dir: Path):
         cache['group1', 'aaafile1_item'] = 'value'
         cache['group2', 'bbbfile2_item'] = 'value'

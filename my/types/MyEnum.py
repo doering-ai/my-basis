@@ -23,16 +23,45 @@ class MyEnum(Enum):
 
     This class is built to be a useful *base* more than anything, but as-is, its main strength is in
     its (de)serialization methods. A single `read()` call can parse strings (matching by name or
-    regex alias), integers (for Flag enums), and lists thereof all at once,  while `write
-    ()` method serializes enums back to strings, with pipe-separated names for combined flags.
+    regex alias), integers (for Flag enums), and lists thereof all at once, while the `write()`
+    method serializes enums back to strings, with pipe-separated names for combined flags.
 
     This class does not inherit from `enum.Flag` by default, but it is built with support for such
-    usecases out-of-the-box; to use those those features, simply subclass both `MyEnum` and `Flag`.
+    usecases out-of-the-box; to use those features, simply subclass both `MyEnum` and `Flag`.
 
-    ```{note}
-    Total ordering is implemented based on enum value for numeric enums, and declaration order
-    otherwise -- if you want ordering based on string values, you'll have to override `__lt__()`.
-    ```
+    .. note::
+        Total ordering is implemented based on enum value for numeric enums, and declaration order
+        otherwise -- if you want ordering based on string values, you'll have to override
+        `__lt__()`.
+
+    Examples:
+        Define an enum, then parse, serialize, and compare its members::
+
+            >>> from my import MyEnum
+            >>> class Color(MyEnum):
+            ...     RED = 1
+            ...     GREEN = 2
+            ...     BLUE = 3
+            >>> Color.read('red')
+            Color.RED
+            >>> Color.RED.write()
+            'red'
+            >>> Color.RED + 1
+            Color.GREEN
+            >>> sorted([Color.BLUE, Color.RED])
+            [Color.RED, Color.BLUE]
+
+        Mix in `enum.Flag` to unlock combined values::
+
+            >>> from enum import Flag
+            >>> class Perm(MyEnum, Flag):
+            ...     R = 1
+            ...     W = 2
+            ...     X = 4
+            >>> Perm.read('r|w')
+            Perm.R|W
+            >>> (Perm.R | Perm.W).write()
+            'r|w'
     """
 
     @classmethod
@@ -40,6 +69,7 @@ class MyEnum(Enum):
         """Parse a value into an enum member.
 
         Supports multiple input formats:
+
         - Enum member: Returns as-is
         - String: Matches by name, alias, or numeric string
         - Integer: For Flag enums, creates by value
@@ -51,6 +81,20 @@ class MyEnum(Enum):
             Corresponding enum member.
         Raises:
             ValueError: If value cannot be parsed.
+        Examples:
+            Parse names, numeric strings, and flag lists::
+
+                >>> from enum import Flag
+                >>> class Perm(MyEnum, Flag):
+                ...     R = 1
+                ...     W = 2
+                ...     X = 4
+                >>> Perm.read('r')
+                Perm.R
+                >>> Perm.read('2')
+                Perm.W
+                >>> Perm.read(['R', 'X'])
+                Perm.R|X
         """
         if isinstance(value, cls):
             return value
@@ -96,6 +140,17 @@ class MyEnum(Enum):
 
         Returns:
             String value, lowercase name, or pipe-separated flags for Flag enums.
+        Examples:
+            Serialize simple members and flag unions::
+
+                >>> from enum import Flag
+                >>> class Perm(MyEnum, Flag):
+                ...     R = 1
+                ...     W = 2
+                >>> Perm.R.write()
+                'r'
+                >>> (Perm.R | Perm.W).write()
+                'r|w'
         """
         if isinstance(self.value, str):
             return self.value
@@ -136,7 +191,18 @@ class MyEnum(Enum):
 
     @property
     def parts(self) -> list[Self]:
-        """The component members of Flag unions, else just `[self]`."""
+        """The component members of Flag unions, else just `[self]`.
+
+        Examples:
+            Decompose a flag union into its atoms::
+
+                >>> from enum import Flag
+                >>> class Perm(MyEnum, Flag):
+                ...     R = 1
+                ...     W = 2
+                >>> (Perm.R | Perm.W).parts
+                [Perm.R, Perm.W]
+        """
         if not isinstance(self, Flag):
             return [self]
         else:

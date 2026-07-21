@@ -18,7 +18,20 @@ from .meta_rgxs import META_RGXS
 ############
 @ft.total_ordering
 class Quantifier:
-    """Subatomic syntax that specifies how many times the atom is allowed to occur."""
+    """Subatomic syntax that specifies how many times the atom is allowed to occur.
+
+    Examples:
+        Inspect a quantifier's range and traits::
+
+            >>> quant = Quantifier('{2,4}')
+            >>> quant.range, quant.is_ranged, quant.is_optional
+            ((2, 4), True, False)
+
+        The lazy/possessive suffix is separated from the base::
+
+            >>> Quantifier('*+').base, Quantifier('*+').extra
+            ('*', '+')
+    """
 
     RGX: ClassVar[re.Pattern] = META_RGXS['quant']
     data: str = ''
@@ -38,7 +51,24 @@ class Quantifier:
 
     @classmethod
     def from_range(cls, r0: int, r1: int, extra: Literal['', '?', '+'] | None = None) -> Self:
-        """Create a Quantifier from a range of occurrences."""
+        """Create a Quantifier from a range of occurrences, choosing the shortest valid syntax.
+
+        Args:
+            r0: Minimum number of occurrences (must be non-negative).
+            r1: Maximum number of occurrences, or a negative value for "unbounded".
+            extra: Optional lazy (`?`) or possessive (`+`) suffix to append.
+        Returns:
+            The simplest quantifier expressing the range.
+        Raises:
+            ValueError: If the minimum is negative.
+        Examples:
+            Common ranges collapse to their shorthand forms::
+
+                >>> str(Quantifier.from_range(0, 1)), str(Quantifier.from_range(1, -1))
+                ('?', '+')
+                >>> str(Quantifier.from_range(2, 5)), str(Quantifier.from_range(3, 3))
+                ('{2,5}', '{3}')
+        """
         if r0 < 0:
             raise ValueError('Tried to create an invalid range.')
         elif r0 == r1:
@@ -72,10 +102,24 @@ class Quantifier:
     # `+` Primary Methods
     # -------------------
     def join(self, other: str | Self) -> Self | None:
-        """Create a copy of this quantifier with the given quantifier applied.
+        """Combine this quantifier with another into a single equivalent quantifier, if possible.
 
         If the two quantifiers cannot be simply combined, return `None` to indicate that nested
-        groups are needed.
+        groups are needed. Also available via the `&` operator.
+
+        Args:
+            other: The quantifier to combine with this one.
+        Returns:
+            The combined quantifier, or None if nesting is required.
+        Examples:
+            Multiply out compatible quantifiers; incompatible pairs return None::
+
+                >>> Quantifier('{2,3}').join('{2,3}')
+                Quantifier('{4,9}')
+                >>> Quantifier('+').join('*')
+                Quantifier('*')
+                >>> Quantifier('{3,5}').join('?') is None
+                True
         """
         cls = self.__class__
         if isinstance(other, str):
@@ -139,6 +183,16 @@ class Quantifier:
         Unlike `as_required()`, this function may not always succeed, as there are valid quantifiers
         that cannot be made optional without wrapping them (i.e. `(?:...)?`) -- namely, this applies
         to range quantifiers that start beyond 1 (e.g. `{3,5}`).
+
+        Returns:
+            The optional copy, or None if this quantifier cannot be made optional in place.
+        Examples:
+            Loosen a quantifier to permit zero occurrences::
+
+                >>> Quantifier('+').as_optional()
+                Quantifier('*')
+                >>> Quantifier('{3,5}').as_optional() is None
+                True
         """
         if self.is_optional:
             return self
@@ -159,7 +213,16 @@ class Quantifier:
         return None
 
     def as_required(self) -> Self:
-        """Create a copy of this quantifier made NON-optional (e.g. `*` -> `+`)."""
+        """Create a copy of this quantifier made NON-optional (e.g. `*` -> `+`).
+
+        Examples:
+            Force at least one occurrence::
+
+                >>> Quantifier('*').as_required()
+                Quantifier('+')
+                >>> Quantifier('{0,4}').as_required()
+                Quantifier('{1,4}')
+        """
         if not self.is_optional:
             return self
 
@@ -244,7 +307,7 @@ class Quantifier:
     # ---------------
     @ft.cached_property
     def base(self) -> str:
-        """Check if the quantifier is "simple" (i.e. empty or `?`)."""
+        """The quantifier's text without its lazy/possessive `extra` suffix (e.g. `*+` -> `*`)."""
         if not self:
             return ''
         elif not (self.is_lazy or self.is_possessive):
@@ -256,7 +319,7 @@ class Quantifier:
 
     @ft.cached_property
     def extra(self) -> Literal['', '?', '+']:
-        """Return the "extra" part of the quantifier (i.e. the lazy `?` or possessive `+`)."""
+        """The "extra" part of the quantifier (i.e. the lazy `?` or possessive `+`)."""
         if self.is_lazy:
             return '?'
         elif self.is_possessive:
@@ -265,37 +328,40 @@ class Quantifier:
 
     @ft.cached_property
     def is_simple(self) -> bool:
-        """Check if the quantifier is "simple" (i.e. empty or `?`)."""
+        """Whether the quantifier is "simple" (i.e. empty or `?`)."""
         return self.data in ('', '?')
 
     @ft.cached_property
     def is_basic(self) -> bool:
-        """Check if the quantifier is "basic" (i.e. empty, `?`, `*`, or `+`)."""
+        """Whether the quantifier is "basic" (i.e. empty, `?`, `*`, or `+`)."""
         return not self.data or self.data[0] in '?*+'
 
     @ft.cached_property
     def is_ranged(self) -> bool:
-        """Check if the quantifier is a range (i.e. starts with `{`)."""
+        """Whether the quantifier is a range (i.e. starts with `{`)."""
         return self.data.startswith('{')
 
     @ft.cached_property
     def is_optional(self) -> bool:
-        """Check if the quantifier allows zero occurrences."""
+        """Whether the quantifier allows zero occurrences."""
         return bool(self.data) and (self.base in '*?' or self.range[0] == 0)
 
     @ft.cached_property
     def is_lazy(self) -> bool:
-        """Check if the quantifier is lazy (i.e. ends with extra `?`)."""
+        """Whether the quantifier is lazy (i.e. ends with extra `?`)."""
         return len(self.data) > 1 and self.data.endswith('?')
 
     @ft.cached_property
     def is_possessive(self) -> bool:
-        """Check if the quantifier is possessive (i.e. ends with extra `+`)."""
+        """Whether the quantifier is possessive (i.e. ends with extra `+`)."""
         return len(self.data) > 1 and self.data.endswith('+')
 
     @ft.cached_property
     def range(self) -> tuple[int, int]:
-        """Return the range of occurrences specified by this quantifier, or `(-1, -1)`."""
+        """The (min, max) occurrences of a ranged quantifier, with -1 marking "not applicable".
+
+        Non-ranged quantifiers yield `(-1, -1)`; an open-ended range like `{2,}` yields `(2, -1)`.
+        """
         if not self.is_ranged:
             return (-1, -1)
         content = self.base[1:-1]

@@ -18,12 +18,29 @@ from ..types import Span, Predicate
 ### BODY ###
 ############
 class MatchData(Predicate):
-    """Ergonomic container for regex search results, especially those with repeated groups.
+    r"""Ergonomic container for regex search results, especially those with repeated groups.
 
     Extends Predicate to STORE captured group values while also maintaining a reference
     to the original match object for accessing spans, positions, and matched text.
 
     Provides cached properties for common match attributes like start, end, and text.
+
+    Examples:
+        Wrap a match and access its repeated captures ergonomically::
+
+            >>> import regex as re
+            >>> data = MatchData(match=re.fullmatch(r'(?:(?P<w>\w+) ?)+', 'ab cd'))
+            >>> data['w']
+            ['ab', 'cd']
+            >>> data.at('w')
+            'cd'
+            >>> data.text, data.start, data.end
+            ('ab cd', 0, 5)
+
+        Empty results are falsy, so lookups chain cleanly::
+
+            >>> bool(MatchData())
+            False
     """
 
     match: ut.MatchField | None = None
@@ -40,7 +57,7 @@ class MatchData(Predicate):
         match: Match | None = None,
         **kwargs: Any,
     ) -> Self:
-        """Construct a new MatchData, coercing mapping-like arguments and binding a source match.
+        r"""Construct a new MatchData, coercing mapping-like arguments and binding a source match.
 
         Duplicates are always enabled so repeated capture groups accumulate their values; empty
         group names and empty value lists are dropped.
@@ -51,6 +68,18 @@ class MatchData(Predicate):
             **kwargs: Additional group values to merge.
         Returns:
             New MatchData holding the merged group data.
+        Examples:
+            Merge mapping-like arguments, accumulating repeated keys::
+
+                >>> from my import MatchData
+                >>> MatchData.new(dict(k=['v1']), k='v2')
+                MatchData({'k': ['v1', 'v2']})
+
+            Bind a source match to expose its captures, spans, and text::
+
+                >>> import regex as re
+                >>> MatchData.new(match=re.fullmatch(r'(?:(?P<word>\w+) ?)+', 'one two three'))
+                MatchData("one two three" -> {'word': ['one', 'two', 'three']})
         """
         ret = cls(duplicates=True, overwrite=False, match=match)
         for arg in (*args, kwargs):
@@ -60,7 +89,7 @@ class MatchData(Predicate):
 
     @pyd.model_validator(mode='after')
     def _validate_matchdata(self) -> Self:
-        """Ensure that all captured group values are lists when duplicates are allowed."""
+        """Populate the group data from the source match when none was provided explicitly."""
         if not self.data and self.match is not None:
             self.data: dict[str, list[str]] = self.match.capturesdict()
         return self
@@ -76,32 +105,46 @@ class MatchData(Predicate):
 
     @ft.cached_property
     def flat(self) -> dict[str, str]:
-        """Returns a flat dictionary of the last non-empty value for each group."""
+        r"""A flat dictionary of the last non-empty value for each group.
+
+        Examples:
+            Flatten repeated captures down to their final values::
+
+                >>> import regex as re
+                >>> from my import MatchData
+                >>> data = MatchData(match=re.fullmatch(r'(?:(?P<word>\w+) ?)+', 'one two three'))
+                >>> data['word']
+                ['one', 'two', 'three']
+                >>> data.flat
+                {'word': 'three'}
+                >>> (data.text, data.span, data.size)
+                ('one two three', Span(0, 13), 13)
+        """
         return {key: val for key in self.data.keys() if (val := self.at(key))}
 
     @ft.cached_property
     def span(self) -> Span:
-        """Returns the span of the match if present; otherwise returns the null span (0, 0)."""
+        """The span of the match if present; otherwise the null span (0, 0)."""
         return Span._fast(*self.match.span()) if self.match else Span._fast(0, 0)
 
     @ft.cached_property
     def start(self) -> int:
-        """Returns the start index of the match if present; otherwise returns 0."""
+        """The start index of the match if present; otherwise 0."""
         return self.match.start() if self.match else 0
 
     @ft.cached_property
     def end(self) -> int:
-        """Returns the end index of the match if present; otherwise returns 0."""
+        """The end index of the match if present; otherwise 0."""
         return self.match.end() if self.match else 0
 
     @ft.cached_property
     def text(self) -> str:
-        """Returns the text of the match if present; otherwise returns an empty string."""
+        """The text of the match if present; otherwise an empty string."""
         return self.match[0] if self.match else ''
 
     @ft.cached_property
     def size(self) -> int:
-        """Returns the number of characters matched."""
+        """The number of characters matched."""
         return len(self.text)
 
     # ------------------
@@ -114,10 +157,18 @@ class MatchData(Predicate):
             return f'MatchData({self.data})'
 
     def print(self, indent: str = '') -> None:
-        """Print captured groups in a formatted table.
+        r"""Print captured groups in a formatted table.
 
         Args:
             indent: String to prepend to each line for indentation.
+        Examples:
+            Repeated captures print as lists, single captures as scalars::
+
+                >>> import regex as re
+                >>> from my import MatchData
+                >>> data = MatchData(match=re.fullmatch(r'(?:(?P<word>\w+) ?)+', 'one two three'))
+                >>> data.print(indent='  ')
+                  word: ['one', 'two', 'three']
         """
         width = min(max(map(len, self.keys())), 48)
         print(
@@ -144,30 +195,52 @@ class MatchData(Predicate):
         self.set_to(None)
 
     def starts(self, field: str) -> list[int]:
-        """Returns the start indices of the match for the specified field."""
+        """Return the start indices of every capture of the specified field."""
         if self.match is None or field not in self:
             return []
         return self.match.starts(field)
 
     def spans(self, field: str) -> list[Span]:
-        """Returns the spans of the match for the specified field."""
+        r"""Return the spans of every capture of the specified field.
+
+        Examples:
+            Locate every capture of a repeated group (see also `starts()` and `ends()`)::
+
+                >>> import regex as re
+                >>> from my import MatchData
+                >>> data = MatchData(match=re.fullmatch(r'(?:(?P<word>\w+) ?)+', 'one two three'))
+                >>> data.spans('word')
+                [Span(0, 3), Span(4, 7), Span(8, 13)]
+                >>> data.starts('word')
+                [0, 4, 8]
+                >>> data.ends('word')
+                [3, 7, 13]
+        """
         if self.match is None or field not in self:
             return []
         return [Span._fast(*s) for s in self.match.spans(field)]
 
     def ends(self, field: str) -> list[int]:
-        """Returns the end indices of the match for the specified field."""
+        """Return the end indices of every capture of the specified field."""
         if self.match is None or field not in self:
             return []
         return self.match.ends(field)
 
     def matches(self, other: 'MatchData') -> bool:
-        """Determine if two MatchData objects have the same set of capture group names.
+        r"""Determine if two MatchData objects have the same set of capture group names.
 
         Args:
             other: MatchData to compare against.
         Returns:
             True if both have the same keys (ignoring values and order).
+        Examples:
+            Compare the captured shape, not the captured values::
+
+                >>> import regex as re
+                >>> from my import MatchData
+                >>> data = MatchData(match=re.fullmatch(r'(?:(?P<word>\w+) ?)+', 'one two three'))
+                >>> MatchData(data={'word': ['x']}).matches(data)
+                True
         """
         lhs, rhs = set(self.keys()), set(other.keys())
         nulls = (not lhs, not rhs)

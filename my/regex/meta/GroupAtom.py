@@ -28,13 +28,26 @@ RegexBuffer = ft.partial(Buffer.new, fence_rgxs=['arrays'])
 ### BODY ###
 ############
 class GroupAtom(Atom):
-    """A single group in a regular expression, denoted by parentheses.
+    r"""A single group in a regular expression, denoted by parentheses.
+
+    Beyond the raw `data` inherited from `Atom`, a group knows its `start` syntax, its `kind`,
+    its inner `body`, and -- where applicable -- its `name` and inline `flags`, all of which are
+    parsed automatically at construction time.
 
     Examples:
-        ```py
-        branches = list(Regex(GroupAtom(r'(?:abc|def)')).split())
-        assert branches == [Atom('abc'), Atom('def')]
-        ```
+        Read the parsed traits of a named, optional group::
+
+            >>> group = GroupAtom(r'(?P<year>\d{4})?')
+            >>> group.kind, group.name, group.body
+            (GroupKind.NAMED, 'year', '\\d{4}')
+            >>> str(group.quantifier)
+            '?'
+
+        Inline flags are extracted from the opening syntax::
+
+            >>> flagged = GroupAtom(r'(?i:abc)')
+            >>> flagged.flags, str(flagged.inline_flags)
+            ({'i'}, '(?i)')
     """
 
     # Primary fields
@@ -74,11 +87,11 @@ class GroupAtom(Atom):
 
         return self
 
-    # -------------------
-    # `-` Private Methods
-    # -------------------
+    # ------------------
+    # `-` Helper Methods
+    # ------------------
     def read_data(self) -> None:
-        """Reads the raw `data` field in order to populate `start`, `body`, and `kind`."""
+        """Read the raw `data` field in order to populate `start`, `body`, and `kind`."""
         # I.i. Separate out the opening syntax (e.g. `(?:`)
         match = META_RGXS['group'].match(self.data)
         assert match is not None, f'Invalid group: {self.data}'
@@ -94,7 +107,7 @@ class GroupAtom(Atom):
         self.body = rest.rsplit(')', 1)[0]
 
     def infer_name(self) -> None:
-        """Infers the name of the group if it is a named capture, invocation, or substitution."""
+        """Infer the name of the group if it is a named capture, invocation, or substitution."""
         if self.kind == GroupKind.NAMED:
             # I. Named capture groups's names are part of 'start', not 'body'
             assert '>' in self.body, f'Invalid named capture self: {self.body}'
@@ -106,7 +119,7 @@ class GroupAtom(Atom):
             self.start += self.name
 
     def infer_flags(self) -> None:
-        """Infers the flags of the group if it is a flag group."""
+        """Infer the flags of the group if it is a flag group."""
         if self.start.endswith(':'):
             # I. Plain groups appear to be flag groups, but actually do have content
             self.kind = GroupKind.PLAIN

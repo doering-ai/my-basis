@@ -5,5 +5,12 @@
 
 ```{eval-rst}
 .. autoclass:: my.regex.meta.SetAtom.SetAtom
-   :members:
+```
+
+```{eval-rst}
+.. autoproperty:: my.regex.meta.SetAtom.SetAtom.members
+```
+
+```{eval-rst}
+.. autoproperty:: my.regex.meta.SetAtom.SetAtom.is_simple
 ```

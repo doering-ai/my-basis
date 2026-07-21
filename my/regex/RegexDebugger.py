@@ -34,12 +34,25 @@ class RegexDebugger(RegexStore):
     # -------------------
     @classmethod
     def new_debugger(cls, store: RegexStore) -> Self:
-        """Create a debugger from an existing RegexStore.
+        r"""Create a debugger from an existing RegexStore.
+
+        .. note::
+            The source store must already be loaded: a store created with the (default)
+            `lazy_load` option holds no patterns until first use, so trigger its load
+            (e.g. `_ = store.load`) before wrapping it, or the debugger will be empty.
 
         Args:
             store: RegexStore instance to create debugger from.
         Returns:
             New RegexDebugger with all patterns from the store.
+        Examples:
+            Wrap a loaded store to gain the debugging methods::
+
+                >>> from my import RegexStore, RegexDebugger
+                >>> store = RegexStore.new(word=r'\w+')
+                >>> _ = store.load
+                >>> RegexDebugger.new_debugger(store).keys()
+                ['word']
         """
         new = cls.model_construct(**store.model_dump())
         new.options = store.options.model_copy()
@@ -50,19 +63,19 @@ class RegexDebugger(RegexStore):
         new._routers = dict(store._routers)
         return new
 
-    # -------------------
-    # `-` Private Methods
-    # -------------------
+    # ------------------
+    # `-` Helper Methods
+    # ------------------
     def pinpoint_failure(self, text: Buffer, expr: Regex, prefix: str) -> tuple[int, MatchData]:
-        """Identifies the first clause to cause an accumulated sub-expression to fail to match.
+        """Identify the first clause to cause an accumulated sub-expression to fail to match.
 
         Args:
             text: Buffer containing text to match against.
-            expr: Tuple of regex atoms from the pattern body.
+            expr: Atomized regex expression from the pattern body.
             prefix: Precompiled prefix string to prepend to each snippet.
         Returns:
-            1. Index of failing atom.
-            2. MatchData of last successful match.
+            1. Index of the failing atom (or the atom count, if every atom matched).
+            2. MatchData of the last successful match.
         """
         n = len(expr)
         last_match: MatchData = MatchData()
@@ -85,9 +98,9 @@ class RegexDebugger(RegexStore):
         a problem regex.
 
         Args:
-            atoms: Tuple of regex atoms from the pattern body.
+            atoms: Atomized regex expression from the pattern body.
             failed_idx: Index of the atom where matching failed.
-            flags: Atom containing any regex flags(/"modifiers") to apply to the curated expression.
+            flags: Atom containing any regex flags ("modifiers") to apply to the curated expression.
         Returns:
             A truncated version of the given expression.
         """
@@ -281,18 +294,29 @@ class RegexDebugger(RegexStore):
         expected: bool = True,
         func: str = '',
     ) -> str:
-        """Generate stdout-ready debug output for a regex test that produced unexpected results.
+        r"""Generate stdout-ready debug output for a regex test that produced unexpected results.
 
         Args:
-            names: List of pattern names that were tested.
+            names: Pattern name (or list of names) that were tested.
             text: Text that was matched against.
             matched: Whether the pattern actually matched.
-            expected: Whether a match was expected (default: True).
-            func: Name of function used (e.g., 'match', 'search', 'findall', etc).
+            expected: Whether a match was expected.
+            func: Name of the function used (e.g. 'match', 'search', 'findall').
         Returns:
             Multi-line debug report showing pattern, text, and failure analysis.
         Raises:
             ValueError: If matched and expected are both False (no failure to debug).
+        Examples:
+            Explain a failed match, clause by clause::
+
+                >>> from my import RegexDebugger
+                >>> store = RegexDebugger.new(date=r'(?P<y>\d{4})-(?P<m>\d\d)-(?P<d>\d\d)')
+                >>> report = store.debug('date', '2024-13-xx', matched=False, func='full')
+                >>> print(report.splitlines()[1])
+                Regular expression "DATE.full()" FAILED TO MATCH the full text.
+
+            The remainder of the report isolates the failing clause as a standalone, curated
+            expression, alongside the last text position that still matched.
         """
         assert names
         if isinstance(names, str):
@@ -333,7 +357,25 @@ class RegexDebugger(RegexStore):
 
     @staticmethod
     def parse_pytest(name: str, case: Vec | dict | str) -> tuple[str, str, dict | None]:
-        """Parse a single regex test case (likely from a `.yaml` file)."""
+        """Parse a single regex test case (likely from a `.yaml` file).
+
+        Args:
+            name: Name of the pattern under test, used to label bare expected values.
+            case: The raw test case -- a plain string (any match passes), a `(text, expected)`
+                vector, or a dict with a `text` key plus optional `func`, `expect_none`, and
+                per-group expectations.
+        Returns:
+            1. The text to match against.
+            2. The store function to use (`match`, `full`, `search`, `fullsplit`, or `poly`).
+            3. The expected captures, or None when the case expects no match at all.
+        Examples:
+            Dict cases carry their own function and expectations::
+
+                >>> RegexDebugger.parse_pytest('word', dict(text='abc', word='abc'))
+                ('abc', 'full', {'word': ['abc']})
+                >>> RegexDebugger.parse_pytest('word', dict(text='123', expect_none=True))
+                ('123', 'full', None)
+        """
         text: str
         func = 'full'
         expected: dict[str, list[str]] | None = None
@@ -402,7 +444,7 @@ class RegexDebugger(RegexStore):
             text: Text to match against.
             func: Name of the function to use (match|full|search|split|poly).
             expected: Expected result (None for no match, dict for expected captures).
-            verbose: Whether to print debug output on failure.
+            verbose: Verbosity level; values above 1 print the full debugger report on failure.
         """
         # Imported here, not at module scope: this is the only use of `pytest` in `my.regex`,
         # and `my.apis.Environment` -> `my.regex.__init__` pulls this module into every plain

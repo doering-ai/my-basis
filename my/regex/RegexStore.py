@@ -92,6 +92,8 @@ class RegexStore(pyd.BaseModel):
         - Automatic parsing of match results into a more ergonomic form (see MatchData).
         - Pattern optimization applied by default.
         - Construction of "Router trees" for efficient matching of long patterns to long texts.
+        - A `REGEX_TIMEOUT` deadline (10s) guarding every public matching call, so runaway
+          backtracking cannot hang unattended processing.
 
     The DSL used to specify patterns can combine a variety of input types into one, including:
         - String literals and pre-compiled patterns.
@@ -153,7 +155,7 @@ class RegexStore(pyd.BaseModel):
         formatter: Callable[..., str] | None = None
         #: The default expression inserted between elements of a list when processing definitions.
         separator: str = r' *'
-        #: Whether to convert `(...)` groups to `(?:...)`, allowing for cleaner definitions.
+        #: Whether to convert ``(...)`` groups to ``(?:...)``, allowing for cleaner definitions.
         force_named_groups: bool = False
         #: Whether to convert `(?P=name)` group *substitutions* to `(?P>name)` group *invocations*,
         #: used primarily for text editors that don't recognize the latter syntax.
@@ -187,14 +189,34 @@ class RegexStore(pyd.BaseModel):
         imports: list[tuple[Self, Iterable[str]]] | None = None,
         **definitions: RegexDef | Any,
     ) -> Self:
-        """Create a new store, likely specifying almost all your patterns upfront.
+        r"""Create a new store, likely specifying almost all your patterns upfront.
 
         Args:
             options: A dictionary of store-level options to apply as member variables.
-            imports: References to patterns contianed in existing stores to be included in this one
+            imports: References to patterns contained in existing stores to be included in this one.
             **definitions: A dictionary of named regular expressions -- see RegexDef.
         Returns:
             A new RegexStore instance with the given patterns compiled into execution-ready objects.
+        Examples:
+            Define patterns upfront, invoking earlier definitions as subroutines::
+
+                >>> from my import RegexStore
+                >>> store = RegexStore.new(
+                ...     year=r'\d{4}',
+                ...     month=r'0?[1-9]|1[0-2]',
+                ...     date=r'(?P<y>(?P>year))-(?P<m>(?P>month))',
+                ... )
+                >>> store.fullmatch('date', '2026-07').flat
+                {'year': '2026', 'month': '07', 'y': '2026', 'm': '07'}
+
+            Compose groups, alternations, and flags with the tuple DSL::
+
+                >>> store2 = RegexStore.new(
+                ...     options=dict(separator=''),
+                ...     feeling=('|:i', r'\b', ['happy', 'sad'], r'\b'),
+                ... )
+                >>> store2.get_def('feeling')
+                '(?i:\\b(?:happy|sad)\\b)'
         """
         # I. Initialize the store with the requested options before any compilation is done
         if not options:
@@ -413,7 +435,7 @@ class RegexStore(pyd.BaseModel):
         patterns: str | Iterable[str],
         text: str | Buffer,
     ) -> tuple[Iterable[str], str]:
-        """Validate, clean, and/or coerce the usual public paramaters of the constructor.
+        """Validate, clean, and/or coerce the usual public parameters of the matching methods.
 
         Args:
             patterns: Pattern name(s) to validate.
@@ -570,11 +592,11 @@ class RegexStore(pyd.BaseModel):
         return ''.join([start, pre, body, suf, end, quant])
 
     def compose_tree(self, data: RegexList) -> str:
-        """Compose an optimized/"condensed" version of the give regex branches.
+        """Compose an optimized/"condensed" version of the given regex branches.
 
         Args:
             data: List of branched regex expressions.
-        Return:
+        Returns:
             The corresponding optimized branching tree regex expression.
         """
         # 0. Finish composing definitions below this one into valid expressions
@@ -652,6 +674,15 @@ class RegexStore(pyd.BaseModel):
             sep: Optional separator string for lists (defaults to store's separator).
         Returns:
             The composed expression.
+        Examples:
+            Tuples become groups, lists become sequences, and the two nest freely::
+
+                >>> from my import RegexStore
+                >>> store = RegexStore.new(options=dict(separator=''))
+                >>> store.compose(('|:', ['cat', 'dog']))
+                '(?:cat|dog)'
+                >>> store.compose(['a', ('|:?', ['b', 'c'])])
+                'a(?:b|c)?'
         """
         if not data:
             return ''
@@ -764,6 +795,14 @@ class RegexStore(pyd.BaseModel):
         Raises:
             AssertionError: If name is already defined.
             Exception: If pattern composition or compilation fails.
+        Examples:
+            Item assignment routes here, so direct calls are only needed for parsers or flags::
+
+                >>> from my import RegexStore
+                >>> store = RegexStore.new()
+                >>> store.define('word', ('|:', ['cat', 'dog']))
+                >>> store.get_def('word')
+                '(?:cat|dog)'
         """
         assert name not in self.definitions, f'Duplicate definition: {name}'
 
@@ -808,6 +847,12 @@ class RegexStore(pyd.BaseModel):
             values: Single string or list of strings to strip.
         Returns:
             List of stripped strings with bracket balancing corrected.
+        Examples:
+            Strip configured characters, dropping values that strip to nothing::
+
+                >>> from my import RegexStore
+                >>> RegexStore.new().autostrip([' cat ', '', 'dog'])
+                ['cat', 'dog']
         """
         if not isinstance(values, list):
             values = [values]
@@ -826,12 +871,24 @@ class RegexStore(pyd.BaseModel):
         return values
 
     def parse_invocations(self, text: str) -> set[str]:
-        """Find all group invocations in text and transitively expand dependencies.
+        r"""Find all group invocations in text and transitively expand dependencies.
 
         Args:
             text: Regex pattern text to analyze.
         Returns:
             Set of all group names invoked directly or indirectly.
+        Examples:
+            One invocation pulls in its transitive dependencies::
+
+                >>> from my import RegexStore
+                >>> store = RegexStore.new(
+                ...     options=dict(lazy_load=False),
+                ...     year=r'\d{4}',
+                ...     month=r'0?[1-9]|1[0-2]',
+                ...     date=r'(?P<y>(?P>year))-(?P<m>(?P>month))',
+                ... )
+                >>> sorted(store.parse_invocations(r'(?P>date)'))
+                ['date', 'month', 'year']
         """
         invocations = {group.name for group in Regex.group_iterator(text, mask=GroupKind.INVOC)}
         return self.find_all_invocations(invocations)
@@ -936,6 +993,15 @@ class RegexStore(pyd.BaseModel):
             text: Text to match against.
         Returns:
             MatchData from first successful match, or empty MatchData if none match.
+        Examples:
+            Matching anchors at the start of the text, unlike `search()`::
+
+                >>> from my import RegexStore
+                >>> store = RegexStore.new(word=r'[a-z]+')
+                >>> bool(store.match('word', '123 abc'))
+                False
+                >>> store.search('word', '123 abc').text
+                'abc'
         """
         names, text = self._validate_automatch_params(names, text)
         return self._autoparse('match', names, text)
@@ -943,11 +1009,22 @@ class RegexStore(pyd.BaseModel):
     def fullmatch(self, names: str | Iterable[str], text: str | Buffer) -> MatchData:
         """Match one of the named patterns against the entire text.
 
+        Also available under the shorter alias `full`.
+
         Args:
             names: Pattern name or list of pattern names to try.
             text: Text to match against.
         Returns:
             MatchData from first successful fullmatch, or empty MatchData if none match.
+        Examples:
+            The whole text must match, not just its start::
+
+                >>> from my import RegexStore
+                >>> store = RegexStore.new(word=r'[a-z]+')
+                >>> store.fullmatch('word', 'abc').text
+                'abc'
+                >>> bool(store.fullmatch('word', 'abc!'))
+                False
         """
         names, text = self._validate_automatch_params(names, text)
         return self._autoparse('fullmatch', names, text)
@@ -995,6 +1072,13 @@ class RegexStore(pyd.BaseModel):
             **kwargs: Optional arguments passed to Buffer.rgx_iterator().
         Returns:
             List of MatchData objects for all matches found.
+        Examples:
+            Collect every match in one list (see `finditer()` for the lazy equivalent)::
+
+                >>> from my import RegexStore
+                >>> store = RegexStore.new(word=r'[a-z]+')
+                >>> [m.text for m in store.findall('word', 'ab cd')]
+                ['ab', 'cd']
         """
         return list(self.finditer(name, text, **kwargs))
 
@@ -1006,6 +1090,8 @@ class RegexStore(pyd.BaseModel):
     ) -> tuple[list[str], list[str]]:
         """Split text by matches, returning both delimiters and sections.
 
+        Also available under the shorter alias `split`.
+
         Args:
             name: Pattern name to split on.
             text: Text to split.
@@ -1013,6 +1099,13 @@ class RegexStore(pyd.BaseModel):
         Returns:
             Tuple of (delimiters, sections) where delimiters[0] is always empty and
             the lists interleave: section[0], delim[1], section[1], delim[2], etc.
+        Examples:
+            Keep the delimiters alongside the sections they separate::
+
+                >>> from my import RegexStore
+                >>> store = RegexStore.new(comma=r' *, *')
+                >>> store.fullsplit('comma', 'a, b , c')
+                (['', ', ', ' , '], ['a', 'b', 'c'])
         """
         _, text = self._validate_automatch_params(name, text)
         delims, sections = [], []
@@ -1046,11 +1139,20 @@ class RegexStore(pyd.BaseModel):
 
         **This is the only such method that doesn't have an analogue in the `re` standard library.**
 
+        Also available under the shorter alias `poly`.
+
         Args:
             name: Pattern name to search for.
             text: Text to search (automatically converted to Buffer).
         Returns:
             Single MatchData with all captures from all matches merged.
+        Examples:
+            Merge every match's captures into one MatchData::
+
+                >>> from my import RegexStore
+                >>> store = RegexStore.new(word=r'(?P<w>[a-z]+)')
+                >>> store.polymatch('word', 'one two three')
+                MatchData({'w': ['one', 'two', 'three']})
         """
         _ = self.load
         pd = ParseData()
@@ -1079,13 +1181,21 @@ class RegexStore(pyd.BaseModel):
         name: str,
         func: MatchFunction = 'match',
     ) -> Callable[[str | Buffer], MatchData]:
-        """Create a partially applied matching function for a pattern.
+        r"""Create a partially applied matching function for a pattern.
 
         Args:
             name: Pattern name to use.
             func: Matching function name ('match', 'fullmatch', 'search', or 'polymatch').
         Returns:
             Function that takes text and returns MatchData using the specified pattern.
+        Examples:
+            Freeze a pattern and function into a reusable predicate::
+
+                >>> from my import RegexStore
+                >>> store = RegexStore.new(num=r'\d+')
+                >>> is_num = store.partial('num', 'fullmatch')
+                >>> (bool(is_num('123')), bool(is_num('12x')))
+                (True, False)
         """
         _ = self.load
         return ft.partial(getattr(self, func), name)
@@ -1096,7 +1206,7 @@ class RegexStore(pyd.BaseModel):
         texts: Iterable[str],
         func: MatchFunction = 'match',
     ) -> Iterable[MatchData]:
-        """Apply a pattern to multiple texts.
+        r"""Apply a pattern to multiple texts.
 
         Args:
             name: Pattern name to use.
@@ -1104,6 +1214,13 @@ class RegexStore(pyd.BaseModel):
             func: Matching function to use ('match', 'fullmatch', 'search', or 'polymatch').
         Yields:
             MatchData objects for each text in order.
+        Examples:
+            Run the same pattern over a batch of texts::
+
+                >>> from my import RegexStore
+                >>> store = RegexStore.new(num=r'\d+')
+                >>> [bool(m) for m in store.apply('num', ['1', 'a', '22'])]
+                [True, False, True]
         """
         _ = self.load
         yield from map(self.partial(name, func), texts)
@@ -1114,7 +1231,7 @@ class RegexStore(pyd.BaseModel):
         texts: Iterable[str],
         func: MatchFunction = 'match',
     ) -> Iterable[str]:
-        """Filter texts by whether they match a pattern.
+        r"""Filter texts by whether they match a pattern.
 
         Args:
             name: Pattern name to test against.
@@ -1122,6 +1239,13 @@ class RegexStore(pyd.BaseModel):
             func: Matching function to use ('match', 'fullmatch', 'search', or 'polymatch').
         Yields:
             Only those texts that successfully match the pattern.
+        Examples:
+            Keep only the texts the pattern accepts::
+
+                >>> from my import RegexStore
+                >>> store = RegexStore.new(num=r'\d+')
+                >>> list(store.filter('num', ['1', 'a', '22']))
+                ['1', '22']
         """
         _ = self.load
         fn = self.partial(name, func)
@@ -1131,7 +1255,7 @@ class RegexStore(pyd.BaseModel):
     # `*3` Optimization Functions
     # ---------------------------
     def define_router_tree(self, router: str, items: Mapping[str, RegexVal], **kwargs: str) -> None:
-        """Define a router pattern that classifies text into named categories.
+        r"""Define a router pattern that classifies text into named categories.
 
         Creates two patterns: one optimized router (`<router>`) and one with route tracking
         (`<router>_router`) that captures which category matched.
@@ -1142,6 +1266,16 @@ class RegexStore(pyd.BaseModel):
             **kwargs: Optional 'prefix'/'suffix' or 'p0'/'p1'/'s0'/'s1' for wrapping patterns.
         Raises:
             AssertionError: If router name is already defined.
+        Examples:
+            Route texts into named categories, then ask which one matched::
+
+                >>> from my import RegexStore
+                >>> store = RegexStore.new(options=dict(separator=''))
+                >>> store.define_router_tree('kind', dict(number=r'\d+', word=r'[a-z]+'))
+                >>> store.routers
+                {'kind': ['number', 'word']}
+                >>> (store.route_match('kind', 'hello'), store.route_match('kind', '42'))
+                ('word', 'number')
         """
         if not self._is_loaded:
             self._lazy_queue.append(ft.partial(self.define_router_tree, router, items, **kwargs))
@@ -1194,7 +1328,7 @@ class RegexStore(pyd.BaseModel):
         return ''
 
     def expand_match(self, router: str, text: str | MatchData) -> str:
-        """Match text against a router and expand using the matched category's format.
+        r"""Match text against a router and expand using the matched category's format.
 
         Args:
             router: Name of router pattern to use.
@@ -1203,6 +1337,14 @@ class RegexStore(pyd.BaseModel):
             Expanded string using the matched category name as format string.
         Raises:
             AssertionError: If router name is not found or match object is invalid.
+        Examples:
+            Category names double as format strings for the matched groups::
+
+                >>> from my import RegexStore
+                >>> store = RegexStore.new(options=dict(separator=''))
+                >>> store.define_router_tree('swap', {'{b} {a}': r'(?P<a>\w+) (?P<b>\w+)'})
+                >>> store.expand_match('swap', 'hello world')
+                'world hello'
         """
         _ = self.load
         assert router in self._routers, f'Unknown router: {router}'
@@ -1230,6 +1372,12 @@ class RegexStore(pyd.BaseModel):
             target: The URL string to format.
         Returns:
             The cleaned URL string with detritus removed and trimmed.
+        Examples:
+            Reduce a matched URL to its stable core::
+
+                >>> from my import RegexStore
+                >>> RegexStore.format_url('https://example.com/page#frag')
+                'example.com/page'
         """
         return META_RGXS['url_detritus'].sub('', target).strip('/. ')
 
@@ -1251,6 +1399,14 @@ class RegexStore(pyd.BaseModel):
             - Single tuple: tuple with boundaries integrated based on mark type
         Raises:
             ValueError: If no content provided or tuple has invalid length.
+        Examples:
+            Strings gain the assertions inline; multiple values become a DSL tuple::
+
+                >>> from my import RegexStore
+                >>> RegexStore.atom(r'cat')
+                '(?P>_ws)cat(?P>_we)'
+                >>> RegexStore.atom(r'cat', r'dog')
+                ('[]:', '(?P>_ws)', ['cat', 'dog'], '(?P>_we)')
         """
         if not contents:
             raise ValueError('No content provided')
@@ -1296,6 +1452,12 @@ class RegexStore(pyd.BaseModel):
             pattern: Either a known pattern's name, a compiled pattern, or a raw expression.
         Returns:
             Sanitized pattern string with normalized flag syntax.
+        Examples:
+            Scoped inline flags become plain groups with a leading flag atom::
+
+                >>> from my import RegexStore
+                >>> RegexStore.new().sanitize(r'(?i:abc)')
+                '(?:(?i)abc)'
         """
         _ = self.load
         if isinstance(pattern, re.Pattern):
@@ -1316,16 +1478,31 @@ class RegexStore(pyd.BaseModel):
         maxdepth: int = 6,
         threshold: int = 48,
     ) -> str:
-        """Pretty-print a regex pattern as an indented multiline tree structure.
+        r"""Pretty-print a regex pattern as an indented multiline tree structure.
 
         Args:
             pattern: The name of an existing pattern, a compiled pattern, or a raw expression.
-            print_head: Whether to include the pattern header (i.e. `(?:DEFINE)...)`) in output.
+            print_head: Whether to include the pattern header (i.e. `(?(DEFINE)...)`) in output.
             depth: Current recursion depth.
             maxdepth: Maximum depth to print before truncating branches.
             threshold: Maximum length of a branch before truncating.
         Returns:
             Multi-line string representation with indentation showing nesting.
+        Examples:
+            Render a stored pattern with its DEFINE header::
+
+                >>> from my import RegexStore
+                >>> store = RegexStore.new(
+                ...     year=r'\d{4}',
+                ...     month=r'0?[1-9]|1[0-2]',
+                ...     date=r'(?P<y>(?P>year))-(?P<m>(?P>month))',
+                ... )
+                >>> print(store.pretty_print('date'))
+                (?(DEFINE)
+                (?P<year>\d{4})
+                (?P<month>0?[1-9]|1[0-2])
+                )
+                (?P<y>(?P>year))-(?P<m>(?P>month))
         """
         _ = self.load
         # 0. Normalize & validate arguments

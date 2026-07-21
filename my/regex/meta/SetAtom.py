@@ -18,7 +18,19 @@ from .Atom import Atom
 ### BODY ###
 ############
 class SetAtom(Atom):
-    """A character set in a regular expression, denoted by square brackets (e.g. `[a-zA-Z]`)."""
+    """A character set in a regular expression, denoted by square brackets (e.g. `[a-zA-Z]`).
+
+    Examples:
+        Break a simple set into its member atoms::
+
+            >>> SetAtom(r'[abc]').members
+            ['a', 'b', 'c']
+
+        Sets using V1 set operators are not considered "simple"::
+
+            >>> SetAtom(r'[a-z--[aeiou]]').is_simple
+            False
+    """
 
     span: Span = pyd.Field(default_factory=lambda: Span(0, 0))
     body: str = ''
@@ -37,7 +49,7 @@ class SetAtom(Atom):
 
     @ft.cached_property
     def members(self) -> list[Atom]:
-        """The individual atoms that make up this set. Only valid for simple sets."""
+        """The individual atoms that make up this set -- only valid for simple sets."""
         escaped_body = META_RGXS['special_characters'].sub(r'\\\1', self.body)
         return list(Atom.plain_atomize(escaped_body))
 

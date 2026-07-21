@@ -12,9 +12,11 @@ Some of the additions -- say, better support for emojis and non-roman script -- 
 
 ...and on and on!
 
-This document started as a simple reorganization of Matthew's fantastic `README.md`, but I have since added some brief elaborations, cross-references, & links to [https://regular-expressions.info](https://www.regular-expressions.info) in order to make it more useful to both beginners and experts. Any allusions to "we" refer to Matthew and his fellow maintainers.
+This document started as a simple reorganization of Matthew's fantastic `README.md`, but I have since added some brief elaborations, cross-references, & links to [https://regular-expressions.info](https://www.regular-expressions.info) in order to make it more useful to both beginners and experts.
+Any allusions to "we" refer to Matthew and his fellow maintainers.
 
-If you're new to regex in general, I reccommend you start by reading [python's quick tutorial](https://docs.python.org/3/howto/regex.html), skimming [regular-expression.info's much more in-depth tutorials](https://www.regular-expressions.info), and/or consulting python's [documentation for the `re` module](https://docs.python.org/3/library/re.html) directly. **For completeness, I have included brief quotes from the `re` documentation to set the stage for many of the extensions -- look out for "See Also" notes.**
+If you're new to regex in general, I recommend you start by reading [python's quick tutorial](https://docs.python.org/3/howto/regex.html), skimming [regular-expression.info's much more in-depth tutorials](https://www.regular-expressions.info), and/or consulting python's [documentation for the `re` module](https://docs.python.org/3/library/re.html) directly.
+**For completeness, I have included brief quotes from the `re` documentation to set the stage for many of the extensions -- look out for "See Also" notes.**
 
 ## Flags
 
@@ -41,7 +43,8 @@ Makes `\w`, `\W`, `\b`, `\B`, `\d`, `\D`, `\s` and `\S` match only ASCII charact
 Makes `\w`, `\W`, `\b`, `\B`, `\d`, `\D`, `\s` and `\S` match according to the current locale settings.
 
 ```{caution}
-This flag is intended for legacy code and has limited support. We recommended you use `UNICODE` instead.
+This flag is intended for legacy code and has limited support.
+We recommended you use `UNICODE` instead.
 ```
 
 #### Case
@@ -77,7 +80,7 @@ _([regular-expressions.info lesson](https://www.regular-expressions.info/freespa
 Ignores all raw whitespace characters in the following pattern, allowing the user to include whitespace between components for clarity.
 Also allows comments, which begin with an "#" and continue until the end of the line.
 
-To match whitespace in an extended expression, wrap it it in a character set (e.g. ` ?` -> `[ ]?`).
+To match whitespace in an extended expression, wrap it in a character set (e.g. ` ?` -> `[ ]?`).
 
 ##### `(?w)` WORD
 Changes the definition of a 'word boundary' (`\b`/`\B`) to that of a default Unicode word boundary, a better choice for a variety of non-romance languages.
@@ -89,7 +92,8 @@ It also affects line separators (and, in turn, `(?s)` and `(?m)`):
 
 ### Global Flags
 
-Global flags apply to the entire pattern and can only be turned on -- if these patterns are present anywhere in a given expression, they apply to the whole thing. **They cannot be disabled.**
+Global flags apply to the entire pattern and can only be turned on -- if these patterns are present anywhere in a given expression, they apply to the whole thing.
+**They cannot be disabled.**
 
 #### General
 
@@ -153,12 +157,12 @@ In version 1, the same pattern (`[[a-z]--[aeiou]]`) is a single set that uses a 
 
 ### Set operators
 
-_([regular-expressions.info lesson 1](https://www.regular-expressions.info/charclasssubtract.html), [lession 2](https://www.regular-expressions.info/charclassintersect.html))_
+_([regular-expressions.info lesson 1](https://www.regular-expressions.info/charclasssubtract.html), [lesson 2](https://www.regular-expressions.info/charclassintersect.html))_
 
 Version 1's set operators allow a set (`[...]`) to be composed of smaller sets.
 The operators, in order of increasing precedence, are:
 
-| Sytnax | Name                 | Boolean | Example                                                        |
+| Syntax | Name                 | Boolean | Example                                                        |
 | ------ | -------------------- | ------- | -------------------------------------------------------------- |
 | `\|\|` | Union                | OR      | `[\w\|\|[:punct:]]` matches word and punctuation characters.   |
 | `~~`   | Symmetric Difference | XOR     | `[\w~~[:punct:]]` matches words or punctuation, but *not* `_`. |
@@ -166,7 +170,8 @@ The operators, in order of increasing precedence, are:
 | `--`   | Difference           | SUB     | `[\w--[:punct:]]` matches all word characters *except* `_`.    |
 
 ```{note}
-Implicit union, ie, simple juxtaposition like in `[ab]`, has the highest precedence. Thus, `[ab&&cd]` is the same as `[[a||b]&&[c||d]]`.
+Implicit union, ie, simple juxtaposition like in `[ab]`, has the highest precedence.
+Thus, `[ab&&cd]` is the same as `[[a||b]&&[c||d]]`.
 ```
 
 **Examples:**
@@ -189,17 +194,21 @@ _([regular-expressions.info lesson](https://www.regular-expressions.info/bracket
 
 _([regular-expressions.info lesson](https://www.regular-expressions.info/subroutine.html))_
 
-All unnamed capturing groups (`(...)`) are assigned a group number, starting from 1. Groups with the same group name will have the same group number, and groups with a different group name will have a different group number.
+All unnamed capturing groups (`(...)`) are assigned a group number, starting from 1.
+Groups with the same group name will have the same group number, and groups with a different group name will have a different group number.
 
-The same name can be used by more than one group, with later captures 'overwriting' earlier captures. All the captures of the group will be available from the `captures` method of the match object.
+The same name can be used by more than one group, with later captures 'overwriting' earlier captures.
+All the captures of the group will be available from the `captures` method of the match object.
 
 #### Substituting & Invoking Subroutines
 
 Subroutines are useful for two things:
 
-1. ["Substitution"/"Backreferencing"](https://www.regular-expressions.info/backref.html) of their results: the exact text that the subroutine last matched will be sought out again. The quintessential usecase is matching quoted text: `(["\'])(\w+)(\1)`.
+1. ["Substitution"/"Backreferencing"](https://www.regular-expressions.info/backref.html) of their results: the exact text that the subroutine last matched will be sought out again.
+   The quintessential usecase is matching quoted text: `(["\'])(\w+)(\1)`.
 
-1. ["Invocation"](https://www.regular-expressions.info/subroutine.html) of their pattern: the subroutine itself is *re-run* at the current location, entirely separate from any previous uses. Like functions do for regular imperative programming languages, subroutines are *so* incredibly useful that it's impossible to pick any one quintessential usecase -- composition, recursion, and more are all possible.
+2. ["Invocation"](https://www.regular-expressions.info/subroutine.html) of their pattern: the subroutine itself is *re-run* at the current location, entirely separate from any previous uses.
+   Like functions do for regular imperative programming languages, subroutines are *so* incredibly useful that it's impossible to pick any one quintessential usecase -- composition, recursion, and more are all possible.
 
 Although the former is supported by `re`, the latter requires the full `regex` package.
 Many different syntaxes are used across different languages, so for convenience, here is a table clarifying exactly which syntaxes are supported by `regex` for each of these functions:
@@ -213,7 +222,8 @@ Many different syntaxes are used across different languages, so for convenience,
 | Named      | Substitution | `(?P=name)`, `\g<name>`              | `\k<name>`, `\k'name'`, `\k{name}`, `\g{name}`, `(?<name>)`, `(?'name')` |
 | Named      | Invocation   | `(?&name)`, `(?P>name)`, `(?P&name)` |                                                                          |
 
-When substituting, the result of the *most recent* invocation is used; sadly, [relative backreferences](https://www.regular-expressions.info/backrefrel.html) are not (yet?) supported. To get around this, wrap your subroutine with a new name (e.g. `(?P<important_quote>(?P>quote))`) for the calls whose results you want to substitute later on.
+When substituting, the result of the *most recent* invocation is used; sadly, [relative backreferences](https://www.regular-expressions.info/backrefrel.html) are not (yet?) supported.
+To get around this, wrap your subroutine with a new name (e.g. `(?P<important_quote>(?P>quote))`) for the calls whose results you want to substitute later on.
 
 Note that you can only invoke a group if there is only one unique group with that name -- else, an `"ambiguous group reference"` exception will be raised.
 
@@ -237,7 +247,8 @@ regex.match(r'(?P<quote>["\'])(\w+)(?P=quote)', "'abc\" 'def'") # -> 'def'
 
 #### Predefined Subroutines (`(?(DEFINE)...)`)
 
-This special group can be placed at the start of a complex pattern to define subroutines that can be invoked later on in the pattern, but that will not themselves be matched against the string. The normal rules for numbering groups still apply.
+This special group can be placed at the start of a complex pattern to define subroutines that can be invoked later on in the pattern, but that will not themselves be matched against the string.
+The normal rules for numbering groups still apply.
 
 ```{caution}
 If you define a subroutine that shares the name `DEFINE`, this section will break.
@@ -273,7 +284,8 @@ In the first example, the lookaround matched, but the remainder of the first bra
 
 _([regular-expressions.info lesson](https://www.regular-expressions.info/branchreset.html))_
 
-The special "branch reset" group syntax (e.g. `(?|(first)|(second))`) allows group numbers to be reused across different branches (the given example has only group `1`). If groups have different group names then they will still have different group numbers.
+The special "branch reset" group syntax (e.g. `(?|(first)|(second))`) allows group numbers to be reused across different branches (the given example has only group `1`).
+If groups have different group names then they will still have different group numbers.
 
 Group numbers will be reused across the alternatives, but groups with different names will have different group numbers.
 
@@ -303,21 +315,22 @@ A lookbehind can match a variable-length string.
 
 _([regular-expressions.info lesson](https://www.regular-expressions.info/unicode.html))_
 
-Unicode properties allow you to more flexibly match non-standard characters, and as such are highly recommended for production applications. For example, `[A-Z]` will not match `Ö` as expected, but `[\p{Lu}]` and `[[:upper:]]` will.
+Unicode properties allow you to more flexibly match non-standard characters, and as such are highly recommended for production applications.
+For example, `[A-Z]` will not match `Ö` as expected, but `[\p{Lu}]` and `[[:upper:]]` will.
 
 Four syntaxes are accepted:
 
 1. `\p{value}` matches characters *with* the given property.
-1. `\P{value}` matches characters *without* the given property.
-1. `\p{property=value}` matches characters whose property `property` *does* have value `value`.
-1. `\P{property=value}` matches characters whose property `property` *does not* have value `value`.
+2. `\P{value}` matches characters *without* the given property.
+3. `\p{property=value}` matches characters whose property `property` *does* have value `value`.
+4. `\P{property=value}` matches characters whose property `property` *does not* have value `value`.
 
 There are four types of Unicode properties, which are checked in order:
 
 1. [`General_Category`](https://www.regular-expressions.info/unicodecategory.html) properties describe all sorts of arbitrary information (e.g. Letter, Mark, Number, Punctuation, Symbol, Separator, Other)
-1. [`Script`](https://www.regular-expressions.info/unicodescript.html) propreties describe which real-life writing system the character belongs to (e.g. Latin, Cyrillic, Han).
-1. [`Block`](https://www.regular-expressions.info/unicodeblock.html) properties describe which of the (somewhat-arbitrary) [Unicode Blocks](https://www.regular-expressions.info/refunicodeblock.html) the character was published within (e.g. Basic Latin, Greek and Coptic, CJK Unified Ideographs).
-1. Finally, all other binary properties are checked.
+2. [`Script`](https://www.regular-expressions.info/unicodescript.html) properties describe which real-life writing system the character belongs to (e.g. Latin, Cyrillic, Han).
+3. [`Block`](https://www.regular-expressions.info/unicodeblock.html) properties describe which of the (somewhat-arbitrary) [Unicode Blocks](https://www.regular-expressions.info/refunicodeblock.html) the character was published within (e.g. Basic Latin, Greek and Coptic, CJK Unified Ideographs).
+4. Finally, all other binary properties are checked.
 
 A short form starting with `Is` indicates a script or binary property (e.g. `\p{IsLatin}` or `\p{IsAlphabetic}`), while a short form starting with `In` indicates a block property (e.g. `\p{InBasicLatin}`).
 
@@ -368,13 +381,15 @@ The definition of a 'word' character (`\w`) has also been expanded to conform to
 
 ### Named characters (`\N{name}`)
 
-Named characters are supported. Note that only those known by Python's Unicode database will be recognised.
+Named characters are supported.
+Note that only those known by Python's Unicode database will be recognised.
 
 ### A single grapheme (`\X`)
 
 _([regular-expressions.info lesson](https://www.regular-expressions.info/unicodechars.html))_
 
-The grapheme matcher is supported. It conforms to the Unicode specification at `http://www.unicode.org/reports/tr29/`.
+The grapheme matcher is supported.
+It conforms to the Unicode specification at `http://www.unicode.org/reports/tr29/`.
 
 ## Optimization
 
@@ -390,7 +405,9 @@ _([regular-expressions.info lesson](https://www.regular-expressions.info/possess
 
 `(?:...)?+` ; `(?:...)*+` ; `(?:...)++` ; `(?:...){min,max}+`
 
-The subpattern is matched up to 'max' times. If the following pattern subsequently fails, then all the repeated subpatterns will fail as a whole. For example, `(?:...)++` is equivalent to `(?>(?:...)+)`.
+The subpattern is matched up to 'max' times.
+If the following pattern subsequently fails, then all the repeated subpatterns will fail as a whole.
+For example, `(?:...)++` is equivalent to `(?>(?:...)+)`.
 
 ### Backtracking Control Verbs (`(*VERB)`)
 
@@ -398,17 +415,20 @@ _([regular-expressions.info lesson](https://www.regular-expressions.info/verb.ht
 
 We support 3 of [the 7 control verbs](https://www.regular-expressions.info/refverb.html) (excluding `ACCEPT`, `COMMIT`, `MARK`, and `THEN`):
 
-1. `(*PRUNE)` discards the backtracking info up to that point. When used in an atomic group or a lookaround, it won't affect the enclosing pattern.
+1. `(*PRUNE)` discards the backtracking info up to that point.
+   When used in an atomic group or a lookaround, it won't affect the enclosing pattern.
 
-1. `(*SKIP)` is similar to `(*PRUNE)`, except that it also sets where in the text the next attempt to match will start. When used in an atomic group or a lookaround, it won't affect the enclosing pattern.
+2. `(*SKIP)` is similar to `(*PRUNE)`, except that it also sets where in the text the next attempt to match will start.
+   When used in an atomic group or a lookaround, it won't affect the enclosing pattern.
 
-1. `(*FAIL)`/`(*F)` causes immediate backtracking.
+3. `(*FAIL)`/`(*F)` causes immediate backtracking.
 
 ### Keep (`\K`)
 
 _([regular-expressions.info lesson](https://www.regular-expressions.info/keep.html))_
 
-Keeps the part of the entire match after the position where `\K` occurred; the part before it is discarded. It does not affect what groups return.
+Keeps the part of the entire match after the position where `\K` occurred; the part before it is discarded.
+It does not affect what groups return.
 
 ```python
 m = regex.search(r'(\w\w\K\w\w\w)', 'abcdef')
@@ -458,7 +478,7 @@ p = regex.compile(r"\L<options>", options=option_set, other_options=[])
 
 ## Python API
 
-### Environement
+### Environment
 
 - Python 2 is not supported.
 - This module is targeted at CPython.
@@ -469,7 +489,8 @@ p = regex.compile(r"\L<options>", options=option_set, other_options=[])
 
 #### Captures & Spans
 
-A match object has additional methods which return information on all the successful matches of a repeated group. These methods are:
+A match object has additional methods which return information on all the successful matches of a repeated group.
+These methods are:
 
 | Method                     | Description                                                         | Singular Counterpart    |
 | -------------------------- | ------------------------------------------------------------------- | ----------------------- |
@@ -582,7 +603,8 @@ m.expandf('{letter[-1]} {letter[-2]} {letter[-3]}') # -> c b a
 
 #### `splititer()`
 
-`regex.splititer` has been added. It's a generator equivalent of `regex.split`.
+`regex.splititer` has been added.
+It's a generator equivalent of `regex.split`.
 
 #### `fullmatch()`
 
@@ -601,7 +623,8 @@ regex.fullmatch(r"a.*?", "abcd").group(0) # -> 'abcd'
 
 #### `subf()` & `subfn()`
 
-`subf` and `subfn` are alternatives to `sub` and `subn` respectively. When passed a replacement string, they treat it as a format string.
+`subf` and `subfn` are alternatives to `sub` and `subn` respectively.
+When passed a replacement string, they treat it as a format string.
 
 ```python
 
@@ -611,7 +634,8 @@ regex.subf(r"(?P<word1>\w+) (?P<word2>\w+)", "{word2} {word1}", "foo bar") # -> 
 
 #### `expandf()`
 
-`expandf` is an alternative to `expand`. When passed a replacement string, it treats it as a format string.
+`expandf` is an alternative to `expand`.
+When passed a replacement string, it treats it as a format string.
 
 ```python
 m = regex.match(r"(\w+) (\w+)", "foo bar")
@@ -687,7 +711,8 @@ pattern.match('1233', partial=True).partial # -> False
 
 #### Special Escapes
 
-regex.escape has an additional keyword parameter `special_only`. When True, only 'special' regex characters, such as '?', are escaped.
+regex.escape has an additional keyword parameter `special_only`.
+When True, only 'special' regex characters, such as '?', are escaped.
 
 ```python
 regex.escape("foo!?", special_only=False) # -> 'foo\!\?'
@@ -711,7 +736,8 @@ regex.escape("foo bar!?", literal_spaces=True) # -> 'foo bar!\?'
 
 #### Timeouts
 
-The matching methods and functions support timeouts. The timeout (in seconds) applies to the entire operation:
+The matching methods and functions support timeouts.
+The timeout (in seconds) applies to the entire operation:
 
 ```python
 from time import sleep
@@ -836,7 +862,8 @@ So the actual string was:
 
 ### `*` operator not working correctly with sub()
 
-Sometimes it's not clear how zero-width matches should be handled. For example, should `.*` match 0 characters directly after matching >0 characters?
+Sometimes it's not clear how zero-width matches should be handled.
+For example, should `.*` match 0 characters directly after matching >0 characters?
 
 ```python
 regex.sub('.*', 'x', 'test') # -> xx

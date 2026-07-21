@@ -16,15 +16,26 @@ from ...types import Buffer
 ############
 RegexBuffer = ft.partial(Buffer.new, fence_rgxs=['arrays'])
 
+#: Lookbehind asserting that the preceding character is not an (unescaped) backslash escape.
 NO_ESC = r'(?<!^\\|[^\\]\\)'
+#: Consuming counterpart of `NO_ESC`: matches a start-of-string, non-backslash, or double-escape.
 NON_ESC = r'(?:^|[^\\]|\\\\)'
+#: An optional quantifier of any form (`?`, `*+`, `{2,5}?`, ...), matched atomically.
 QUANT = r'(?>\?|[*+][?+]?|\{\d+(?:,\d*)?\}[?+]?)?'
+#: A named capture of inline-flag syntax (e.g. `smi`, `i-x`), as found inside `(?...)` groups.
 FLAGS = r'(?P<flags>-?[afiLmsuxwif]+|[afiLmsuxwif]+-[afiLmsuxwif]+)'
 
 ############
 ### BODY ###
 ############
-#: Dictionary of meta-regex patterns used for parsing and analyzing regular expressions.
+#: Dictionary of meta-regex patterns used for parsing and analyzing regular expressions:
+#: the primary decomposition patterns (`set`, `group`, `atom`), their second-order helpers
+#: (`quant`, `set_operator`, `inline_flags`, ...), and the `struct_mark` pattern behind the
+#: `RegexStore` composition DSL. Each value is a compiled pattern, ready to match::
+#:
+#:     >>> from my import META_RGXS
+#:     >>> META_RGXS['quant'].search('ab{2,5}?cd')[0]
+#:     '{2,5}?'
 META_RGXS: dict[str, re.Pattern] = ut.regex_dict(
     # ---------------
     # Building Blocks

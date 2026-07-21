@@ -3,6 +3,8 @@
 ############
 ### STANDARD
 from typing import ClassVar
+from datetime import datetime
+import warnings
 import more_itertools as mi
 
 ### EXTERNAL
@@ -410,3 +412,30 @@ class TestPredicate:
         restored = cls.new(dumped)
         assert restored.data == pred.data
         assert key in restored.data
+
+    # ---- Investigation: datetime decast/serialize consistency (wart audit) ----
+
+    def test_datetime_decast_roundtrip(self):
+        """A datetime-valued entry must decast and serialize/deserialize consistently.
+
+        Investigated as a suspected ``Typist.SCALAR_TYPES`` (has ``datetime``) vs.
+        ``Predicate.DECAST_TYPES`` (missing ``datetime``, has ``bytes`` instead) mismatch.
+        ``DECAST_TYPES`` turns out to be dead code -- it has zero consumers anywhere in this
+        repo -- so it cannot actually gate any decast/serialize behavior. The *live* gates are
+        ``Typist.SCALAR_TYPES`` (used by ``_abbreviate()`` -> ``flex_deserialize()`` to pick a
+        value's type) and the ``PredicateLeaf`` type alias (used by ``_serialize_predicate()``'s
+        return annotation), and both of those already include ``datetime`` and already agree
+        with each other. Confirmed NOT A DEFECT: no serializer warning is raised, and the value
+        round-trips as an actual ``datetime``, not a string.
+        """
+        when = datetime(2026, 7, 21, 12, 30, 0)
+        pred = cls.new({'when': when.isoformat()})
+
+        with warnings.catch_warnings():
+            warnings.simplefilter('error')
+            dumped = pred.model_dump()
+
+        assert isinstance(dumped['when'], datetime)
+
+        restored = cls.new(dumped)
+        assert restored.data == pred.data

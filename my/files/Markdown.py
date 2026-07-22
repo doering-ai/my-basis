@@ -71,7 +71,8 @@ class Markdown(pyd.BaseModel):
     idx: str = ''
 
     #: Optional tags associated with this markdown node, stored as a list of strings.
-    #: Rendered as a bactic-wrapped, space-separated string immediately following the header hashes.
+    #: Rendered as a backtick-wrapped, space-separated string immediately following the header
+    #: hashes.
     tags: list[str] = []
 
     #: Arbitrary YAML data attached to this markdown node. This is rendered as YAML frontmatter for
@@ -138,10 +139,25 @@ class Markdown(pyd.BaseModel):
         construction of child nodes with automatic index assignment.
 
         Args:
-            source: Markdown text or iterable of lines to initialize the prose buffer.
+            source: Prose text to seed the node's buffer. Only multiline (or 256+ character)
+                strings are stored; short single-line strings and `Path` objects are currently
+                discarded without effect.
             **kwargs: Node properties (level, idx, tags, title, prose, nodes, etc.).
         Returns:
             New Markdown instance with properly initialized tree structure.
+        Examples:
+            Build a small document tree, indices and levels assigned automatically::
+
+                >>> from my import Markdown
+                >>> doc = Markdown.new(
+                ...     title='Guide',
+                ...     nodes=[
+                ...         dict(title='Setup', prose='Install it.'),
+                ...         dict(title='Usage', prose='Run it.'),
+                ...     ],
+                ... )
+                >>> [(node.idx, node.level, node.title) for node in doc.tree]
+                [('', 1, 'Guide'), ('0', 2, 'Setup'), ('1', 2, 'Usage')]
         """
         if source is None:
             return cls(**kwargs)
@@ -265,6 +281,15 @@ class Markdown(pyd.BaseModel):
             num: Number of levels to indent (can be negative to outdent).
         Returns:
             Self for chaining.
+        Examples:
+            Shift a subtree one level deeper::
+
+                >>> from my import Markdown
+                >>> sub = dict(title='Sub', prose='x.')
+                >>> sec = Markdown.new(title='Section', level=2, nodes=[sub])
+                >>> _ = sec.indent(1)
+                >>> [(node.title, node.level) for node in sec.tree]
+                [('Section', 3), ('Sub', 4)]
         """
         for node in self.tree:
             node.level += num
@@ -306,6 +331,18 @@ class Markdown(pyd.BaseModel):
         Args:
             start: First child index to update (default: 0).
             end: Last child index (exclusive, default: all children).
+        Examples:
+            Repair indices after reordering children by hand::
+
+                >>> from my import Markdown
+                >>> doc = Markdown.new(
+                ...     title='Guide',
+                ...     nodes=[dict(title='A', prose='a.'), dict(title='B', prose='b.')],
+                ... )
+                >>> doc.nodes.reverse()
+                >>> doc.refresh_indices()
+                >>> [(node.idx, node.title) for node in doc.nodes]
+                [('0', 'B'), ('1', 'A')]
         """
         n = len(self.nodes)
         if start >= n:
@@ -360,6 +397,24 @@ class Markdown(pyd.BaseModel):
             max_d: Maximum depth to traverse (-1 for unlimited).
         Yields:
             Markdown nodes in depth-first order.
+        Examples:
+            Traverse depth-first, optionally bounded or reversed::
+
+                >>> from my import Markdown
+                >>> adv = dict(title='Advanced', prose='x.')
+                >>> doc = Markdown.new(
+                ...     title='Guide',
+                ...     nodes=[
+                ...         dict(title='Setup', prose='Install it.'),
+                ...         dict(title='Usage', prose='Run it.', nodes=[adv]),
+                ...     ],
+                ... )
+                >>> [node.title for node in doc.walk()]
+                ['Guide', 'Setup', 'Usage', 'Advanced']
+                >>> [node.title for node in doc.walk(max_d=1)]
+                ['Guide', 'Setup', 'Usage']
+                >>> [node.title for node in doc.walk(asc=True)]
+                ['Guide', 'Usage', 'Advanced', 'Setup']
         """
         # I. Yield the root by default
         if not skip_self:
@@ -395,6 +450,14 @@ class Markdown(pyd.BaseModel):
             left: Whether to prepend (True) or append (False).
         Returns:
             Self for chaining.
+        Examples:
+            Append a child; sibling indices refresh, but `level` is kept as constructed::
+
+                >>> from my import Markdown
+                >>> doc = Markdown.new(title='Guide', nodes=[dict(title='Setup', prose='x.')])
+                >>> _ = doc.add_node(Markdown.new(title='FAQ', prose='Q & A.', level=2))
+                >>> [(node.idx, node.title) for node in doc.nodes]
+                [('0', 'Setup'), ('1', 'FAQ')]
         """
         if isinstance(new_nodes, Markdown):
             new_nodes = [new_nodes]
@@ -421,6 +484,27 @@ class Markdown(pyd.BaseModel):
             Matching Markdown node or None.
         Raises:
             ValueError: If invalid parameter combination.
+        Examples:
+            Fetch descendants by index string, child position, title, or index path (the same
+            criteria back `get_idx()`, `get_child()`, `get_title()`, and `get_path()`)::
+
+                >>> from my import Markdown
+                >>> adv = dict(title='Advanced', prose='x.')
+                >>> doc = Markdown.new(
+                ...     title='Guide',
+                ...     nodes=[
+                ...         dict(title='Setup', prose='Install it.'),
+                ...         dict(title='Usage', prose='Run it.', nodes=[adv]),
+                ...     ],
+                ... )
+                >>> doc.get(idx='10').title
+                'Advanced'
+                >>> doc.get(child=0).title
+                'Setup'
+                >>> doc.get(title='advanced').title
+                'Advanced'
+                >>> doc.get(path=[1, 0]).title
+                'Advanced'
         """
         if 'idx' in kwargs:
             return self.get_idx(**kwargs)
@@ -514,6 +598,17 @@ class Markdown(pyd.BaseModel):
         Returns:
             List of nodes from this node to target (inclusive).
             Empty list if target not found or invalid.
+        Examples:
+            Collect the chain of nodes leading to a target::
+
+                >>> from my import Markdown
+                >>> adv = dict(title='Advanced', prose='x.')
+                >>> doc = Markdown.new(
+                ...     title='Guide',
+                ...     nodes=[dict(title='Usage', prose='Run it.', nodes=[adv])],
+                ... )
+                >>> [node.title for node in doc.trace_path('00')]
+                ['Guide', 'Usage', 'Advanced']
         """
         return Markdown._trace_path(self, target)
 
@@ -523,6 +618,15 @@ class Markdown(pyd.BaseModel):
         Args:
             base_idx: Parent's index string.
             rel_idx: This node's position relative to parent (0-61).
+        Examples:
+            Rebase a subtree's indices onto a new parent position::
+
+                >>> from my import Markdown
+                >>> adv = dict(title='Advanced', prose='x.')
+                >>> node = Markdown.new(title='Usage', level=2, nodes=[adv])
+                >>> node.set_idx('3', 2)
+                >>> (node.idx, node.nodes[0].idx)
+                ('32', '320')
         """
         new_idx = base_idx + self._num_to_digit(rel_idx)
         if new_idx == self.idx:
@@ -555,19 +659,40 @@ class Markdown(pyd.BaseModel):
 
     @property
     def prefix(self) -> str:
-        """The bactic-escaped prefix for this node's title, or emptystring if there is none."""
+        """The backtick-escaped prefix for this node's title, or emptystring if there is none."""
         if self.idx or self.tags:
             return '`' + ' '.join(s for s in [self.idx, *self.tags] if s) + '`'
         return ''
 
     @property
     def header(self) -> str:
-        """Returns the full, markdown-ready header line for this node."""
+        """Returns the full, markdown-ready header line for this node.
+
+        Examples:
+            The header composes the level's hashes, the `prefix`, and the title::
+
+                >>> from my import Markdown
+                >>> node = Markdown.new(title='Tagged', tags=['draft'], idx='3', level=2)
+                >>> node.prefix
+                '`3 draft`'
+                >>> node.header
+                '## `3 draft` Tagged'
+        """
         return ' '.join(filter(bool, (self.level * '#', self.prefix, self.title)))
 
     @property
     def fulltext(self) -> str:
-        """Returns the full text of this markdown object."""
+        r"""Returns the full text of this markdown object.
+
+        Examples:
+            Join headers and prose across the whole tree::
+
+                >>> from my import Markdown
+                >>> sub = dict(title='Sub', prose='More.')
+                >>> doc = Markdown.new(title='Note', prose='Body.', nodes=[sub])
+                >>> doc.fulltext
+                '# Note\n\nBody.\n\n## `0` Sub\n\nMore.'
+        """
         parts = [self.header, str(self.prose), *(node.fulltext for node in self.nodes)]
         return '\n\n'.join(parts).strip()
 
@@ -587,6 +712,18 @@ class Markdown(pyd.BaseModel):
             **kwargs: Node search criteria (passed to get()).
         Returns:
             Removed node, or None if not found.
+        Examples:
+            Remove a node by any `get()` criteria; its siblings re-index::
+
+                >>> from my import Markdown
+                >>> doc = Markdown.new(
+                ...     title='Guide',
+                ...     nodes=[dict(title='Setup', prose='a.'), dict(title='Usage', prose='b.')],
+                ... )
+                >>> doc.pop(title='Setup').title
+                'Setup'
+                >>> [(node.idx, node.title) for node in doc.nodes]
+                [('0', 'Usage')]
         """
         # I. Find the target node
         if not (target := self.get(**kwargs)):
@@ -609,6 +746,18 @@ class Markdown(pyd.BaseModel):
         Args:
             orig: String or regex pattern to replace.
             new: Replacement string.
+        Examples:
+            Substitute text across every node's prose::
+
+                >>> from my import Markdown
+                >>> doc = Markdown.new(
+                ...     title='Guide',
+                ...     prose='Use foo.',
+                ...     nodes=[dict(title='Sub', prose='More foo.')],
+                ... )
+                >>> doc.replace('foo', 'bar')
+                >>> [str(node.prose) for node in doc.tree]
+                ['Use bar.', 'More bar.']
         """
         for node in self.tree:
             node.prose.replace(orig, new)
@@ -618,7 +767,7 @@ class Markdown(pyd.BaseModel):
         return len(self.nodes)
 
     def __isub__(self, nodes: Collection[str]) -> Self:
-        """Removes nodes with the given indices from this markdown object."""
+        """Removes nodes with the given titles from this markdown object."""
         for title in nodes:
             if node := self.pop(title=title):
                 self.LOGGER.info(f'Removed node: {node.title} ({node.idx})')
@@ -626,9 +775,9 @@ class Markdown(pyd.BaseModel):
                 self.LOGGER.warning(f'Node not found: {title}')
         return self
 
-    # -------------
-    # `*1` Standard
-    # -------------
+    # ------------------------
+    # `*2` Parsing & Rendering
+    # ------------------------
     @staticmethod
     def _mask_fences(text: str) -> str:
         """Neutralize `#` at the start of lines inside fenced code blocks.
@@ -665,18 +814,28 @@ class Markdown(pyd.BaseModel):
 
     @classmethod
     def parse(cls, text: str | Buffer, base_level: int = 0) -> list[Self]:
-        """Parse markdown text into a hierarchical tree structure.
+        r"""Parse markdown text into a hierarchical tree structure.
 
         Recognizes headers, tags, indices, and prose to build nested Markdown nodes.
         Automatically handles "Notes" sections by parsing them as YAML. Lines inside fenced code
         blocks are ignored by the header scanner, so a `#` comment in a code fence is kept as
-        prose rather than misread as a header.
+        prose rather than misread as a header. Note that a header is only recognized as a child
+        when its parent carries prose of its own: adjacent header lines with nothing between
+        them are folded into the parent's prose.
 
         Args:
             text: Markdown text or Buffer to parse.
             base_level: Minimum header level to parse (default: 0 for all).
         Returns:
             List of top-level Markdown nodes with nested children.
+        Examples:
+            Parse nested sections -- including tagged, indexed headers -- into a tree::
+
+                >>> from my import Markdown
+                >>> text = '# Guide\n\nIntro.\n\n## `0 draft` Usage\n\nRun it.\n'
+                >>> doc = Markdown.parse(text)[0]
+                >>> [(n.level, n.idx, n.tags, n.title) for n in doc.tree]
+                [(1, '', [], 'Guide'), (2, '0', ['draft'], 'Usage')]
         """
         masked = cls._mask_fences(str(text))
         nodes = deque(
@@ -698,7 +857,20 @@ class Markdown(pyd.BaseModel):
         return Predicate.new(self.from_yaml())
 
     def reparse_prose(self) -> None:
-        """Identify and parse newly-created header nodes embedded in this node's raw prose."""
+        r"""Identify and parse newly-created header nodes embedded in this node's raw prose.
+
+        Examples:
+            Promote headers typed into prose to real child nodes::
+
+                >>> from my import Markdown
+                >>> node = Markdown.new(title='Host', level=1)
+                >>> node.prose = node.buffer_factory('Intro.\n\n## Fresh\n\nNew content.')
+                >>> node.reparse_prose()
+                >>> [(n.level, n.title) for n in node.tree]
+                [(1, 'Host'), (2, 'Fresh')]
+                >>> str(node.prose).strip()
+                'Intro.'
+        """
         # Search the fence-masked prose so a `#` inside a code fence can't be taken for a header;
         # offsets are preserved, so the match start still indexes into the original prose.
         masked = self._mask_fences(str(self.prose))
@@ -712,6 +884,17 @@ class Markdown(pyd.BaseModel):
 
         Returns:
             Dictionary of parsed YAML data with child nodes as nested keys.
+        Examples:
+            Collect YAML prose and child sections into one dict::
+
+                >>> from my import Markdown
+                >>> cfg = Markdown.new(
+                ...     title='Config',
+                ...     prose='debug: true',
+                ...     nodes=[dict(title='paths', prose='root: /tmp')],
+                ... )
+                >>> cfg.from_yaml()
+                {'debug': True, 'paths': {'root': '/tmp'}}
         """
         # Handle top-level data
         ret = {}
@@ -746,13 +929,22 @@ class Markdown(pyd.BaseModel):
         return body
 
     def to_string(self, strip_notes: bool = False, fix: bool = True) -> str:
-        """Render this node and its children as markdown text.
+        r"""Render this node and its children as markdown text.
 
         Args:
             strip_notes: Whether to exclude notes from output.
             fix: Whether to apply mdformat formatting.
         Returns:
             Formatted markdown string.
+        Examples:
+            Root-level notes render as YAML frontmatter unless stripped::
+
+                >>> from my import Markdown
+                >>> noted = Markdown.new(title='Doc', prose='Body.', notes={'k': 'v'})
+                >>> noted.to_string()
+                '---\nk: v\n---\n\n# Doc\n\nBody.\n'
+                >>> noted.to_string(strip_notes=True)
+                '# Doc\n\nBody.\n'
         """
         data = self.model_dump()
         if strip_notes and 'notes' in data:

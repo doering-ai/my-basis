@@ -34,11 +34,26 @@ class FileCache[T]:
     Organizes items into a directory structure: group/prefix/file where prefix
     is derived from file. Maintains separate indices for in-memory (hot) items
     and on-disk (cold) files. Automatically prunes memory cache and writes to disk
-    when size limits are exceeded.
+    when size limits are exceeded:
 
-    Structure:
-    - items: In-memory cache of deserialized data
-    - files: Index of on-disk files with their contained item names
+    - `items`: In-memory cache of deserialized data
+    - `files`: Index of on-disk files with their contained item names
+
+    Examples:
+        Write an item, read it back, then shunt its shard between disk and memory::
+
+            >>> import tempfile
+            >>> from pathlib import Path
+            >>> from my import FileCache
+            >>> tmp = tempfile.TemporaryDirectory()
+            >>> cache = FileCache(Path(tmp.name))
+            >>> cache.write('users', 'robb_doering', {'role': 'author'})
+            >>> cache[('users', 'robb_doering')]
+            {'role': 'author'}
+            >>> cache.move_to_sys('users', 'robb')  # written to <dir>/users/r/o/b/robb.json
+            {'robb_doering'}
+            >>> cache.move_to_mem('users', 'robb')
+            {'robb_doering': {'role': 'author'}}
     """
 
     DEBUG: ClassVar[bool] = False
@@ -46,7 +61,9 @@ class FileCache[T]:
     NAME_RGXS: ClassVar[dict[str, re.Pattern]] = ut.regex_dict(
         dict(
             yaml=r'(?m)^[\'"]?(\w.*?)[\'"]?:(?!\S)',
-            json=r'(?m)^ {2,4}"(.+?)"\s*:(?!\S)',
+            # No whitespace lookahead: srsly's writer emits `"name":{` with no space after the
+            # colon, and the indent bound already scopes matches to top-level keys.
+            json=r'(?m)^ {2,4}"(.+?)"\s*:',
         )
     )
 
@@ -265,7 +282,7 @@ class FileCache[T]:
             file: File identifier.
             prefix: Optional prefix override (auto-derived if empty).
         Returns:
-            The number of items written.
+            The set of item names written to disk.
         """
         prefix = prefix or self._prefix(file)
         path = self._path(group, prefix, file)
@@ -359,7 +376,7 @@ class FileCache[T]:
         return None
 
     def write(self, group: str, name: str, item: T) -> None:
-        """Write a single item set the value of an item by name (in memory, for now).
+        """Set the value of a single item by name (in memory, for now).
 
         Args:
             group: Category/namespace.
@@ -418,7 +435,13 @@ class FileCache[T]:
         return True
 
     def flush(self) -> None:
-        """Write all in-memory items to disk and clear memory cache."""
+        """Write all in-memory items to disk and clear the memory cache.
+
+        Note:
+            Prints a `Flushed N items to disk` summary line on completion. Unlike
+            `move_to_sys()`, this does not add the flushed shards to the `files` index, so
+            they are not readable again through this instance without re-initialization.
+        """
         for group in self.items.keys():
             for prefix in self.items[group].keys():
                 for file in self.items[group][prefix].keys():
@@ -450,6 +473,18 @@ class FileCache[T]:
             mode: Search 'items' (memory), 'files' (disk), or 'both'.
         Yields:
             Items matching the search criteria.
+        Examples:
+            Search across memory and disk::
+
+                >>> import regex as re
+                >>> import tempfile
+                >>> from pathlib import Path
+                >>> from my import FileCache
+                >>> tmp = tempfile.TemporaryDirectory()
+                >>> cache = FileCache(Path(tmp.name))
+                >>> cache.write('users', 'robb_doering', {'role': 'author'})
+                >>> list(cache.search('users', re.compile('robb'), re.compile('robb')))
+                [{'role': 'author'}]
         """
         if mode == 'both':
             yield from self.search(group, file_rgx, name_rgx, prefix, 'items')

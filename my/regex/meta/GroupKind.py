@@ -19,21 +19,27 @@ from .meta_rgxs import NO_ESC, FLAGS as _FLAGS
 class GroupKind(MyEnum, Flag):
     """A flag representing one or more "kinds" of regex groups (capturing, lookahead, etc.).
 
-    The flags with underlines at the start of their names are unions of the main kinds, exported
+    The flags with underscores at the start of their names are unions of the main kinds, exported
     for caller convenience when filtering by multiple flag types at once.
+
+    Examples:
+        Test membership against a union flag::
+
+            >>> GroupKind.PLAIN in GroupKind._SIMPLE
+            True
     """
 
     # Basics
     POSIT = auto()  #: Positional capturing group -- ``r'(...)'``.
     PLAIN = auto()  #: Positional non-capturing group -- ``r'(?:...)'``.
-    FLAGS = auto()  #: Custom flag group for setting regex flags -- ``r'(?msi)'``
+    FLAGS = auto()  #: Custom flag group for setting regex flags -- ``r'(?msi)'``.
     ATOMS = auto()  #: Atomic group -- ``r'(?>...)'``.
     RESET = auto()  #: Branch reset group -- ``r'(?|...)'``.
 
     # Captures
     NAMED = auto()  #: Named capturing group -- ``r'(?P<name>...)'``.
     INVOC = auto()  #: Reuse capturing group -- ``r'(?P&name)'``/``r'(?P>name)'``.
-    SUBST = auto()  #: Backreference to a capturing group -- ``r'(?P=name)'``
+    SUBST = auto()  #: Backreference to a capturing group -- ``r'(?P=name)'``.
 
     # Lookarounds
     AHEAD = auto()  #: Positive lookahead assertion -- ``r'(?=...)'``.
@@ -46,12 +52,12 @@ class GroupKind(MyEnum, Flag):
     CONDN = auto()  #: Named conditional -- ``(?(1)...|...)``.
     CONDL = auto()  #: Lookaround conditional -- ``(?(?=...)...|...)``.
 
-    _NAMED = NAMED | INVOC | SUBST  #: Combined flag for all named groups
-    _LOOKAHEADS = AHEAD | NOT_AHEAD  #: Union of lookahead groups
-    _LOOKBEHINDS = BEHIND | NOT_BEHIND  #: Union of lookbehind groups
+    _NAMED = NAMED | INVOC | SUBST  #: Combined flag for all named groups.
+    _LOOKAHEADS = AHEAD | NOT_AHEAD  #: Union of lookahead groups.
+    _LOOKBEHINDS = BEHIND | NOT_BEHIND  #: Union of lookbehind groups.
     _LOOK = AHEAD | BEHIND | NOT_AHEAD | NOT_BEHIND  #: Union of all lookaround groups.
     _SPLITTABLE = PLAIN | ATOMS | AHEAD | BEHIND | RESET  #: Union of branch-compatible groups.
-    _SIMPLE = PLAIN | ATOMS  #: Union of simple non-capturing groups
+    _SIMPLE = PLAIN | ATOMS  #: Union of simple non-capturing groups.
 
     @override
     @classmethod
@@ -70,6 +76,17 @@ class GroupKind(MyEnum, Flag):
             Corresponding GroupKind flag.
         Raises:
             ValueError: If a string is neither a member name nor a recognized group prefix.
+        Examples:
+            Read group-opening syntax or plain member names::
+
+                >>> GroupKind.read('(?:')
+                GroupKind.PLAIN
+                >>> GroupKind.read('(')
+                GroupKind.POSIT
+                >>> GroupKind.read('(?P<name>')
+                GroupKind.NAMED
+                >>> GroupKind.read('named') == GroupKind.NAMED
+                True
         """
         if not value:
             return cls(0)

@@ -27,8 +27,8 @@ class TextUtils(_UtilsBase):
 
     Parts of this class overlap in scope with `RegexStore` (namely `regex_dict()`), but ultimately
     present a much more lightweight interface for simple (or dependency-sensitive...) regex tasks.
-    As with the store, all regex compiled through these methods supports the regex module's
-    [extended regex syntax](./regex.extended_syntax.md).
+    As with the store, all regex compiled through these methods supports the `regex` module's
+    extended regex syntax (see the `my.regex` docs).
     """
 
     RGXS: ClassVar[dict[str, Pattern]] = {}  # written at bottom of file
@@ -38,13 +38,19 @@ class TextUtils(_UtilsBase):
     # ------------------------
     @staticmethod
     def replace(string: str, *args: tuple[str | Pattern, str | Callable[[Match[str]], str]]) -> str:
-        """Apply multiple regex replacements sequentially to a string.
+        r"""Apply multiple regex replacements sequentially to a string.
 
         Args:
             string: Input string to transform.
             *args: Tuples of (pattern, replacement) for sequential application.
         Returns:
             String with all replacements applied in order.
+        Examples:
+            Chain several substitutions in one pass::
+
+                >>> from my import ut
+                >>> ut.replace('a1b2', (r'\d', '#'), ('b', 'B'))
+                'a#B#'
         """
         for pattern, repl in args:
             string = re.sub(pattern, repl, string)
@@ -63,6 +69,14 @@ class TextUtils(_UtilsBase):
             List of exactly n strings, padded with empty strings if needed.
         Raises:
             AssertionError: If n <= 1 or split operation fails.
+        Examples:
+            Split into exactly `n` parts, padding when short::
+
+                >>> from my import ut
+                >>> ut.split_into('a:b:c', ':', 2)
+                ['a', 'b:c']
+                >>> ut.split_into('a', ':', 3)
+                ['a', '', '']
         """
         if not text:
             return [''] * n
@@ -85,7 +99,7 @@ class TextUtils(_UtilsBase):
         compile_function: Callable[[V], Pattern] = re.compile,  # type: ignore
         **kwargs: V | Pattern,
     ) -> dict[K, Pattern]:
-        """Compile the expression strings in the given dictionary, mapping names to Patterns.
+        r"""Compile the expression strings in the given dictionary, mapping names to Patterns.
 
         Args:
             expressions: A mapping of string names to regular expressions (compiled or otherwise).
@@ -93,6 +107,13 @@ class TextUtils(_UtilsBase):
             **kwargs: Additional named patterns to include.
         Returns:
             The expressions mapping with all values now compiled.
+        Examples:
+            Compile a named batch of patterns::
+
+                >>> from my import ut
+                >>> rgxs = ut.regex_dict(word=r'\w+')
+                >>> rgxs['word'].findall('a b')
+                ['a', 'b']
         """
         ret = {}
         _expr: dict[K, str | V | Pattern] = dict(expressions or {}) | kwargs  # type: ignore
@@ -119,14 +140,20 @@ class TextUtils(_UtilsBase):
         *args: tuple[str | Pattern, V],
         compile_function: Callable[..., Pattern] = re.compile,
     ) -> list[tuple[Pattern, V]]:
-        """Compile the expressions in a list of two-tuples, effectively mapping Patterns to strings.
+        r"""Compile the expressions in a list of two-tuples, mapping Patterns to strings.
 
         Args:
-            array: Iterable of (pattern, replacement) tuples.
-            *args: Additional (pattern, replacement) tuples to include.
+            *args: (pattern, replacement) tuples to compile.
             compile_function: Function to compile patterns (default: re.compile).
         Returns:
             List of (compiled_pattern, replacement) tuples.
+        Examples:
+            Compile substitution pairs ready for `replace()`::
+
+                >>> from my import ut
+                >>> pairs = ut.regex_array((r'\d+', 'N'), (r'\s+', '_'))
+                >>> [(p.pattern, repl) for p, repl in pairs]
+                [('\\d+', 'N'), ('\\s+', '_')]
         """
         ret = []
         for key, val in args:
@@ -147,12 +174,20 @@ class TextUtils(_UtilsBase):
 
         Args:
             *expressions: Regex patterns to be combined.
+            branching: If True, use a branch-reset group (resets group names b/w branches).
             sep: Separator for joining list patterns (default: ` ?`).
             pre: Prefix to add before combined pattern (default: empty).
             suf: Suffix to add after combined pattern (default: empty).
-            branching: If True, use branching group (resets group names b/w branches)
         Returns:
             Combined regex pattern in group format ``(?|...)`` or ``(?:...)``.
+        Examples:
+            Combine alternatives into one non-capturing group::
+
+                >>> from my import ut
+                >>> ut.multi_rgx('cat', 'dog')
+                '(?:cat|dog)'
+                >>> ut.multi_rgx(['a', 'b'], 'c')
+                '(?:a ?b|c)'
         """
         parts = [(expr if isinstance(expr, str) else sep.join(expr)) for expr in expressions]
         contents = r'|'.join(parts)
@@ -172,6 +207,14 @@ class TextUtils(_UtilsBase):
             width: Padding width on each side (default: 2).
         Returns:
             Multi-line string with text wrapped in decorative borders.
+        Examples:
+            Frame a headline::
+
+                >>> from my import ut
+                >>> print(ut.wrap('Stage 1').strip())
+                -------------
+                -- Stage 1 --
+                -------------
         """
         n = (len(line) + 2 + 2 * width) if width else len(line)
         wrapper = prefix + (char * n)
@@ -186,13 +229,20 @@ class TextUtils(_UtilsBase):
 
     @staticmethod
     def indent(text: str, n: int = 4) -> str:
-        """Indent all lines in text by n spaces.
+        r"""Indent all lines in text by n spaces.
 
         Args:
             text: Text to indent.
             n: Number of spaces to indent (default: 4).
         Returns:
             Indented text, or original if n is 0.
+        Examples:
+            Indent every line::
+
+                >>> from my import ut
+                >>> print(ut.indent('a\nb', 2))
+                  a
+                  b
         """
         if not n:
             return text
@@ -200,13 +250,20 @@ class TextUtils(_UtilsBase):
 
     @staticmethod
     def unindent(text: str, n: int = 4) -> str:
-        """Remove up to n*4 leading spaces from each line.
+        r"""Remove up to n\*4 leading spaces from each line.
 
         Args:
             text: Text to unindent.
             n: Number of indent levels to remove (default: 4, removes up to 16 spaces).
         Returns:
             Unindented text.
+        Examples:
+            Peel off up to `n` levels of 4-space indentation::
+
+                >>> from my import ut
+                >>> print(ut.unindent('    a\n        b', 1))
+                a
+                    b
         """
         assert n > 0, 'Number of indent levels to remove must be > 0.'
         return re.compile(rf'(?m)^ {{1,{n * 4}}}').sub('', text)
@@ -219,6 +276,14 @@ class TextUtils(_UtilsBase):
             string: The text content to strip.
         Returns:
             String with surrounding quotes/emphasis removed.
+        Examples:
+            Strip matched quoting and emphasis pairs::
+
+                >>> from my import ut
+                >>> ut.strip_quotes('"hello"')
+                'hello'
+                >>> ut.strip_quotes("*'nested'*")
+                'nested'
         """
         string = string.strip()
         while len(string) > 2 and (c := string[0]) in '_*\'"':
@@ -263,6 +328,14 @@ class TextUtils(_UtilsBase):
             case: Case conversion - 'lower', 'upper', or 'none' (default: 'lower').
         Returns:
             Cleaned and normalized string suitable for identifiers.
+        Examples:
+            Slugify arbitrary text::
+
+                >>> from my import ut
+                >>> ut.clean_string('Héllo, World!')
+                'hello_world'
+                >>> ut.clean_string("Zoë's Café", case='none')
+                'Zoes-Cafe'
         """
         ret = iter_utils.build(string, unidecode, str.strip, cls._clean_nonwords)
         if case == 'lower':
@@ -280,18 +353,32 @@ class TextUtils(_UtilsBase):
             text: Text to extract words from.
         Returns:
             List of word strings.
+        Examples:
+            Pull out just the words::
+
+                >>> from my import ut
+                >>> ut.to_words('Hello, world - again!')
+                ['Hello', 'world', 'again']
         """
         return list(cls.RGXS['word'].findall(text))
 
     @staticmethod
     def line_num(article: str, pos: int | str) -> int:
-        """Calculate line number from character position or substring.
+        r"""Calculate line number from character position or substring.
 
         Args:
             article: Text to search within.
             pos: Character position (int) or substring to find (str).
         Returns:
             Line number (1-indexed).
+        Examples:
+            Locate by offset or by substring::
+
+                >>> from my import ut
+                >>> ut.line_num('ab\ncd\nef', 4)
+                2
+                >>> ut.line_num('ab\ncd\nef', 'ef')
+                3
         """
         if isinstance(pos, int):
             return article.count('\n', 0, pos) + 1
@@ -307,6 +394,14 @@ class TextUtils(_UtilsBase):
             default: Default value if parsing fails (default: '').
         Returns:
             Domain name without 'www.' prefix, or default if parsing fails.
+        Examples:
+            Extract the bare domain::
+
+                >>> from my import ut
+                >>> ut.parse_domain('https://www.example.com/page?q=1')
+                'example.com'
+                >>> ut.parse_domain('not a url', default='n/a')
+                'n/a'
         """
         if url:
             try:
@@ -318,19 +413,25 @@ class TextUtils(_UtilsBase):
 
     @staticmethod
     def wrap_paragraphs(text: str, width: int = 100) -> str:
-        """Wrap text to specified width, breaking on whitespace.
+        r"""Wrap text to specified width, breaking on whitespace.
 
         Args:
             text: Text to wrap.
             width: Maximum line width (default: 100).
         Returns:
             Wrapped text.
+        Examples:
+            Hard-wrap prose at a fixed width::
+
+                >>> from my import ut
+                >>> ut.wrap_paragraphs('one two three four', width=9)
+                'one two\nthree\nfour'
         """
         return textwrap.fill(text, width=width)
 
     @classmethod
     def unwrap_paragraphs(cls, text: str) -> str:
-        """Unwrap and normalize paragraph text, joining wrapped lines intelligently.
+        r"""Unwrap and normalize paragraph text, joining wrapped lines intelligently.
 
         Handles hyphenated line breaks, prose detection, and comment prefixes.
 
@@ -338,6 +439,12 @@ class TextUtils(_UtilsBase):
             text: Text with potentially wrapped paragraphs.
         Returns:
             Unwrapped text with proper spacing and line breaks.
+        Examples:
+            Rejoin hard-wrapped prose while preserving non-prose lines::
+
+                >>> from my import ut
+                >>> ut.unwrap_paragraphs('This line was\nhard-wrapped by an\neditor.\n\n- a bullet')
+                'This line was hard-wrapped by an editor.\n\n- a bullet'
         """
         text = textwrap.dedent(text.strip('\n'))
         text = cls.RGXS['comment_prefix'].sub('', text)

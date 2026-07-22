@@ -16,10 +16,24 @@ import pydantic as pyd
 ### BODY ###
 ############
 class UniqueId(pyd.RootModel[str]):
-    """A simple wrapper for uuid4 strings (32-byte hex codes), with validation and utilities.
+    """A simple wrapper for uuid4 strings (32 hex digits, hyphenated), with validation & utilities.
+
+    Also exported under the shorthand alias `Uid`.
 
     Attributes:
         root: The UUID string itself.
+
+    Examples:
+        Wrap an existing UUID string (normalized to lowercase), or generate a fresh one::
+
+            >>> from my import Uid
+            >>> uid = Uid('D6F00951-6E49-4C56-B443-56774EA3C71D')
+            >>> str(uid)
+            'd6f00951-6e49-4c56-b443-56774ea3c71d'
+            >>> uid == 'D6F00951-6E49-4C56-B443-56774EA3C71D'
+            True
+            >>> bool(Uid.RGX.fullmatch(Uid.newstr()))
+            True
     """
 
     RGX: ClassVar[re.Pattern] = re.compile(
@@ -50,12 +64,18 @@ class UniqueId(pyd.RootModel[str]):
             uid: Optional UUID string. If empty, generates a new UUID.
         Returns:
             UniqueId instance.
+        Examples:
+            Wrap a known UUID (note the bare-string repr)::
+
+                >>> from my import UniqueId
+                >>> UniqueId.new('D6F00951-6E49-4C56-B443-56774EA3C71D')
+                d6f00951-6e49-4c56-b443-56774ea3c71d
         """
         return cls(uid or str(uuid4()))
 
     @classmethod
     def newstr(cls) -> str:
-        """Generate a new UUID as a string (just a convience wrapper around `new()`)."""
+        """Generate a new UUID as a string (just a convenience wrapper around `new()`)."""
         return str(cls.new())
 
     def __hash__(self) -> int:
@@ -84,7 +104,16 @@ class UniqueId(pyd.RootModel[str]):
 
     @classmethod
     def remove_uids(cls, text: str) -> str:
-        """Remove all lines containing UUIDs from the given text."""
+        r"""Remove all lines containing UUIDs from the given text.
+
+        Examples:
+            Strip an identifier line from a block of text::
+
+                >>> from my import UniqueId
+                >>> text = 'keep me\nuid: d6f00951-6e49-4c56-b443-56774ea3c71d\nand me'
+                >>> UniqueId.remove_uids(text)
+                'keep me\nand me'
+        """
         return cls.UID_LINE_RGX.sub('', text)
 
 

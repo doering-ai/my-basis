@@ -32,15 +32,23 @@
 ## `II` Formatting
 
 ```{eval-rst}
+.. automethod:: my.utils.TextUtils.TextUtils.wrap
+```
+
+```{eval-rst}
+.. automethod:: my.utils.TextUtils.TextUtils.indent
+```
+
+```{eval-rst}
+.. automethod:: my.utils.TextUtils.TextUtils.unindent
+```
+
+```{eval-rst}
 .. automethod:: my.utils.TextUtils.TextUtils.strip_quotes
 ```
 
 ```{eval-rst}
 .. automethod:: my.utils.TextUtils.TextUtils.clean_string
-```
-
-```{eval-rst}
-.. automethod:: my.utils.TextUtils.TextUtils.wrap
 ```
 
 ```{eval-rst}
@@ -53,14 +61,6 @@
 
 ```{eval-rst}
 .. automethod:: my.utils.TextUtils.TextUtils.parse_domain
-```
-
-```{eval-rst}
-.. automethod:: my.utils.TextUtils.TextUtils.indent
-```
-
-```{eval-rst}
-.. automethod:: my.utils.TextUtils.TextUtils.unindent
 ```
 
 ```{eval-rst}

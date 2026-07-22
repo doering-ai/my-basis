@@ -20,7 +20,7 @@ from .TextUtils import text_utils
 ### BODY ###
 ############
 class SemanticUtils(_UtilsBase):
-    """Methods for semantic-y tasks (i.e. related to data's contant rather than its form)."""
+    """Methods for semantic-y tasks (i.e. related to data's content rather than its form)."""
 
     # ------------------
     # `0` ROMAN NUMERALS
@@ -49,6 +49,14 @@ class SemanticUtils(_UtilsBase):
             decimal: Integer to convert (typically 1-3999).
         Returns:
             Roman numeral string representation.
+        Examples:
+            Convert with proper subtractive notation::
+
+                >>> from my import ut
+                >>> ut.decimal_to_roman(1994)
+                'MCMXCIV'
+                >>> ut.decimal_to_roman(4)
+                'IV'
         """
         ans = ''
         for char, val in cls.ROMAN_MAP.items():
@@ -76,12 +84,23 @@ class SemanticUtils(_UtilsBase):
     def roman_to_decimal(cls, roman: str) -> int:
         """Convert Roman numeral notation to decimal integer.
 
-        Validates format and handles subtractive notation.
+        Validates format and handles subtractive notation. Note that non-canonical additive runs
+        that still parse (e.g. `IIII`) are summed rather than rejected.
 
         Args:
-            roman: Roman numeral string (case-insensitive).
+            roman: Roman numeral string, in either case.
         Returns:
             Decimal integer value, or 0 if invalid format.
+        Examples:
+            Parse subtractive notation, case-insensitively; malformed strings yield 0::
+
+                >>> from my import ut
+                >>> ut.roman_to_decimal('MCMXCIV')
+                1994
+                >>> ut.roman_to_decimal('mcmxciv')
+                1994
+                >>> ut.roman_to_decimal('MXQ')
+                0
         """
         ans = 0
         last_index = 0
@@ -91,7 +110,7 @@ class SemanticUtils(_UtilsBase):
             else:
                 last_index = match.end()
 
-            v = [cls.ROMAN_MAP[char] for char in match[0]]
+            v = [cls.ROMAN_MAP[char] for char in match[0].upper()]
             n_unique = len(set(v))
             if n_unique == 2:
                 mod = v[0] * (-1 if v[1] > v[0] else 1)
@@ -121,6 +140,16 @@ class SemanticUtils(_UtilsBase):
             width: Fixed width for formatting (default: 0 for no fixed width).
         Returns:
             Formatted string with appropriate suffix.
+        Examples:
+            Abbreviate counts and byte sizes::
+
+                >>> from my import ut
+                >>> ut.format_amount(2_300_000)
+                '2M'
+                >>> ut.format_amount(1_500_000, 'mem')
+                '2MB'
+                >>> ut.format_amount(42)
+                '42'
         """
         index = iter_utils.find(cls.BASELINES, lambda trip: amount >= trip[0])
         if index > -1:
@@ -228,6 +257,22 @@ class SemanticUtils(_UtilsBase):
         Raises:
             ValueError: If no singularization rule matches.
             AssertionError: If result is empty string.
+        Examples:
+            Handle regular, irregular, and Latin/Greek plurals -- case included::
+
+                >>> from my import ut
+                >>> ut.to_singular('cities')
+                'city'
+                >>> ut.to_singular('Geese')
+                'Goose'
+                >>> ut.to_singular('analyses')
+                'analysis'
+
+            Prepend custom rules via `overrides`::
+
+                >>> rules = ut.regex_array((r'(?i)^boxen$', lambda _: 'box'))
+                >>> ut.to_singular('boxen', overrides=rules)
+                'box'
         """
         if overrides is None:
             overrides = []
@@ -255,6 +300,12 @@ class SemanticUtils(_UtilsBase):
             Ordinal string with suffix (st/nd/rd/th), or empty string if input is '0' or empty.
         Raises:
             AssertionError: If input is not a valid integer string after stripping zeros.
+        Examples:
+            Pick the right suffix, teens included::
+
+                >>> from my import ut
+                >>> [ut.to_ordinal(n) for n in (1, 2, 3, 11, 23)]
+                ['1st', '2nd', '3rd', '11th', '23rd']
         """
         num = str(num).lstrip('0')
         if len(num) == 0:
@@ -334,6 +385,15 @@ class SemanticUtils(_UtilsBase):
             *symbols: Symbol names to validate.
         Raises:
             AssertionError: If any symbol is a keyword or invalid identifier.
+        Examples:
+            Pass silently on valid symbols, raise on reserved ones::
+
+                >>> from my import ut
+                >>> ut.validate_identifier('total_count')
+                >>> ut.validate_identifier('class')
+                Traceback (most recent call last):
+                    ...
+                AssertionError: Symbol class is invalid (Python keyword)
         """
         for sym in symbols:
             assert not keyword.iskeyword(sym), f'Symbol {sym} is invalid (Python keyword)'
@@ -342,3 +402,4 @@ class SemanticUtils(_UtilsBase):
 
 
 semantic_utils = SemanticUtils
+"""An alias of `SemanticUtils`, cased so as to imply static usage."""

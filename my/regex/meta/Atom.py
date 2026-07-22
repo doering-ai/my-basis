@@ -19,11 +19,20 @@ from .Quantifier import Quantifier
 ############
 @ft.total_ordering
 class Atom(pyd.BaseModel):
-    """An immutable, atomic element of a regex expression (e.g. literal characters, sets, & groups).
+    r"""An immutable, atomic element of a regex expression (e.g. characters, sets, & groups).
 
     Collections (sets and groups) can be broken down further in a way by identifying their
     alternating matches, but all atoms nonetheless share the quality of being indivisible in the
     context of the original expression that contains them.
+
+    Examples:
+        Inspect an atom's parts and shape::
+
+            >>> atom = Atom(r'\d{2,4}')
+            >>> atom.base, str(atom.quantifier)
+            ('\\d', '{2,4}')
+            >>> Atom(r'(?:ab)+').is_group, Atom(r'[ab]').is_set
+            (True, True)
     """
 
     GroupAtom: ClassVar[type['Atom']]
@@ -52,12 +61,11 @@ class Atom(pyd.BaseModel):
 
     @classmethod
     def plain_atomize(cls, expr: str) -> Generator[Self]:
-        """Iteratively generate *plain* atoms from the given expression.
+        r"""Iteratively generate *plain* atoms from the given expression.
 
-        ```{important}
-        This function is "plain" because it does NOT handle groups or sets -- the caller must
-        guarantee that neither type of atom appears in the snippet before calling this function.
-        ```
+        .. important::
+            This function is "plain" because it does NOT handle groups or sets -- the caller must
+            guarantee that neither type of atom appears in the snippet before calling this function.
 
         For general-purpose atomization, see `Regex.atomize()`.
 
@@ -65,6 +73,11 @@ class Atom(pyd.BaseModel):
             expr: The regex expression snippet to atomize.
         Yields:
             Atom objects representing each atomic element in the expression.
+        Examples:
+            Break a group-free snippet into its atoms::
+
+                >>> list(Atom.plain_atomize(r'ab\d+c?'))
+                ['a', 'b', '\\d+', 'c?']
         """
         yield from map(cls, META_RGXS['atom'].findall(expr))
 
@@ -139,7 +152,7 @@ class Atom(pyd.BaseModel):
     # ---------------
     @ft.cached_property
     def quantifier(self) -> Quantifier:
-        """Extracts the quantifier (if any) applied to this atom."""
+        """The quantifier applied to this atom, empty if it has none."""
         ret = ''
         if len(self) <= 1:
             pass
@@ -154,30 +167,27 @@ class Atom(pyd.BaseModel):
 
     @ft.cached_property
     def base(self) -> str:
-        """The unqualified 'base' text of this atom."""
+        """The unqualified 'base' text of this atom, i.e. its data without any quantifier."""
         return self.data[: -len(self.quantifier)] if self.quantifier else self.data
 
     @ft.cached_property
     def is_optional(self) -> bool:
-        """Determines if this atom has an optional quantifier.
-
-        E.g. ``r'?'``, ``r'*'``, ``r'{0,3}'``.
-        """
+        """Whether this atom has an optional quantifier (e.g. `?`, `*`, `{0,3}`)."""
         return self.quantifier.is_optional
 
     @ft.cached_property
     def is_group(self) -> bool:
-        """Whether this is atom is a group (e.g. '(?:abc)')."""
+        """Whether this atom is a group (e.g. ``(?:abc)``)."""
         return len(self) > 0 and self.data[0] == '('
 
     @ft.cached_property
     def is_set(self) -> bool:
-        """Whether this atom is a character set (e.g. '[A-Za-z]')."""
+        """Whether this atom is a character set (e.g. `[A-Za-z]`)."""
         return len(self) >= 3 and self.data[0] == '['
 
     @ft.cached_property
     def is_simple(self) -> bool:
-        """Whether if this atom is 'simple': a single literal w/ no repeating quantifier."""
+        """Whether this atom is 'simple': a single literal w/ no repeating quantifier."""
         return bool(self) and self.quantifier.is_simple
 
     # ------------
@@ -187,10 +197,18 @@ class Atom(pyd.BaseModel):
         """Create a copy of this atom with the given quantifier applied.
 
         Args:
-            quantifier: The quantifier string to apply (e.g., `r'?'`, `r'*+'`, `r'{2,5}'`).
-            overwrite: Whether to overwrite any existing quantifier.
+            quantifier: The quantifier string to apply (e.g. `?`, `*+`, `{2,5}`).
+            overwrite: Whether to overwrite any existing quantifier; if False, the two
+                quantifiers are combined instead (wrapping in a new group when necessary).
         Returns:
             A new, quantified atom (the original object is NOT modified).
+        Examples:
+            Apply a quantifier directly, or combine it with an existing one::
+
+                >>> Atom('a').quantify('{2,5}')
+                'a{2,5}'
+                >>> Atom('a+').quantify('?', overwrite=False)
+                'a*'
         """
         cls = self.__class__
         new = Quantifier(quantifier)
@@ -204,11 +222,11 @@ class Atom(pyd.BaseModel):
             return Atom.GroupAtom(rf'(?:{self.data}){new}')
 
     def as_optional(self) -> 'Atom':
-        """Generate a copy of this atom with its quantifier made optional (default `r'?'`)."""
+        """Generate a copy of this atom with its quantifier made optional (e.g. `a` -> `a?`)."""
         return self.quantify(r'?', overwrite=False)
 
     def as_required(self) -> Self:
-        """Generate a copy of this atom with its quantifier made non-optional (default `r''`)."""
+        """Generate a copy of this atom with its quantifier made required (e.g. `a*` -> `a+`)."""
         ret = self.quantify(self.quantifier.as_required(), overwrite=True)
         assert ret is not None and isinstance(ret, self.__class__)
         return ret

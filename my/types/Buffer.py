@@ -47,7 +47,7 @@ PairMode = Literal['all', 'roots', 'leaves']
 ### BODY ###
 ############
 class Buffer(pyd.BaseModel):
-    """A mutable text container optimized for iterative string modification.
+    r"""A mutable text container optimized for iterative string modification.
 
     Unlike immutable Python strings, buffers support in-place regex replacement while iterating over
     matches via functions such as `rgx_iterator()`. This enables complex text transformations that
@@ -65,6 +65,30 @@ class Buffer(pyd.BaseModel):
 
     Some functionality is also included for identifying "[hanging] chads", which refer to unmatched
     pair delimiters that are assumed to represent syntax errors in the original content.
+
+    Examples:
+        Create a buffer and modify it in place::
+
+            >>> from my import Buffer
+            >>> buf = Buffer.new('hello world')
+            >>> buf.replace('world', 'there')
+            Buffer("hello there", len=11)
+            >>> str(buf)
+            'hello there'
+
+        Replace matches while iterating over them::
+
+            >>> buf = Buffer.new('x1 x2 x3')
+            >>> for match in buf.rgx_iterator(r'x(\d)'):
+            ...     _ = buf.replace(match.span(), f'y{match[1]}!')
+            >>> str(buf)
+            'y1! y2! y3!'
+
+        Fence off backticked regions so pair matching skips them::
+
+            >>> buf = Buffer.new('a `b` c', fence_rgxs=['bactic'])
+            >>> list(buf.fence_spans)
+            [Span(2, 5)]
     """
 
     BUFF_LEN: ClassVar[int] = 1
@@ -101,10 +125,10 @@ class Buffer(pyd.BaseModel):
     fence_rgxs: list[str] = []
 
     fence_rgx: ut.RegexField | None = pyd.Field(default=None, exclude=True)
-    #: Version counter that increments on every text mutation (``_replace_span``).
+    #: Version counter that increments on every text mutation (`_replace_span()`).
     #: Used by consumers to cache iterator results and invalidate on change.
     _version: int = pyd.PrivateAttr(default=0)
-    #: Cache for :meth:`pair_list`, cleared automatically by version bumps.
+    #: Cache for `pair_list()`, cleared automatically by version bumps.
     _pair_cache: dict = pyd.PrivateAttr(default_factory=dict)
 
     # -------------------
@@ -140,11 +164,11 @@ class Buffer(pyd.BaseModel):
         fence_rgxs: list[str] | None = None,
         no_fence: bool = False,
     ) -> Self:
-        """The primary interface for creating new Buffers, providing flexible argument conversion.
+        """Create a new Buffer, flexibly coercing the given arguments.
 
-        The `fence_rgx` parameter allows the caller to control exactly what content-if any-will be
-        ignored while iterating through this buffer. For ease of use, 6 prewritten patterns can be
-        identified by name:
+        The `fence_rgxs` parameter allows the caller to control exactly what content -- if any --
+        will be ignored while iterating through this buffer. For ease of use, 6 prewritten patterns
+        can be identified by name:
 
         1. bactic: `` `...` ``
         2. parens: `(...)`
@@ -160,9 +184,17 @@ class Buffer(pyd.BaseModel):
             text: The string to coerce into the new buffer's initial value.
             uid: An optional identifier for the new buffer.
             fence_rgxs: A list of regex patterns (or names of default patterns) to use as fences.
-            no_fence: If set to True, disables fence calculation even if `fence_rgx` is given.
+            no_fence: If set to True, disables fence calculation even if `fence_rgxs` is given.
         Returns:
             A new Buffer instance (with fences calculated if possible).
+        Examples:
+            Create a plain buffer, and a fenced one::
+
+                >>> from my import Buffer
+                >>> Buffer.new('hello world')
+                Buffer("hello world", len=11)
+                >>> Buffer.new('a `b` c', fence_rgxs=['bactic']).has_fences
+                True
         """
         if no_fence or fence_rgxs is None:
             fence_rgxs = []
@@ -445,7 +477,7 @@ class Buffer(pyd.BaseModel):
         b1: int = -1,
         strict: bool = True,
     ) -> Iterator[Pair]:
-        """Finds all the "pairs" of text delimiters with the given fruit, handling edge cases.
+        """Find all the "pairs" of text delimiters matching the given regex, handling edge cases.
 
         See `pair_iterator()` for full usage details.
 
@@ -531,7 +563,7 @@ class Buffer(pyd.BaseModel):
     # ------------------
     @property
     def lines(self) -> list[str]:
-        """The number of distinct lines in the buffer."""
+        """The buffer's text, split into a list of lines."""
         return self.text[0].splitlines()
 
     @property
@@ -618,10 +650,9 @@ class Buffer(pyd.BaseModel):
         count: int = 0,
         diff: int = 0,
     ) -> Self:
-        """Replace the specified text with the new text, updating internal trackers as necessary.
+        r"""Replace the specified text with the new text, updating internal trackers as necessary.
 
-        ```{tip} Prefer to pass a precalculated span if you have it, to prevent rework.
-        ```
+        .. tip:: Prefer to pass a precalculated span if you have it, to prevent rework.
 
         Args:
             old: The substring, span, or regex pattern to replace.
@@ -631,6 +662,15 @@ class Buffer(pyd.BaseModel):
                 have simply moved by this static amount.
         Returns:
             The modified Buffer instance (for convenient access and/or builder patterns).
+        Examples:
+            Replace by substring, by span, or by regex::
+
+                >>> from my import Buffer
+                >>> import regex as re
+                >>> str(Buffer.new('a1 b2').replace(re.compile(r'\d'), '#'))
+                'a# b#'
+                >>> str(Buffer.new('hello world').replace((0, 5), 'goodbye'))
+                'goodbye world'
         """
         if isinstance(old, Pattern):
             self._replace_regex(old, new, count)
@@ -711,7 +751,7 @@ class Buffer(pyd.BaseModel):
         return rgx.findall(self.text[0], *args, **kwargs)
 
     def sub(self, rgx: Pattern, new: str, count: int = 0) -> None:
-        """Direct wrapper for _replace_regex(), defined to match the base regex interface.
+        """Direct wrapper for `_replace_regex()`, defined to match the base regex interface.
 
         Args:
             rgx: The regex pattern to replace.
@@ -729,6 +769,12 @@ class Buffer(pyd.BaseModel):
             b1: The positive, exclusive end bound, or -1 to apply up to the end of the text.
         Returns:
             The modified Buffer instance (for convenient access and/or builder patterns).
+        Examples:
+            Apply a transformation to the whole buffer::
+
+                >>> from my import Buffer
+                >>> str(Buffer.new('abc').apply(str.upper))
+                'ABC'
         """
         if b1 == -1:
             b1 = len(self)
@@ -745,7 +791,15 @@ class Buffer(pyd.BaseModel):
         return self
 
     def linespan(self, pos: int) -> Span:
-        """Find the start and end of the line on which pos sits."""
+        r"""Find the start and end of the line on which `pos` sits.
+
+        Examples:
+            Locate the line containing position 5::
+
+                >>> from my import Buffer
+                >>> Buffer.new('one\ntwo\nthree').linespan(5)
+                Span(4, 7)
+        """
         assert 0 <= pos < len(self), f'Position {pos} is out of bounds'
         text = self.text[0]
         start = text.rfind('\n', 0, pos + 1) + 1
@@ -762,20 +816,29 @@ class Buffer(pyd.BaseModel):
         return self
 
     def write(self, span: Span, text: str | Iterable[str], spacing: int = 0, diff: int = 0) -> None:
-        """Wraps a given string output in preparation for it to be inserted into the article.
+        """Wrap a given string output in preparation for it to be inserted into the buffer.
 
-        Offers four distinct spacing modes:
-        - 0: No spacing
-        - 1: Ensures space or newline exists before and after
-        - 2: Ensures newline exists before and after
-        - 3: Ensures two newlines (i.e. an empty line) exists before and after
+        Offers three distinct spacing modes, each of which also serves as the separator when `text`
+        is an iterable of strings to join:
+
+        - 0: Ensures a space (or other whitespace/punctuation) exists before and after
+        - 1: Ensures a newline exists before and after
+        - 2: Ensures two newlines (i.e. an empty line) exist before and after
 
         Args:
             span: The span of text to replace.
             text: The text to insert, either as a single string or an iterable of strings to join.
-            spacing: The spacing mode to use (0-3).
+            spacing: The spacing mode to use (0-2).
             diff: When set, indicates that any fences found within the old text are still there, but
                 have simply moved by this static amount.
+        Examples:
+            Write into a buffer, ensuring space separation::
+
+                >>> from my import Buffer, Span
+                >>> buf = Buffer.new('ab')
+                >>> buf.write(Span(1, 2), 'c', spacing=0)
+                >>> str(buf)
+                'a c'
         """
         if not text:
             self.drop(span)
@@ -807,7 +870,7 @@ class Buffer(pyd.BaseModel):
         self._replace_span(span, newtext, diff)
 
     def find_chads(self, rgx: Pattern, b0: int = 0, b1: int = -1) -> tuple[list[Span], list[Span]]:
-        """Searches for one or more "hanging chads" -- unmatched delimiters of the given regex pair.
+        r"""Search for one or more "hanging chads" -- unmatched delimiters of the given regex pair.
 
         See `find_pair_match()` for details on pairs in general.
 
@@ -817,6 +880,14 @@ class Buffer(pyd.BaseModel):
             b1: The positive, exclusive end bound for searching, or -1 to search the whole text.
         Returns:
             A tuple of two lists: (unmatched_starts, unmatched_ends)
+        Examples:
+            Find the unmatched opening paren::
+
+                >>> from my import Buffer
+                >>> import regex as re
+                >>> pair_rgx = re.compile(r'(?P<start>\()|(?P<end>\))')
+                >>> Buffer.new('a (b (c d) e').find_chads(pair_rgx)
+                ([Span(2, 3)], [])
         """
         pos = b0
         b1 = b1 if b1 != -1 else len(self)
@@ -847,7 +918,7 @@ class Buffer(pyd.BaseModel):
         b0: int = 0,
         b1: int = -1,
     ) -> tuple[Span, str, str, str] | None:
-        """Find the the given substrings "partner", handling nesting & other edge cases.
+        r"""Find the given substring's "partner", handling nesting & other edge cases.
 
         Args:
             rgx: The regex pattern with the named groups 'start' and 'end'.
@@ -856,6 +927,14 @@ class Buffer(pyd.BaseModel):
             b1: The end bound for searching.
         Returns:
             `(full_span, start_text, body_text, end_text)` if a match is found, else `None`.
+        Examples:
+            Find the pair enclosing position 6::
+
+                >>> from my import Buffer
+                >>> import regex as re
+                >>> pair_rgx = re.compile(r'(?P<start>\()|(?P<end>\))')
+                >>> Buffer.new('a (b (c) d) e').find_pair_match(pair_rgx, 6)
+                (Span(5, 8), '(', 'c', ')')
         """
         for span, start, body, end in self.pair_iterator(rgx, 'all', b0, b1):
             if pos in span:
@@ -869,7 +948,7 @@ class Buffer(pyd.BaseModel):
         b0: int = 0,
         b1: int = -1,
     ) -> Iterator[tuple[Span, str, str, str]]:
-        """Iterate through matching "pairs" of delimiters, handling nesting and other edge cases.
+        r"""Iterate through matching "pairs" of delimiters, handling nesting and other edge cases.
 
         Like the other Buffer iterators, this method supports a read+write paradigm where callers
         modify the buffer's text while they iterate over it. To make this possible, it is assumed
@@ -884,7 +963,18 @@ class Buffer(pyd.BaseModel):
             b0: The positive, inclusive start bound for searching.
             b1: The positive, exclusive end bound for searching, or -1 to search the whole text.
         Yields:
-            Tuples of spans representing the start and end delimiters.
+            `(full_span, start_text, body_text, end_text)` tuples, innermost pairs first.
+        Examples:
+            Iterate over nested paren pairs::
+
+                >>> from my import Buffer
+                >>> import regex as re
+                >>> pair_rgx = re.compile(r'(?P<start>\()|(?P<end>\))')
+                >>> buf = Buffer.new('a (b (c) d) e')
+                >>> for span, start, body, end in buf.pair_iterator(pair_rgx):
+                ...     print(span, repr(body))
+                5-7 'c'
+                2-10 'b (c) d'
         """
         yield from map(self._yield_pair, self.raw_pair_iterator(rgx, mode, b0, b1))
 
@@ -895,12 +985,12 @@ class Buffer(pyd.BaseModel):
         b0: int = 0,
         b1: int = -1,
     ) -> list[tuple[Span, str, str, str]]:
-        """Materialized, cached version of :meth:`pair_iterator` for read-only passes.
+        r"""Materialized, cached version of `pair_iterator()` for read-only passes.
 
-        Returns the full list of ``(full_span, start_text, body_text, end_text)`` tuples.
-        Results are cached per ``(rgx identity, mode, buffer version)`` and invalidated
-        on any text mutation.  Use this instead of ``pair_iterator`` when the caller
-        does not modify the buffer during iteration — it avoids re-running the regex
+        Returns the full list of `(full_span, start_text, body_text, end_text)` tuples.
+        Results are cached per `(rgx identity, mode, buffer version)` and invalidated
+        on any text mutation. Use this instead of `pair_iterator()` when the caller
+        does not modify the buffer during iteration -- it avoids re-running the regex
         scan on repeated calls with the same delimiter pattern.
 
         Args:
@@ -909,7 +999,16 @@ class Buffer(pyd.BaseModel):
             b0: The positive, inclusive start bound for searching.
             b1: The positive, exclusive end bound for searching, or -1 to search the whole text.
         Returns:
-            A list of ``(full_span, start_text, body_text, end_text)`` tuples.
+            A list of `(full_span, start_text, body_text, end_text)` tuples.
+        Examples:
+            List only the outermost (root) pairs::
+
+                >>> from my import Buffer
+                >>> import regex as re
+                >>> pair_rgx = re.compile(r'(?P<start>\()|(?P<end>\))')
+                >>> pairs = Buffer.new('a (b (c) d) e').pair_list(pair_rgx, 'roots')
+                >>> [pair[0] for pair in pairs]
+                [Span(2, 11)]
         """
         key = (id(rgx), mode, b0, b1, self._version)
         if key not in self._pair_cache:
@@ -925,20 +1024,31 @@ class Buffer(pyd.BaseModel):
         b0: int = 0,
         b1: int = -1,
     ) -> Iterator[Match]:
-        """Iterate over all matches of the given regex pattern in the buffer.
+        r"""Iterate over all matches of the given regex pattern in the buffer.
 
         Like the other Buffer iterators, this method supports a read+write paradigm where callers
         modify the buffer's text while they iterate over it. To make this possible, it is assumed
         that the caller will only ever modify the last-yielded match of text during each iteration.
 
-        It also respects the 'fence' spans specified during initialization, such as code blocks in
-        Markdown files or character sets in regular expressions.
+        Unlike the pair iterators, this method does not currently skip the 'fence' spans specified
+        during initialization -- every match in the bounds is yielded, fenced or not.
 
         Args:
             rgx: The regex pattern to search for (compiled or as a plain string).
             recursive: If set, overlapping matches are also found.
             b0: The positive, inclusive start bound for searching.
             b1: The positive, exclusive end bound for searching, or -1 to search the whole text.
+        Yields:
+            Match objects for each occurrence, adjusted for any in-flight modifications.
+        Examples:
+            Rewrite each match while iterating::
+
+                >>> from my import Buffer
+                >>> buf = Buffer.new('x1 x2 x3')
+                >>> for match in buf.rgx_iterator(r'x(\d)'):
+                ...     _ = buf.replace(match.span(), f'y{match[1]}!')
+                >>> str(buf)
+                'y1! y2! y3!'
         """
         if isinstance(rgx, str):
             rgx = self.RGXS.get(rgx, re.compile(rgx))

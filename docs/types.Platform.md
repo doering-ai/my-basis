@@ -5,5 +5,8 @@
 
 ```{eval-rst}
 .. autoclass:: my.types.Platform.Platform
-   :members:
+```
+
+```{eval-rst}
+.. automethod:: my.types.Platform.Platform.local
 ```

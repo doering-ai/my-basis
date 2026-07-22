@@ -7,6 +7,11 @@
 .. autoclass:: my.regex.RegexStore.RegexStore
 ```
 
+```{eval-rst}
+.. autoclass:: my.regex.RegexStore.RegexStore.Options
+   :members:
+```
+
 ## `I` Initial Methods
 
 ```{eval-rst}

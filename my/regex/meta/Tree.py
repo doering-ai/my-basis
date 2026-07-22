@@ -27,7 +27,15 @@ class Tree(pyd.BaseModel):
     """A collection of alternative "branches" for a regex position, for use in optimization code.
 
     Examples:
-        - `Tree('(?:br1|br2|br3)')` -> `{prefix: 'br', branches: ['1', '2', '3'], suffix: ''}`
+        Decompose an alternation, then factor its shared context back out::
+
+            >>> from my import Tree
+            >>> tree = Tree('(?:br1|br2|br3)').expand()
+            >>> [str(branch) for branch in tree.branches]
+            ['br1', 'br2', 'br3']
+            >>> tree = tree.factor()
+            >>> (str(tree.prefix), [str(branch) for branch in tree.branches])
+            ('br', ['[123]'])
     """
 
     # Primary data
@@ -84,7 +92,15 @@ class Tree(pyd.BaseModel):
         *args: str | Atom | Regex | Sequence[Regex] | Iterator[Regex] | Self,
         **kwargs: Any,
     ) -> Self:
-        """Construct a new instance from the given branches, casting flexibly."""
+        """Construct a new instance from the given branches, casting flexibly.
+
+        Examples:
+            Alternated strings and standalone arguments both become branches::
+
+                >>> from my import Tree
+                >>> [str(branch) for branch in Tree.new('a|b', 'c').branches]
+                ['a', 'b', 'c']
+        """
         return cls(
             branches=list(mi.flatten(map(cls._parse_arg, args))),
             **kwargs,
@@ -122,10 +138,8 @@ class Tree(pyd.BaseModel):
             raise TypeError(f'Unsupported type for Branches initialization: {type(arg)}')
 
     def supports_atomic_grouping(self) -> bool:
-        """Decides whether the given branches can be safely grouped in an atomic group.
+        """Decides whether this tree's branches can be safely grouped in an atomic group.
 
-        Args:
-            branches: The list of atom sequences representing alternative branches.
         Returns:
             True if this tree can be joined atomically (i.e. with `(?>...)`), False otherwise.
         """
@@ -143,11 +157,10 @@ class Tree(pyd.BaseModel):
     def _is_set_eligible(atom: Atom | Regex) -> bool:
         """Determine if the given atom can be isomorphically added to a (simple) character set.
 
-        ```{note}
-        For this purpose, clean() should have removed any simply-quantified (AKA optional)
-        branches already *if* that were possible.
-        Thus they should not be re-handled here, but rather ignored as complex.
-        ```
+        .. note::
+            For this purpose, `clean()` should have removed any simply-quantified (AKA optional)
+            branches already *if* that were possible.
+            Thus they should not be re-handled here, but rather ignored as complex.
         """
         if isinstance(atom, Regex):
             atom = atom.one
@@ -188,7 +201,7 @@ class Tree(pyd.BaseModel):
         Args:
             branches: A list of sorted expressions assumed to be alternated by their parent.
         Yields:
-            Lists of atoms, each representing a contiguous subset of this tree's branches.
+            Lists of branches, each representing a contiguous subset of the given branches.
         """
         _split = lambda lhs, rhs: not cls.greatest_common_prefix(lhs, rhs)
         yield from mi.split_when(branches, _split)
@@ -202,7 +215,7 @@ class Tree(pyd.BaseModel):
         Args:
             trees: A list of tree instances to group.
         Yields:
-            Lists of Block instances, each representing a contiguous subset of the given trees.
+            Tree instances, each merging a contiguous subset of the given trees.
         """
         _split = lambda lhs, rhs: not cls.greatest_common_suffix(*lhs, *rhs)
         serialized_blocks = list(map(cls.serialize, trees))
@@ -210,7 +223,7 @@ class Tree(pyd.BaseModel):
             yield cls.new(*mi.flatten(branch_group))
 
     def set_quantifier(self, quantifier: str | Quantifier, overwrite: bool = False) -> bool:
-        """Attempt to set the quantifier for this block to an optional version of itself.
+        """Attempt to apply the given quantifier to this tree.
 
         Determines whether to write to the main quantifier (wrapping everything) or the "inner"
         quantifier, which just applies to the branches themselves. If the tree has no context
@@ -225,7 +238,8 @@ class Tree(pyd.BaseModel):
             quantifier: The quantifier to apply.
             overwrite: If True, overwrite any existing quantifier instead of combining.
         Returns:
-            True if the quantifier is optional, False if this is not possible (e.g. `{3,5}`)
+            True if the quantifier was set (or combined with the existing one), False if the two
+            cannot be combined without nested groups (e.g. `{3,5}` plus `?`).
         """
         has_context = self.prefix or self.suffix
         field = 'inner_quant' if has_context else 'quantifier'
@@ -267,7 +281,7 @@ class Tree(pyd.BaseModel):
     # `+` Primary Methods
     # -------------------
     def expand_branch(self, branch: Regex) -> Generator[Regex]:
-        """Expand a branch into an equivelant alternation of multiple branches, if possible.
+        """Expand a branch into an equivalent alternation of multiple branches, if possible.
 
         If no atoms within are expandable, it will naturally return the same
         branch that was passed in, unchanged.
@@ -331,7 +345,16 @@ class Tree(pyd.BaseModel):
 
     @classmethod
     def expand_set(cls, atom: Atom) -> Self:
-        """Split a set atom into individual branches, if possible."""
+        """Split a set atom into individual branches, if possible.
+
+        Examples:
+            An optional set contributes an extra empty branch::
+
+                >>> from my.regex.meta import SetAtom
+                >>> tree = Tree.expand_set(SetAtom('[abc]?'))
+                >>> ([str(branch) for branch in tree.branches], str(tree.quantifier))
+                (['', 'a', 'b', 'c'], '')
+        """
         # 0. Validate
         assert isinstance(atom, SetAtom), f'Expected set atom, got: {atom!r}'
         if not atom.is_simple:
@@ -361,21 +384,21 @@ class Tree(pyd.BaseModel):
     def condense_atomic_branches(cls, branches: list[Regex]) -> list[Regex]:
         """Condense a set of monatomic branches into an isomorphic, shorter version (if possible).
 
-        ```{note}
-        This is just a special case of condense() above where all the alternatives are themselves
-        atomic.
-        ```
-
-        Examples:
-        ```py
-        _condense_atomic_branches(['a', 'b', '']) # -> '[ab]?'
-        _condense_atomic_branches(['(?:one)', '(?:two)', 'a', 'b', '']) # -> '(?:one|two|[ab])?'
-        ```
+        .. note::
+            This is just a special case of `condense()` below where all the alternatives are
+            themselves atomic.
 
         Args:
             branches: A list of valid expressions, each of which has just one atom.
         Returns:
             An isomorphic version of the inputs that has been optimized as much as possible.
+        Examples:
+            Set-eligible branches merge into one character set; the rest pass through::
+
+                >>> from my import Regex
+                >>> branches = [Regex('a'), Regex('b'), Regex('(?:one)')]
+                >>> [str(branch) for branch in Tree.condense_atomic_branches(branches)]
+                ['(?:one)', '[ab]']
         """
         # I. Validate that this block only has single-atom branches
         atoms = [br.one for br in branches]
@@ -399,10 +422,10 @@ class Tree(pyd.BaseModel):
         """Construct a single tree from a list of trees, factoring out shared suffixes if possible.
 
         We don't check for shared prefixes because those would've been handled already as part of
-        the primary factor() step -- each block represents a prefix group.
+        the primary `factor()` step -- each tree represents a prefix group.
 
         Args:
-            trees: The list of Block instances to condense.
+            trees: The list of tree instances to condense.
         Returns:
             The optimized list of regex branches, isomorphic to the original set of trees.
         """
@@ -479,7 +502,14 @@ class Tree(pyd.BaseModel):
         given context.
 
         Returns:
-            A quantifier that can be applied to the whole set of branches.
+            This tree, cleaned in place.
+        Examples:
+            An empty branch is absorbed into an optional quantifier::
+
+                >>> from my import Tree
+                >>> tree = Tree('a', 'b', '').clean()
+                >>> ([str(branch) for branch in tree.branches], str(tree.quantifier))
+                (['a', 'b'], '?')
         """
         # I. FIRST PASS
         to_drop: set[int] = set()
@@ -501,13 +531,21 @@ class Tree(pyd.BaseModel):
     def expand(self) -> Self:
         """Recursively split all our branches into more explicit, longer versions.
 
-        Examples:
-            - expand(r'confirm(?:ation)?') -> r'(?:confirm|confirmation)'
-            - expand(r'a[bc]d') -> r'(?:abd|acd)'
-        Args:
-            max_per_branch: The maximum number of atoms to split per branch (default: 4).
+        The number of atoms expanded per branch is capped by the `max_expand` field.
+
         Returns:
-            The modified block instance with expanded branches.
+            This tree, with its branches expanded in place.
+        Examples:
+            Expand an optional suffix into explicit branches::
+
+                >>> from my import Tree
+                >>> [str(branch) for branch in Tree(r'confirm(?:ation)?').expand().branches]
+                ['confirm', 'confirmation']
+
+            Character sets expand too::
+
+                >>> [str(branch) for branch in Tree(r'a[bc]d').expand().branches]
+                ['abd', 'acd']
         """
         if self:
             self.branches = list(mi.flatten(map(self.expand_branch, self.branches)))
@@ -515,7 +553,16 @@ class Tree(pyd.BaseModel):
         return self
 
     def factor(self) -> Self:
-        """Factor out common prefixes and suffixes from the branches in the main data structure."""
+        """Factor out common prefixes and suffixes from the branches in the main data structure.
+
+        Examples:
+            A shared prefix moves into the tree's context::
+
+                >>> from my import Tree
+                >>> tree = Tree('street', 'stream', 'strap').factor()
+                >>> (str(tree.prefix), str(tree.render()))
+                ('str', 'str(?>eet|eam|ap)')
+        """
         # 0. Return immediately if this is a single branch
         if len(self) <= 1 or self.max_length <= 1:
             return self
@@ -549,6 +596,14 @@ class Tree(pyd.BaseModel):
 
         This method builds an efficient regex pattern by identifying and extracting common
         prefixes and suffixes from multiple branches, minimizing redundancy in the result.
+
+        Examples:
+            The `expand()` / `condense()` cycle is the core of `RegexStore`'s optimization::
+
+                >>> from my import Tree
+                >>> tree = Tree('grape', 'grapefruit', 'apple').expand()
+                >>> str(tree.condense().render())
+                '(?>apple|grape(?:fruit)?)'
         """
         cls = self.__class__
 
@@ -585,13 +640,16 @@ class Tree(pyd.BaseModel):
     # `*3` Serialization
     # ------------------
     def render(self) -> Regex:
-        """Render the given branches into a regex group, applying optimizations where possible.
+        """Render this tree's branches into a regex group, applying optimizations where possible.
 
-        Args:
-            branches: The list of atom sequences representing alternative branches.
-            quantity: The quantifier string to apply to the entire group.
         Returns:
             A pattern representing the properly combined & wrapped branches.
+        Examples:
+            Simple branches are joined atomically, with the context applied around them::
+
+                >>> from my import Tree
+                >>> str(Tree('a', 'b', quantifier='?').render())
+                '(?>a|b)?'
         """
         # I. Clean the branch list, identifying optional branches and pre-combining where possible
         if not self:
@@ -613,6 +671,13 @@ class Tree(pyd.BaseModel):
         This output is intended for consumption by other trees, rather than callers building
         expressions. For the output to serve as an isomorphic version of this tree, all the branches
         must be alternated together.
+
+        Examples:
+            Contextual trees serialize to a single rendered branch::
+
+                >>> from my import Tree
+                >>> [str(branch) for branch in Tree('a', 'b', prefix='x').serialize()]
+                ['x(?>a|b)']
         """
         if len(self) == 0:
             return []
@@ -622,5 +687,13 @@ class Tree(pyd.BaseModel):
             return self.branches
 
     def export_branches(self) -> list[Regex]:
-        """Export the branches of this block as standalone expressions."""
+        """Export the branches of this tree as standalone expressions.
+
+        Examples:
+            Each branch gets its own copy of the tree's context::
+
+                >>> from my import Tree
+                >>> [str(branch) for branch in Tree('a', 'b', prefix='x').export_branches()]
+                ['xa', 'xb']
+        """
         return list(map(self.contextualize, self.branches))

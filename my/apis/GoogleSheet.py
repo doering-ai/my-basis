@@ -43,35 +43,46 @@ logger = logging.getLogger()
 class GoogleSheet:
     """A singleton wrapping the Google Sheets API v4 for usage in scripts and notebooks.
 
-    This code is written against [Google's v4 HTML API](https://developers.google.com/workspace/sheets/api/reference/rest)
-    for their Google Sheets product. They have multiple official python packages, but they all are
-    fatally flawed in one way or another.
+    This code is written against `Google's v4 REST API
+    <https://developers.google.com/workspace/sheets/api/reference/rest>`__ for their Google
+    Sheets product. They have multiple official python packages, but they all are fatally
+    flawed in one way or another.
 
-    ```{important}
-    These methods are only present if the **optional** `google` dependency is installed
-    (`pip install my-basis[google]`). If you try to call them without it, an `ImportError` will
-    be thrown.
-    ```
+    .. important::
+       These methods are only present if the **optional** `google` dependency is installed
+       (`pip install my-basis[google]`). If you try to call them without it, an `ImportError`
+       will be thrown.
 
-    Authentication is handled automatically via Google's [OAuth2.0 for Web Server Applications](https://developers.google.com/identity/protocols/oauth2/web-server)
-    flow, which works by prompting the user to log in via an auto-launched browser window.
-    From there, this class handles token caching and refresh, storing credentials in the `creds_dir`
-    directory.
+    Authentication is handled automatically via Google's `OAuth2.0 for Web Server Applications
+    <https://developers.google.com/identity/protocols/oauth2/web-server>`__ flow, which works by
+    prompting the user to log in via an auto-launched browser window. From there, this class
+    handles token caching and refresh, storing credentials in the `creds_dir` directory.
 
-    ```{caution}
-    Credentials are stored unencrypted. Though they do expire quickly, please do not use this on an
-    unsecure system without setting up some sort of encryption!
-    ```
+    .. caution::
+       Credentials are stored unencrypted. Though they do expire quickly, please do not use this
+       on an unsecure system without setting up some sort of encryption!
 
-    Data is seamlessly converted between Google Sheets' list-of-lists format and pandas DataFrames.
-    The class supports both single and batch operations for reading and writing worksheets, with
-    intelligent handling of headers, indices, and cell ranges. Methods like `read()`/`batch_read
-    ()` and `write()`/`batch_write()` abstract away the complexity of the underlying API while
-    preserving flexibility through A1-notation cell ranges.
+    Data is seamlessly converted between Google Sheets' list-of-lists format and pandas
+    DataFrames. The class supports both single and batch operations for reading and writing
+    worksheets, with intelligent handling of headers, indices, and cell ranges. Methods like
+    `read()`/`batch_read()` and `write()`/`batch_write()` abstract away the complexity of the
+    underlying API while preserving flexibility through A1-notation cell ranges.
 
-    The singleton pattern ensures a single authenticated connection is maintained throughout your
-    application's lifecycle, with explicit `connect()` and `disconnect()` methods for resource
-    management.
+    The singleton pattern ensures a single authenticated connection is maintained throughout
+    your application's lifecycle, with explicit `connect()` and `disconnect()` methods for
+    resource management.
+
+    Examples:
+        Connect once, then move worksheets in and out as DataFrames (requires the `google`
+        extra, plus a browser for the first OAuth run)::
+
+            >>> from my.apis import GoogleSheet
+            >>> sheet = GoogleSheet()  # doctest: +SKIP
+            >>> sheet.connect('1BxiM...your-sheet-id...upms')  # doctest: +SKIP
+            >>> sheet.worksheets  # doctest: +SKIP
+            ['Roster', 'Scores']
+            >>> df = sheet.read('Roster')  # doctest: +SKIP
+            >>> sheet.write('Scores', df)  # doctest: +SKIP
     """
 
     INST: ClassVar[GoogleSheet | None] = None
@@ -120,7 +131,10 @@ class GoogleSheet:
 
     @_import_guard
     def connect(self, uid: str) -> None:
-        """Connect to a Google Sheet via its sheet ID, loading its conents into local memory.
+        """Connect to a Google Sheet via its sheet ID, loading its contents into local memory.
+
+        Fetches the sheet's metadata, recording its display `name` and the ordered list of its
+        `worksheets`. Triggers the OAuth flow on first use (see `auth()`).
 
         Args:
             uid: The Google Sheet ID (not URL).
@@ -154,9 +168,9 @@ class GoogleSheet:
 
         self.LOGGER.info('Closed Google Sheets connection.')
 
-    # -------------------
-    # `-` Private Methods
-    # -------------------
+    # ---------------------------
+    # `-` Serialization Utilities
+    # ---------------------------
     @staticmethod
     @_import_guard
     def serialize_data(
@@ -172,6 +186,16 @@ class GoogleSheet:
             index: If true, include the index as the first column.
         Returns:
             A list of lists representing the DataFrame.
+        Examples:
+            Serialize a small frame, with and without its index::
+
+                >>> import pandas as pd
+                >>> from my.apis import GoogleSheet
+                >>> df = pd.DataFrame({'name': ['ada', 'bob'], 'score': [92, 85]})
+                >>> GoogleSheet.serialize_data(df)
+                [['name', 'score'], ['ada', '92'], ['bob', '85']]
+                >>> GoogleSheet.serialize_data(df, index=True)
+                [['index', 'name', 'score'], ['0', 'ada', '92'], ['1', 'bob', '85']]
         """
         df = data.copy().reset_index()
         values = df.fillna('').astype(str).to_numpy().tolist()
@@ -188,10 +212,20 @@ class GoogleSheet:
 
         Args:
             values: The list of lists to deserialize.
-            header: If true, use the first row as column names.
+            header: The 1-based row number to use as column names (rows before it are dropped),
+                or 0 to number the columns instead. Short header rows are padded with
+                `Column N` placeholders.
             index: The column to use as the index, if any.
         Returns:
             A pandas DataFrame representing the data.
+        Examples:
+            Rebuild a DataFrame from raw cell values::
+
+                >>> from my.apis import GoogleSheet
+                >>> GoogleSheet.deserialize_data([['name', 'score'], ['ada', '92'], ['bob', '85']])
+                  name score
+                0  ada    92
+                1  bob    85
         """
         if not any(values):
             return pd.DataFrame()
@@ -219,6 +253,14 @@ class GoogleSheet:
             start: The cell to place the top-left corner of the block on (default `A1`).
         Returns:
             An A1-style range string.
+        Examples:
+            Anchor a block at the origin or at an arbitrary cell::
+
+                >>> from my.apis import GoogleSheet
+                >>> GoogleSheet.shape_to_range((3, 5))
+                'A1:C5'
+                >>> GoogleSheet.shape_to_range((2, 2), start='B2')
+                'B2:C3'
         """
 
         def col_to_num(col: str) -> int:
@@ -375,6 +417,7 @@ class GoogleSheet:
         """Return the Google Sheets API `values` resource."""
         return self.sheets_api.values()
 
+    @_import_guard
     def mtime(self) -> datetime | None:
         """Get the last modified time of the connected Google Sheet, or `None` if not connected."""
         if self.is_connected:
@@ -398,6 +441,11 @@ class GoogleSheet:
             index: The index of the column to use as the row names (i.e. the 'index'), if any.
         Returns:
             A pandas DataFrame with the worksheet data.
+        Examples:
+            Load a range, optionally naming the header and index (requires a connection)::
+
+                >>> df = sheet.read(
+                ...     'Roster', cells='A1:C10', header=1, index='name')  # doctest: +SKIP
         """
         response = self.exec('get', range=f'{worksheet}!{cells}')
         return self.deserialize_data(response['values'], header=header, index=index)
@@ -410,6 +458,13 @@ class GoogleSheet:
             *args: The worksheet names or ranges to load.
             **kwargs: Additional options for each range. Each value is a dictionary of options to
                 pass to `deserialize_data`.
+        Returns:
+            A map from range strings to DataFrames, with keys simplified to bare worksheet
+            names whenever those are unique.
+        Examples:
+            Load several worksheets in one API call (requires a connection)::
+
+                >>> frames = sheet.batch_read('Roster', 'Scores!A1:D20')  # doctest: +SKIP
         """
         # I. Issue the request
         n_args = len(args)
@@ -442,6 +497,11 @@ class GoogleSheet:
         Args:
             worksheet: The worksheet name(s) to clear.
             cells: The cell range(s) to clear.
+        Examples:
+            Clear one range, or several worksheets at once (requires a connection)::
+
+                >>> sheet.clear('Roster', 'A2:C100')  # doctest: +SKIP
+                >>> sheet.clear(['Roster', 'Scores'])  # doctest: +SKIP
         """
         if isinstance(worksheet, str):
             assert isinstance(cells, str)
@@ -467,6 +527,10 @@ class GoogleSheet:
             data: The DataFrame to write.
             cells: The range of cells to write to.
             **kwargs: Additional arguments to pass to `serialize_data`.
+        Examples:
+            Write a DataFrame into a worksheet, headers included (requires a connection)::
+
+                >>> sheet.write('Scores', df, cells='A1:Z')  # doctest: +SKIP
         """
         response = self.exec(
             'update',
@@ -480,8 +544,15 @@ class GoogleSheet:
     def batch_write(self, **kwargs: pd.DataFrame) -> None:
         """Write multiple DataFrames to the Google Sheet in a single batch operation.
 
+        Bare worksheet names have a range (and headers/index) computed from each DataFrame's
+        shape; explicit `Sheet!A1:...` targets are written as-is.
+
         Args:
-            **kwargs: A maping from cell ranges to `DataFrame` objects.
+            **kwargs: A mapping from worksheet names or cell ranges to `DataFrame` objects.
+        Examples:
+            Write two worksheets in one API call (requires a connection)::
+
+                >>> sheet.batch_write(Roster=roster_df, Scores=scores_df)  # doctest: +SKIP
         """
         requests = []
         # I. Build the requests, adding on cell info where needed
@@ -516,6 +587,11 @@ class GoogleSheet:
         Args:
             *args: The names of the worksheets to add with default properties.
             **kwargs: A map of properties to set for each worksheet.
+        Examples:
+            Add plain and customized worksheets together (requires a connection)::
+
+                >>> sheet.add_worksheets(
+                ...     'Notes', Wide=dict(gridProperties=dict(columnCount=40)))  # doctest: +SKIP
         """
         worksheets = [
             *(dict(title=worksheet) for worksheet in args),
@@ -536,4 +612,5 @@ class GoogleSheet:
         self.LOGGER.info(f'Created {len(worksheets)} new worksheets in {self.name}')
 
 
+#: Global instance of this class for convenient access.
 gsheet = GoogleSheet()

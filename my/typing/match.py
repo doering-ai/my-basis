@@ -4,7 +4,7 @@
 ### STANDARD
 from __future__ import annotations
 from typing import overload, ClassVar, TypeIs, Literal, is_typeddict, Any
-from collections.abc import Hashable, Iterable
+from collections.abc import Hashable, Iterable, ItemsView, Mapping
 from enum import Enum
 from dataclasses import is_dataclass
 import contextlib as ctx
@@ -24,10 +24,8 @@ from ..infra.types import (
     Atom,
     Vec,
     Iter,
-    Map,
     Maps,
     Model,
-    Struct,
     Func,
     Funcs,
 )
@@ -41,7 +39,22 @@ from ._TypingBase import _TypingBase
 ### BODY ###
 ############
 class TypeMatch(_TypingBase):
-    """Type matching utilities for MyType and Typist."""
+    """Type matching utilities for MyType and Typist.
+
+    Exported as the static alias `tym`, and mixed into `Typist` (so `ty.match` and the
+    `is_*_type` family resolve here). Matching compares *types* to types; see `TypeCheck` for
+    comparing runtime values to types.
+
+    Examples:
+        Compare generic types recursively, beyond what `issubclass()` can see::
+
+            >>> from collections.abc import Mapping
+            >>> from my import tym
+            >>> tym.match(dict[str, int], Mapping[str, int])
+            True
+            >>> tym.match(dict[str, int], Mapping[str, str])
+            False
+    """
 
     MATCH_CACHE: ClassVar[NestedCache[tuple[str, str], bool]] = NestedCache(signature=(str, str))
 
@@ -148,6 +161,16 @@ class TypeMatch(_TypingBase):
             t1: The target type.
             intersect: If `True`, check for any overlap between the two types
                        rather than full subset coverage.
+        Examples:
+            Subset matching is directional; `intersect` loosens it to any overlap::
+
+                >>> from my import tym
+                >>> tym.match(int, int | str)
+                True
+                >>> tym.match(int | str, int)
+                False
+                >>> tym.match(int | str, int, intersect=True)
+                True
         """
         # I. Parse the types (if they're already parsed, no work is done)
         t0, t1 = MyType.new(t0), MyType.new(t1)
@@ -216,7 +239,7 @@ class TypeMatch(_TypingBase):
     def is_stream_type(cls, tvar: type) -> TypeIs[type[Stream]]: ...
     @classmethod
     def is_stream_type(cls, tvar: MyType | type) -> bool:
-        """Determine if a variable is a Stream type."""
+        """Determine if the given type is a Stream type."""
         return bool(main := MyType.new(tvar).main) and issubclass(main, Stream)
 
     # ---- STRING ----
@@ -228,7 +251,7 @@ class TypeMatch(_TypingBase):
     def is_string_type(cls, tvar: type) -> TypeIs[type[String]]: ...
     @classmethod
     def is_string_type(cls, tvar: MyType | type) -> bool:
-        """Determine if a variable is a String type."""
+        """Determine if the given type is a String type."""
         return bool(main := MyType.new(tvar).main) and issubclass(main, String)
 
     # ---- SCALAR ----
@@ -240,7 +263,7 @@ class TypeMatch(_TypingBase):
     def is_scalar_type(cls, tvar: type) -> TypeIs[type[Scalar]]: ...
     @classmethod
     def is_scalar_type(cls, tvar: MyType | type) -> bool:
-        """Determine if a variable is a Scalar type."""
+        """Determine if the given type is a Scalar type."""
         return bool(main := MyType.new(tvar).main) and issubclass(main, Scalar)
 
     # ---- TIME ----
@@ -252,7 +275,7 @@ class TypeMatch(_TypingBase):
     def is_time_type(cls, tvar: type) -> TypeIs[type[Time]]: ...
     @classmethod
     def is_time_type(cls, tvar: MyType | type) -> bool:
-        """Determine if a variable is a Time type."""
+        """Determine if the given type is a Time type."""
         return bool(main := MyType.new(tvar).main) and issubclass(main, Time)
 
     # ---- ATOM ----
@@ -264,7 +287,7 @@ class TypeMatch(_TypingBase):
     def is_atom_type(cls, tvar: type) -> TypeIs[type[Atom]]: ...
     @classmethod
     def is_atom_type(cls, tvar: MyType | type) -> bool:
-        """Determine if a variable is a Atom type."""
+        """Determine if the given type is an Atom type."""
         tvar = MyType.new(tvar)
         return bool(tvar.main) and (
             cls.is_string_type(tvar)
@@ -282,16 +305,17 @@ class TypeMatch(_TypingBase):
     def is_vec_type(cls, tvar: type) -> TypeIs[type[Vec]]: ...
     @classmethod
     def is_vec_type(cls, tvar: MyType | type) -> bool:
-        """Determine if a variable is a Vec type."""
+        """Determine if the given type is a Vec type."""
         return bool(main := MyType.new(tvar).main) and issubclass(main, Vec)
 
     # ---- MAP ----
     @overload
     @classmethod
-    def is_map_type(cls, tvar: MyType) -> TypeIs[MyType[Map]]: ...
+    def is_map_type(cls, tvar: MyType) -> TypeIs[MyType[Mapping | ItemsView]]: ...
     @overload
     @classmethod
-    def is_map_type(cls, tvar: type) -> TypeIs[type[Map]]: ...
+    # `type[]` cannot wrap `Map` (parametrized members, per typing spec) -- narrow to bare bases.
+    def is_map_type(cls, tvar: type) -> TypeIs[type[Mapping | ItemsView]]: ...
     @classmethod
     def is_map_type(cls, tvar: MyType | type) -> bool:
         """Determine if a type is a Map: a `Mapping`/`ItemsView`, or an iterable of pairs."""
@@ -323,7 +347,7 @@ class TypeMatch(_TypingBase):
     def is_iter_type(cls, tvar: type) -> TypeIs[type[Iter]]: ...
     @classmethod
     def is_iter_type(cls, tvar: MyType | type) -> bool:
-        """Determine if a variable is a non-struct, non-atomic Iterable type (mostly iterators)."""
+        """Determine if the given type is a non-struct, non-atomic Iterable (mostly iterators)."""
         return (
             bool(main := MyType.new(tvar).main)
             and issubclass(main, Iter)
@@ -333,13 +357,14 @@ class TypeMatch(_TypingBase):
     # ---- STRUCT ----
     @overload
     @classmethod
-    def is_struct_type(cls, tvar: MyType) -> TypeIs[MyType[Struct]]: ...
+    def is_struct_type(cls, tvar: MyType) -> TypeIs[MyType[Vec | Mapping | ItemsView | Model]]: ...
     @overload
     @classmethod
-    def is_struct_type(cls, tvar: type) -> TypeIs[type[Struct]]: ...
+    # `type[]` cannot wrap `Struct` (its `Map` arm has parametrized members) -- bare bases instead.
+    def is_struct_type(cls, tvar: type) -> TypeIs[type[Vec | Mapping | ItemsView | Model]]: ...
     @classmethod
     def is_struct_type(cls, tvar: MyType | type) -> bool:
-        """Determine if a variable is a struct type."""
+        """Determine if the given type is a Struct type (any Iterable or Model)."""
         return bool(main := MyType.new(tvar).main) and (
             issubclass(main, Iterable) or cls.is_model_type(tvar)
         )
@@ -353,7 +378,7 @@ class TypeMatch(_TypingBase):
     def is_func_type(cls, tvar: type) -> TypeIs[type[Func]]: ...
     @classmethod
     def is_func_type(cls, tvar: MyType | type) -> bool:
-        """Determine if a variable is a Func type."""
+        """Determine if the given type is a Func type."""
         return bool(main := MyType.new(tvar).main) and issubclass(main, Funcs)
 
     # ---- MODEL ----
@@ -365,7 +390,7 @@ class TypeMatch(_TypingBase):
     def is_model_type[M: Model](cls, tvar: type) -> TypeIs[type[M]]: ...
     @classmethod
     def is_model_type(cls, tvar: MyType | type) -> bool:
-        """Determine if a variable is a model type."""
+        """Determine if the given type is a Model type (pydantic model, dataclass, or TypedDict)."""
         tvar = MyType.new(tvar)
         main = tvar.main
         return (

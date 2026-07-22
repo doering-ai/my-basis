@@ -46,13 +46,12 @@ type Metrics = OpenTelemetryCounter | dict[str, float] | pd.Series
 ### BODY ###
 ############
 class MetricUtils(_UtilsBase):
-    """Methods deal with logging, telemetry, and other measurement tasks.
+    """Methods that deal with logging, telemetry, and other measurement tasks.
 
-    ```{important}
-    These methods are only present if the **optional** `metrics` dependency is installed
-    (`pip install my-basis[metrics]`). If you try to call them without it, an `ImportError` will
-    be thrown.
-    ```
+    .. important::
+        These methods are only usable if the **optional** `metrics` dependency is installed
+        (`pip install my-basis[metrics]`). If you try to call them without it, an `ImportError`
+        will be thrown.
     """
 
     METRICS_INSTALLED: ClassVar[bool] = INSTALLED
@@ -196,6 +195,13 @@ class MetricUtils(_UtilsBase):
             maxcount: Maximum number of backup files (default: 1024).
         Returns:
             Configured Logger instance.
+        Examples:
+            Attach a rotating file handler for a package::
+
+                >>> from pathlib import Path
+                >>> from my import ut
+                >>> logger = ut.setup_py_logging(Path('logs'), True, 'my-basis')  # doctest: +SKIP
+                >>> logger.info('ready')  # doctest: +SKIP
         """
         # I. Validate log directory and logging object
         SystemUtils.validate_dir(logdir)
@@ -254,6 +260,13 @@ class MetricUtils(_UtilsBase):
         Raises:
             ValueError: If the service identity/destination is missing or a privacy control
                 is weakened.
+        Examples:
+            Configure Logfire against an existing logger::
+
+                >>> import logging
+                >>> from my import ut
+                >>> ut.setup_fire_logging(  # doctest: +SKIP
+                ...     fire_token='', package='my-basis', logger=logging.getLogger('my-basis'))
         """
         if not package:
             raise ValueError('Telemetry service package is required.')
@@ -348,6 +361,12 @@ class MetricUtils(_UtilsBase):
             **fire_kwargs: Additional Logfire configuration options.
         Returns:
             Configured Logger instance (cached per package).
+        Examples:
+            One call wires both file logging and Logfire::
+
+                >>> from pathlib import Path
+                >>> from my import ut
+                >>> logger = ut.setup_logging(Path('logs'), True, fire_token='')  # doctest: +SKIP
         """
         cls = MetricUtils
         if not package:
@@ -434,6 +453,14 @@ class MetricUtils(_UtilsBase):
             logger: Logger for recording setup actions.
         Raises:
             AssertionError: If PROMETHEUS_MULTIPROC_DIR not set or mismatches metrics path.
+        Examples:
+            Prepare the Prometheus multiprocess directory::
+
+                >>> import logging
+                >>> from pathlib import Path
+                >>> from my import ut
+                >>> metrics_dir = Path('/tmp/prometheus')  # must match $PROMETHEUS_MULTIPROC_DIR
+                >>> ut.setup_metrics(metrics_dir, logging.getLogger())  # doctest: +SKIP
         """
         if MetricUtils.METRICS_SETUP:
             return
@@ -524,6 +551,15 @@ class MetricUtils(_UtilsBase):
             counter: Dictionary counter to record elapsed time.
         Yields:
             None (timing measured around context block).
+        Examples:
+            Accumulate elapsed milliseconds into a plain dict::
+
+                >>> from my import ut
+                >>> counter = {}
+                >>> with ut.measure_context('step', counter):
+                ...     total = sum(range(1000))
+                >>> counter['step'] > 0
+                True
         """
         start = perf_counter_ns()
         try:
@@ -541,6 +577,12 @@ class MetricUtils(_UtilsBase):
             **kwargs: Keyword arguments for fire.instrument().
         Returns:
             Decorator that instruments function with Logfire monitoring.
+        Examples:
+            Instrument a function with a Logfire span::
+
+                >>> from my import ut
+                >>> @ut.monitor('fetch-page')  # doctest: +SKIP
+                ... def fetch(url): ...
         """
         return fire.instrument(*args, extract_args=False, **kwargs)
 

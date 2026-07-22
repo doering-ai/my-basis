@@ -5,5 +5,20 @@
 
 ```{eval-rst}
 .. autoclass:: my.caches.Cache.Cache
-   :members:
+```
+
+```{eval-rst}
+.. automethod:: my.caches.Cache.Cache.items
+```
+
+```{eval-rst}
+.. automethod:: my.caches.Cache.Cache.keys
+```
+
+```{eval-rst}
+.. automethod:: my.caches.Cache.Cache.values
+```
+
+```{eval-rst}
+.. automethod:: my.caches.Cache.Cache.prune
 ```

@@ -1,4 +1,11 @@
-"""Foundational types and constants shared across the package, with no internal dependencies."""
+"""Foundational Types and Constants.
+
+The `infra` subpackage is the package's dependency-free foundational layer: it defines the public
+type-alias vocabulary (`Atom`, `Vec`, `Map`, `Model`, ...) that the top-level `my` namespace
+re-exports, plus package paths and template plumbing. Nothing here imports from elsewhere in the
+package, and it deliberately has no docs page of its own -- consumers meet these names through
+`my` directly.
+"""
 
 from .types import (
     # Singular aliases

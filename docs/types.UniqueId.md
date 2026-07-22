@@ -5,5 +5,20 @@
 
 ```{eval-rst}
 .. autoclass:: my.types.UniqueId.UniqueId
-   :members:
+```
+
+```{eval-rst}
+.. automethod:: my.types.UniqueId.UniqueId.validate_uid
+```
+
+```{eval-rst}
+.. automethod:: my.types.UniqueId.UniqueId.new
+```
+
+```{eval-rst}
+.. automethod:: my.types.UniqueId.UniqueId.newstr
+```
+
+```{eval-rst}
+.. automethod:: my.types.UniqueId.UniqueId.remove_uids
 ```

@@ -227,11 +227,12 @@ class TestFilesystem:
                 ('/home/user/project', '/home/other'),
                 ('/tmp/project', '/home/user'),
                 ('/home/user', '/home/user/project'),
+                ('/srv/app2', '/srv/app'),  # Sibling sharing a string prefix (regression)
             ],
         ),
     )
     def test_is_relative_to(self, child: str, parent: str, expected: bool):
-        """Test is_relative_to detects child/parent relationships via string prefix."""
+        """Test is_relative_to detects child/parent relationships segment-aware."""
         assert cls.is_relative_to(child, parent) == expected
 
     def test_relativize__basic(self):

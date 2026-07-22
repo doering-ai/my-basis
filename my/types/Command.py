@@ -38,8 +38,26 @@ class Command(pyd.BaseModel):
     flags (e.g., `--key value` or `-k`). The class handles quoting, underscore-to-dash conversion
     in flag names, and various shell conventions.
 
-    Commands can be manually finalized w/ `assemble()`, or executed directly via `execute()`
-     / `execute_async()`. To chain commands together, use the provided `out` and `pipe` options.
+    Commands can be manually finalized w/ `assemble()`, or executed directly via `execute()` /
+    `execute_async()`. To chain commands together, use the provided `out` and `pipe` options.
+
+    Examples:
+        Build a command, inspect it, and execute it::
+
+            >>> from my import Command
+            >>> cmd = Command.new('ls', '-l', color='auto')
+            >>> str(cmd)
+            'ls --color auto -l'
+            >>> Command.run('echo', 'hello')
+            Result(code=0, out='hello', err='')
+
+        Pipe one command into another::
+
+            >>> piped = Command.new('echo', 'one two', options={'pipe': Command.new('wc', '-w')})
+            >>> str(piped)
+            'echo "one two" | wc -w'
+            >>> piped.execute()
+            Result(code=0, out='2', err='')
     """
 
     model_config = pyd.ConfigDict()
@@ -62,9 +80,9 @@ class Command(pyd.BaseModel):
     class Result(NamedTuple):
         """Structured result of command execution."""
 
-        code: int
-        out: str
-        err: str
+        code: int  #: The process's return code (0 on success).
+        out: str  #: The captured, stripped stdout text.
+        err: str  #: The captured, stripped stderr text.
 
     command: str  #: Base command name.
     args: list[Any] = []  #: Positional arguments.
@@ -93,11 +111,18 @@ class Command(pyd.BaseModel):
 
         Args:
             command: Base command string -- ostensibly but NOT necessarily a name.
-            args: Positional arguments ot the command.
+            args: Positional arguments to the command.
             options: Assembly option flags.
             **kwargs: Keyword arguments to the command.
         Returns:
             Configured Command instance.
+        Examples:
+            Configure assembly via an `Options` dict::
+
+                >>> from my import Command
+                >>> opts = {'flag_assignment': True}
+                >>> str(Command.new('grep', 'TODO', options=opts, max_count=3))
+                'grep --max-count=3 TODO'
         """
         if options is None:
             options = cls.Options()
@@ -204,7 +229,16 @@ class Command(pyd.BaseModel):
     # `+` Primary Methods
     # -------------------
     def assemble(self) -> str:
-        """Assemble a complete shell command from this instance's members."""
+        """Assemble a complete shell command from this instance's members.
+
+        Examples:
+            Assemble a command with values that require quoting::
+
+                >>> from my import Command
+                >>> cmd = Command.new('tar', 'x', options={'single_dashes': True}, file='a b.tar')
+                >>> cmd.assemble()
+                'tar -file "a b.tar" x'
+        """
         parts = [self.command]
         if self.args or self.kwargs:
             # I. Assemble the main parts of the command
@@ -246,6 +280,12 @@ class Command(pyd.BaseModel):
 
         Returns:
             (`return_code`, `stdout`, `stderr`).
+        Examples:
+            Execute a command and capture its output::
+
+                >>> from my import Command
+                >>> Command.new('echo', 'hello').execute()
+                Result(code=0, out='hello', err='')
         """
         self.assemble()  # side effect only: prints the human-readable form when `verbose` is set
         argv = self._argv
@@ -287,6 +327,13 @@ class Command(pyd.BaseModel):
 
         Returns:
             (`return_code`, `stdout`, `stderr`).
+        Examples:
+            Execute a command from synchronous code::
+
+                >>> import asyncio
+                >>> from my import Command
+                >>> asyncio.run(Command.new('echo', 'async!').execute_async())
+                Result(code=0, out='async!', err='')
         """
         self.assemble()  # side effect only: prints the human-readable form when `verbose` is set
         argv = self._argv
@@ -348,6 +395,12 @@ class Command(pyd.BaseModel):
             **kwargs: Keyword arguments (converted to flags).
         Returns:
             (return_code, stdout, stderr).
+        Examples:
+            Build and run in one call::
+
+                >>> from my import Command
+                >>> Command.run('echo', 'hello')
+                Result(code=0, out='hello', err='')
         """
         return cls.new(command, *args, **kwargs).execute()
 
@@ -366,12 +419,20 @@ class Command(pyd.BaseModel):
 
     @classmethod
     async def exa(cls, *args: str, _cwd: str | Path | None = None, **kwargs: Any) -> Result:
-        """Executes a command in the virtual environment asynchronously."""
+        """Execute a command asynchronously, with a shorthand for overriding the working directory.
+
+        Args:
+            *args: The base command and its positional arguments, as for `run_async()`.
+            _cwd: Working-directory override, applied via `options.cwd` whether or not an
+                `options` value was passed alongside it.
+            **kwargs: Keyword arguments (converted to flags).
+        Returns:
+            (`return_code`, `stdout`, `stderr`).
+        """
         if _cwd is not None:
             _opts = kwargs.get('options', {})
             if isinstance(_opts, dict):
                 _opts = Command.Options(**_opts)
-            else:
-                _opts.cwd = str(_cwd)
+            _opts.cwd = str(_cwd)
             kwargs['options'] = _opts
         return await cls.run_async(*args, **kwargs)

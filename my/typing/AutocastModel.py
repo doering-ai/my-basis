@@ -23,9 +23,25 @@ class AutocastModel(pyd.BaseModel):
     models more permissive with input formats.
 
     During serialization, the model automatically simplifies nested structures in preparation for
-    them to be saved to a flat mapping of some kind, be it YAML, JSON, SQL, or otherwise.
-    Single-element lists become scalars, enums serialize to readable strings, and redundant nesting
-    is flattened.
+    them to be saved to a flat mapping of some kind, be it YAML, JSON, SQL, or otherwise: enums
+    and times serialize to readable strings, series become plain lists, and nested models become
+    dicts (see `Typist.serialize()`).
+
+    Examples:
+        Declare fields normally; construction coerces, serialization simplifies::
+
+            >>> from datetime import datetime
+            >>> from my import AutocastModel
+            >>> class Job(AutocastModel):
+            ...     name: str
+            ...     priority: int
+            ...     tags: list[str] = []
+            ...     due: datetime | None = None
+            >>> job = Job(name=5, priority='3', tags='urgent', due='2026-02-01')
+            >>> job.priority, job.tags
+            (3, ['urgent'])
+            >>> job.model_dump()['due']
+            '2026-02-01T00:00:00'
     """
 
     @pyd.model_validator(mode='before')

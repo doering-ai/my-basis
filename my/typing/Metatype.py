@@ -21,6 +21,18 @@ class Metatype(Enum):
     Each member holds a `frozenset` of the *names* (i.e. `__name__`) of the special forms it
     covers, so that `Metatype(value)` can categorize any annotation by looking up its name. Ordinary
     types (e.g. `int`, `list`, `dict`) belong to no special form and resolve to the falsy `NULL`.
+
+    Examples:
+        Categorize annotations by their special-form name::
+
+            >>> from typing import Any, Optional
+            >>> from my.typing.Metatype import Metatype
+            >>> Metatype(Any) is Metatype.ALWAYS
+            True
+            >>> Metatype(Optional[int]) is Metatype.POLY
+            True
+            >>> bool(Metatype(int))  # ordinary types resolve to the falsy NULL
+            False
     """
 
     #: Unrecognized / ordinary types -- the falsy fallback.

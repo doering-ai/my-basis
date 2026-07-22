@@ -26,7 +26,20 @@ from .SetAtom import SetAtom
 ############
 @ft.total_ordering
 class Regex:
-    """A mutable representation of regex expression, valid or otherwise."""
+    r"""A mutable representation of a regex expression, valid or otherwise.
+
+    A Regex is essentially a list of `Atom` objects: it can be indexed, sliced, iterated,
+    compared, and concatenated, and it serializes back to the raw pattern text via `str()`.
+
+    Examples:
+        Parse an expression into atoms and read its parts::
+
+            >>> expr = Regex(r'ab(?:cd)+[ef]\d?')
+            >>> list(expr)
+            ['a', 'b', '(?:cd)+', '[ef]', '\\d?']
+            >>> str(expr)
+            'ab(?:cd)+[ef]\\d?'
+    """
 
     SPLITTER: ClassVar[Atom] = Atom(r'|')
 
@@ -36,18 +49,24 @@ class Regex:
     # `.` Initial Methods
     # -------------------
     def __init__(self, *args: str | Atom | Iterable[Atom] | Self) -> None:
-        """Construct a new instead from a very flexible set of positional arguments."""
+        """Construct a new instance from a very flexible set of positional arguments."""
         self.data = list(filter(bool, mi.flatten(map(self._parse_arg, args))))
 
     @classmethod
     def atomize(cls, expr: str | Buffer | Self) -> Generator[Atom]:
-        """Break a regex expression into its atomic components.
+        r"""Break a regex expression into its atomic components.
 
         Args:
             expr: The raw regular expression string to atomize.
-            escape: If set, escape characters matching RGXS['special_characters'].
-        Returns:
-            Tuple of atomic regex components (characters, groups, character sets, etc.).
+        Yields:
+            Atomic regex components (characters, groups, character sets, etc.), each carrying
+            its quantifier.
+        Examples:
+            Groups and sets are atoms too, no matter how long they are::
+
+                >>> from my import Regex
+                >>> list(Regex.atomize(r'ab?(?:cd|ef)[xyz]+'))
+                ['a', 'b?', '(?:cd|ef)', '[xyz]+']
         """
         if isinstance(expr, Regex):
             yield from expr.data
@@ -79,7 +98,7 @@ class Regex:
 
     @classmethod
     def empty(cls) -> Self:
-        """Creates a new 'empty' instance, holding just one empty `Atom`."""
+        """Create a new 'empty' instance, holding just one empty `Atom`."""
         return cls(Atom())
 
     def copy(self) -> Self:
@@ -149,18 +168,21 @@ class Regex:
         mask: GroupKind = NO_KIND,
         mode: PairMode = 'all',
     ) -> Iterator[GroupAtom]:
-        """Iterate over all groups in the given pattern (e.g. `(?:abc)`).
+        r"""Iterate over all groups in the given pattern (e.g. `(?:abc)`).
 
         Args:
             text: Text to search for groups (will be converted to Buffer).
             mask: Optional GroupKind filter to yield only matching group types.
             mode: 'all' by default, 'roots' to exclude nested groups, or 'leaves' for the opposite.
         Yields:
-            1. span: The (start, end) indices of the full group match.
-            2. kind: The GroupKind of the group.
-            3. name: The name of the group (if applicable).
-            4. body: The body text of the group.
-            5. quant: Any quantifier applied to the group.
+            A GroupAtom for each group found, populated with its span, kind, name, and body.
+        Examples:
+            Filter for one kind of group with a mask::
+
+                >>> from my import Regex, GroupKind
+                >>> groups = Regex.group_iterator(r'(?P<a>x)(?P<b>y)', mask=GroupKind.NAMED)
+                >>> [group.name for group in groups]
+                ['a', 'b']
         """
         # I. Cast the input text to a charset-ignoring buffer
         if isinstance(text, list):
@@ -185,7 +207,12 @@ class Regex:
         Args:
             text: Text to search for character sets.
         Yields:
-            Atom.Set objects
+            A SetAtom for each root-level character set found, populated with its span and body.
+        Examples:
+            Iterate the sets of a pattern::
+
+                >>> [s.body for s in Regex.set_iterator(r'[a-z]+[0-9]')]
+                ['a-z', '0-9']
         """
         if isinstance(text, list):
             text = ''.join(text)
@@ -307,7 +334,7 @@ class Regex:
 
     @property
     def spans(self) -> list[tuple[int, int]]:
-        """Get the raw text (start, end) spans of each Atom in this expression."""
+        """The raw-text (start, end) spans of each Atom in this expression."""
         ends = list(it.accumulate(map(len, self.data)))
         starts = [0, *ends[:-1]]
         return list(zip(starts, ends, strict=True))
@@ -316,15 +343,22 @@ class Regex:
     # `*2` Methods
     # ------------
     def quantify(self, quantifier: str | Quantifier, overwrite: bool = False) -> Self:
-        """Create a new version of this expression that has the request quantifier applied to it.
+        """Create a new version of this expression that has the requested quantifier applied to it.
 
         Handles patterns that need to be wrapped before a quantifier is applied.
 
         Args:
-            quantifier: The quantifier string to apply (e.g., `?`, `+`, `*`, `{2,5}`).
+            quantifier: The quantifier string to apply (e.g. `?`, `+`, `*`, `{2,5}`).
             overwrite: Whether to replace an existing expr-level quantifier rather than wrapping it.
         Returns:
-            The quantified regex pattern string.
+            A new, quantified Regex (the original is NOT modified).
+        Examples:
+            Multi-atom expressions are wrapped before quantification; single atoms are not::
+
+                >>> str(Regex(r'abc').quantify('+'))
+                '(?:abc)+'
+                >>> str(Regex(r'a').quantify('+'))
+                'a+'
         """
         cls = self.__class__
         quantifier = Quantifier(quantifier)
@@ -340,7 +374,14 @@ class Regex:
 
     @classmethod
     def is_split(cls, expr: str | Atom | Self) -> bool:
-        """Check if the given expression contains any top-level '|' splitters."""
+        """Check if the given expression contains any top-level `|` splitters.
+
+        Examples:
+            Splitters inside groups do not count::
+
+                >>> Regex.is_split(r'a|b'), Regex.is_split(r'(?:a|b)')
+                (True, False)
+        """
         if isinstance(expr, str):
             return cls.SPLITTER in cls.atomize(expr)
         elif isinstance(expr, cls):
@@ -351,7 +392,14 @@ class Regex:
 
     @classmethod
     def is_atomic(cls, expr: str | Atom | Self) -> bool:
-        """Check if the given expression is atomic (i.e., composed of a single atom)."""
+        """Check if the given expression is atomic (i.e. composed of a single atom).
+
+        Examples:
+            A whole group is one atom; two literals are not::
+
+                >>> Regex.is_atomic(r'(?:a|b)'), Regex.is_atomic(r'ab')
+                (True, False)
+        """
         if isinstance(expr, Atom) or not expr:
             return True
         elif isinstance(expr, Regex):
@@ -363,7 +411,14 @@ class Regex:
             raise TypeError(f'Unsupported type for is_atomic check: {type(expr)}')
 
     def split(self) -> Iterator[Self]:
-        """Split the Regex instance into branches at top-level '|' atoms."""
+        """Split the Regex instance into branches at top-level `|` atoms.
+
+        Examples:
+            Split an alternation into its branches::
+
+                >>> [str(branch) for branch in Regex(r'foo|bar|baz').split()]
+                ['foo', 'bar', 'baz']
+        """
         yield from map(self.__class__, mi.split_at(self.data, lambda atom: atom == self.SPLITTER))
 
     def startswith(self, other: str | Atom | Self) -> bool:

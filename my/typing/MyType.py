@@ -82,6 +82,8 @@ from .Metatype import Metatype as Meta
 ############
 ### DATA ###
 ############
+#: Any argument acceptable wherever a type is expected: a plain type, an already-wrapped
+#: `MyType`, a tuple of types, a raw value (whose type is inferred), or None.
 type TypeArg[T = Any] = type[T] | MyType[T] | tuple[type[T], ...] | Any | None
 Empty = type[inspect.Parameter.empty]
 empty = inspect.Parameter.empty
@@ -122,15 +124,16 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
        assert atom_t & str_t
        assert not str_t & int_t
 
-       # Works with raw or wrapped types as long as at least one side is wrapped
+       # Works with a raw *plain type* on either side, as long as the other side is wrapped
        assert str & atom_t and str_t & Atom
-       assert atom_t & str and Atom & str_t
-       #! assert str & Atom and Atom & str
+       assert atom_t & str
+       #! assert str & Atom  # two raw annotations know nothing of each other
+       #! assert Atom & str_t  # a raw union LHS cannot reflect onto the wrapped RHS
 
-       # Works with type tuples and unions (when LHS is wrapped)
+       # Works with unions and tuples of plain types (when LHS is wrapped)
        assert str_t & (str | Scalar)
-       assert str_t & (str, Scalar)
-       assert not str_t & (bytes, Scalar)
+       assert str_t & (str, int)
+       assert not str_t & (bytes, int)
 
     **``__contains__()``**
 
@@ -146,9 +149,6 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
        # Works with tuples
        assert str in (str_t, Scalar)
 
-       # def ex[T](tvar: type[T]) -> None:
-       #     target = MyType(tvar)
-
     .. rubric:: "Main" types (i.e. ``MyType.main``)
 
     The main type of an instance represents the most meaningfully *active* part of that type in
@@ -158,18 +158,19 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
 
        assert MyType(dict[str, int]).main is dict
        assert MyType(Literal['a', 'b']).main is None
-       assert MyType(Optional[int]).main is None
+       assert MyType(Optional[int]).is_split
 
     Some cases:
       - Basic generics use their origins, while the vast majority of Atoms use themselves in full.
 
       - Literals use ``Literal``.
 
-      - Monotomic "Special Forms" (e.g. ``Optional[int]``, ``Annotated[int, ...]``) use a type or
+      - Monotomic "Special Forms" (e.g. ``Annotated[int, ...]``, ``Final[str]``) use a type or
         union representing the wrapped content of the inner form.
 
-      - Polytomic "Special Forms" (e.g. ``Union[int, str]`` -> ``UnionType``, ``Unpack[str, str]``
-        -> ``Unpack``) us a type representing the wrapping content of the outer form.
+      - Polytomic "Special Forms" (e.g. ``Optional[int]`` / ``Union[int, str]`` -> ``UnionType``,
+        ``Unpack[str, str]`` -> ``Unpack``) use a type representing the wrapping content of the
+        outer form.
     """
 
     POS: ClassVar[MyType]
@@ -202,7 +203,7 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
     #: The arguments of generic types; only needed for advanced usecases.
     args: tuple[MyType, ...] = tuple()
 
-    #: The the type annotation for the contents of a generic collection.
+    #: The type annotation for the contents of a generic collection.
     #: The vast majority of generics are monotyped so only use this field (e.g. vecs & iters).
     #: None when the contents are unconstrained (e.g. a bare ``list`` or an ``Any`` value type).
     vals: MyType | None = None
@@ -231,15 +232,13 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
     def __init__[R = Any](self, root: TypeArg[R] = Any, uid: int = 0, **kwargs):
         """Initialize a MyType instance with the given source type and unique identifier.
 
-        This function is overriden from ``pyd.BaseModel`` so as to allow positional args.
+        This function is overridden from ``pyd.BaseModel`` so as to allow positional args.
 
         Args:
-            root: The original type annotation that this MyType instance represents. Can be any type
-            or None.
-
+            root: The original type annotation that this MyType instance represents. Can be any
+                type or None.
             uid: A unique identifier for this type, used for caching. If not provided, will be
-            generated from the stringified root.
-
+                generated from the stringified root.
             **kwargs: Additional keyword arguments to pass to the BaseModel initializer.
         """
         kwargs.pop('raw', None)
@@ -265,7 +264,17 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
     def new[R](root: R) -> MyType[R]: ...
     @staticmethod
     def new(root: TypeArg | Any | Empty = empty) -> MyType:
-        """Create a new MyType instance by parsing a type OR inferring the full type of a value."""
+        """Create a new MyType instance by parsing a type OR inferring the full type of a value.
+
+        Examples:
+            Types parse; values infer::
+
+                >>> from my import MyType
+                >>> MyType.new(int)
+                MyType[<class 'int'>](main=<class 'int'>)
+                >>> MyType.new(5)
+                MyType[<class 'int'>](main=<class 'int'>)
+        """
         cls = MyType
         # 0. Handle edge & null cases, prep data
         if not isinstance(root, Hashable):
@@ -312,7 +321,7 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
     def parse(cls, root: object, throw: bool = False) -> MyType: ...
     @classmethod
     def parse[R](cls, root: object, throw: bool = False) -> MyType:
-        """Decompose a given type so that other methods can intelligently handly each part in turn.
+        """Decompose a given type so that other methods can intelligently handle each part in turn.
 
         By far the most likely usecase is for containers such as ``dict[str, int]`` (which becomes
         the tuple ``(dict, str, int)``) and ``list[int]`` (which becomes ``(list, int, None)``), but
@@ -325,6 +334,14 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
         Returns:
             A MyType instance with the root set to the original type, and the other fields
             populated according to the structure of that type.
+        Examples:
+            Decompose parameterized generics into their parts::
+
+                >>> from my import MyType
+                >>> MyType.parse(dict[str, int]).summarize()
+                (<class 'dict'>, <class 'str'>, <class 'int'>)
+                >>> MyType.parse(int | str).is_split
+                True
         """
         if isinstance(root, MyType):
             # Already parsed -- re-deriving a uid from `str(root)` here would collapse an
@@ -363,6 +380,12 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
             data: Data value to infer type from.
         Returns:
             Parsed MyType instance representing the inferred type.
+        Examples:
+            Infer full container annotations from runtime values::
+
+                >>> from my import MyType
+                >>> str(MyType.typeof({'a': [1]}))
+                'dict[str, list[int]]'
         """
         ty = cls._ty()
         origin = type(data)
@@ -611,7 +634,7 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
 
         Args:
             tvar: Type to decompose.
-        Return:
+        Returns:
             1. The type's name.
             2. The type's origin (if any).
             3. The type's args (if any).
@@ -677,8 +700,10 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
     def rtype(self) -> type | UnionType:
         """A version of the root that has been lightly coerced into being a regular type.
 
-        Returns ``Any`` if the root is not parseable as a type, or if it's a split type with an
-        unparseable root.
+        Plain types and unions return themselves, and an ``Unpack`` unwraps to its content.
+        Otherwise a split type collapses to the bare ``UnionType``, a parameterized generic yields
+        its *first argument's* root (e.g. ``dict[str, int]`` -> ``str``, not ``dict``), and
+        anything else falls back to ``Any``.
         """
         ret = self.root
         if isinstance(ret, (type, UnionType)):
@@ -742,7 +767,7 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
     @overload
     def __contains__(self, child: object) -> TypeIs[type[T]]: ...
     def __contains__(self, child: MyType | type | object | None) -> bool:
-        """Determines whether the preceeding type is a valid subset of this one."""
+        """Determine whether the preceding type is a valid subset of this one."""
         if isinstance(child, (type, MyType)):
             return self.ty.match(child, self, False)
         return False
@@ -756,7 +781,7 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
     @overload
     def __and__(self, other: tuple[type, ...]) -> TypeIs[tuple[type[T], ...]]: ...
     def __and__(self, other: TypeArg) -> bool:
-        """Determines whether the other type contains this one."""
+        """Determine whether either of the two types contains the other."""
         return other is not None and self.ty.match(self, other, True)
 
     @overload
@@ -770,7 +795,7 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
     @overload
     def __rand__(self, other: object) -> TypeIs[type[T]]: ...
     def __rand__(self, other: MyType | type | object | None) -> bool:
-        """Determines whether this type contains the other one."""
+        """Determine whether either of the two types contains the other (reflected form)."""
         if isinstance(other, (type, MyType)):
             return self.ty.match(other, self, True)
         return False
@@ -806,7 +831,17 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
     @overload
     def match(self, other: object) -> TypeIs[type[T]]: ...
     def match(self, other: MyType | type | object | None) -> bool:
-        """Determines whether the given type value is a subset of this type."""
+        """Determine whether the given type value is a subset of this type.
+
+        Examples:
+            Membership runs from the argument into this type::
+
+                >>> from my import MyType
+                >>> MyType(int | str).match(int)
+                True
+                >>> MyType(int).match(int | str)
+                False
+        """
         if isinstance(other, (type, MyType)):
             return self.ty.match(other, self)  # note that this checks the ARG for membership
         return False
@@ -818,6 +853,13 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
             data: The data value to check. Ideally not an exhaustable iter.
         Returns:
             True if *all* aspects of this type are satisfied by this data, including nested types.
+        Examples:
+            Validate values against the parsed type::
+
+                >>> from my import MyType
+                >>> t = MyType.parse(dict[str, int])
+                >>> t.check({'a': 1}), t.check({'a': 'b'})
+                (True, False)
         """
         # `Any` (always-true wildcard) and `None`/`NoneType` (concrete null) are all falsy
         # (`main is None`) yet still delegate; only a truly empty type short-circuits to `False`.
@@ -889,7 +931,11 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
 
     @ft.cached_property
     def idx(self) -> str:
-        """A unique-ish ID for this type that implicitly identifies the closest 'known' ancestor."""
+        """The hierarchy ID of the most specific registered `IDXS` type that matches this one.
+
+        Scans the registered index (longest keys first) and returns the ID of the first entry
+        whose type matches (is a subset of) this one, or '0' when none do.
+        """
         arr = sorted(
             self.IDXS.items(),
             key=lambda x: f'{len(x[0])}_{x[0]}',

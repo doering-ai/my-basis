@@ -41,9 +41,9 @@ class ParseData(pyd.BaseModel):
     # `.` Initial Methods
     # -------------------
 
-    # -------------------
-    # `-` Private Methods
-    # -------------------
+    # ------------------
+    # `-` Helper Methods
+    # ------------------
     def interleave(self, src: str, dest: str, effects: list[tuple[int, str]]) -> None:
         """Merge new captures into destination field, maintaining position order.
 
@@ -88,7 +88,8 @@ class ParseData(pyd.BaseModel):
         to move captures from source fields to destination fields.
 
         Args:
-            parser: Mapping from destination field names to source field names.
+            parser: Mapping from source field names to the destination fields that should
+                receive their captures.
             rgx: Pattern to re-match captured values with.
         """
         matches = [MatchData(match=rgx.fullmatch(val)) for val in self.value]
@@ -116,6 +117,15 @@ class ParseData(pyd.BaseModel):
             parser: Function transforming each captured string.
         Raises:
             TypeError: If one invocation returns a mapping and another returns a string.
+        Examples:
+            String-returning parsers rewrite the active field's values in place::
+
+                >>> from my import ParseData
+                >>> pd = ParseData(captures={'n': ['1', '2']}, starts={'n': [0, 2]})
+                >>> pd.set_field('n')
+                >>> pd.apply_func_parser(lambda v: str(int(v) * 2))
+                >>> pd.captures
+                {'n': ['2', '4']}
         """
         results = list(map(parser, self.value))
         if not results:

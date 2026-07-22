@@ -409,6 +409,21 @@ class TestTypist:
         else:
             assert result is None
 
+    def test_invocable__pep563(self):
+        """Regression: PEP 563 string annotations are resolved before checking (`eval_str`)."""
+        # Built via exec so the future import genuinely stringifies the annotations.
+        ns: dict = {}
+        exec(
+            'from __future__ import annotations\n'
+            'def fn(x: int, y: str) -> str:\n'
+            "    return f'{x}: {y}'\n",
+            ns,
+        )
+        fn = ns['fn']
+        assert typist.invocable(fn, 4, 'hi') is not None
+        assert typist.invocable(fn, 'not-an-int', 'hi') is None
+        assert typist.invoke(fn, 4, 'hi') == '4: hi'
+
     @pyt.mark.parametrize(
         'func, args, kwargs, expected_result',
         [

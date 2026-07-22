@@ -125,7 +125,20 @@ _TRQUE: deque = deque()
 ### BODY ###
 ############
 class TypeCast(_TypingBase):
-    """An ephemeral state machine that the cast defined by its inputs."""
+    """Coerce data between arbitrary type pairs via a table of registered transforms.
+
+    Casting routes through transforms keyed by (source, target) type bounds and tried from most-
+    to least-specific; the first candidate that neither declines nor fails decides the result.
+    `cast` is the primary entry point, with `multicast` and `flexcast` as convenience facades;
+    the per-cast state lives in the ephemeral `Transform` class.
+
+    Examples:
+        Coerce stringly-typed data into shape::
+
+            >>> from my import ty
+            >>> ty.cast({'a': '1'}, dict[str, int])
+            {'a': 1}
+    """
 
     RGXS: ClassVar[dict[str, re.Pattern]] = ut.regex_dict(
         ### Atomic Types
@@ -152,13 +165,19 @@ class TypeCast(_TypingBase):
 
     @staticmethod
     def register[F: FunctionType](fn: F) -> F:
-        """Decorator to register a function as a Cast transform based on its type parameters."""
+        """Register a function as a cast transform based on its type parameters, as a decorator.
+
+        The decorated function declares its source and target bounds as PEP 695 type parameters
+        (e.g. ``def _string_to_scalar[S: String, T: Scalar](self: Transform) -> ...``); the pair is
+        inserted into the transform table just before any more-general entry, so specific
+        transforms are always tried first. Registration is deferred until `setup` runs.
+        """
         _TRQUE.append(fn)
         return fn
 
     @classmethod
     def setup(cls) -> None:
-        """Register all transforms defined in this file."""
+        """Install every queued transform into the registry; only the first call has any effect."""
         if not cls._SETUP:
             while _TRQUE:
                 cls._register_impl(_TRQUE.popleft())
@@ -166,7 +185,7 @@ class TypeCast(_TypingBase):
 
     @classmethod
     def _register_impl(cls, fn: TransformFn) -> None:
-        """Decorator to register a function as a Cast transform based on its type parameters."""
+        """Install a queued transform into the registry, ordered before more-general entries."""
         name = getattr(fn, '__name__', 'fn')
         ty_params = cls._get_type_params(fn)
         if len(ty_params) == 0:
@@ -261,21 +280,49 @@ class TypeCast(_TypingBase):
         flex: bool = False,
         flags: CastFlags | CastPreset | None = None,
     ) -> B | A | None:
-        """Internal casting implementation that routes to specialized conversion methods.
+        """Cast data to the target type, trying registered transforms from specific to general.
 
         Args:
             data: The source data to cast.
-            source: The MyType of the source data.
+            target: The target type to cast to.
             default: The default value to return if casting fails.
-            target: The target MyType to cast to.
-            flex: Whether to use "flexcasting", which falls back to any remotely-similar input data
+            source: An explicit type for the source data, inferred from `data` when omitted.
+            flex: Whether to use "flexcasting", which falls back to the original input data
                 rather than returning None.
             flags: An explicit `CastFlags` snapshot (or preset-level name) to use for this cast;
                 `None` (the default) snapshots the global `Typist` singleton's current flags once,
                 at this entry point, so the whole cast (and any nested casts it triggers) sees one
                 consistent flag set even if the singleton is mutated mid-flight.
         Returns:
-            Cast data if successful, None otherwise.
+            The cast data on success; otherwise `default` (if given), the original `data` (if
+            `flex` is set), or None.
+        Raises:
+            Decline: If the data contains a reference cycle, which cannot be cast.
+        Examples:
+            Coerce a stringly-typed record into shape::
+
+                >>> from my import ty
+                >>> ty.cast({'a': '1'}, dict[str, int])
+                {'a': 1}
+                >>> ty.cast('1, 2, 3', list[int])
+                [1, 2, 3]
+                >>> from datetime import date
+                >>> ty.cast('2026-07-21', date)
+                datetime.date(2026, 7, 21)
+
+            A failed cast returns the default (if any), else None::
+
+                >>> ty.cast('hello', int, 0)
+                0
+                >>> ty.cast('hello', int) is None
+                True
+
+            Tighten (or loosen) the leniency flags for just this call::
+
+                >>> ty.cast('3', list[int])
+                [3]
+                >>> ty.cast('3', list[int], flags='strict') is None
+                True
         """
         resolved = CastFlags.resolve(flags)
         try:
@@ -307,6 +354,12 @@ class TypeCast(_TypingBase):
                 every element casts against the same flag set. See `TypeCast.cast`.
         Returns:
             A list of cast elements, with None elements kept as-is.
+        Examples:
+            Cast elements individually, preserving None placeholders::
+
+                >>> from my import ty
+                >>> ty.multicast(['1', None, '3'], int)
+                [1, None, 3]
         """
         resolved = CastFlags.resolve(flags)
         return [None if v is None else cls.cast(v, target, flags=resolved) for v in data]
@@ -323,6 +376,14 @@ class TypeCast(_TypingBase):
             flags: An explicit `CastFlags` snapshot (or preset-level name). See `TypeCast.cast`.
         Returns:
             The cast value on success, otherwise the original `data` unchanged.
+        Examples:
+            Keep the original value when no coercion is possible::
+
+                >>> from my import ty
+                >>> ty.flexcast('42', int)
+                42
+                >>> ty.flexcast('hello', int)
+                'hello'
         """
         return cls.cast(data, target, flex=True, flags=flags)
 
@@ -340,7 +401,22 @@ class TypeCast(_TypingBase):
     def normalize[V](cls, data: V) -> V: ...
     @classmethod
     def normalize(cls, data: object) -> object:
-        """Normalize the input data into a more workable form for casting."""
+        """Normalize the input data into a more workable form for casting.
+
+        Strings decode to `str`, mappings (and item views) become dicts, and other iterables
+        become lists; everything else passes through untouched.
+
+        Examples:
+            Collapse the many container interfaces down to a few workable ones::
+
+                >>> from my import ty
+                >>> ty.normalize({'a': 1}.items())
+                {'a': 1}
+                >>> ty.normalize((1, 2))
+                [1, 2]
+                >>> ty.normalize(b'hi')
+                'hi'
+        """
         return ut.normalize(data)
 
     @overload
@@ -355,13 +431,22 @@ class TypeCast(_TypingBase):
         data: String,
         tvar: type[S] | MyType[S] = Scalar,  # ty:ignore[invalid-parameter-default]
     ) -> list[S]:
-        """Attempt to read scalar types from data using regex patterns.
+        """Attempt to read scalar values out of a string using regex patterns.
+
+        Note that a `bool` target currently yields the raw regex matches (truthy for matched
+        true-forms, None otherwise) rather than proper booleans.
 
         Args:
             data: The source data to read from.
             tvar: The scalar type to seek out.
         Returns:
-            Scalar value if successful, None otherwise.
+            A list of the scalar values found, empty when nothing matches.
+        Examples:
+            Extract every int embedded in a sentence::
+
+                >>> from my import ty
+                >>> ty.read_scalars('I have 3 cats and 12 dogs', int)
+                [3, 12]
         """
         if not data:
             return []
@@ -384,7 +469,7 @@ class TypeCast(_TypingBase):
 
         name, matches = min(counts.items(), key=_calc)
         if name == 'bool':
-            return [(cls.RGXS['bool_true'].fullmatch(m)) for m in matches]
+            return [cls.RGXS['bool_true'].fullmatch(m) is not None for m in matches]
 
         return [v for m in matches if (v := cls.cast(m, target)) is not None]
 
@@ -426,6 +511,12 @@ class CastFlags(pyd.BaseModel):
                 collections.
         Returns:
             A `CastFlags` instance for the given tier.
+        Examples:
+            Bundle a full strictness tier in one call::
+
+                >>> from my import CastFlags
+                >>> CastFlags.preset('strict')
+                CastFlags(firsts=False, atomics=False, splits=False, wraps=False)
         """
         if level == 'strict':
             return cls(firsts=False, atomics=False, splits=False, wraps=False)
@@ -444,6 +535,16 @@ class CastFlags(pyd.BaseModel):
         the live `Typist` singleton's current fields -- the compatibility seam that keeps direct
         `ty.splits = ...` mutation (and friends) working as the process-wide default source,
         while still giving each cast one consistent flag set from start to finish.
+
+        Examples:
+            Resolve a preset name, or pass an explicit snapshot through untouched::
+
+                >>> from my import CastFlags
+                >>> CastFlags.resolve('basic').wraps
+                False
+                >>> flags = CastFlags(splits=False)
+                >>> CastFlags.resolve(flags) is flags
+                True
         """
         if isinstance(flags, CastFlags):
             return flags
@@ -1333,9 +1434,6 @@ class Transform[T0, T1]:
     def _object_to_model[S: Any, T: Model](self: Transform[S, T]) -> T | None:
         """Cast data to a class instance using various instantiation strategies.
 
-        Args:
-            data: The source data to instantiate from.
-            target: The target class type.
         Returns:
             Class instance if successful, None otherwise.
         """
@@ -1395,6 +1493,14 @@ class Transform[T0, T1]:
 
         Returns:
             The (possibly coerced) data, or None if no member could be satisfied.
+        Examples:
+            Satisfied targets are a NOOP; otherwise members are tried best-fit-first::
+
+                >>> from my import ty
+                >>> ty.cast('5', int | str)
+                '5'
+                >>> ty.cast('5', float | int)
+                5
         """
         if self.t1.check(self.data):
             return self.data
@@ -1409,9 +1515,6 @@ class Transform[T0, T1]:
         Fails silently if the passed data is a sequence that differs in length from the target
         type's expectations.
 
-        Args:
-            data: The source data to cast.
-            target: The target literal MyType.
         Returns:
             Cast data if it matches the literal, None otherwise.
         """
@@ -1454,7 +1557,17 @@ class Transform[T0, T1]:
 
     @classmethod
     def flex_deserialize(cls, text: str) -> Scalar | None:
-        """Parse text as whichever scalar type's pattern it matches, or None if none match."""
+        """Parse text as whichever scalar type's pattern it matches, or None if none match.
+
+        Examples:
+            Give a string its most literal scalar reading::
+
+                >>> from my.typing.cast import Transform
+                >>> Transform.flex_deserialize(' 42 ')
+                42
+                >>> Transform.flex_deserialize('hi') is None
+                True
+        """
         # Numeric parsers own their whitespace: surrounding pad is insignificant when the
         # output is a number (`Scalars` is int/float/complex/bool -- never `str`), so strip
         # before matching. This is the "parsers handle whitespace" half of the no-strip rule.
@@ -1616,7 +1729,7 @@ class Transform[T0, T1]:
             target: The target MyType.
             data: The source data to inform concretization.
         Returns:
-            Tuple of (potentially modified MyType, potentially modified main type).
+            The target as-is when already concrete, otherwise a copy with a concrete origin.
         """
         main = target.main
         if main is None:

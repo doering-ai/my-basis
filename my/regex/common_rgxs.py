@@ -14,6 +14,15 @@ from .meta import META_RGXS
 ### BODY ###
 ############
 #: Store of miscellaneous general patterns, for direct and/or indirect use.
+#:
+#: Underscore-prefixed names are "hidden" building blocks meant for invocation by other
+#: patterns; the rest are ready to match directly, several with parsers attached::
+#:
+#:     >>> from my import COMMON_RGXS
+#:     >>> COMMON_RGXS.fullmatch('year', "'99").flat
+#:     {'year': '1999'}
+#:     >>> COMMON_RGXS.search('md_url', 'see [docs](https://ex.com/a_(b)) now').flat
+#:     {'alias': 'docs', 'target': 'https://ex.com/a_(b)'}
 COMMON_RGXS = RegexStore.new(
     options=dict(
         separator='',

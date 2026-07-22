@@ -24,11 +24,25 @@ class PickleCache[Key: Hashable, Value](pyd.BaseModel):
     """Persistent cache backed by pickle files with TTL-based invalidation.
 
     Supports three data sources with fallback hierarchy:
+
     1. In-memory data (fastest, if fresh)
     2. Pickle file on disk (if within TTL)
     3. Async callback function (if provided, refreshes cache)
 
     Data is automatically written to disk when refreshed from callback.
+
+    Examples:
+        Persist data to disk, then read it back through a fresh instance::
+
+            >>> import asyncio, tempfile
+            >>> from my import PickleCache
+            >>> tmp = tempfile.TemporaryDirectory()
+            >>> cache = PickleCache(file=f'{tmp.name}/data.pkl', data={'a': 1})
+            >>> cache['b'] = 2
+            >>> cache.write()
+            >>> fresh = PickleCache(file=f'{tmp.name}/data.pkl')
+            >>> asyncio.run(fresh.read())
+            {'a': 1, 'b': 2}
     """
 
     file: Path
@@ -55,12 +69,24 @@ class PickleCache[Key: Hashable, Value](pyd.BaseModel):
         """Refresh cache data, checking memory, disk, and callback in order.
 
         Falls back through data sources:
+
         1. Returns in-memory data if recent (within TTL)
         2. Loads from pickle file if it exists and is fresh
         3. Calls async func if provided and caches result
 
         Returns:
             Dictionary of cached data.
+        Examples:
+            Populate an empty cache from its async callback::
+
+                >>> import asyncio, tempfile
+                >>> from my import PickleCache
+                >>> async def fetch():
+                ...     return {'x': 10}
+                >>> tmp = tempfile.TemporaryDirectory()
+                >>> cache = PickleCache(file=f'{tmp.name}/cb.pkl', func=fetch)
+                >>> asyncio.run(cache.read())
+                {'x': 10}
         """
         now = ut.posix()
         cutoff = now - self.ttl
@@ -88,11 +114,11 @@ class PickleCache[Key: Hashable, Value](pyd.BaseModel):
         place, so a crash or kill mid-write can never leave a torn/partially-written
         pickle file at `file`.
 
-        TRUST BOUNDARY:
-            Only unpickle data you trust. `read()` calls `pickle.loads()` on whatever
-            bytes are on disk at `file` -- unpickling arbitrary/untrusted data can
-            execute arbitrary code. Treat this cache's file as trusted storage, not a
-            format for exchanging data with other parties.
+        Warning:
+            This is a trust boundary -- only unpickle data you trust. `read()` calls
+            `pickle.loads()` on whatever bytes are on disk at `file`, and unpickling
+            arbitrary/untrusted data can execute arbitrary code. Treat this cache's file
+            as trusted storage, not a format for exchanging data with other parties.
         """
         fd, tmp_name = tempfile.mkstemp(dir=self.file.parent, prefix=f'.{self.file.name}.')
         tmp_path = Path(tmp_name)
@@ -131,7 +157,7 @@ class PickleCache[Key: Hashable, Value](pyd.BaseModel):
         return self.data.get(key, default)
 
     def items(self) -> Iterable[tuple[Key, Value]]:
-        """Iteratre through all key-value pairs in the cache."""
+        """Iterate through all key-value pairs in the cache."""
         return self.data.items()
 
     def keys(self) -> Iterable[Key]:

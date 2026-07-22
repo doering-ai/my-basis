@@ -7,7 +7,7 @@
 .. autoclass:: my.utils.SemanticUtils.SemanticUtils
 ```
 
-## `I` Formatting
+## `I` Roman Numerals
 
 ```{eval-rst}
 .. automethod:: my.utils.SemanticUtils.SemanticUtils.decimal_to_roman

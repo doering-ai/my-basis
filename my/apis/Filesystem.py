@@ -22,11 +22,10 @@ from .Environment import env
 
 
 class Convention(pyd.BaseModel):
-    """A model representing a single user directory convention.
+    """A model representing a single platform's user directory conventions.
 
-    A dictionary mapping platforms to their user directory conventions.
-    The inner dictionary maps a key (like `config`, `cache`, or `data`) to a tuple of an
-    environment variable and a default path.
+    Each field maps a directory purpose (`config`, `cache`, or `data`) to a tuple of the
+    environment variable that may override it and the platform's default path.
     """
 
     #: The "configuration" directory, i.e. ~/.config
@@ -41,7 +40,7 @@ class Convention(pyd.BaseModel):
     @ft.lru_cache(1)
     @staticmethod
     def conventions() -> dict[Platform, Convention]:
-        """Load platform conventions from the YAML file and populate the `CONVENTIONS` map."""
+        """Load the per-platform directory conventions from the bundled YAML data file."""
         text = (INFRA_PATHS.data / 'platform-conventions.yaml').read_text()
         data = typist.from_yaml(text, dict[str, dict[str, tuple[str, str]]])
 
@@ -51,14 +50,14 @@ class Convention(pyd.BaseModel):
         }
 
     def resolve(self, envvar: str, default: str) -> Path:
-        """Resolve the given field in this environment, returning the default if necessary."""
+        """Resolve an (envvar, default) pair to a path, preferring the environment variable."""
         return ut.path(os.getenv(envvar, default))
 
 
 ############
 ### DATA ###
 ############
-#: Regexes, mostly for for identifying directories.
+#: Regexes, mostly for identifying project directories by their tell-tale files and folders.
 RGXS = RegexStore.new(
     options=RegexStore.Options(force_named_groups=True),
     branch=(
@@ -116,7 +115,7 @@ RGXS = RegexStore.new(
 #: explicitly. Mirrors `RegexStore.REGEX_TIMEOUT` / `Buffer.REGEX_TIMEOUT`.
 REGEX_TIMEOUT: float = 10.0
 
-#: A sentinel value that communicates a failure of some kind, or an unininitialized register.
+#: A sentinel value that communicates a failure of some kind, or an uninitialized register.
 NOWHERE = Path()
 
 Leaf, Branch = pyd.FilePath, pyd.DirectoryPath
@@ -131,7 +130,22 @@ _CONV: Convention = Convention.conventions()[_PLAT]
 ### BODY ###
 ############
 class Filesystem(pyd.BaseModel):
-    """A registry of file paths, mapping string names to Path objects."""
+    """A registry of file paths, mapping string names to Path objects.
+
+    Each instance carries the platform's conventional user directories (`home`, `config`,
+    `cache`, `data`) plus the workspace roots configured through environment variables like
+    `$MY` and `$MY_LOCAL`. The class also collects a family of `classmethod` path utilities
+    usable without any instance. A default instance is exported as `fs` (aliased `FS` and
+    `PATHS`).
+
+    Examples:
+        The default instance reflects the local machine::
+
+            >>> from pathlib import Path
+            >>> from my.apis import fs
+            >>> fs.home == Path.home()
+            True
+    """
 
     RGXS: ClassVar[RegexStore] = RGXS
     PATH_VARS: ClassVar[dict[str, str]] = {
@@ -213,37 +227,85 @@ class Filesystem(pyd.BaseModel):
 
     @ft.cached_property
     def rgxs(self) -> dict[str, re.Pattern[str]]:
-        """A list of regex patterns matching the paths in this registry."""
+        """A map from registry field names to regex patterns matching each registered path."""
         return {name: self.compile_rgx(path) for name, path in reversed(self.model_dump().items())}
 
     @classmethod
     def is_possible(cls, raw: str | Path | None) -> bool:
-        """Check if the given path isn't empty."""
+        """Check if the given value denotes a usable, non-trivial path.
+
+        Args:
+            raw: Path-like value to inspect.
+        Returns:
+            True unless the value is empty, None, or normalizes to a rootless/trivial path.
+        Examples:
+            Empty-ish values fail; anything that normalizes to a real shape passes::
+
+                >>> from my.apis import Filesystem
+                >>> Filesystem.is_possible('/srv/app')
+                True
+                >>> Filesystem.is_possible('')
+                False
+        """
         return bool(raw and (_p := cls.path(raw)).root and str(_p).strip('./\\ '))
 
     @classmethod
     def is_actual(cls, raw: str | Path | None) -> bool:
-        """Check if the given path actually exists."""
+        """Check if the given path actually exists on this machine.
+
+        Args:
+            raw: Path-like value to inspect.
+        Returns:
+            True when the value is a possible path that exists on disk.
+        Examples:
+            Existence is checked after normalization::
+
+                >>> from pathlib import Path
+                >>> from my.apis import Filesystem
+                >>> Filesystem.is_actual(Path.home())
+                True
+                >>> Filesystem.is_actual('/no/such/place')
+                False
+        """
         return bool(raw and cls.is_possible(path := cls.path(raw)) and path.exists())
 
     @classmethod
     def path(cls, raw: str | Path | None) -> Path:
-        """Normalizes a path -- see `ut.path()` for documentation."""
+        """Normalize a path -- see `ut.path()` for full documentation.
+
+        Expands `~` and environment variables, then resolves the result to an absolute path.
+
+        Examples:
+            Relative segments are resolved lexically::
+
+                >>> from my.apis import Filesystem
+                >>> Filesystem.path('/srv/app/../logs')
+                PosixPath('/srv/logs')
+        """
         return ut.path(raw)
 
     @classmethod
     def is_relative_to(cls, child: Path | str, parent: Path | str) -> bool:
-        """Naively check if the child is relative to the proposed parent.
+        """Check if the child path sits under the proposed parent, segment-aware.
 
-        Necessary because of a seemingly undocumented lack of this method in Python3.8 paths.
+        A convenience wrapper over `Path.is_relative_to()` that accepts strings, so sibling
+        names sharing a prefix (`/srv/app2` vs `/srv/app`) are correctly kept apart.
 
         Args:
             child: Path to check.
             parent: Proposed parent path.
         Returns:
             Whether the child is relative to parent.
+        Examples:
+            Compare by whole path segments, not string prefixes::
+
+                >>> from my.apis import Filesystem
+                >>> Filesystem.is_relative_to('/srv/app/logs', '/srv/app')
+                True
+                >>> Filesystem.is_relative_to('/srv/app2', '/srv/app')
+                False
         """
-        return str(child).startswith(str(parent))
+        return Path(child).is_relative_to(Path(parent))
 
     @classmethod
     def relativize(cls, path: Path, *ancestors: Path | str) -> Path | None:
@@ -253,7 +315,16 @@ class Filesystem(pyd.BaseModel):
             path: Path to relativize, which must be absolute. Doesn't have to exist.
             *ancestors: One or more potential ancestors to check against.
         Returns:
-            The same path but relevant to one of the ancestors if possible, otherwise None.
+            The same path but relative to the first matching ancestor, otherwise None.
+        Examples:
+            The first matching ancestor wins; non-absolute paths are refused::
+
+                >>> from pathlib import Path
+                >>> from my.apis import Filesystem
+                >>> Filesystem.relativize(Path('/srv/app/logs/x.log'), '/opt', '/srv/app')
+                PosixPath('logs/x.log')
+                >>> Filesystem.relativize(Path('relative/x.log'), '/srv') is None
+                True
         """
         if not path.is_absolute():
             return None
@@ -271,9 +342,16 @@ class Filesystem(pyd.BaseModel):
     def seek_project(cls, path: Path | None = None) -> Path | None:
         """Attempt to find the project root by looking for common indicators.
 
+        Walks the strict ancestors of the starting directory (not the directory itself),
+        stopping at the user's home directory. An ancestor counts as a project root when it
+        contains a recognizable marker file (`pyproject.toml`, `Taskfile`, a lockfile, ...) or
+        directory (`.git`, `node_modules`, ...).
+
         Args:
-            path: Starting path to search from. If a file is given, the parent will be used.
-            depth: Maximum number of ancestor levels to check. Use -1 for unlimited.
+            path: Starting path to search from, defaulting to the working directory. If a file
+                is given, its parent will be used.
+        Returns:
+            The first ancestor containing a project marker, or None if the walk reaches home.
         """
         path = path or Path.cwd()
 
@@ -294,7 +372,18 @@ class Filesystem(pyd.BaseModel):
 
     @classmethod
     def shortpath(cls, path: str | Path | None) -> str:
-        """Relativize the given path to a shorter form if possible. For casual use."""
+        """Relativize the given path to a shorter form if possible. For casual use.
+
+        Candidate anchors are the working directory (`.`), the home directory (`~`), and any
+        absolute paths found in environment variables; unmatched paths yield the empty string.
+
+        Examples:
+            Paths under home shorten to the `~` form::
+
+                >>> from my.apis import fs
+                >>> fs.shortpath(fs.home / 'notes' / 'todo.md')
+                '~/notes/todo.md'
+        """
         if not path:
             return ''
         path = cls.path(path)

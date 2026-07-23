@@ -68,6 +68,8 @@ type MatchFunction = Literal['match', 'fullmatch', 'full', 'search', 'polymatch'
 # ---------
 DEBUG = True
 NO_FLAG = RegexFlag(0)
+#: Flags the engine adds when compiling an ordinary Unicode string with no explicit options.
+DEFAULT_PATTERN_FLAGS = RegexFlag(re.compile('').flags)
 #: Deadline for every public regex search path used in unattended processing.
 REGEX_TIMEOUT: float = 10.0
 
@@ -92,8 +94,8 @@ class RegexStore(pyd.BaseModel):
         - Automatic parsing of match results into a more ergonomic form (see MatchData).
         - Pattern optimization applied by default.
         - Construction of "Router trees" for efficient matching of long patterns to long texts.
-        - A `REGEX_TIMEOUT` deadline (10s) guarding every public matching call, so runaway
-          backtracking cannot hang unattended processing.
+        - A `REGEX_TIMEOUT` deadline (10s) guarding every public engine call, including
+          substitutions, so runaway backtracking cannot hang unattended processing.
 
     The DSL used to specify patterns can combine a variety of input types into one, including:
         - String literals and pre-compiled patterns.
@@ -123,6 +125,10 @@ class RegexStore(pyd.BaseModel):
     _strip: tuple[Callable[[str], str]] = pyd.PrivateAttr(default=(str,))
     _lazy_queue: deque[Callable[[], None]] = pyd.PrivateAttr(default_factory=deque)
     _is_loaded: bool = pyd.PrivateAttr(default=True)
+    #: Final engine flags for definitions whose flags came from outside the DSL. Keeping this
+    #: provenance separate lets store unions preserve exact compiled-pattern behavior without
+    #: mistaking an inline scoped flag in a string definition for an out-of-band compile option.
+    _external_flags: dict[str, RegexFlag] = pyd.PrivateAttr(default_factory=dict)
     #: Router-tree names to their category lists (see `define_router_tree`) -- private so that
     #: external access is forced through the `routers` property below, which triggers a load
     #: first. `.patterns`/`.definitions` get the same guarantee indirectly: every public method
@@ -249,6 +255,8 @@ class RegexStore(pyd.BaseModel):
                     self.patterns[name] = source.patterns[name]
                     if name in source.parsers:
                         self.parsers[name] = source.parsers[name]
+                    if name in source._external_flags:
+                        self._external_flags[name] = source._external_flags[name]
 
         # II. Preformat the given definitions with the user-defined formatter function
         if (fn := self.options.init_formatter) is not None:
@@ -745,6 +753,8 @@ class RegexStore(pyd.BaseModel):
             Set of all group names invoked by this pattern.
         Raises:
             AssertionError: If local group names conflict with predefined groups.
+            ValueError: If a dependency relies on compile-time flags that cannot travel through
+                the rendered definition block.
         """
         # I. Modify all expressions to use invocations if requested
         if self.options.force_reinvocations:
@@ -767,8 +777,22 @@ class RegexStore(pyd.BaseModel):
                 else:
                     raise ValueError(f'Undefined group invoked: {group.name}')
 
-        # III. Recursively fetch dependencies for the used groups
+        # III. Recursively fetch dependencies for the used groups. Compile-time flags cannot be
+        # imported through a `(?(DEFINE)...)` block: only the dependency's pattern text is
+        # rendered there. Refuse that lossy composition and point callers to flags that travel
+        # with the definition itself.
         groups_used = self.find_all_invocations(groups_used)
+        flagged_dependencies = {
+            group: self._external_flags[group]
+            for group in groups_used
+            if self._external_flags.get(group, DEFAULT_PATTERN_FLAGS) != DEFAULT_PATTERN_FLAGS
+        }
+        if flagged_dependencies:
+            names = ', '.join(sorted(flagged_dependencies))
+            raise ValueError(
+                f'Cannot compose out-of-band flags from dependencies: {names}. '
+                'Use inline scoped flags such as `(?i:...)` in the RegexStore DSL.'
+            )
 
         # IV. Ensure that any local groups don't conflict with predefined ones
         ambiguous = set.intersection(groups_used, local_groups)
@@ -780,7 +804,7 @@ class RegexStore(pyd.BaseModel):
         name: str,
         val: RegexVal,
         parser: RegexParser | None = None,
-        flags: RegexFlag = NO_FLAG,
+        flags: RegexFlag | None = None,
     ) -> None:
         """Define a new named regex pattern in the store.
 
@@ -791,20 +815,39 @@ class RegexStore(pyd.BaseModel):
             name: Unique name for this pattern.
             val: Regex value to compose (string, list, tuple, or Pattern).
             parser: Optional function to parse match results.
-            flags: Optional regex flags to apply during compilation.
+            flags: Compile-time flags for a raw DSL value. Leave this unset for a compiled pattern,
+                whose exact engine flags are preserved automatically.
         Raises:
             AssertionError: If name is already defined.
+            ValueError: If both a compiled pattern and explicit flags are supplied, or a composed
+                dependency relies on out-of-band flags. Use inline scoped flags such as
+                ``(?i:...)`` when flags must travel with a reusable DSL definition.
             Exception: If pattern composition or compilation fails.
         Examples:
             Item assignment routes here, so direct calls are only needed for parsers or flags::
 
+                >>> import regex
                 >>> from my import RegexStore
                 >>> store = RegexStore.new()
                 >>> store.define('word', ('|:', ['cat', 'dog']))
                 >>> store.get_def('word')
                 '(?:cat|dog)'
+                >>> store['casefolded'] = regex.compile(r'hello', regex.I)
+                >>> bool(store.fullmatch('casefolded', 'HELLO'))
+                True
         """
         assert name not in self.definitions, f'Duplicate definition: {name}'
+        if isinstance(val, re.Pattern):
+            if flags is not None:
+                raise ValueError(
+                    'A compiled pattern and explicit flags are ambiguous; compile once, or use '
+                    'inline scoped flags such as `(?i:...)` in the RegexStore DSL.'
+                )
+            flags = RegexFlag(val.flags)
+            has_external_flags = True
+        else:
+            has_external_flags = flags is not None
+        compile_flags = flags if flags is not None else NO_FLAG
 
         try:
             # I. Compose complex data structures into a string, and apply universal formatting
@@ -819,7 +862,7 @@ class RegexStore(pyd.BaseModel):
             definitions = self._render_definitions(*groups_used)
             rgx = rf'{definitions}(?P<{name}>{text})'
             try:
-                self.patterns[name] = re.compile(rgx, flags)
+                self.patterns[name] = re.compile(rgx, compile_flags)
             except Exception:
                 print(f'Failed to compile rgx `{name.upper()}`:\n{rgx}\n')
                 raise
@@ -836,9 +879,11 @@ class RegexStore(pyd.BaseModel):
                     print(f'\nCOMPOSED:\n{raw_text}\n')
             raise
 
-        # III. Store the parser function & regex flags for this group, if present
+        # III. Store parser and out-of-band flag provenance, when present.
         if parser:
             self.parsers[name] = parser
+        if has_external_flags:
+            self._external_flags[name] = RegexFlag(self.patterns[name].flags)
 
     def autostrip(self, values: list[str] | str) -> list[str]:
         """Strip configured characters from values and fix broken brackets.
@@ -890,6 +935,7 @@ class RegexStore(pyd.BaseModel):
                 >>> sorted(store.parse_invocations(r'(?P>date)'))
                 ['date', 'month', 'year']
         """
+        _ = self.load
         invocations = {group.name for group in Regex.group_iterator(text, mask=GroupKind.INVOC)}
         return self.find_all_invocations(invocations)
 
@@ -942,10 +988,12 @@ class RegexStore(pyd.BaseModel):
         _ = self.load
         if isinstance(other, RegexStore):
             for name in other.keys():
-                if name in other.parsers:
-                    self[name] = (other.definitions[name], other.parsers[name])
-                else:
-                    self[name] = other.definitions[name]
+                value: RegexVal = (
+                    other.patterns[name]
+                    if name in other._external_flags
+                    else other.definitions[name]
+                )
+                self.define(name, value, other.parsers.get(name))
         else:
             for name, param in other.items():
                 self[name] = param
@@ -1081,6 +1129,59 @@ class RegexStore(pyd.BaseModel):
                 ['ab', 'cd']
         """
         return list(self.finditer(name, text, **kwargs))
+
+    def sub(
+        self,
+        name: str,
+        repl: str | Callable[[Match], str],
+        text: str | Buffer,
+        count: int = 0,
+    ) -> str:
+        r"""Replace matches of a named pattern under the store-wide timeout.
+
+        Args:
+            name: Pattern name to replace.
+            repl: Replacement text or a function receiving each match.
+            text: Text in which to replace matches.
+            count: Maximum replacements; zero replaces every match.
+        Returns:
+            Text with the requested replacements applied.
+        Examples:
+            Use a stored grammar fragment for safe repeated substitution::
+
+                >>> from my import RegexStore
+                >>> store = RegexStore.new(word=r'\w+')
+                >>> store.sub('word', lambda match: match[0].upper(), 'one two', count=1)
+                'ONE two'
+        """
+        _, text = self._validate_automatch_params(name, text)
+        return self.patterns[name].sub(repl, text, count=count, timeout=REGEX_TIMEOUT)
+
+    def subn(
+        self,
+        name: str,
+        repl: str | Callable[[Match], str],
+        text: str | Buffer,
+        count: int = 0,
+    ) -> tuple[str, int]:
+        r"""Replace matches and return both the new text and replacement count.
+
+        Args:
+            name: Pattern name to replace.
+            repl: Replacement text or a function receiving each match.
+            text: Text in which to replace matches.
+            count: Maximum replacements; zero replaces every match.
+        Returns:
+            Pair of replaced text and number of substitutions made.
+        Examples:
+            Ask the engine to report how many substitutions it performed::
+
+                >>> from my import RegexStore
+                >>> RegexStore.new(word=r'\w+').subn('word', '_', 'one two')
+                ('_ _', 2)
+        """
+        _, text = self._validate_automatch_params(name, text)
+        return self.patterns[name].subn(repl, text, count=count, timeout=REGEX_TIMEOUT)
 
     def fullsplit(
         self,
@@ -1257,8 +1358,10 @@ class RegexStore(pyd.BaseModel):
     def define_router_tree(self, router: str, items: Mapping[str, RegexVal], **kwargs: str) -> None:
         r"""Define a router pattern that classifies text into named categories.
 
-        Creates two patterns: one optimized router (`<router>`) and one with route tracking
-        (`<router>_router`) that captures which category matched.
+        Creates two patterns: one matching router (``<router>``) and one route-tracking router
+        (``<router>_router``) that captures which category matched. Both use ordinary ordered
+        alternation because atomic tree condensation can change lazy-quantifier fullmatch
+        semantics; use the ``<|>`` DSL mark directly when optimization is explicitly desired.
 
         Args:
             router: Base name for the router patterns.
@@ -1297,13 +1400,21 @@ class RegexStore(pyd.BaseModel):
             s0 = kwargs.get('s0', '')
             s1 = kwargs.get('s1', '')
 
-        self[router] = ('<|>', p0, list(items.values()), s0)
-
         routes: list[tuple[int, RegexList]] = [
             (i, rgx if isinstance(rgx, list) else [rgx]) for i, rgx in enumerate(items.values())
         ]
-        _list: RegexList = [(f'<|>P<rt_{i}>', rgx) for i, rgx in routes]
-        self[f'{router}_router'] = ('|:', p1, _list, s1)
+
+        # Router patterns are semantic classifiers, so their advertised fast path and tracking
+        # path must accept exactly the same language. Atomic tree condensation is unsafe for
+        # lazy quantifiers such as `script\\/?\\w*?`: factoring the optional slash branch can
+        # commit too early and make `fullmatch()` reject text the raw expression accepts. Keep
+        # both patterns on the ordinary ordered-alternation path; callers who explicitly want
+        # condensation can still use the `<|>` DSL mark outside a router.
+        main_branches: RegexList = [branch for _, branches in routes for branch in branches]
+        self[router] = ('|:', p0, main_branches, s0)
+
+        tracking_branches: RegexList = [(f'|P<rt_{i}>', branches) for i, branches in routes]
+        self[f'{router}_router'] = ('|:', p1, tracking_branches, s1)
 
     def route_match(self, router: str, text: str | MatchData) -> str:
         """Determine which category a text matches in a router tree.

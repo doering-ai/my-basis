@@ -2,11 +2,11 @@
 ### HEAD ###
 ############
 ### STANDARD
-from regex import Match
 import warnings
 
 ### EXTERNAL
-from pytest import mark
+import pytest as pyt
+from regex import Match
 
 ### INTERNAL
 from my.regex import MatchData
@@ -18,7 +18,7 @@ cls = MatchData
 ### BODY ###
 ############
 class TestMatchData:
-    @mark.parametrize(
+    @pyt.mark.parametrize(
         'data, match, expected',
         [
             (dict(one='1', two=2), None, dict(one=['1'], two=['2'])),
@@ -40,7 +40,7 @@ class TestMatchData:
             assert ret.match is not None
             assert ret.data == expected
 
-    @mark.parametrize(
+    @pyt.mark.parametrize(
         'data, field, default, expected',
         [
             (dict(alpha=['1', '2']), 'alpha', '', '2'),
@@ -56,7 +56,7 @@ class TestMatchData:
         inst = cls(data=data)
         assert inst.at(field, default) == expected
 
-    @mark.parametrize(
+    @pyt.mark.parametrize(
         'data',
         [
             # basis-12 item 6: `flex_deserialize` "decasts" numeric-looking captures into real

@@ -26,8 +26,9 @@ cls = RegexDebugger
 ### BODY ###
 ############
 class TestRegexDebugger:
+    @staticmethod
     @pyt.fixture(scope='class')
-    def store(self) -> RegexStore:
+    def store() -> RegexStore:
         """Create a basic RegexStore for testing."""
         return RegexStore.new(
             dict(separator='', lazy_load=False),
@@ -45,22 +46,32 @@ class TestRegexDebugger:
             month=r'(?i)\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b',
         )
 
+    @staticmethod
     @pyt.fixture(scope='class')
-    def debugger(self, store: RegexStore) -> RegexDebugger:
+    def debugger(store: RegexStore) -> RegexDebugger:
         """Create a RegexDebugger from the store fixture."""
         return RegexDebugger.new_debugger(store)
 
     # -------------------
     # `.` Initial Methods
     # -------------------
-    def test_new_debugger(self, store: RegexStore):
-        """Test creating a debugger from an existing RegexStore."""
+    @pyt.mark.parametrize('lazy_load', [True, False], ids=['lazy', 'eager'])
+    def test_new_debugger(self, lazy_load: bool):
+        """Creating a debugger loads and copies either kind of source store."""
+        store = RegexStore.new(
+            dict(lazy_load=lazy_load),
+            simple=r'hello',
+            flagged=re.compile(r'abc', re.I),
+        )
+        assert (store.patterns == {}) is lazy_load
+
         debugger = cls.new_debugger(store)
+
         assert isinstance(debugger, cls)
-        # Should have all the patterns from the original store
         assert debugger.definitions == store.definitions
+        assert debugger.definitions is not store.definitions
         assert debugger.options == store.options
-        # Should inherit all store functionality
+        assert debugger['flagged'].flags == store['flagged'].flags
         assert debugger.match('simple', 'hello')
         assert not debugger.match('simple', 'goodbye')
 

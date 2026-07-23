@@ -63,7 +63,12 @@ class Markdown(pyd.BaseModel):
             r'(?sm)^# (?P=tags)?(?P=title)',
             r'(?P=prose)(?=\n+# |\Z)',
         ],
-        node=[r'(?sm)(?P=header) *\n+(?P=prose)\n*(?=^#{1,6} |\Z)'],
+        # Try the zero-prose lookahead before the prose subroutine; otherwise an adjacent
+        # heading is consumed as the preceding node's prose.
+        node=[
+            r'(?sm)(?P=header)(?: *\n+'
+            r'(?:(?=^#{1,6} |\Z)|(?P=prose)\n*(?=^#{1,6} |\Z))| *\Z)'
+        ],
     )
 
     # Metadata
@@ -819,9 +824,9 @@ class Markdown(pyd.BaseModel):
         Recognizes headers, tags, indices, and prose to build nested Markdown nodes.
         Automatically handles "Notes" sections by parsing them as YAML. Lines inside fenced code
         blocks are ignored by the header scanner, so a `#` comment in a code fence is kept as
-        prose rather than misread as a header. Note that a header is only recognized as a child
-        when its parent carries prose of its own: adjacent header lines with nothing between
-        them are folded into the parent's prose.
+        prose rather than misread as a header. Empty sections are preserved, including adjacent
+        headings with no intervening prose, so their descendants remain attached to the right
+        parent.
 
         Args:
             text: Markdown text or Buffer to parse.
@@ -836,6 +841,13 @@ class Markdown(pyd.BaseModel):
                 >>> doc = Markdown.parse(text)[0]
                 >>> [(n.level, n.idx, n.tags, n.title) for n in doc.tree]
                 [(1, '', [], 'Guide'), (2, '0', ['draft'], 'Usage')]
+
+            Empty parent sections remain in the hierarchy::
+
+                >>> text = '# Guide\n\n## Empty\n\n### Leaf\n\nBody.\n'
+                >>> doc = Markdown.parse(text)[0]
+                >>> [(n.level, n.title, str(n.prose)) for n in doc.tree]
+                [(1, 'Guide', ''), (2, 'Empty', ''), (3, 'Leaf', 'Body.')]
         """
         masked = cls._mask_fences(str(text))
         nodes = deque(

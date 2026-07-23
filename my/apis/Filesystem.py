@@ -202,14 +202,29 @@ class Filesystem(pyd.BaseModel):
     @staticmethod
     @ft.lru_cache(maxsize=256)
     def compile_rgx(path: Path | str) -> re.Pattern[str]:
-        """Compile a regex pattern matching the given path, allowing for relative leading parts."""
+        """Compile a pattern that consumes a literal path with a relative prefix.
+
+        The match starts with `/`, `./`, or one or more `../` segments, captures the path
+        without its leading slash, and consumes one optional trailing slash. This shape lets
+        callers replace registered paths inside text without matching longer word or dotted-path
+        segments.
+
+        Args:
+            path: Path to escape and match literally.
+        Returns:
+            Compiled path pattern.
+        Examples:
+            Relative prefixes and a trailing slash are part of the match::
+
+                >>> from my.apis import Filesystem
+                >>> pattern = Filesystem.compile_rgx('/srv/app')
+                >>> pattern.search('from ../srv/app/logs')[0]
+                '../srv/app/'
+                >>> pattern.search('unrelated') is None
+                True
+        """
         pathstr = re.escape(Path(path).as_posix().strip('/'))
-        expr = ut.multi_rgx(
-            r'(?<![-\w\/.])',
-            r'(?:\.{0,2}\/)+',
-            rf'({pathstr})',
-            r'(?![-.\w])(\/?)',
-        )
+        expr = rf'(?<![-\w\/.])(?:\.{{0,2}}\/)+({pathstr})(?![-.\w])(\/?)'
         return re.compile(expr)
 
     # ------------------
@@ -227,8 +242,26 @@ class Filesystem(pyd.BaseModel):
 
     @ft.cached_property
     def rgxs(self) -> dict[str, re.Pattern[str]]:
-        """A map from registry field names to regex patterns matching each registered path."""
-        return {name: self.compile_rgx(path) for name, path in reversed(self.model_dump().items())}
+        """Compile patterns for every path-valued registry field.
+
+        Non-path metadata such as `plat` is omitted.
+
+        Returns:
+            Map from path field name to its compiled literal-path pattern.
+        Examples:
+            Platform metadata is not a path pattern::
+
+                >>> from my.apis import fs
+                >>> 'plat' in fs.rgxs
+                False
+                >>> bool(fs.rgxs['home'].search(fs.home.as_posix()))
+                True
+        """
+        return {
+            name: self.compile_rgx(path)
+            for name, path in reversed(self.model_dump().items())
+            if isinstance(path, Path)
+        }
 
     @classmethod
     def is_possible(cls, raw: str | Path | None) -> bool:

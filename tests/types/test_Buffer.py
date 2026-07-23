@@ -141,6 +141,59 @@ class TestBuffer:
             assert match[0] == exp
             buf.drop(match.span())
 
+    @pyt.mark.parametrize(
+        'text, fence_rgxs, skip_fenced, rgx, expected',
+        [
+            ('a1 a2', [], False, r'a\d', ['a1', 'a2']),
+            ('a1 `a2` a3', ['bactic'], None, r'a\d', ['a1', 'a2', 'a3']),
+            ('a1 `a2` a3', ['bactic'], False, r'a\d', ['a1', 'a2', 'a3']),
+            ('a1 `a2` a3', ['bactic'], True, r'a\d', ['a1', 'a3']),
+            ('`a1 a2` a3', ['bactic'], True, r'a\d', ['a3']),
+            ('a1 [a2] `a3` a4', ['arrays', 'bactic'], True, r'a\d', ['a1', 'a4']),
+            ('a1 [a2] `a3` a4', ['arrays'], True, r'a\d', ['a1', 'a3', 'a4']),
+            ('a1 <code>a2 a3</code> a4', [r'<code>.+?</code>'], True, r'a\d', ['a1', 'a4']),
+            (
+                'a1 <code>a2 a3</code> a4',
+                [r'<code>.+?</code>'],
+                False,
+                r'a\d',
+                ['a1', 'a2', 'a3', 'a4'],
+            ),
+            ('`a1`', ['bactic'], True, r'(?=a)', []),
+        ],
+    )
+    def test_rgx_iterator__fences(
+        self,
+        text: str,
+        fence_rgxs: list[str],
+        skip_fenced: bool | None,
+        rgx: str,
+        expected: list[str],
+    ):
+        """Test historical all-match iteration and explicit fence protection."""
+        buf = cls.new(text, fence_rgxs=fence_rgxs)
+        matches = (
+            buf.rgx_iterator(rgx)
+            if skip_fenced is None
+            else buf.rgx_iterator(rgx, skip_fenced=skip_fenced)
+        )
+        assert [match[0] for match in matches] == expected
+
+    @pyt.mark.parametrize(
+        'text, fence_rgxs, expected',
+        [
+            ('a1 `a2` a3', ['bactic'], 'X `a2` X'),
+            ('a1 [a2] a3', ['arrays'], 'X [a2] X'),
+            ('a1 [a2] `a3` a4', ['arrays', 'bactic'], 'X [a2] `a3` X'),
+            ('a1 [a2] `a3` a4', [], 'X [X] `X` X'),
+        ],
+    )
+    def test_replace__fences(self, text: str, fence_rgxs: list[str], expected: str):
+        """Test that pattern replacement explicitly opts into fence protection."""
+        buf = cls.new(text, fence_rgxs=fence_rgxs)
+        buf.replace(re.compile(r'a\d'), 'X')
+        assert str(buf) == expected
+
     def test_rgx_iterator__recursive(self):
         buf = DefBuf('start [WORD1] middle [WORD3] end')
         for match in buf.rgx_iterator('arrays', True):
@@ -281,6 +334,42 @@ class TestBuffer:
         buf.strip(chars)
         assert str(buf) == expected
         assert list(it.starmap(buf.slice, buf.fences)) == [f'`{f}`' for f in fences]
+
+    @pyt.mark.parametrize(
+        'text, span, new, spacing, expected',
+        [
+            ('ab', Span(1, 2), 'c', 0, 'a c'),
+            ('a b', Span(2, 3), 'c', 0, 'a c'),
+            ('a,b!', Span(2, 3), 'c', 0, 'a,c!'),
+            ('ab', Span(1, 2), 'c', 1, 'a\nc'),
+            ('a\nb\nc', Span(2, 3), 'X', 1, 'a\nX\nc'),
+            ('ab', Span(1, 2), 'c', 2, 'a\n\nc'),
+            ('a\nb', Span(2, 3), 'X', 2, 'a\n\nX'),
+            ('', Span(0, 0), ['a', 'b'], 0, 'a b'),
+            ('', Span(0, 0), ['a', 'b'], 1, 'a\nb'),
+            ('', Span(0, 0), ['a', 'b'], 2, 'a\n\nb'),
+            ('abc', Span(1, 2), '', 0, 'ac'),
+            ('abc', Span(1, 2), [], 2, 'ac'),
+        ],
+    )
+    def test_write(
+        self,
+        text: str,
+        span: Span,
+        new: str | list[str],
+        spacing: int,
+        expected: str,
+    ):
+        """Test the space, line, and blank-line separation policies."""
+        buf = cls.new(text)
+        buf.write(span, new, spacing)
+        assert str(buf) == expected
+
+    @pyt.mark.parametrize('spacing', [-1, 3])
+    def test_write__invalid_spacing(self, spacing: int):
+        """Test that only the three documented spacing modes are accepted."""
+        with pyt.raises(AssertionError, match=f'Invalid spacing: {spacing}'):
+            cls.new('ab').write(Span(1, 2), 'c', spacing)
 
     @pyt.mark.parametrize(
         'text, pos, expected',

@@ -166,9 +166,71 @@ class TestFilesystem:
             cls._check_for_project_root(tmp_path)
         assert time.monotonic() - start < 5, 'timeout should fire well before this bound'
 
+    # -------------------
+    # `+` Primary Methods
+    # -------------------
+    @pyt.mark.parametrize(
+        'path, text, expected',
+        [
+            ('/test/path', '/test/path/file.py', '/test/path/'),
+            (Path('/test/path'), './test/path/', './test/path/'),
+            ('/test/path', '../test/path', '../test/path'),
+            ('/space dir', 'trace: /space dir/log.txt', '/space dir/'),
+            ('/test/path', '', None),
+            ('/test/path', 'unrelated', None),
+            ('/test/path', '/test/pathology', None),
+            ('/test/path', 'x/test/path', None),
+            ('/test/path', '/test/path.ext', None),
+        ],
+        ids=[
+            'absolute-with-child',
+            'dot-relative',
+            'parent-relative',
+            'escaped-space',
+            'empty',
+            'unrelated',
+            'longer-name',
+            'word-prefix',
+            'dotted-suffix',
+        ],
+    )
+    def test_compile_rgx(self, path: Path | str, text: str, expected: str | None):
+        """Test path patterns consume only the requested path and an optional trailing slash."""
+        match = cls.compile_rgx(path).search(text)
+        assert (match[0] if match else None) == expected
+
     # ------------------
     # `*` Public Methods
     # ------------------
+    # ---------------
+    # `*1` Properties
+    # ---------------
+    @pyt.mark.parametrize(
+        'field, expected',
+        boolmap(
+            true=[
+                'home',
+                'config',
+                'cache',
+                'data',
+                'my',
+                'creds',
+                'corpus',
+                'local',
+                'logs',
+                'models',
+                'metrics',
+            ],
+            false=['plat'],
+        ),
+    )
+    def test_rgxs(self, fs: Filesystem, field: str, expected: bool):
+        """Test rgxs compiles path fields and excludes non-path registry metadata."""
+        assert (field in fs.rgxs) == expected
+        if expected:
+            match = fs.rgxs[field].search(getattr(fs, field).as_posix())
+            assert match and match[0]
+
     # ------------
     # `*2` Methods
     # ------------

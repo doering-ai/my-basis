@@ -358,7 +358,7 @@ class Buffer(pyd.BaseModel):
             new: The new text to insert.
             count: The maximum number of replacements to make (0 for all).
         """
-        for i, match in enumerate(self.rgx_iterator(rgx)):
+        for i, match in enumerate(self.rgx_iterator(rgx, skip_fenced=True)):
             if count and i >= count:
                 break
             self._replace_span(match.span(), rgx.sub(new, match[0]))
@@ -654,6 +654,9 @@ class Buffer(pyd.BaseModel):
 
         .. tip:: Prefer to pass a precalculated span if you have it, to prevent rework.
 
+        Pattern replacements preserve matches beginning inside configured fences. Use
+        `rgx_iterator()` directly when fenced matches must be processed deliberately.
+
         Args:
             old: The substring, span, or regex pattern to replace.
             new: The new text to insert.
@@ -824,6 +827,8 @@ class Buffer(pyd.BaseModel):
         - 0: Ensures a space (or other whitespace/punctuation) exists before and after
         - 1: Ensures a newline exists before and after
         - 2: Ensures two newlines (i.e. an empty line) exist before and after
+
+        Use `replace()` when no surrounding spacing should be added.
 
         Args:
             span: The span of text to replace.
@@ -1023,6 +1028,7 @@ class Buffer(pyd.BaseModel):
         recursive: bool = False,
         b0: int = 0,
         b1: int = -1,
+        skip_fenced: bool = False,
     ) -> Iterator[Match]:
         r"""Iterate over all matches of the given regex pattern in the buffer.
 
@@ -1030,14 +1036,16 @@ class Buffer(pyd.BaseModel):
         modify the buffer's text while they iterate over it. To make this possible, it is assumed
         that the caller will only ever modify the last-yielded match of text during each iteration.
 
-        Unlike the pair iterators, this method does not currently skip the 'fence' spans specified
-        during initialization -- every match in the bounds is yielded, fenced or not.
+        By default, every match is yielded, including matches inside configured fences. This
+        historical behavior lets callers deliberately process or remove the text defining a fence.
+        Set `skip_fenced` to protect matches that begin inside fences, as the pair iterators do.
 
         Args:
             rgx: The regex pattern to search for (compiled or as a plain string).
             recursive: If set, overlapping matches are also found.
             b0: The positive, inclusive start bound for searching.
             b1: The positive, exclusive end bound for searching, or -1 to search the whole text.
+            skip_fenced: If set, suppress matches that begin inside a configured fence.
         Yields:
             Match objects for each occurrence, adjusted for any in-flight modifications.
         Examples:
@@ -1059,6 +1067,11 @@ class Buffer(pyd.BaseModel):
             x0, x1 = match.span()
             if x1 > b1:
                 break
+            elif skip_fenced and self._is_fenced(x0):
+                # Fenced matches are not yielded, so always advance without waiting for a caller
+                # mutation. The +1 fallback also makes zero-width fenced patterns progress.
+                pos = max(x1, x0 + 1)
+                continue
 
             # Record initial length
             last_len = len(self)

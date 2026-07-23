@@ -704,28 +704,138 @@ class TestMarkdown:
         nodes = cls.parse('')
         assert nodes == []
 
-    def test_parse__code_fence_hash_not_header(self):
-        # Regression: a `#` comment inside a fenced code block must stay prose, not be mistaken
-        # for a header (which fabricated a phantom node and misnested the sections after it).
-        text = (
-            '# Title\n\nIntro.\n\n'
-            '```python\n# this is a comment\ndef f():\n    pass\n```\n\n'
-            '## Section Two\n\nMore.\n'
-        )
+    @pyt.mark.parametrize(
+        'text, expected_tree',
+        [
+            pyt.param(
+                '# A\n\n## B\n\n## C\n\nbody',
+                [
+                    (1, 'A', '', ['B', 'C']),
+                    (2, 'B', '', []),
+                    (2, 'C', 'body', []),
+                ],
+                id='empty-sibling',
+            ),
+            pyt.param(
+                '# A\n\n## B\n\n### C\n\nbody',
+                [
+                    (1, 'A', '', ['B']),
+                    (2, 'B', '', ['C']),
+                    (3, 'C', 'body', []),
+                ],
+                id='empty-ancestor',
+            ),
+            pyt.param(
+                '# A\n## B\n### C\nbody',
+                [
+                    (1, 'A', '', ['B']),
+                    (2, 'B', '', ['C']),
+                    (3, 'C', 'body', []),
+                ],
+                id='adjacent-headings',
+            ),
+            pyt.param(
+                '# A\n\n### C\n\nbody',
+                [
+                    (1, 'A', '', ['C']),
+                    (3, 'C', 'body', []),
+                ],
+                id='skipped-level',
+            ),
+            pyt.param(
+                '# A\n\n## B',
+                [
+                    (1, 'A', '', ['B']),
+                    (2, 'B', '', []),
+                ],
+                id='empty-final-child',
+            ),
+            pyt.param(
+                '# A',
+                [(1, 'A', '', [])],
+                id='empty-root',
+            ),
+        ],
+    )
+    def test_parse__headerless(
+        self,
+        text: str,
+        expected_tree: list[tuple[int, str, str, list[str]]],
+    ):
+        """Empty sections must remain nodes and retain their descendants or siblings."""
         nodes = cls.parse(text)
         assert len(nodes) == 1
-        assert nodes[0].title == 'Title'
-        # `## Section Two` is a real child; the fenced `# comment` is not a node at all.
-        assert [child.title for child in nodes[0].nodes] == ['Section Two']
-        # The fence (including its `#` comment) is preserved verbatim in the title node's prose.
-        assert '# this is a comment' in str(nodes[0].prose)
+        assert [
+            (node.level, node.title, str(node.prose), [child.title for child in node.nodes])
+            for node in nodes[0].tree
+        ] == expected_tree
 
-    def test_parse__tilde_fence_hash_not_header(self):
-        text = '# T\n\n~~~\n### not a header\n~~~\n\n## Real\n\nx\n'
+    @pyt.mark.parametrize(
+        'text, note_path, expected_notes, expected_root_children',
+        [
+            pyt.param(
+                '# A\n\n## Notes\n\nkey: value\n\n## Body\n\ncopy',
+                [],
+                {'key': 'value'},
+                ['Body'],
+                id='root',
+            ),
+            pyt.param(
+                '# A\n\n## B\n\n### Notes\n\nkey: value\n\n## C\n\ncopy',
+                [0],
+                {'key': 'value'},
+                ['B', 'C'],
+                id='headerless-child',
+            ),
+        ],
+    )
+    def test_parse__notes(
+        self,
+        text: str,
+        note_path: list[int],
+        expected_notes: dict[str, object],
+        expected_root_children: list[str],
+    ):
+        """A YAML Notes child must attach to its prose-free parent as metadata."""
+        root = cls.parse(text)[0]
+        noted = root
+        for child_index in note_path:
+            noted = noted.nodes[child_index]
+
+        assert noted.notes == expected_notes
+        assert [child.title for child in root.nodes] == expected_root_children
+        assert all(child.title != 'Notes' for child in noted.nodes)
+
+    @pyt.mark.parametrize(
+        'text, root_title, child_title, fenced_hash',
+        [
+            pyt.param(
+                '# Title\n\nIntro.\n\n'
+                '```python\n# this is a comment\ndef f():\n    pass\n```\n\n'
+                '## Section Two\n\nMore.\n',
+                'Title',
+                'Section Two',
+                '# this is a comment',
+                id='backtick',
+            ),
+            pyt.param(
+                '# T\n\n~~~\n### not a header\n~~~\n\n## Real\n\nx\n',
+                'T',
+                'Real',
+                '### not a header',
+                id='tilde',
+            ),
+        ],
+    )
+    def test_parse__fenced_hash(
+        self, text: str, root_title: str, child_title: str, fenced_hash: str
+    ):
+        """Hash-prefixed prose inside either fence style must not become a header."""
         nodes = cls.parse(text)
         assert len(nodes) == 1
-        assert [child.title for child in nodes[0].nodes] == ['Real']
-        assert '### not a header' in str(nodes[0].prose)
+        assert nodes[0].title == root_title
+        assert [child.title for child in nodes[0].nodes] == [child_title]
+        assert fenced_hash in str(nodes[0].prose)
 
     def test_from_yaml(self):
         node = cls.new(
@@ -764,6 +874,64 @@ class TestMarkdown:
         node = cls.new(title='Test', prose='Content')
         output = node.to_string(fix=False)
         assert isinstance(output, str)
+
+    @pyt.mark.parametrize('fix', [False, True])
+    @pyt.mark.parametrize(
+        'text, expected_tree, expected_descendant_prose, fenced_hash',
+        [
+            pyt.param(
+                '# Root\n\nBefore.\n\n'
+                '```python\n# not a heading\nprint("ok")\n```\n\n'
+                '## Empty\n\n### Leaf\n\nleaf',
+                [
+                    (1, 'Root', ['Empty']),
+                    (2, 'Empty', ['Leaf']),
+                    (3, 'Leaf', []),
+                ],
+                {'Empty': '', 'Leaf': 'leaf'},
+                '# not a heading',
+                id='backtick-nested',
+            ),
+            pyt.param(
+                '# Root\n\nBefore.\n\n'
+                '~~~text\n## not a child\n~~~\n\n'
+                '## Empty\n\n## Filled\n\nbody',
+                [
+                    (1, 'Root', ['Empty', 'Filled']),
+                    (2, 'Empty', []),
+                    (2, 'Filled', []),
+                ],
+                {'Empty': '', 'Filled': 'body'},
+                '## not a child',
+                id='tilde-siblings',
+            ),
+        ],
+    )
+    def test_to_string__roundtrip(
+        self,
+        fix: bool,
+        text: str,
+        expected_tree: list[tuple[int, str, list[str]]],
+        expected_descendant_prose: dict[str, str],
+        fenced_hash: str,
+    ):
+        """Rendering must separate child headers and preserve fence-aware tree structure."""
+        root = cls.parse(text)[0]
+        raw_output = root.to_string(fix=False)
+        output = root.to_string(fix=fix)
+        reparsed = cls.parse(output)[0]
+        reparsed_tree = list(reparsed.tree)
+
+        assert (output != raw_output) is fix
+        assert f'\n{root.nodes[0].header}\n' in output
+        assert [
+            (node.level, node.title, [child.title for child in node.nodes])
+            for node in reparsed_tree
+        ] == expected_tree
+        assert {
+            node.title: str(node.prose) for node in reparsed_tree[1:]
+        } == expected_descendant_prose
+        assert fenced_hash in str(reparsed.prose)
 
     @pyt.mark.parametrize('fix', [False, True])
     def test_to_string__root_notes_render_as_frontmatter(self, fix: bool):

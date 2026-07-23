@@ -1,7 +1,7 @@
 # `@dtm/basis` — the house Typst package
 
 The fleet's shared Typst import: one line gives an authored report the house theme, the callouts, a per-genre template, a queryable metadata envelope, and the problem-space frontier component.
-It is the authoring counterpart to [`myform`](../myform) (the universal `md↔typst` translator): `myform` *converts* existing documents and ships a self-contained callout prelude; `@dtm/basis` is what agents `#import` when they *author* a new `.typ` report.
+It is the authoring counterpart to [`myform`](../../myform) (the universal `md↔typst` translator): `myform` *converts* existing documents and ships a self-contained callout prelude; `@dtm/basis` is what agents `#import` when they *author* a new `.typ` report.
 The two are visually aligned on purpose, so converted and authored reports read as one corpus in the Latent Library.
 
 Part of the fleet markdown→typst migration (`MEMY-597`, wave W0.2 / `MEMY-599`).
@@ -15,6 +15,12 @@ Part of the fleet markdown→typst migration (`MEMY-597`, wave W0.2 / `MEMY-599`
 ./install.sh --copy   # release snapshot instead of a symlink
 ```
 
+## Repository and release boundary
+
+This package lives under `typst/` in the `my-basis` repository, but it remains an independently versioned `@dtm/basis` package. Its sources are MIT-licensed under [`LICENSE`](LICENSE); the Python project at repository root remains MPL-2.0. Python wheels and source distributions explicitly exclude this subtree.
+
+Use `typst-vX.Y.Z` tags for this package. Bare `vX.Y.Z` tags belong to the Python package and may trigger PyPI publication. The package history was imported from `/home/robbd/my/libs/typst-basis` at source head `fc46f3700af5415db0692f30bc955df361638aee`.
+
 ## Use
 
 ```typst
@@ -24,7 +30,7 @@ Part of the fleet markdown→typst migration (`MEMY-597`, wave W0.2 / `MEMY-599`
   title: "Findings on X",
   agent: "claude",
   date: "2026-07-21",
-  genre: "references",          // references | explanations | lessons | instructions
+  genre: "reference",           // reference | explanation | lesson | instruction
   tagline: "one-line subtitle",  // optional
 )
 
@@ -76,5 +82,10 @@ typst eval 'query(<dtm-report>).first().value' --in report.typ --format json
 
 ## Tests
 
-Compile + envelope-query tests live in the corpus repo (`tests/test_typst_basis.py`) — that is where the migration epic's pytest gate runs and where the package is exercised continuously.
-They install `@dtm/basis` into a temporary package root and assert every fixture compiles and the envelope round-trips.
+Run the package's self-contained Typst 0.15 gate from this directory:
+
+```sh
+./test.sh
+```
+
+It installs a temporary copy, compiles both fixtures, checks nonempty PDFs, verifies the copied release manifest, and queries the `dtm-report/1` envelope. The Corpus repository retains the downstream integration gate in `tests/test_typst_basis.py`.

@@ -3,6 +3,9 @@
 ############
 ### STANDARD
 import typing
+
+# PEP 696 defaults: 3.13 in the stdlib, always available from typing_extensions.
+import typing_extensions
 from typing import Any, Literal, Optional, TypeGuard, Annotated, Union, Unpack
 import types
 from collections.abc import (
@@ -330,7 +333,8 @@ class TestMyType:
             # ---- Constrained ----
             (typing.TypeVar('T', str, bytes), str | bytes),  # constraints -> union of all
             # ---- Defaulted (PEP 696) ----
-            (typing.TypeVar('T', bound=Real, default=float), float),  # default beats bound
+            # default beats bound
+            (typing_extensions.TypeVar('T', bound=Real, default=float), float),
             # ---- Unconstrained ----
             (typing.TypeVar('T'), Any),
         ],
@@ -361,7 +365,7 @@ class TestMyType:
     def test_parse__typevar_self_referential_default(self):
         """A TypeVar's PEP 696 default may itself be another TypeVar -- resolve recursively."""
         T1 = typing.TypeVar('T1', bound=Real)
-        T2 = typing.TypeVar('T2', default=T1)
+        T2 = typing_extensions.TypeVar('T2', default=T1)
         assert cls.parse(T2).root == cls.parse(T1).root == Real
 
     def test_parse__pair(self):

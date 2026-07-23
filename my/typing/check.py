@@ -3,7 +3,8 @@
 ############
 ### STANDARD
 from __future__ import annotations
-from typing import overload, TypeIs, Literal, Any, TypeGuard
+from typing import overload, Literal, Any, TypeGuard
+from typing_extensions import TypeIs  # 3.13 in the stdlib; our floor is 3.12
 from collections.abc import Iterator
 from types import EllipsisType, NoneType
 from collections.abc import Iterable, Callable, Hashable

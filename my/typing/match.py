@@ -3,7 +3,8 @@
 ############
 ### STANDARD
 from __future__ import annotations
-from typing import overload, ClassVar, TypeIs, Literal, is_typeddict, Any
+from typing import overload, ClassVar, Literal, is_typeddict, Any
+from typing_extensions import TypeIs  # 3.13 in the stdlib; our floor is 3.12
 from collections.abc import Hashable, Iterable, ItemsView, Mapping
 from enum import Enum
 from dataclasses import is_dataclass

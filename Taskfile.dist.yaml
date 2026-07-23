@@ -178,6 +178,17 @@ tasks:
         desc: Install & verify dependencies through `uv sync`, including all optional and dev
             dependencies.
 
+    lock:check:
+        cmd: '{{.UV}} lock --check'
+        desc: Prove `uv.lock` is present and exactly synchronized with `pyproject.toml`.
+        aliases: [check-lock, lock-check]
+
+    sync:locked:
+        cmd: '{{.UV}} sync --locked --all-extras {{.CLI_ARGS}}'
+        deps: [lock:check]
+        desc: Reproduce the locked development environment without changing `uv.lock`.
+        aliases: [locked-sync]
+
     # ----------
     # Evaluation
     # ----------
@@ -189,12 +200,12 @@ tasks:
             - eval:format
 
     eval:lint:
-        cmd: '{{.UV}} run ruff check {{.CLI_ARGS}}'
+        cmd: '{{.UV}} run --locked ruff check {{.CLI_ARGS}}'
         desc: Catch logic & semantic errors with `ruff check`.
         aliases: [ch, ruff, check]
 
     eval:typecheck:
-        cmd: '{{.UV}} run pyrefly check --summary=none {{.CLI_ARGS}}'
+        cmd: '{{.UV}} run --locked pyrefly check --summary=none {{.CLI_ARGS}}'
         desc: Verify types and import structure with `pyrefly check`.
         aliases: [ty, types]
 
@@ -210,11 +221,11 @@ tasks:
             set -e
             for v in {{.PYVERS}}; do
               printf '\033[1m── pyrefly @ py%s ──\033[0m\n' "$v"
-              {{.UV}} run pyrefly check . --python-version "$v" {{.CLI_ARGS}}
+              {{.UV}} run --locked pyrefly check . --python-version "$v" {{.CLI_ARGS}}
             done
 
     eval:format:
-        cmd: '{{.UV}} run ruff format {{.CLI_ARGS}}'
+        cmd: '{{.UV}} run --locked ruff format {{.CLI_ARGS}}'
         desc: Fix any formatting issues in our python code, saving the files in place with changes.
         aliases: [fm, fmt, format]
 
@@ -222,30 +233,40 @@ tasks:
     # Testing
     # -------
     test:
-        cmd: '{{.UV}} run pytest {{.CLI_ARGS}}'
+        cmd: '{{.UV}} run --locked pytest {{.CLI_ARGS}}'
         aliases: [pt, tests, pytest]
         desc: Dynamically assess the codebase by running `pytest` with no filters applied.
 
+    test:audit:
+        cmds:
+            - mkdir -p '{{._0}}/build'
+            - cmd: >-
+                {{.UV}} run --locked python scripts/audit_tests.py --tests tests
+                --baseline c9bcd09 --json build/test-audit.json
+                --markdown build/test-audit.md --check {{.CLI_ARGS}}
+        aliases: [audit-tests, test-audit]
+        desc: Audit test conventions against the pre-July baseline and emit JSON/MyST evidence.
+
     test:dev:
-        cmd: '{{.UV}} run pytest --sw -vv {{.CLI_ARGS}}'
+        cmd: '{{.UV}} run --locked pytest --sw -vv {{.CLI_ARGS}}'
         aliases: [dev-test]
         desc: Run iterative developer tests that stop upon first failure, showing extra output
             and skipping code coverage.
 
     test:pdb:
-        cmd: '{{.UV}} run pytest -s --pdb --sw -vv {{.CLI_ARGS}}'
+        cmd: '{{.UV}} run --locked pytest -s --pdb --sw -vv {{.CLI_ARGS}}'
         aliases: [pdb-test, debug-test]
         desc: The same as dev-test, but also drop into the interactive debugger upon exception
             or failure.
 
     test:ssu:
-        cmd: '{{.UV}} run pytest --snapshot-update {{.CLI_ARGS}}'
+        cmd: '{{.UV}} run --locked pytest --snapshot-update {{.CLI_ARGS}}'
         aliases: [snapshot-test, ssu-test, snap-test]
         desc: Update regression test "snapshot" files to reflect the new truth.
 
     test:cov:
         cmd: >-
-            {{.UV}} run pytest --cov "{{._PACKAGE}}" --cov-branch --no-cov-on-fail {{.CLI_ARGS}}
+            {{.UV}} run --locked pytest --cov "{{._PACKAGE}}" --cov-branch --no-cov-on-fail {{.CLI_ARGS}}
             --cov-report term-missing --cov-report markdown:tests/coverage.md
 
         aliases: [coverage, cov-test, coverage-test]
@@ -259,7 +280,7 @@ tasks:
             for v in {{.PYVERS}}; do
               printf '\033[1m── py%s ──────────────────────────────\033[0m\n' "$v"
               UV_PROJECT_ENVIRONMENT={{._0}}/.venvs/py$v \
-                {{.UV}} run --python "$v" --all-extras pytest -q {{.CLI_ARGS}}
+                {{.UV}} run --locked --python "$v" --all-extras pytest -q {{.CLI_ARGS}}
             done
 
     test:floor:
@@ -269,10 +290,26 @@ tasks:
         vars:
             PYMIN: '3.{{get .REPO "pyver"}}'
         cmd: |
-            set -e
-            export UV_PROJECT_ENVIRONMENT={{._0}}/.venvs/floor
-            {{.UV}} sync --python '{{.PYMIN}}' --all-extras --resolution lowest-direct
-            {{.UV}} run --python '{{.PYMIN}}' pytest -q {{.CLI_ARGS}}
+            set -eu
+            project='{{._0}}'
+            package='{{._PACKAGE}}'
+            floor_root="$(mktemp -d "${TMPDIR:-/tmp}/py-floor.XXXXXX")"
+            trap 'rm -rf "$floor_root"' EXIT
+            cp "$project/pyproject.toml" "$project/README.md" "$project/LICENSE" "$floor_root/"
+            cp -R "$project/$package" "$project/tests" "$floor_root/"
+            for extra in scripts typst; do
+              if [ -d "$project/$extra" ]; then cp -R "$project/$extra" "$floor_root/"; fi
+            done
+            export UV_PROJECT_ENVIRONMENT="$floor_root/.venv"
+            export UV_LINK_MODE=copy
+            export UV_RESOLUTION=lowest-direct
+            uv --project "$floor_root" lock --python '{{.PYMIN}}'
+            uv --project "$floor_root" lock --check --python '{{.PYMIN}}'
+            uv --project "$floor_root" sync --locked --python '{{.PYMIN}}' --all-extras
+            (
+              cd "$floor_root"
+              uv run --locked --no-sync --python '{{.PYMIN}}' pytest -q {{.CLI_ARGS}}
+            )
 
     # -------------
     # Documentation
@@ -349,7 +386,7 @@ tasks:
     # PyPI Packaging
     # --------------
     pkg:build:
-        cmd: '{{.UV}} build --no-sources --format wheel {{.CLI_ARGS}}'
+        cmd: '{{.UV}} build --no-sources --wheel {{.CLI_ARGS}}'
         desc: Build a distributable wheel of this package through `uv build`.
 
     pkg:publish:

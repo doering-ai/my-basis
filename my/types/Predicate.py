@@ -4,7 +4,7 @@
 ### STANDARD
 from __future__ import annotations
 from collections import Counter
-from typing import ClassVar, Any, Self
+from typing import ClassVar, Any, Self, cast
 from collections.abc import Iterable, Iterator
 from datetime import datetime
 import regex as re
@@ -23,12 +23,8 @@ from ..typing import Typist, MyType, ty
 # Create a local typist with the most permissive possible configuration.
 typist = Typist(firsts=True, atomics=True, splits=True, wraps=True)
 
-#: The atomic scalar types `Typist.flex_deserialize` may "decast" a captured string value into
-#: (mirrors `Typist.SCALAR_TYPES`, minus `enum` -- casting to the bare, abstract `Enum` class
-#: never succeeds, so that candidate never actually surfaces a value here). Used to keep
-#: `_serialize_predicate`'s declared return type honest: before this existed it claimed every
-#: leaf was `str`, so a decast int/float/bool/datetime value tripped a pydantic serializer
-#: warning on every `MatchData`/`Predicate` round-trip that decast a leaf.
+#: Scalar types produced only by the optional YAML-oriented decast pass. Pydantic dumps and
+#: ``repr()`` preserve the canonical string leaves of ``Predicate.data``.
 type PredicateLeaf = str | int | float | bool | datetime
 
 
@@ -45,8 +41,9 @@ class Predicate(pyd.BaseModel):
     Serialization supports nested dictionary structures using dot notation in keys. A field like
     `"user.name"` becomes `{"user": {"name": value}}` in the output. This makes Predicate suitable
     for representing structured data that originates as flat key-value pairs but needs hierarchical
-    output. Note that serialization (including `repr()`) also *abbreviates*: single-element lists
-    collapse to bare values, and scalar-looking strings are decast (e.g. `'1'` becomes `1`).
+    output. Pydantic serialization and `repr()` abbreviate single-element lists but preserve every
+    stored string verbatim, so values such as `'y'`, `'0'`, and date-shaped text never change type.
+    `to_yaml()` additionally infers familiar YAML scalar types for human-readable output.
 
     Examples:
         Build a predicate and inspect its fields::
@@ -136,9 +133,12 @@ class Predicate(pyd.BaseModel):
         return ret
 
     @pyd.model_serializer
-    def _serialize_predicate(self) -> dict[str, PredicateLeaf | list[PredicateLeaf] | dict]:
-        """Pydantic serializer method to convert the Predicate to its internal dict format."""
-        return self._abbreviate(self.data)
+    def _serialize_predicate(self) -> dict[str, str | list[str] | dict]:
+        """Serialize abbreviated leaves without changing their canonical string type."""
+        return cast(
+            'dict[str, str | list[str] | dict]',
+            self._abbreviate(self.data, decast=False),
+        )
 
     # -------------------
     # `-` Private Methods
@@ -167,22 +167,34 @@ class Predicate(pyd.BaseModel):
 
     @classmethod
     def _abbreviate(
-        cls, data: MapT[str, list[str] | dict]
+        cls,
+        data: MapT[str, list[str] | dict],
+        *,
+        decast: bool = True,
     ) -> dict[str, PredicateLeaf | list[PredicateLeaf] | dict]:
-        """Recursively simplify one-element arrays into strings."""
+        """Recursively collapse one-element lists, optionally inferring scalar types.
+
+        Args:
+            data: String-leaf mapping to abbreviate.
+            decast: Whether scalar-looking strings should become their inferred scalar types.
+                This is useful for YAML output, but must stay disabled for Pydantic dumps and
+                `repr()`, whose contract mirrors the canonical `dict[str, list[str]]` storage.
+        Returns:
+            An abbreviated mapping, with inferred scalar leaves only when `decast` is true.
+        """
         ret: dict[str, Any] = {}
         for field, values in sorted(dict(data).items()):
             if ty.is_map(values):
                 # I. Recursive case
-                ret[field] = cls._abbreviate(dict(values))
+                ret[field] = cls._abbreviate(dict(values), decast=decast)
             else:
-                # II. Decast simple, atomic types (i.e. int, float, and bool)
-                if ut.any_has_any(values, '\n'):
+                # II. Escape multiline YAML values, then optionally infer friendly scalars.
+                if decast and ut.any_has_any(values, '\n'):
                     values = list(map(cls._escape, values))
-                _vals = typist.flex_deserialize(values)
+                vals = typist.flex_deserialize(values) if decast else list(values)
 
                 # III. Just return one value if that's all there is
-                ret[field] = _vals[0] if len(_vals) == 1 else _vals
+                ret[field] = vals[0] if len(vals) == 1 else vals
 
         return ret
 
@@ -364,7 +376,7 @@ class Predicate(pyd.BaseModel):
         return self.to_yaml()
 
     def __repr__(self) -> str:
-        return f'{self._abbreviate(self.data)}'
+        return f'{self._abbreviate(self.data, decast=False)}'
 
     def __getitem__(self, field: str) -> list[str]:
         """Get the values associated with a field in the predicate.

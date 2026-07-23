@@ -729,7 +729,8 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
 
         Args:
             data: The source data to serialize.
-            full: If True, include unset/default fields for pydantic models.
+            full: Whether to include unset and default-valued Pydantic fields. The default emits
+                only explicitly populated, non-default fields.
             cases: Optional special-case handlers, keyed by type or predicate, that trigger at
                 all depths.
         Returns:
@@ -769,7 +770,10 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
 
             # II.ii. Rely on the model's serializers and treat the result as a dict
             if isinstance(data, pyd.BaseModel):
-                data = data.model_dump(exclude_unset=full, exclude_defaults=full)  # type: ignore
+                data = data.model_dump(  # type: ignore
+                    exclude_unset=not full,
+                    exclude_defaults=not full,
+                )
             elif is_dataclass(data) and not isinstance(data, type):
                 data = asdict(data)
 

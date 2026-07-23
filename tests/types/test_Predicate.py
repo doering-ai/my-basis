@@ -382,31 +382,31 @@ class TestPredicate:
         assert data.values() == values
 
     # -------------
-    # `*3` Mutators
+    # `*3` Serialization
     # -------------
 
-    # ---- Regression: zero-valued entries must survive round-trip ----
-
     @pyt.mark.parametrize(
-        'key, value',
+        'value, expected',
         [
-            ('count', 0),
-            ('ratio', 0.0),
-            ('flag', False),
-            ('empty', ''),
+            ('y', 'y'),
+            ('N', 'N'),
+            ('true', 'true'),
+            ('0', '0'),
+            ('1.0', '1.0'),
+            ('2026-07-18', '2026-07-18'),
+            ('line one\nline two', 'line one\nline two'),
+            (0, '0'),
+            (0.0, '0.0'),
+            (False, 'False'),
+            ('', ''),
+            (['1', 'true', '2026-07-18'], ['1', 'true', '2026-07-18']),
         ],
     )
-    def test_zero_values_survive_roundtrip(self, key: str, value: object):
-        """A zero-valued or falsy entry must survive a serialize/deserialize round-trip.
+    def test_serialization__string_leaves(self, value: object, expected: str | list[str]):
+        """Pydantic dumps and repr preserve Predicate's canonical string-leaf contract."""
+        pred = cls.new({'value': value})
+        dumped = {'value': expected}
 
-        Previously the ``new`` constructor's final filter (``if k and v``) silently dropped
-        any entry whose *list* of values was empty -- which included the string-ified
-        representations of ``0``, ``0.0``, ``False`` and ``''`` after they were cast to
-        ``list[str]`` and then decast by ``flex_deserialize``.  The fix ensures that an
-        explicit zero value is either preserved or raises at construction time.
-        """
-        pred = cls.new({key: value})
-        dumped = pred.model_dump()
-        restored = cls.new(dumped)
-        assert restored.data == pred.data
-        assert key in restored.data
+        assert pred.model_dump() == dumped
+        assert repr(pred) == repr(dumped)
+        assert cls.new(dumped).data == pred.data

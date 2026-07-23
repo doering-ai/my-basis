@@ -22,9 +22,9 @@ class MyEnum(Enum):
     """Enhanced Enum base class with flexible & ergonomic parsing, arithmetic, and comparison.
 
     This class is built to be a useful *base* more than anything, but as-is, its main strength is in
-    its (de)serialization methods. A single `read()` call can parse strings (matching by name or
-    regex alias), integers (for Flag enums), and lists thereof all at once, while the `write()`
-    method serializes enums back to strings, with pipe-separated names for combined flags.
+    its (de)serialization methods. A single `read()` call can parse strings (matching normalized
+    names, string values, or regex aliases), integer values, and Flag lists all at once, while the
+    `write()` method serializes enums back to strings, with pipe-separated names for combined flags.
 
     This class does not inherit from `enum.Flag` by default, but it is built with support for such
     usecases out-of-the-box; to use those features, simply subclass both `MyEnum` and `Flag`.
@@ -71,8 +71,8 @@ class MyEnum(Enum):
         Supports multiple input formats:
 
         - Enum member: Returns as-is
-        - String: Matches by name, alias, or numeric string
-        - Integer: For Flag enums, creates by value
+        - String: Matches trimmed, case-insensitive names or values, regex aliases, and numbers
+        - Integer: Matches exact values; for Flag enums, also accepts combined bit masks
         - List: For Flag enums, combines multiple values
 
         Args:
@@ -100,11 +100,11 @@ class MyEnum(Enum):
             return value
         members = cls.__members__
 
-        # I. Check against key names
+        # I. Check normalized string forms
         if isinstance(value, str):
             uval = value.upper().strip()
-            if uval.isdigit():
-                # I.i. Cast numeric strings after trimming surrounding whitespace.
+            if uval.isdigit() and cls.vtype() is not str:
+                # I.i. Cast numeric strings only for numeric-valued enums.
                 value = int(uval)
             elif uval in members:
                 # I.ii. Find by name
@@ -115,6 +115,9 @@ class MyEnum(Enum):
             elif issubclass(cls, Flag) and '|' in uval:
                 # I.iv. Break down flags into a list
                 value = uval.split('|')
+            elif member := cls._read_string_value(value):
+                # I.v. Match exact or unambiguous normalized string values.
+                return member
 
         # II. Handle int flags
         if isinstance(value, int) and issubclass(cls, Flag):
@@ -134,6 +137,28 @@ class MyEnum(Enum):
             return cast('Self', cls(sum(val.value for val in map(read, value))))
 
         raise ValueError(f'Invalid {cls.__name__} value: {value}')
+
+    @classmethod
+    def _read_string_value(cls, value: str) -> Self | None:
+        """Match a trimmed string value exactly, then case-insensitively when unambiguous."""
+        members = list(mi.unique_everseen(cls.__members__.values()))
+        stripped = value.strip()
+        exact = [member for member in members if member.value == stripped]
+        if len(exact) == 1:
+            return exact[0]
+
+        folded = stripped.casefold()
+        normalized = [
+            member
+            for member in members
+            if isinstance(member.value, str) and member.value.casefold() == folded
+        ]
+        if len(normalized) == 1:
+            return normalized[0]
+        elif len(normalized) > 1:
+            names = ', '.join(member.name for member in normalized)
+            raise ValueError(f'Ambiguous {cls.__name__} value {value!r}; matches {names}.')
+        return None
 
     def write(self) -> str:
         """Convert enum member to string representation.

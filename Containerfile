@@ -5,7 +5,7 @@
 ##################
 # ---- debian ----
 # See https://docs.astral.sh/uv/guides/integration/docker/#available-images
-FROM ghcr.io/astral-sh/uv:python3.13-trixie-slim AS system
+FROM ghcr.io/astral-sh/uv:python3.12-trixie-slim AS system
 ENV DEBIAN_FRONTEND=noninteractive \
     LANG=C.UTF-8 \
     _APT="apt-get update && apt-get install -y --no-install-recommends" \
@@ -31,11 +31,18 @@ ENV PATH=$PATH:/home/my/.local/bin
 WORKDIR /home/my/
 
 # ---- uv ----
+# `python-downloads=manual` (not `never`) plus `python-preference=system` is what lets this
+# single image serve a multi-interpreter test matrix. The baked-in interpreter above stays the
+# default, and uv still refuses to *silently* download one -- a typo'd version fails loudly
+# rather than pulling a surprise runtime. But `never` also blocks an EXPLICIT
+# `uv python install 3.x` ("Change to `manual` to allow explicit installs"), which made it
+# impossible to test any version but the baked-in one without swapping the whole image. CI's
+# matrix job provisions the extra interpreters deliberately, and they land in UV_CACHE_DIR.
 ENV UV_LINK_MODE=copy \
     UV_COMPILE_BYTECODE=1 \
     UV_SYSTEM_PYTHON=1 \
-    UV_NO_MANAGED_PYTHON=1 \
-    UV_PYTHON_DOWNLOADS=never \
+    UV_PYTHON_PREFERENCE=system \
+    UV_PYTHON_DOWNLOADS=manual \
     UV_CACHE_DIR=/home/my/.cache/uv
 
 RUN mkdir -p $UV_CACHE_DIR

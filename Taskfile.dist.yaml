@@ -21,6 +21,10 @@ vars:
     IMG_FILE: Containerfile
     IMG_URL: registry.{{get .REPO "host"}}/{{get .REPO "host_path_full_"}}
     IMG: '{{.IMG_URL}}:latest'
+    # The inclusive interpreter range `3.pyver .. 3.pymax`, as a space-separated list.
+    PYVERS:
+        sh: seq {{get .REPO "pyver"}} {{get .REPO "pymax" | default (get .REPO "pyver")}} |
+            sed 's/^/3./' | tr '\n' ' '
 
 tasks:
 
@@ -194,6 +198,21 @@ tasks:
         desc: Verify types and import structure with `pyrefly check`.
         aliases: [ty, types]
 
+    eval:typecheck:matrix:
+        desc: Typecheck against every supported interpreter (`3.pyver .. 3.pymax`). `pyrefly`'s
+            configured `python-version` should be the FLOOR, so this adds the newer ones.
+        aliases: [tym, types-matrix, typecheck-matrix]
+        vars:
+            PYVERS:
+                sh: seq {{get .REPO "pyver"}} {{get .REPO "pymax" | default (get .REPO "pyver")}}
+                    | sed 's/^/3./' | tr '\n' ' '
+        cmd: |
+            set -e
+            for v in {{.PYVERS}}; do
+              printf '\033[1m── pyrefly @ py%s ──\033[0m\n' "$v"
+              {{.UV}} run pyrefly check . --python-version "$v" {{.CLI_ARGS}}
+            done
+
     eval:format:
         cmd: '{{.UV}} run ruff format {{.CLI_ARGS}}'
         desc: Fix any formatting issues in our python code, saving the files in place with changes.
@@ -231,6 +250,29 @@ tasks:
 
         aliases: [coverage, cov-test, coverage-test]
         desc: Report code coverage of our unit tests to stdout and `tests/coverage.md`.
+
+    test:matrix:
+        desc: Run the suite on every supported interpreter (`3.pyver .. 3.pymax`).
+        aliases: [matrix, matrix-test, test-matrix]
+        cmd: |
+            set -e
+            for v in {{.PYVERS}}; do
+              printf '\033[1m── py%s ──────────────────────────────\033[0m\n' "$v"
+              UV_PROJECT_ENVIRONMENT={{._0}}/.venvs/py$v \
+                {{.UV}} run --python "$v" --all-extras pytest -q {{.CLI_ARGS}}
+            done
+
+    test:floor:
+        desc: Verify the declared dependency floors actually resolve and pass on the oldest
+            supported interpreter -- catches `requires-python` drifting away from the pins.
+        aliases: [floor, floor-test, test-floor]
+        vars:
+            PYMIN: '3.{{get .REPO "pyver"}}'
+        cmd: |
+            set -e
+            export UV_PROJECT_ENVIRONMENT={{._0}}/.venvs/floor
+            {{.UV}} sync --python '{{.PYMIN}}' --all-extras --resolution lowest-direct
+            {{.UV}} run --python '{{.PYMIN}}' pytest -q {{.CLI_ARGS}}
 
     # -------------
     # Documentation

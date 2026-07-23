@@ -163,3 +163,6 @@ formatter.assets/
 
 # Agent worktrees (corpus worktree-isolation policy)
 .worktrees/
+
+# Per-interpreter venvs created by `task test:matrix` / `task test:floor`.
+.venvs/

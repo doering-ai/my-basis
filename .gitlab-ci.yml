@@ -190,3 +190,25 @@ Test Python:
     script:
         - uv run task test:cov
     coverage: '/TOTAL.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
+# `Test Python` above runs the image's baked-in interpreter (python3.12, the declared floor)
+# and owns the coverage report -- it stays a single job so the `coverage:` regex cannot race
+# across parallel children. This job adds every OTHER supported interpreter.
+#
+# The image sets `UV_PYTHON_DOWNLOADS=manual`, so the extra interpreters must be provisioned
+# EXPLICITLY -- that is the point: no job silently acquires a runtime it did not ask for.
+Test Python Matrix:
+    stage: test
+    timeout: 30m
+    parallel:
+        matrix:
+            - PYVER: ['3.13', '3.14']
+    rules:
+        - if: $CI_COMMIT_TAG
+          when: never
+        - when: on_success
+    before_script:
+        - cd $CI_PROJECT_DIR
+        - uv python install "$PYVER"
+        - uv sync --all-extras --python "$PYVER"
+    script:
+        - uv run --python "$PYVER" pytest -q

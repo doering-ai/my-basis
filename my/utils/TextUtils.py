@@ -94,7 +94,7 @@ class TextUtils(_UtilsBase):
         return parts
 
     @staticmethod
-    def regex_dict[K: Hashable, V = str](
+    def regex_dict[K: Hashable, V](
         expressions: Mapping[K, V | Pattern] | None = None,
         compile_function: Callable[[V], Pattern] = re.compile,  # type: ignore
         **kwargs: V | Pattern,
@@ -130,13 +130,13 @@ class TextUtils(_UtilsBase):
 
     @overload
     @staticmethod
-    def regex_array[V = str](
+    def regex_array[V](
         *args: tuple[str | Pattern, V],
         compile_function: Callable[..., Pattern] = re.compile,
     ) -> list[tuple[Pattern, V]]: ...
 
     @staticmethod
-    def regex_array[V = str](
+    def regex_array[V](
         *args: tuple[str | Pattern, V],
         compile_function: Callable[..., Pattern] = re.compile,
     ) -> list[tuple[Pattern, V]]:

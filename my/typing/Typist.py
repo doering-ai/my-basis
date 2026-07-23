@@ -501,7 +501,7 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
         return self.match(MyType.typeof(t0), MyType.typeof(t1), intersect)
 
     @classmethod
-    def type_partition[T0, T1 = object](
+    def type_partition[T0, T1](
         cls,
         data: Iterable[T0 | T1],
         tvar: type[T0],

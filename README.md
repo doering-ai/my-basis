@@ -251,9 +251,12 @@ A hosted copy on ReadTheDocs is provisioned-but-pending; until it lands, the doc
 
 You can absolutely use this package without using Pydantic yourself, but you'd be missing out on a lot of the ergonomic benefits: basically every class is a Pydantic model, and the logging functionality in [`MetricUtils`](docs/utils.MetricUtils.md) exclusively supports Pydantic's Logfire.
 
-### Python 3.13+
+### Python 3.12+
 
-The project is written in modern Python 3.13 syntax with no compatibility shims (`requires-python >= 3.13`), and the typing subpackage leans hard on recent typing semantics.
+The project is written in modern Python syntax (`requires-python >= 3.12`) and the typing subpackage leans hard on recent typing semantics — PEP 695 generics throughout, and `typing_extensions` as the one compatibility shim, for the handful of constructs that only reached the stdlib in 3.13 (`TypeIs`, PEP 696 type-parameter defaults).
+Every release is tested against **3.12, 3.13, and 3.14** (`task test:matrix`), and the declared dependency floors are exercised too (`task test:floor`).
+
+3.12 is a deliberate floor rather than a stepping stone: below it, PEP 695 syntax stops parsing, and the 20-odd modules that would need rewriting are the package's core — not optional leaves that could be excluded on old runtimes.
 If an older runtime blocks you, either let me know — or lift the one or two modules you need straight out of the repo; the subpackages are deliberately self-contained.
 
 ## Contributing

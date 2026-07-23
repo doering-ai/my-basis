@@ -24,6 +24,9 @@ import itertools as it
 import asyncio as aio
 
 ### EXTERNAL
+# See the note in `my/infra/types.py`: PEP 696 defaults are 3.13 syntax, and `Pred`'s
+# default is load-bearing (`Pred[V]` is used below at less than full arity).
+from typing_extensions import TypeAliasType, TypeVar  # noqa: UP035
 import more_itertools as mi
 
 ### INTERNAL (NOTE: If adding new internal imports, update the comments in `__init__.py`)
@@ -43,7 +46,14 @@ from ._UtilsBase import _UtilsBase
 ### DATA ###
 ############
 #: A flexible predicate: a literal value to equal, a container of values, or a callable check.
-type Pred[V, R = bool] = V | Iterable[V] | Callable[[V], R]
+_PredV = TypeVar('_PredV')
+_PredR = TypeVar('_PredR', default=bool)
+#: `Pred[V]` leaves the return type defaulted to `bool`; `Pred[V, R]` names it explicitly.
+Pred = TypeAliasType(  # noqa: UP040
+    'Pred',
+    _PredV | Iterable[_PredV] | Callable[[_PredV], _PredR],
+    type_params=(_PredV, _PredR),
+)
 
 
 ############
@@ -341,6 +351,10 @@ class IterUtils(_UtilsBase):
         match pred:
             case _ if callable(pred):
                 return pred
+            # pyrefly reads the declared union (`Callable | Iterable[P] | P`) as excluding
+            # `Container`, but a `list`/`set`/`dict` argument reaches this branch at runtime
+            # and is covered by tests -- the pattern is live, the narrowing is not.
+            # pyrefly: ignore[unreachable-match-case]
             case Container() if not isinstance(pred, (str, bytes, bytearray)):
                 return pred.__contains__
             case Iterator():
@@ -625,9 +639,7 @@ class IterUtils(_UtilsBase):
             return data
 
     @classmethod
-    def safe[K: Hashable = str, V = str](
-        cls, container: MapT[K, V | Map | None], *keys: K
-    ) -> V | None:
+    def safe[K: Hashable, V](cls, container: MapT[K, V | Map | None], *keys: K) -> V | None:
         """Safely access nested map values with multiple keys.
 
         Args:
@@ -1088,7 +1100,7 @@ class IterUtils(_UtilsBase):
             return ret
 
     @classmethod
-    def exclusive_elements[H: Hashable, S: Sequence = list](
+    def exclusive_elements[H: Hashable, S: Sequence](
         cls,
         lhs: S,
         rhs: Iterable[H],

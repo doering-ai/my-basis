@@ -6,6 +6,35 @@ Where a change is a behavior break rather than an internal fix, it's called out 
 
 ## [Unreleased]
 
+### Python floor lowered to 3.12, with a real version matrix
+
+`requires-python` is now `>= 3.12` (was `>= 3.13`), and the suite runs against **3.12, 3.13, and 3.14** on every pipeline.
+
+- **The whole cost was 24 PEP 696 type-parameter defaults across 7 modules** — every other PEP 695 construct (191 generic `def`/`class` declarations, 38 `type` aliases) is 3.12-native.
+  Aliases whose defaults are load-bearing (`StructT[V]` and `Pred[V]` are both subscripted below full arity) moved to the explicit `TypeVar`/`TypeAliasType` form with `typing_extensions`, so no subscript arity changed.
+  The rest sat on *function* type parameters, where a default only steers inference.
+- `TypeIs` and `TypeVar.has_default()`/`__default__` now come from `typing_extensions` (already a direct dependency) rather than the 3.13 stdlib.
+- **No dependency floor moved.** `uv sync --resolution lowest-direct` on 3.12 resolves and passes.
+- New `task test:matrix`, `task test:floor`, and `task eval:typecheck:matrix`; `pyrefly`'s `python-version` is now the *floor*, where version-gated diagnostics actually surface.
+
+### Fixed
+
+- **`typist.cast` dispatched transforms in an undefined order.** Candidate specificity is a *partial* order, and it was being sorted with a `cmp_to_key` comparator that returns `0` for *incomparable* (not merely equal) entries — an intransitive comparator, for which `list.sort` guarantees nothing.
+  The order therefore depended on Timsort's internal merge sequence: the identical registry and comparator ranked `(list -> str)` differently on 3.12 and 3.13, demoting `_vec_to_string` from first to ninth so `cast([], str)` returned `'{}'` instead of `'[]'`.
+  Candidates are now ranked by a total key (how many rivals each is strictly narrower than, then registration index), which is stable across interpreters by construction.
+  This was latent on *every* version, not a 3.12 quirk — a new invariant test shows the old ordering was wrong for 7 of 8 representative casts, far more than the three the suite happened to catch.
+- `cast('<unrecognized word>', bool)` returned `None` instead of falling back to Python truthiness.
+  `_string_to_scalar` declined, and the result depended on `_object_to_model` reaching `bool(text)` — which only works where `inspect.signature(bool)` succeeds, i.e. 3.13+ (CPython gave `bool` a text signature).
+  The truthiness fallback is now explicit in `_string_to_scalar`.
+
+### Infrastructure
+
+- The CI image no longer pins `UV_NO_MANAGED_PYTHON=1` / `UV_PYTHON_DOWNLOADS=never`.
+  `never` blocks even an *explicit* `uv python install`, so a single image could not serve a matrix; it is now `manual` plus `python-preference=system`, which keeps the baked-in interpreter as the default and still refuses *silent* downloads.
+  Mirrored into the corpus `pyrepo` template, alongside a new `pymax` answer that drives the matrix (`pymax == pyver` means no matrix job at all, so single-version repos render exactly as before).
+- Re-locking for the new floor upgraded `pyrefly` 1.0.0 -> 1.1.1, which surfaced four latent diagnostics that had nothing to do with the floor itself; they are fixed rather than pinned around.
+  `Markdown.add_node` now takes a covariant `Sequence[Markdown]` instead of an invariant `list[Markdown]`, so passing `parse()`'s `list[Self]` is no longer a type error (it also accepts tuples now); two no-op `cast('Self', ...)` calls in `MyEnum.__add__`/`__sub__` are gone; and `IterUtils`'s `Container()` match arm carries an explicit suppression documenting that the branch is live at runtime and covered by tests, whatever the declared union says.
+
 The documentation campaign: every non-trivial public feature now carries an executed, doctest-locked example (roughly 330 `Examples:` blocks across ~700 rendered signatures), the README is rewritten around a full export map, and the campaign's verification pass surfaced a batch of small correctness fixes, each landed with a regression test.
 
 ### Documentation

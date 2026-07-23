@@ -4,7 +4,7 @@
 ### STANDARD
 from __future__ import annotations
 from typing import Annotated, ClassVar, Any, Self, cast
-from collections.abc import Iterator, Collection, Callable, Iterable
+from collections.abc import Iterator, Collection, Callable, Iterable, Sequence
 from collections import deque
 from pathlib import Path
 import logging
@@ -442,7 +442,7 @@ class Markdown(pyd.BaseModel):
             n += delta
             i += -1 if asc else 1
 
-    def add_node(self, new_nodes: Markdown | list[Markdown], left: bool = False) -> Markdown:
+    def add_node(self, new_nodes: Markdown | Sequence[Markdown], left: bool = False) -> Markdown:
         """Add child nodes to this markdown node.
 
         Args:
@@ -466,7 +466,7 @@ class Markdown(pyd.BaseModel):
             n_cur = len(self.nodes)
             if left:
                 # I.i. Refresh the entire index
-                self.nodes = new_nodes + self.nodes
+                self.nodes = [*new_nodes, *self.nodes]
                 self.refresh_indices(start=0)
             else:
                 # I.ii. Just refresh the new nodes

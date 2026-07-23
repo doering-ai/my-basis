@@ -173,7 +173,7 @@ class MyEnum(Enum):
             other = cls.read(other)
         if isinstance(self, Flag):
             return cast('Self', self & ~cast('Any', other))
-        return cast('Self', cls(self.value - other.value))
+        return cls(self.value - other.value)
 
     def __isub__(self, other: Self | str | int | list) -> Self:
         return self - other
@@ -184,7 +184,7 @@ class MyEnum(Enum):
             other = cls.read(other)
         if isinstance(self, Flag):
             return cast('Self', self | cast('Any', other))
-        return cast('Self', cls(self.value + other.value))
+        return cls(self.value + other.value)
 
     def __iadd__(self, other: Self | str | int | list) -> Self:
         return self + other

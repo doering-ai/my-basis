@@ -9,9 +9,11 @@ readme = "README.md"
 license = "MPL-2.0"
 license-files = ["LICENSE"]
 authors = [{ name = "Robb Doering", email = "robb@doering.ai" }]
-requires-python = ">=3.13"
+requires-python = ">=3.12"
 classifiers = [
+  "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
   "Framework :: Pydantic :: 2",
   "Intended Audience :: Developers",
   "Topic :: Software Development :: Libraries :: Python Modules",
@@ -155,7 +157,9 @@ ignore_errors = true
 [tool.pyrefly]
 project-includes = ["my/**/*.py*", "tests/**/*.py*"]
 min-severity = 'warn'
-python-version = '3.13'
+# Typecheck at the FLOOR, not the newest interpreter: 3.12 is where the version-gated
+# diagnostics surface. `task eval:typecheck:matrix` sweeps the rest of the supported range.
+python-version = '3.12'
 check-unannotated-defs = true
 permissive-ignores = true
 search-path = ['.']

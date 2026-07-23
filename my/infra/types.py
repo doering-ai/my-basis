@@ -3,7 +3,7 @@
 ############
 ### STANDARD
 from __future__ import annotations
-from typing import Any, IO
+from typing import Any, Generic, IO
 from collections.abc import (
     Callable,
     Hashable,
@@ -21,6 +21,13 @@ from array import array
 import itertools as it
 
 ### EXTERNAL
+# PEP 696 type-parameter defaults are 3.13 syntax, but `typing_extensions` backports the
+# runtime objects to our 3.12 floor. Aliases whose defaults are load-bearing (`StructT[V]`
+# and `Pred[V]` are both subscripted below their full arity, in this package and by callers)
+# are therefore declared in the explicit `TypeVar`/`TypeAliasType` form rather than with the
+# `type X[T = ...]` statement. Everything without a default keeps the PEP 695 syntax, which
+# 3.12 supports natively.
+from typing_extensions import ParamSpec, TypeAliasType, TypeVar  # noqa: UP035
 import pydantic as pyd
 import more_itertools as mi
 
@@ -78,13 +85,19 @@ type _Iter[T] = Iterable[T] | AsyncIterable[T]
 #: Any container of other values: a `Vec`, `Map`, or `Model`.
 Struct = Vec | Map | Model
 #: The generic (parametrizable) form of `Struct`, e.g. `StructT[int]`.
-type StructT[V, K: Hashable = Any] = VecT[V] | MapT[K, V] | _Iter[V] | Model
+_V = TypeVar('_V')
+_K = TypeVar('_K', bound=Hashable, default=Any)
+StructT = TypeAliasType(  # noqa: UP040
+    'StructT', VecT[_V] | MapT[_K, _V] | _Iter[_V] | Model, type_params=(_V, _K)
+)
 
 # ---- Misc ----
 #: Plain functions, by exact type -- excludes arbitrary callables like partials and lambdas' kin.
 Func = FunctionType | BuiltinFunctionType
 #: The generic (parametrizable) form of a callable, e.g. `FuncT[[int, str], bool]`.
-type FuncT[**PSpec, R = Any] = Callable[PSpec, R]
+_PSpec = ParamSpec('_PSpec')
+_R = TypeVar('_R', default=Any)
+FuncT = TypeAliasType('FuncT', Callable[_PSpec, _R], type_params=(_PSpec, _R))  # noqa: UP040
 
 #: The universal alias: any `Atom`, `Struct`, or `Func`.
 Object = Atom | Struct | Func
@@ -115,7 +128,11 @@ TYPESET = {*Atoms, *Structs, *Funcs}
 # Exploratory
 # -----------
 # type Pair[K: Object, T2: Object = T1] = tuple[T1, T2]
-class Pair[T1: Object, T2: Object = T1](tuple[T1, T2]):
+_T1 = TypeVar('_T1', bound=Object)
+_T2 = TypeVar('_T2', bound=Object, default=_T1)
+
+
+class Pair(tuple[_T1, _T2], Generic[_T1, _T2]):
     """A pair of objects, potentially of different types."""
 
     @classmethod
@@ -135,5 +152,7 @@ class Pair[T1: Object, T2: Object = T1](tuple[T1, T2]):
         )
 
 
-type Quad[T1, T2 = T1] = tuple[Pair[T1, T2], Pair[T1, T2]]
-type Oct[T1, T2 = T1] = tuple[Quad[T1, T2], Quad[T1, T2]]
+_Q1 = TypeVar('_Q1')
+_Q2 = TypeVar('_Q2', default=_Q1)
+Quad = TypeAliasType('Quad', tuple[Pair[_Q1, _Q2], Pair[_Q1, _Q2]], type_params=(_Q1, _Q2))  # noqa: UP040
+Oct = TypeAliasType('Oct', tuple[Quad[_Q1, _Q2], Quad[_Q1, _Q2]], type_params=(_Q1, _Q2))  # noqa: UP040

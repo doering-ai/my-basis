@@ -26,7 +26,6 @@ from typing import (
     TypeVarTuple,
     Unpack,
     overload,
-    TypeIs,
     is_typeddict,
     TypeAliasType,
     get_args,
@@ -34,6 +33,7 @@ from typing import (
     Union,
     Never,
 )
+from typing_extensions import TypeIs  # 3.13 in the stdlib `typing`; our floor is 3.12
 from collections import Counter, deque
 from collections.abc import (
     Iterator,
@@ -84,7 +84,9 @@ from .Metatype import Metatype as Meta
 ############
 #: Any argument acceptable wherever a type is expected: a plain type, an already-wrapped
 #: `MyType`, a tuple of types, a raw value (whose type is inferred), or None.
-type TypeArg[T = Any] = type[T] | MyType[T] | tuple[type[T], ...] | Any | None
+#: NOTE: `T` has no PEP 696 default (3.13 syntax, above our 3.12 floor). With a single
+#: type parameter a partial subscript is impossible, so the default was inert.
+type TypeArg[T] = type[T] | MyType[T] | tuple[type[T], ...] | Any | None
 Empty = type[inspect.Parameter.empty]
 empty = inspect.Parameter.empty
 
@@ -226,10 +228,10 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
     @overload
     def __init__(self: MyType[NoneType], root: None, **kwargs): ...
     @overload
-    def __init__[R = Any](self: MyType[R], root: TypeArg[R], **kwargs): ...
+    def __init__[R](self: MyType[R], root: TypeArg[R], **kwargs): ...
     @overload
-    def __init__[R = Any](self: MyType[R], root: TypeArg[R] = Any, uid: int = 0, **kwargs): ...
-    def __init__[R = Any](self, root: TypeArg[R] = Any, uid: int = 0, **kwargs):
+    def __init__[R](self: MyType[R], root: TypeArg[R] = Any, uid: int = 0, **kwargs): ...
+    def __init__[R](self, root: TypeArg[R] = Any, uid: int = 0, **kwargs):
         """Initialize a MyType instance with the given source type and unique identifier.
 
         This function is overridden from ``pyd.BaseModel`` so as to allow positional args.
@@ -616,8 +618,13 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
         Returns:
             A concrete type (or union) standing in for the TypeVar.
         """
-        if tvar.has_default():
-            default = tvar.__default__
+        # `has_default()` is a 3.13 runtime API. PEP 695 type params on our 3.12 floor lack
+        # it entirely; `typing_extensions` TypeVars always carry it.
+        has_default = getattr(tvar, 'has_default', None)
+        if has_default is not None and has_default():
+            # `__default__` is only declared on 3.13+ / `typing_extensions` TypeVars, and
+            # `has_default()` above already proved this one carries it.
+            default = getattr(tvar, '__default__')
             return cls._resolve_typevar(default) if isinstance(default, TypeVar) else default
         elif bound := tvar.__bound__:
             return bound

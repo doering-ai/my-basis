@@ -259,9 +259,13 @@ Every release is tested against **3.12, 3.13, and 3.14** (`task test:matrix`), a
 3.12 is a deliberate floor rather than a stepping stone: below it, PEP 695 syntax stops parsing, and the 20-odd modules that would need rewriting are the package's core — not optional leaves that could be excluded on old runtimes.
 If an older runtime blocks you, either let me know — or lift the one or two modules you need straight out of the repo; the subpackages are deliberately self-contained.
 
+## Development
+
+GitLab is the canonical development forge. The GitHub repository is a read-only source mirror; report issues and propose changes at <https://gitlab.com/doering-ai/libs/basis>.
+
 ## Contributing
 
 The project was built over the course of 2025 for its author's own use, so it's definitely opinionated — influenced by a weathered respect for polymorphism, an addiction to ergonomic code in the Don-Norman sense, and a reliance on symbolic, deterministic devtools (heavy typing, even at runtime).
-If any of that resonates: get in touch, open an issue, or open a PR.
+If any of that resonates: get in touch, or open an issue or merge request on GitLab.
 
 Licensed under [MPL-2.0](/LICENSE).

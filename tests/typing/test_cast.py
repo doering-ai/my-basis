@@ -908,3 +908,56 @@ class TestCast:
         cyclic_list.append(cyclic_list)
         with pyt.raises(Decline):
             typist.cast(cyclic_list, list)
+
+    # ---- Dispatch ordering must be a total order, identical on every interpreter ----
+
+    @pyt.mark.parametrize(
+        'data, target',
+        [
+            ([], str),
+            (set(), str),
+            ({}, str),
+            ('x', bool),
+            ([1, 2], tuple),
+            ({'a': 1}, list),
+            (1, str),
+            ('1', int),
+        ],
+        ids=[
+            'list-str',
+            'set-str',
+            'dict-str',
+            'str-bool',
+            'list-tuple',
+            'dict-list',
+            'int-str',
+            'str-int',
+        ],
+    )
+    def test_dispatch_candidates__specificity_is_a_total_order(self, data: Any, target: type):
+        """No candidate may be strictly narrower than one dispatched before it.
+
+        Specificity is a *partial* order, and ordering it with a `cmp_to_key` comparator that
+        returns 0 for *incomparable* (not merely equal) entries is intransitive -- `list.sort`
+        is only well-defined for a total order. That silently made dispatch order depend on
+        Timsort's internal merge sequence, which is not part of the language contract: the very
+        same registry and comparator ordered `(list -> str)` differently on 3.12 and 3.13,
+        demoting `_vec_to_string` from first to ninth so `cast([], str)` returned `'{}'`.
+
+        This asserts the invariant directly, so it holds on every interpreter by construction
+        rather than by luck.
+        """
+        tr = Transform(data, target)
+        candidates = Transform._dispatch_candidates(tr.t0, tr.t1, tr.flags)
+
+        def within(a: tuple, b: tuple) -> bool:
+            (a0, a1, _), (b0, b1, _) = a, b
+            return (a0 == b0 or a0 in b0) and (a1 == b1 or a1 in b1)
+
+        for i, earlier in enumerate(candidates):
+            for later in candidates[i + 1 :]:
+                strictly_narrower = within(later, earlier) and not within(earlier, later)
+                assert not strictly_narrower, (
+                    f'{later[2].__name__} is strictly more specific than '
+                    f'{earlier[2].__name__} but dispatches after it'
+                )

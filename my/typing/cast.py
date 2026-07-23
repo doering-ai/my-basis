@@ -99,8 +99,11 @@ empty = Empty.EMPTY
 logger = logging.getLogger()
 _TY = TYPESET
 
-type TransformFn[T0 = Any, T1 = Any] = Callable[[Transform[T0, T1]], object | None]
-type TransformEntry[T0 = Any, T1 = Any] = tuple[MyType[T0], MyType[T1], TransformFn[T0, T1]]
+#: NOTE: These two keep the lazy PEP 695 `type` form because their values forward-reference
+#: `Transform` (defined far below). Their PEP 696 defaults (3.13 syntax) are dropped: both are
+#: only ever used bare or at full arity, so the defaults were inert.
+type TransformFn[T0, T1] = Callable[[Transform[T0, T1]], object | None]
+type TransformEntry[T0, T1] = tuple[MyType[T0], MyType[T1], TransformFn[T0, T1]]
 _TRANSFORMS: list[TransformEntry] = []
 
 type CaseKey = type | Callable[[object], bool]  #:
@@ -426,7 +429,7 @@ class TypeCast(_TypingBase):
     @classmethod
     def read_scalars(cls, data: String) -> list[Scalar]: ...
     @classmethod
-    def read_scalars[S: Scalar = Scalar](
+    def read_scalars[S: Scalar](
         cls,
         data: String,
         tvar: type[S] | MyType[S] = Scalar,  # ty:ignore[invalid-parameter-default]
@@ -765,6 +768,13 @@ class Transform[T0, T1]:
         elif issubclass(self._t1, bool):
             if self.RGXS['bool'].fullmatch(text):
                 return self.RGXS['bool_true'].fullmatch(text) is not None
+            # An unrecognized word falls back to plain Python truthiness (`'maybe'` -> True),
+            # matching the rest of the language. Do this here rather than declining and letting
+            # `_object_to_model` stumble into `bool(text)`: that route only works where
+            # `inspect.signature(bool)` succeeds, which is 3.13+ (CPython gave `bool` a text
+            # signature). On our 3.12 floor it raises `ValueError`, `invocable` reports
+            # not-invocable, and the whole cast returned `None` instead of a bool.
+            return bool(text)
         else:
             return self.flex_deserialize(text)
 
@@ -1797,8 +1807,21 @@ class Transform[T0, T1]:
 
         Specificity is a *partial* order (subset of bounds), so a plain `.sort()` on
         `MyType.__lt__` scrambles it -- e.g. letting `object`-bound hailmary transforms beat
-        `_scalar_to_string`. Use an explicit comparator that puts strictly-narrower (subset)
-        bounds first instead.
+        `_scalar_to_string`.
+
+        Ordering by a `cmp_to_key` comparator does not fix that, because a comparator returning
+        `0` for *incomparable* entries (rather than *equal* ones) is intransitive, and `list.sort`
+        is only well-defined for a total order. Identical input and an identical comparator
+        produced different orders under 3.12 and 3.13 -- Timsort's result depends on its internal
+        merge sequence, which is not part of the language contract. That is a latent
+        correctness bug on *every* interpreter, not a 3.12 quirk: on 3.12 it demoted
+        `_vec_to_string` from first to ninth for a `(list -> str)` cast, so `_map_to_map` won and
+        `cast([], str)` returned `'{}'` instead of `'[]'`.
+
+        So rank by a *total* key instead: how many rival candidates each entry is strictly
+        narrower than (descending), with the registration index as a deterministic tiebreak --
+        `_register_impl` already inserts each entry ahead of anything more general, so that
+        index is itself meaningful. This is stable across interpreter versions by construction.
 
         Args:
             t0: The source MyType.
@@ -1808,15 +1831,20 @@ class Transform[T0, T1]:
             Candidate `(source_bound, target_bound, fn)` entries, most- to least-specific.
         """
 
-        def _by_specificity(a: TransformEntry, b: TransformEntry) -> int:
+        def _within(a: TransformEntry, b: TransformEntry) -> bool:
+            """Whether `a`'s bounds are a (non-strict) subset of `b`'s."""
             (a0, a1, _), (b0, b1, _) = a, b
-            a_sub = (a0 == b0 or a0 in b0) and (a1 == b1 or a1 in b1)  # a's bounds ⊆ b's bounds
-            b_sub = (b0 == a0 or b0 in a0) and (b1 == a1 or b1 in a1)  # b's bounds ⊆ a's bounds
-            return int(b_sub) - int(a_sub)  # the narrower (more-specific) entry sorts first
+            return (a0 == b0 or a0 in b0) and (a1 == b1 or a1 in b1)
+
+        def _strictly_narrower(a: TransformEntry, b: TransformEntry) -> bool:
+            return _within(a, b) and not _within(b, a)
 
         candidates = [(k0, k1, tr) for k0, k1, tr in _TRANSFORMS if t0 in k0 and t1 in k1]
-        candidates.sort(key=ft.cmp_to_key(_by_specificity))
-        return tuple(candidates)
+        ranked = sorted(
+            enumerate(candidates),
+            key=lambda pair: (-sum(_strictly_narrower(pair[1], b) for b in candidates), pair[0]),
+        )
+        return tuple(entry for _, entry in ranked)
 
     def __call__(self, new_data: T0 | None = None) -> T1 | None:
         """Main entrypoint for casting a value to a new type."""

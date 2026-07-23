@@ -2,9 +2,11 @@
 ### HEAD ###
 ############
 ### STANDARD
-from datetime import datetime, timedelta, UTC
+from datetime import datetime, timedelta, timezone, UTC
 from pathlib import Path
+from typing import Any
 import logging
+import time
 import pickle
 from unittest.mock import MagicMock
 
@@ -42,11 +44,32 @@ class TestSystemUtils:
         assert isinstance(result, datetime)
         assert result.tzinfo == UTC
 
-    def test_posix_datetime(self):
-        dt = datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC)
-        result = cls.posix(dt)
-        assert result == dt
-        assert result.tzinfo == UTC
+    @pyt.mark.parametrize(
+        'value, expected',
+        [
+            (
+                datetime(2024, 1, 1, 12, tzinfo=UTC),
+                datetime(2024, 1, 1, 12, tzinfo=UTC),
+            ),
+            (
+                datetime(2024, 1, 1, 12),
+                datetime(2024, 1, 1, 12, tzinfo=UTC),
+            ),
+            (
+                datetime(2024, 1, 1, 12, tzinfo=timezone(-timedelta(hours=5))),
+                datetime(2024, 1, 1, 17, tzinfo=UTC),
+            ),
+        ],
+    )
+    def test_posix_datetime(self, patch, value: datetime, expected: datetime):
+        """Test UTC normalization independently of the host's local timezone."""
+        try:
+            with patch.context() as local_patch:
+                local_patch.setenv('TZ', 'America/New_York')
+                time.tzset()
+                assert cls.posix(value) == expected
+        finally:
+            time.tzset()
 
     def test_posix_timestamp(self):
         timestamp = 1704110400  # 2024-01-01 12:00:00 UTC
@@ -54,15 +77,30 @@ class TestSystemUtils:
         assert isinstance(result, datetime)
         assert result.tzinfo == UTC
 
-    def test_posix_since(self):
-        past = datetime.now(UTC) - timedelta(seconds=5)
-        result = cls.posix_since(past)
-        assert isinstance(result, timedelta)
-        assert result.total_seconds() >= 4  # At least 4 seconds (allowing for execution time)
+    @pyt.mark.parametrize(
+        'value, expected',
+        [
+            (None, timedelta(0)),
+            (0, datetime(2024, 1, 2, tzinfo=UTC) - datetime.fromtimestamp(0, UTC)),
+            (1704067200, timedelta(days=1)),
+            (datetime(2024, 1, 1, tzinfo=UTC), timedelta(days=1)),
+        ],
+    )
+    def test_posix_since(
+        self,
+        patch,
+        value: int | datetime | None,
+        expected: timedelta,
+    ):
+        """Test missing, epoch, timestamp, and datetime elapsed-time inputs."""
+        now = datetime(2024, 1, 2, tzinfo=UTC)
+        original_posix = cls.posix
 
-    def test_posix_since_none(self):
-        assert cls.posix_since(None) == timedelta(0)
-        assert cls.posix_since(0) == timedelta(0)
+        def fixed_posix(raw: int | datetime | None = None) -> datetime:
+            return now if raw is None else original_posix(raw)
+
+        patch.setattr(cls, 'posix', fixed_posix)
+        assert cls.posix_since(value) == expected
 
     # --------------
     # `1` FILESYSTEM
@@ -140,17 +178,16 @@ class TestSystemUtils:
         else:
             assert result == text or result == ''
 
-    def test_terminal_linewrap(self):
-        """Test that terminal_linewrap wraps text to terminal width."""
-        text = 'This is a test sentence that should be wrapped to the terminal width.'
-        result = cls.terminal_linewrap(text)
-        assert isinstance(result, str)
-        assert len(result) > 0
-
-    def test_terminal_linewrap__with_indent(self):
-        """Test terminal_linewrap with an indent value."""
-        text = 'This is a test sentence that should be wrapped with an indent.'
-        result = cls.terminal_linewrap(text, indent=10)
+    @pyt.mark.parametrize(
+        'text, indent',
+        [
+            ('This is a test sentence that should be wrapped to the terminal width.', 0),
+            ('This is a test sentence that should be wrapped with an indent.', 10),
+        ],
+    )
+    def test_terminal_linewrap(self, text: str, indent: int):
+        """Test terminal_linewrap with and without reserved indentation."""
+        result = cls.terminal_linewrap(text, indent=indent)
         assert isinstance(result, str)
         assert len(result) > 0
 
@@ -203,35 +240,21 @@ class TestSystemUtils:
         finally:
             cls.AUTO_CONFIRM = original
 
-    def test_confirm__yes_default_yes(self, patch):
-        """Test confirm with default_no=False and user types 'y'."""
-        patch.setattr('builtins.input', lambda *a: 'y')
-        assert cls.confirm('Proceed?') is True
-
-    def test_confirm__no_default_yes(self, patch):
-        """Test confirm with default_no=False and user types 'n'."""
-        patch.setattr('builtins.input', lambda *a: 'n')
-        assert cls.confirm('Proceed?') is False
-
-    def test_confirm__yes_default_no(self, patch):
-        """Test confirm with default_no=True and user types 'y' (regression: was inverted)."""
-        patch.setattr('builtins.input', lambda *a: 'y')
-        assert cls.confirm('Proceed?', default_no=True) is True
-
-    def test_confirm__no_default_no(self, patch):
-        """Test confirm with default_no=True and user types 'n' (regression: was inverted)."""
-        patch.setattr('builtins.input', lambda *a: 'n')
-        assert cls.confirm('Proceed?', default_no=True) is False
-
-    def test_confirm__empty_default_no(self, patch):
-        """Test that empty input falls to the default: no."""
-        patch.setattr('builtins.input', lambda *a: '')
-        assert cls.confirm('Proceed?', default_no=True) is False
-
-    def test_confirm__empty_default_yes(self, patch):
-        """Test that empty input falls to the default: yes."""
-        patch.setattr('builtins.input', lambda *a: '')
-        assert cls.confirm('Proceed?') is True
+    @pyt.mark.parametrize(
+        'answer, default_no, expected',
+        [
+            ('y', False, True),
+            ('n', False, False),
+            ('y', True, True),
+            ('n', True, False),
+            ('', True, False),
+            ('', False, True),
+        ],
+    )
+    def test_confirm(self, patch, answer: str, default_no: bool, expected: bool):
+        """Test explicit answers and empty-input defaults."""
+        patch.setattr('builtins.input', lambda *a: answer)
+        assert cls.confirm('Proceed?', default_no=default_no) is expected
 
     @pyt.mark.parametrize(
         'modules, expected',
@@ -278,234 +301,165 @@ class TestSystemUtils:
             ({'a': 1}, ["{'a': 1}"]),
             (42, ['42']),
             (int, ['int']),
+            ('a' * 100, ['...']),
+            (list(range(20)), [f'- {i}' for i in range(20)]),
+            (
+                {f'key_{i}': f'val_{i}' for i in range(10)},
+                [f'key_{i}: val_{i}' for i in range(10)],
+            ),
+            (_ExampleModel(name='hello', count=5), ["{'name': 'hello', 'count': 5}"]),
         ],
     )
-    def test_multiprint_data__simple(self, data, expected: list[str]):
-        """Test _multiprint_data with various simple data types."""
-        result = list(cls._multiprint_data(data))
-        assert result == expected
+    def test_multiprint_data(self, data: object, expected: list[str]):
+        """Test concise, shortened, recursive, and model data formatting."""
+        assert list(cls._multiprint_data(data)) == expected
 
-    def test_multiprint_data__long_string(self):
-        """Test _multiprint_data shortens long strings."""
-        long_text = 'a' * 100
-        result = list(cls._multiprint_data(long_text))
-        assert len(result) == 1
-        assert '...' in result[0]
-        assert len(result[0]) <= 64
+    @pyt.mark.parametrize(
+        'items, kwargs, expected',
+        [
+            (('hello', 'world'), {}, 'hello\nworld\n'),
+            (('content',), {'title': 'My Title'}, 'My Title\n    content\n'),
+            (('hello',), {'indent': 4}, '    hello\n'),
+            ((), {'data': {'key': 'value'}}, "{'key': 'value'}\n"),
+            ((), {'lines': ['extra1', 'extra2']}, 'extra1\nextra2\n'),
+            (('hello',), {'margins': (2, 3)}, '\n\nhello\n\n\n'),
+        ],
+    )
+    def test_multiprint(
+        self,
+        items: tuple[object, ...],
+        kwargs: dict[str, Any],
+        expected: str,
+    ):
+        """Test item, title, indentation, data, line, and margin formatting."""
+        assert cls.multiprint(*items, quiet=True, **kwargs) == expected
 
-    def test_multiprint_data__long_list(self):
-        """Test _multiprint_data recursively formats long lists."""
-        data = list(range(20))
-        result = list(cls._multiprint_data(data))
-        assert len(result) == 20
-        # Each item should be prefixed with a dash
-        assert result[0].startswith('- ')
+    @pyt.mark.parametrize(
+        'quiet, expected_stdout',
+        [
+            (True, ''),
+            (False, 'hello\n\n'),
+        ],
+    )
+    def test_multiprint__printing(self, capsys, quiet: bool, expected_stdout: str):
+        """Test quiet and printing output modes."""
+        assert cls.multiprint('hello', quiet=quiet) == 'hello\n'
+        assert capsys.readouterr().out == expected_stdout
 
-    def test_multiprint_data__long_dict(self):
-        """Test _multiprint_data recursively formats long dicts."""
-        data = {f'key_{i}': f'val_{i}' for i in range(10)}
-        result = list(cls._multiprint_data(data))
-        # Should produce one line per key-value pair
-        assert len(result) == 10
-        assert 'key_0' in result[0]
-
-    def test_multiprint_data__pydantic_model(self):
-        """Test _multiprint_data handles pydantic BaseModel."""
-        model = _ExampleModel(name='hello', count=5)
-        result = list(cls._multiprint_data(model))
-        assert len(result) > 0
-        assert any('name' in line for line in result)
-
-    def test_multiprint__basic(self):
-        """Test multiprint returns a formatted string with items."""
-        result = cls.multiprint('hello', 'world', quiet=True)
-        assert 'hello' in result
-        assert 'world' in result
-
-    def test_multiprint__with_title(self):
-        """Test multiprint includes a title with default indent."""
-        result = cls.multiprint('content', title='My Title', quiet=True)
-        assert 'My Title' in result
-        # Title should be at the top
-        lines = result.strip().split('\n')
-        assert lines[0].strip() == 'My Title'
-
-    def test_multiprint__with_indent(self):
-        """Test multiprint applies indentation."""
-        result = cls.multiprint('hello', indent=4, quiet=True)
-        assert result.startswith('    hello')
-
-    def test_multiprint__with_data(self):
-        """Test multiprint formats data dict."""
-        result = cls.multiprint(data={'key': 'value'}, quiet=True)
-        assert 'key' in result
-        assert 'value' in result
-
-    def test_multiprint__with_lines(self):
-        """Test multiprint includes additional lines."""
-        result = cls.multiprint(lines=['extra1', 'extra2'], quiet=True)
-        assert 'extra1' in result
-        assert 'extra2' in result
-
-    def test_multiprint__with_margins(self):
-        """Test multiprint adds margin newlines."""
-        result = cls.multiprint('hello', margins=(2, 3), quiet=True)
-        assert result.startswith('\n\n')
-        assert result.endswith('\n\n\n')
-
-    def test_multiprint__quiet_no_print(self, capsys):
-        """Test multiprint with quiet=True does not print to stdout."""
-        cls.multiprint('hello', quiet=True)
-        captured = capsys.readouterr()
-        assert captured.out == ''
-
-    def test_multiprint__prints_when_not_quiet(self, capsys):
-        """Test multiprint prints to stdout when quiet=False."""
-        cls.multiprint('hello', quiet=False)
-        captured = capsys.readouterr()
-        assert 'hello' in captured.out
-
-    def test_debug_fence__with_content(self, capsys):
-        """Test debug_fence prints fence with centered content."""
-        with cls.debug_fence('Test', width=40):
+    @pyt.mark.parametrize(
+        'content, kwargs, expected',
+        [
+            (
+                'Test',
+                {'width': 40},
+                '----------------------------------------\n'
+                '----------------- Test -----------------\n'
+                '----------------------------------------\n',
+            ),
+            (
+                '',
+                {'width': 40},
+                '----------------------------------------\n'
+                '----------------------------------------\n',
+            ),
+            (
+                'Test',
+                {'width': 40, 'indent': 4},
+                '    ------------------------------------\n'
+                '    --------------- Test ---------------\n'
+                '    ------------------------------------\n',
+            ),
+            (
+                'Test',
+                {'mark': '=', 'width': 40},
+                '========================================\n'
+                '================= Test =================\n'
+                '========================================\n',
+            ),
+        ],
+    )
+    def test_debug_fence(
+        self,
+        capsys,
+        content: str,
+        kwargs: dict[str, Any],
+        expected: str,
+    ):
+        """Test content, empty, indented, and custom-mark fences."""
+        with cls.debug_fence(content, **kwargs):
             pass
-        captured = capsys.readouterr()
-        assert 'Test' in captured.out
-        # Should have at least 3 lines: top fence, content, bottom fence
-        lines = [line for line in captured.out.split('\n') if line]
-        assert len(lines) >= 3
-
-    def test_debug_fence__without_content(self, capsys):
-        """Test debug_fence with empty content prints just fence lines."""
-        with cls.debug_fence('', width=40):
-            pass
-        captured = capsys.readouterr()
-        lines = [line for line in captured.out.split('\n') if line]
-        # Only top and bottom fence, no content line
-        assert len(lines) == 2
-
-    def test_debug_fence__with_indent(self, capsys):
-        """Test debug_fence with indent."""
-        with cls.debug_fence('Test', width=40, indent=4):
-            pass
-        captured = capsys.readouterr()
-        # Each line should be indented
-        for line in captured.out.split('\n'):
-            if line:
-                assert line.startswith('    ')
-
-    def test_debug_fence__custom_mark(self, capsys):
-        """Test debug_fence with a custom mark character."""
-        with cls.debug_fence('Test', mark='=', width=40):
-            pass
-        captured = capsys.readouterr()
-        assert '=' in captured.out
+        assert capsys.readouterr().out == expected
 
     # ---------------
     # `*` Path & Logging
     # ---------------
-    def test_path__empty(self):
-        """Test path returns NOWHERE for empty input."""
-        result = cls.path('')
-        assert result == Path()
-
-    def test_path__none(self):
-        """Test path returns NOWHERE for None input."""
-        result = cls.path(None)
-        assert result == Path()
-
-    def test_path__unexpanded_var(self):
-        """Test path returns NOWHERE for unexpanded env vars."""
-        result = cls.path('$NONEXISTENT_VAR_XYZ')
-        assert result == Path()
-
-    def test_path__absolute(self):
-        """Test path resolves an absolute path."""
+    @pyt.mark.parametrize(
+        'raw, expected',
+        [
+            ('', Path()),
+            (None, Path()),
+            ('$NONEXISTENT_VAR_XYZ', Path()),
+            ('/tmp', Path('/tmp')),
+        ],
+    )
+    def test_path(self, raw: str | None, expected: Path):
+        """Test sentinel-producing and absolute path resolution."""
         cls._path.cache_clear()
-        result = cls.path('/tmp')
-        assert result.is_absolute()
-        assert result.exists()
+        assert cls.path(raw) == expected
 
-    def test_log(self):
-        """Test log method executes without raising."""
-        cls.log('test', 'message')
-
-    def test_log__materializes_map_message(self, caplog):
-        """Regression test: `log()` used to pass a live `map` object as the log message.
-
-        That rendered as the useless `<map object at 0x...>` instead of the joined text --
-        the message must now be a real, materialized string.
-        """
+    def test_log__materializes_message(self, caplog):
+        """Test that loose arguments become a real message instead of a live map."""
         with caplog.at_level(logging.DEBUG):
             cls.log('hello', 'world', _level=logging.INFO)
-        assert caplog.records
-        message = caplog.records[-1].getMessage()
-        assert 'hello' in message
-        assert 'world' in message
-        assert 'map object' not in message
+        assert caplog.records[-1].getMessage() == 'hello world'
 
-    def test_info(self):
-        """Test info method logs at INFO level."""
-        cls.info('info message', kwargs={})
-
-    def test_error(self):
-        """Test error method logs at ERROR level."""
-        cls.error('error message', kwargs={})
-
-    def test_warn(self):
-        """Test warn method logs at WARNING level."""
-        cls.warn('warn message', kwargs={})
-
-    @pyt.mark.parametrize('method', ['info', 'error', 'warn'])
-    def test_log_methods__callable_without_kwargs(self, method: str):
-        """Regression test: `info`/`error`/`warn` declared a bare `kwargs` parameter.
-
-        That made `kwargs` a *required* keyword-only argument instead of `**kwargs`, so the
-        documented call form -- calling with no `kwargs=` at all -- raised a TypeError.
-        """
-        getattr(cls, method)('message without an explicit kwargs=')
+    @pyt.mark.parametrize(
+        'method, level',
+        [
+            ('info', logging.INFO),
+            ('error', logging.ERROR),
+            ('warn', logging.WARNING),
+        ],
+    )
+    def test_log_methods(self, caplog, method: str, level: int):
+        """Test convenience loggers without an explicit kwargs argument."""
+        with caplog.at_level(logging.DEBUG):
+            getattr(cls, method)('message')
+        assert caplog.records[-1].levelno == level
+        assert caplog.records[-1].getMessage() == 'message'
 
     # --------------
     # `*2` File I/O
     # --------------
-    def test_from_file__empty(self):
-        """Test from_file raises ValueError for empty input."""
-        with pyt.raises(ValueError, match='No file provided'):
-            cls.from_file('')
+    @pyt.mark.parametrize(
+        'file, message',
+        [
+            ('', 'No file provided'),
+            ('/tmp/nonexistent_file_xyz.json', 'No/Invalid file'),
+        ],
+    )
+    def test_from_file__invalid(self, file: str, message: str):
+        """Test empty and nonexistent file rejection."""
+        with pyt.raises(ValueError, match=message):
+            cls.from_file(file)
 
-    def test_from_file__nonexistent(self):
-        """Test from_file raises ValueError for non-existent file."""
-        with pyt.raises(ValueError, match='No/Invalid file'):
-            cls.from_file('/tmp/nonexistent_file_xyz.json')
-
-    def test_from_file__json(self, tmp_path):
-        """Test from_file loads a JSON file."""
+    @pyt.mark.parametrize(
+        'suffix, content',
+        [
+            ('.json', '{"key": "value"}'),
+            ('.yaml', 'key: value\n'),
+            ('.toml', 'key = "value"\n'),
+            ('.pkl', pickle.dumps({'key': 'value'})),
+        ],
+    )
+    def test_from_file(self, tmp_path, suffix: str, content: str | bytes):
+        """Test loading every supported file format."""
+        file = tmp_path / f'test{suffix}'
+        if isinstance(content, bytes):
+            file.write_bytes(content)
+        else:
+            file.write_text(content)
         cls._path.cache_clear()
-        file = tmp_path / 'test.json'
-        file.write_text('{"key": "value"}')
-        result = cls.from_file(file)
-        assert result == {'key': 'value'}
-
-    def test_from_file__yaml(self, tmp_path):
-        """Test from_file loads a YAML file."""
-        cls._path.cache_clear()
-        file = tmp_path / 'test.yaml'
-        file.write_text('key: value\n')
-        result = cls.from_file(file)
-        assert result == {'key': 'value'}
-
-    def test_from_file__toml(self, tmp_path):
-        """Test from_file loads a TOML file path."""
-        cls._path.cache_clear()
-        file = tmp_path / 'test.toml'
-        file.write_text('key = "value"\n')
-        assert cls.from_file(file) == {'key': 'value'}
-
-    def test_from_file__pickle(self, tmp_path):
-        """Test from_file loads a Pickle file path."""
-        cls._path.cache_clear()
-        file = tmp_path / 'test.pkl'
-        file.write_bytes(pickle.dumps({'key': 'value'}))
         assert cls.from_file(file) == {'key': 'value'}
 
     def test_from_file__unsupported_type(self, tmp_path):
@@ -520,41 +474,24 @@ class TestSystemUtils:
         """Test to_file does nothing when file is empty."""
         cls.to_file({'key': 'value'}, '')
 
-    def test_to_file__json(self, tmp_path):
-        """Test to_file saves data as JSON."""
-        file = tmp_path / 'test.json'
-        cls.to_file({'key': 'value'}, file)
+    @pyt.mark.parametrize(
+        'suffix, as_string',
+        [
+            ('.json', False),
+            ('.yaml', False),
+            ('.toml', False),
+            ('.pkl', False),
+            ('.json', True),
+        ],
+    )
+    def test_to_file(self, tmp_path, suffix: str, as_string: bool):
+        """Test every supported format and both accepted path forms."""
+        file = tmp_path / f'test{suffix}'
+        destination = str(file) if as_string else file
+        cls.to_file({'key': 'value'}, destination)
         assert file.exists()
-        import json
-
-        assert json.loads(file.read_text()) == {'key': 'value'}
-
-    def test_to_file__yaml(self, tmp_path):
-        """Test to_file saves data as YAML."""
-        file = tmp_path / 'test.yaml'
-        cls.to_file({'key': 'value'}, file)
-        assert file.exists()
-        assert 'key' in file.read_text()
-
-    def test_to_file__toml(self, tmp_path):
-        """Test to_file saves data as TOML."""
-        file = tmp_path / 'test.toml'
-        cls.to_file({'key': 'value'}, file)
-        assert file.exists()
-        assert 'key' in file.read_text()
-
-    def test_to_file__pickle(self, tmp_path):
-        """Test to_file saves data as pickle."""
-        file = tmp_path / 'test.pkl'
-        cls.to_file({'key': 'value'}, file)
-        assert file.exists()
-        assert pickle.loads(file.read_bytes()) == {'key': 'value'}
-
-    def test_to_file__str_path(self, tmp_path):
-        """Test to_file accepts a string path."""
-        file = str(tmp_path / 'test.json')
-        cls.to_file({'key': 'value'}, file)
-        assert Path(file).exists()
+        cls._path.cache_clear()
+        assert cls.from_file(file) == {'key': 'value'}
 
     def test_to_file__unsupported(self, tmp_path, caplog):
         """Test to_file logs error for unsupported file type."""
@@ -566,38 +503,50 @@ class TestSystemUtils:
     # ---------------
     # `*2` from_json
     # ---------------
-    def test_from_json__empty(self):
-        """Test from_json returns empty dict for empty input."""
-        assert cls.from_json(None) == {}
-        assert cls.from_json('') == {}
+    @pyt.mark.parametrize(
+        'content, as_file, tvar, cast, expected',
+        [
+            (None, False, dict, True, {}),
+            ('', False, dict, True, {}),
+            ('{"key": "value"}', False, dict, True, {'key': 'value'}),
+            ('{"key": "value"}', True, dict, True, {'key': 'value'}),
+            ('{"a": 1}', False, list, True, ['a']),
+        ],
+    )
+    def test_from_json(
+        self,
+        tmp_path,
+        content: str | None,
+        as_file: bool,
+        tvar: type[Any],
+        cast: bool,
+        expected: object,
+    ):
+        """Test empty, text, file, and casted JSON inputs."""
+        source: str | Path | None = content
+        if as_file:
+            source = tmp_path / 'test.json'
+            source.write_text(content or '')
+        assert cls.from_json(source, tvar, cast=cast) == expected
 
-    def test_from_json__string(self):
-        """Test from_json parses a JSON string."""
-        result = cls.from_json('{"key": "value"}')
-        assert result == {'key': 'value'}
-
-    def test_from_json__from_file(self, tmp_path):
-        """Test from_json reads from a file path."""
-        file = tmp_path / 'test.json'
-        file.write_text('{"key": "value"}')
-        result = cls.from_json(file)
-        assert result == {'key': 'value'}
-
-    def test_from_json__cast_to_list(self):
-        """Test from_json casts dict to list when cast=True."""
-        result = cls.from_json('{"a": 1}', list, cast=True)
-        assert result == ['a']
-
-    def test_from_json__type_mismatch_no_cast(self):
-        """Test from_json raises TypeError on type mismatch with cast=False."""
-        with pyt.raises(TypeError, match='Expected'):
-            cls.from_json('{"a": 1}', list, cast=False)
-
-    def test_from_json__unsupported_type(self):
-        """Test from_json raises ValueError for unsupported input type."""
-        with pyt.raises(ValueError, match='Unsupported input type'):
-            # Deliberately violate the public type contract to exercise runtime validation.
-            cls.from_json(object())  # pyrefly: ignore[bad-argument-type]
+    @pyt.mark.parametrize(
+        'content, tvar, cast, error, message',
+        [
+            ('{"a": 1}', list, False, TypeError, 'Expected'),
+            (object(), dict, True, ValueError, 'Unsupported input type'),
+        ],
+    )
+    def test_from_json__invalid(
+        self,
+        content: object,
+        tvar: type[Any],
+        cast: bool,
+        error: type[Exception],
+        message: str,
+    ):
+        """Test type mismatches and unsupported runtime inputs."""
+        with pyt.raises(error, match=message):
+            cls.from_json(content, tvar, cast=cast)  # pyrefly: ignore[bad-argument-type]
 
     # ---------------
     # `*2` is_pathy
@@ -621,134 +570,143 @@ class TestSystemUtils:
     # ---------------
     # `*2` from_yaml
     # ---------------
-    def test_from_yaml__empty(self):
-        """Test from_yaml returns empty dict for empty input."""
-        assert cls.from_yaml(None) == {}
-        assert cls.from_yaml('') == {}
+    @pyt.mark.parametrize(
+        'content, as_file, expected',
+        [
+            (None, False, {}),
+            ('', False, {}),
+            ('key: value\n', False, {'key': 'value'}),
+            (b'key: value\n', False, {'key': 'value'}),
+            ('key: value\n', True, {'key': 'value'}),
+            ('null', False, {}),
+            ('```yaml\nkey: value\n```', False, {'key': 'value'}),
+            ('```yml\nkey: value\n```', False, {'key': 'value'}),
+            ('  ``` YAML  \nkey: value\n```  \n', False, {'key': 'value'}),
+            ('\t```  YmL\t\r\nkey: value\r\n```\t', False, {'key': 'value'}),
+            (b'```YAML\nkey: value\n```', False, {'key': 'value'}),
+            ('```yaml\n```', False, {}),
+        ],
+    )
+    def test_from_yaml(
+        self,
+        tmp_path,
+        content: str | bytes | None,
+        as_file: bool,
+        expected: object,
+    ):
+        """Test empty, text, bytes, file, and null YAML inputs."""
+        source: str | bytes | Path | None = content
+        if as_file:
+            source = tmp_path / 'test.yaml'
+            if isinstance(content, bytes):
+                source.write_bytes(content)
+            else:
+                source.write_text(content or '')
+        assert cls.from_yaml(source) == expected
 
-    def test_from_yaml__string(self):
-        """Test from_yaml parses a YAML string."""
-        result = cls.from_yaml('key: value\n')
-        assert result == {'key': 'value'}
-
-    def test_from_yaml__bytes(self):
-        """Test from_yaml parses YAML bytes."""
-        result = cls.from_yaml(b'key: value\n')
-        assert result == {'key': 'value'}
-
-    def test_from_yaml__from_file(self, tmp_path):
-        """Test from_yaml reads from a file path."""
-        file = tmp_path / 'test.yaml'
-        file.write_text('key: value\n')
-        result = cls.from_yaml(file)
-        assert result == {'key': 'value'}
-
-    def test_from_yaml__null_returns_empty(self):
-        """Test from_yaml returns empty dict when YAML parses to None."""
-        result = cls.from_yaml('null', dict)
-        assert result == {}
-
-    def test_from_yaml__type_mismatch_no_cast(self):
-        """Test from_yaml raises TypeError on type mismatch with cast=False."""
-        with pyt.raises(TypeError, match='Expected'):
-            cls.from_yaml('key: value', list, cast=False)
-
-    def test_from_yaml__cast_fails_raises_typeerror(self):
-        """Test from_yaml raises TypeError when cast fails with ValueError."""
-        with pyt.raises(TypeError, match='Expected'):
-            cls.from_yaml('hello', int, cast=True)
+    @pyt.mark.parametrize(
+        'content, tvar, cast, error, message',
+        [
+            ('key: value', list, False, TypeError, 'Expected'),
+            ('hello', int, True, TypeError, 'Expected'),
+            ('```yaml\nkey: value', dict, True, ValueError, 'Invalid YAML fence'),
+            ('```json\n{"key": "value"}\n```', dict, True, ValueError, 'Invalid YAML fence'),
+            ('```yaml key: value```', dict, True, ValueError, 'Invalid YAML fence'),
+            ('```yaml\nkey: value\n````', dict, True, ValueError, 'Invalid YAML fence'),
+        ],
+    )
+    def test_from_yaml__invalid(
+        self,
+        content: str,
+        tvar: type[Any],
+        cast: bool,
+        error: type[Exception],
+        message: str,
+    ):
+        """Test type mismatches and malformed fenced YAML."""
+        with pyt.raises(error, match=message):
+            cls.from_yaml(content, tvar, cast=cast)
 
     # ---------------
     # `*2` from_toml
     # ---------------
-    def test_from_toml__empty(self):
-        """Test from_toml returns empty dict for empty input."""
-        assert cls.from_toml(None) == {}
-        assert cls.from_toml('') == {}
+    @pyt.mark.parametrize(
+        'content, tvar, expected',
+        [
+            (None, dict, {}),
+            ('', dict, {}),
+            ('key = "value"\n', dict, {'key': 'value'}),
+            (b'key = "value"\n', dict, {'key': 'value'}),
+            ('key = "value"', list, ['key']),
+        ],
+    )
+    def test_from_toml(self, content: str | bytes | None, tvar: type[Any], expected: object):
+        """Test empty, text, bytes, and casted TOML inputs."""
+        assert cls.from_toml(content, tvar, cast=True) == expected
 
-    def test_from_toml__string(self):
-        """Test from_toml parses a TOML string."""
-        result = cls.from_toml('key = "value"\n')
-        assert result == {'key': 'value'}
-
-    def test_from_toml__bytes(self):
-        """Test from_toml parses TOML bytes."""
-        result = cls.from_toml(b'key = "value"\n')
-        assert result == {'key': 'value'}
-
-    def test_from_toml__cast_to_list(self):
-        """Test from_toml casts dict to list when cast=True."""
-        result = cls.from_toml('key = "value"', list, cast=True)
-        assert result == ['key']
-
-    def test_from_toml__type_mismatch_no_cast(self):
-        """Test from_toml raises TypeError on type mismatch with cast=False."""
+    def test_from_toml__invalid(self):
+        """Test rejecting a type mismatch when casting is disabled."""
         with pyt.raises(TypeError, match='Expected'):
             cls.from_toml('key = "value"', list, cast=False)
 
     # ---------------
     # `*2` from_pickle
     # ---------------
-    def test_from_pickle__empty(self):
-        """Test from_pickle returns empty dict for empty input."""
-        assert cls.from_pickle(None) == {}
+    @pyt.mark.parametrize(
+        'data, tvar, expected',
+        [
+            (None, dict, {}),
+            (pickle.dumps({'key': 'value'}), dict, {'key': 'value'}),
+            (
+                pickle.dumps({'key': 'value'}, protocol=0).decode('ascii'),
+                dict,
+                {'key': 'value'},
+            ),
+            (pickle.dumps({'a': 1}), list, ['a']),
+        ],
+    )
+    def test_from_pickle(
+        self,
+        data: str | bytes | None,
+        tvar: type[Any],
+        expected: object,
+    ):
+        """Test empty, binary, protocol-zero text, and casted pickle inputs."""
+        assert cls.from_pickle(data, tvar, cast=True) == expected
 
-    def test_from_pickle__bytes(self):
-        """Test from_pickle loads from pickle bytes."""
-        data = pickle.dumps({'key': 'value'})
-        result = cls.from_pickle(data)
-        assert result == {'key': 'value'}
-
-    def test_from_pickle__string(self):
-        """Test from_pickle loads from a protocol-0 pickle string."""
-        data = pickle.dumps({'key': 'value'}, protocol=0)
-        str_data = data.decode('ascii')
-        result = cls.from_pickle(str_data)
-        assert result == {'key': 'value'}
-
-    def test_from_pickle__cast_to_list(self):
-        """Test from_pickle casts dict to list when cast=True."""
-        data = pickle.dumps({'a': 1})
-        result = cls.from_pickle(data, list, cast=True)
-        assert result == ['a']
-
-    def test_from_pickle__type_mismatch_no_cast(self):
-        """Test from_pickle raises TypeError on type mismatch with cast=False."""
-        data = pickle.dumps({'a': 1})
+    def test_from_pickle__invalid(self):
+        """Test rejecting a type mismatch when casting is disabled."""
         with pyt.raises(TypeError, match='Expected'):
-            cls.from_pickle(data, list, cast=False)
+            cls.from_pickle(pickle.dumps({'a': 1}), list, cast=False)
 
     # ---------------
     # `*2` Serialization
     # ---------------
-    def test_to_yaml__wrap(self):
-        """Test to_yaml wraps output in markdown code block."""
-        result = cls.to_yaml({'key': 'value'}, wrap=True)
-        assert result.startswith('```yaml\n')
+    @pyt.mark.parametrize(
+        'method, language',
+        [
+            ('to_yaml', 'yaml'),
+            ('to_json', 'json'),
+            ('to_toml', 'toml'),
+        ],
+    )
+    def test_serializers__wrap(self, method: str, language: str):
+        """Test markdown fencing for every text serializer."""
+        result = getattr(cls, method)({'key': 'value'}, wrap=True)
+        assert result.startswith(f'```{language}\n')
         assert result.endswith('```')
 
-    def test_to_json__wrap(self):
-        """Test to_json wraps output in markdown code block."""
-        result = cls.to_json({'key': 'value'}, wrap=True)
-        assert result.startswith('```json\n')
-        assert result.endswith('```')
-
-    def test_to_toml__dict(self):
-        """Test to_toml serializes a dict."""
-        result = cls.to_toml({'key': 'value'})
-        assert 'key' in result
-        assert 'value' in result
-
-    def test_to_toml__non_dict_wraps_content(self):
-        """Test to_toml wraps non-dict data in a content key."""
-        result = cls.to_toml([1, 2, 3])
-        assert 'content' in result
-
-    def test_to_toml__wrap(self):
-        """Test to_toml wraps output in markdown code block."""
-        result = cls.to_toml({'key': 'value'}, wrap=True)
-        assert result.startswith('```toml\n')
-        assert result.endswith('```')
+    @pyt.mark.parametrize(
+        'data, expected',
+        [
+            ({'key': 'value'}, ('key', 'value')),
+            ([1, 2, 3], ('content',)),
+        ],
+    )
+    def test_to_toml(self, data: object, expected: tuple[str, ...]):
+        """Test mapping serialization and non-mapping content wrapping."""
+        result = cls.to_toml(data)
+        assert all(fragment in result for fragment in expected)
 
     def test_to_pickle(self):
         """Test to_pickle returns valid pickle bytes."""

@@ -53,7 +53,9 @@ class Tool(pyd.BaseModel):
     PKG: ClassVar[str] = 'my'
 
     #: Subpackages that are internal infrastructure or deprecated shims -- no public docs page.
-    SKIP: ClassVar[frozenset[str]] = frozenset({'scripts', 'templates', 'infra', 'text', 'type'})
+    SKIP: ClassVar[frozenset[str]] = frozenset(
+        {'_adoption', 'scripts', 'templates', 'infra', 'text', 'type'}
+    )
 
     #: The directory containing a local python project.
     root: pyd.DirectoryPath

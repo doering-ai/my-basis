@@ -142,32 +142,29 @@ class TestEnvironment:
         cls._get.cache_clear()
         assert env_instance.get('NEW_VAR') == 'test_value'
 
-    def test_set__clears_caches_on_change(self, env_instance: Environment, temp_env_var):
-        """Test that changing a value clears all caches."""
-        temp_env_var('CACHE_TEST', 'initial')
-        _ = env_instance.get('CACHE_TEST')
+    @pyt.mark.parametrize(
+        'key, initial, updated',
+        [
+            pyt.param('CACHE_TEST', 'initial', 'updated', id='changed'),
+            pyt.param('SAME_VAR', 'value', 'value', id='unchanged'),
+            pyt.param('NEVER_BEFORE_SET_KEY', None, 'now_set', id='previously-unset'),
+        ],
+    )
+    def test_set__cache_invalidation(
+        self,
+        env_instance: Environment,
+        temp_env_var,
+        key: str,
+        initial: str | None,
+        updated: str,
+    ):
+        """A cached lookup reflects set values whether changed, unchanged, or newly created."""
+        if initial is not None:
+            temp_env_var(key, initial)
 
-        # Change the value - should clear caches
-        env_instance.set('CACHE_TEST', 'updated')
-        assert env_instance.get('CACHE_TEST') == 'updated'
-
-    def test_set__no_cache_clear_if_same(self, env_instance: Environment, temp_env_var):
-        """Test that setting the same value doesn't clear caches."""
-        temp_env_var('SAME_VAR', 'value')
-        env_instance.set('SAME_VAR', 'value')  # Should not clear caches
-        assert env_instance.get('SAME_VAR') == 'value'
-
-    def test_set__clears_cache_for_previously_unset_key(self, env_instance: Environment):
-        """Regression: `set()` must clear the cache for a key that was never set before.
-
-        A key absent from `_ENVIRON` reads back as `''` (falsy), so the old
-        `if cur := self.get(key):` guard skipped the cache-clear whenever the key being
-        set had no prior value -- the cached `''` stuck around forever even though
-        `_ENVIRON` held the freshly-set value underneath it.
-        """
-        assert env_instance.get('NEVER_BEFORE_SET_KEY') == ''  # populates the `_get` cache
-        env_instance.set('NEVER_BEFORE_SET_KEY', 'now_set')
-        assert env_instance.get('NEVER_BEFORE_SET_KEY') == 'now_set'
+        assert env_instance.get(key) == (initial or '')
+        env_instance.set(key, updated)
+        assert env_instance.get(key) == updated
 
     @pyt.mark.parametrize(
         'invalid_key',

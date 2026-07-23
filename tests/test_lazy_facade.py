@@ -57,47 +57,45 @@ def _probe(body: str) -> subprocess.CompletedProcess:
 class TestLazyFacadeDefersLeaves:
     """`import my` must not eagerly import the `apis`/`files` leaves."""
 
-    def test_bare_import_defers_apis_and_files(self):
-        """A fresh `import my` leaves `my.apis` and `my.files` unimported."""
-        proc = _probe(
-            'import my, sys; '
-            "assert 'my.apis' not in sys.modules, 'apis eagerly imported'; "
-            "assert 'my.files' not in sys.modules, 'files eagerly imported'"
+    @pyt.mark.parametrize(
+        'module_names',
+        [
+            pyt.param(('my.apis', 'my.files'), id='leaf-packages'),
+            pyt.param(('googleapiclient',), id='google-client'),
+            pyt.param(('jinja2',), id='jinja'),
+        ],
+    )
+    def test_bare_import__defers_modules(self, module_names: tuple[str, ...]):
+        """A fresh `import my` leaves deferred modules unimported."""
+        checks = '; '.join(
+            f'assert {module_name!r} not in sys.modules, {module_name + " eagerly imported"!r}'
+            for module_name in module_names
         )
+        proc = _probe(f'import my, sys; {checks}')
         assert proc.returncode == 0, proc.stderr
 
-    def test_bare_import_defers_googleapiclient(self):
-        """A bare `import my` leaves `googleapiclient` (inside lazy `apis`) unimported."""
-        proc = _probe(
-            "import my, sys; assert 'googleapiclient' not in sys.modules, 'eagerly imported'"
-        )
-        assert proc.returncode == 0, proc.stderr
-
-    def test_bare_import_defers_jinja2(self):
-        """A bare `import my` does not build the infra Jinja env (so `jinja2` stays unimported)."""
-        proc = _probe(
-            "import my, sys; assert 'jinja2' not in sys.modules, 'jinja2 eagerly imported'"
-        )
-        assert proc.returncode == 0, proc.stderr
-
-    def test_infra_jinja_loads_on_demand(self):
-        """`my.infra.JINJA` still resolves, building `jinja2` only on that first access."""
-        proc = _probe(
-            'import my.infra as infra, sys; '
-            "assert 'jinja2' not in sys.modules; "
-            'assert type(infra.JINJA).__name__ == "Environment"; '
-            "assert 'jinja2' in sys.modules, 'accessing JINJA did not load jinja2'"
-        )
-        assert proc.returncode == 0, proc.stderr
-
-    def test_env_access_loads_apis_on_demand(self):
-        """Touching `my.env` pulls `apis` in -- deferral, not removal."""
-        proc = _probe(
-            'import my, sys; '
-            "assert 'my.apis' not in sys.modules; "
-            '_ = my.env; '
-            "assert 'my.apis' in sys.modules, 'accessing env did not load apis'"
-        )
+    @pyt.mark.parametrize(
+        'body',
+        [
+            pyt.param(
+                'import my.infra as infra, sys; '
+                "assert 'jinja2' not in sys.modules; "
+                'assert type(infra.JINJA).__name__ == "Environment"; '
+                "assert 'jinja2' in sys.modules, 'accessing JINJA did not load jinja2'",
+                id='infra-jinja',
+            ),
+            pyt.param(
+                'import my, sys; '
+                "assert 'my.apis' not in sys.modules; "
+                '_ = my.env; '
+                "assert 'my.apis' in sys.modules, 'accessing env did not load apis'",
+                id='facade-env',
+            ),
+        ],
+    )
+    def test_access__loads_on_demand(self, body: str):
+        """Deferred modules load on the first access that needs them."""
+        proc = _probe(body)
         assert proc.returncode == 0, proc.stderr
 
     def test_star_import_resolves_lazy_names(self):

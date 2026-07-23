@@ -92,6 +92,10 @@ class SystemUtils(_UtilsBase):
             r'\.\.',
             r'~',
         ),
+        yaml_fence=(
+            r'(?ims)\A\s*```[ \t]*ya?ml[ \t]*\r?\n'
+            r'(?P<content>.*?)^```[ \t]*(?:\r?\n)?\s*\Z'
+        ),
     )
 
     # ---------------
@@ -102,7 +106,8 @@ class SystemUtils(_UtilsBase):
         """Convert a timestamp or datetime to UTC datetime.
 
         Args:
-            val: Unix timestamp (int/float), datetime object, or None for current time.
+            val: Unix timestamp (int/float), datetime object, or None for current time. Naive
+                datetimes are interpreted as UTC; aware datetimes are converted to UTC.
         Returns:
             Timezone-aware datetime in UTC.
         Examples:
@@ -115,6 +120,8 @@ class SystemUtils(_UtilsBase):
         if val is None:
             return datetime.now(UTC)
         elif isinstance(val, datetime):
+            if val.tzinfo is None or val.utcoffset() is None:
+                return val.replace(tzinfo=UTC)
             return val.astimezone(UTC)
         else:
             return datetime.fromtimestamp(val, UTC)
@@ -126,15 +133,17 @@ class SystemUtils(_UtilsBase):
         Args:
             val: Unix timestamp (int/float), datetime object, or None.
         Returns:
-            Timedelta representing elapsed time, or zero if val is falsy.
+            Timedelta representing elapsed time, or zero when val is None.
         Examples:
-            Falsy inputs yield a zero delta::
+            A missing value yields zero; Unix epoch remains a real timestamp::
 
                 >>> from my import ut
                 >>> ut.posix_since(None)
                 datetime.timedelta(0)
+                >>> ut.posix_since(0).total_seconds() > 0
+                True
         """
-        if not val:
+        if val is None:
             return timedelta(0)
         else:
             return cls.posix() - cls.posix(val)
@@ -811,9 +820,8 @@ class SystemUtils(_UtilsBase):
         r"""Load data from YAML file or string, then cast to target type. See `from_file()`.
 
         Note:
-            Passing a markdown-fenced string (starting with three backticks and `yaml`) currently
-            raises `KeyError: 'yaml'` -- the fence-extraction branch references an RGXS pattern
-            that is not defined. Strip fences before calling.
+            Complete markdown fences tagged `yaml` or `yml` are unwrapped case-insensitively;
+            spaces around the tag and surrounding block are ignored.
 
         Args:
             file: Path to the file to load, or raw YAML string/bytes.
@@ -822,12 +830,17 @@ class SystemUtils(_UtilsBase):
             cast: If False, data that doesn't match the expected return type raises an error.
         Returns:
             Loaded and cast data from the file/string.
+        Raises:
+            ValueError: If an input beginning with a markdown fence is not a complete `yaml` or
+                `yml` block.
         Examples:
-            Parse an in-memory YAML string::
+            Parse raw or markdown-fenced YAML::
 
                 >>> from my import ut
                 >>> ut.from_yaml('a: 1\nb: [x, y]')
                 {'a': 1, 'b': ['x', 'y']}
+                >>> ut.from_yaml('```YML\nanswer: 42\n```')
+                {'answer': 42}
         """
         # I. Parse the content using an external library
         if not file:
@@ -840,8 +853,13 @@ class SystemUtils(_UtilsBase):
         else:
             # I.iii. Main Case: Attempt to parse in-memory YAML strings
             text = file.decode() if isinstance(file, bytes) else file
-            if text.strip().startswith('```yaml'):
-                text = '\n\n'.join(cls.RGXS['yaml'].findall(text))
+            if text.lstrip().startswith('```'):
+                match = cls.RGXS['yaml_fence'].fullmatch(text)
+                if match is None:
+                    raise ValueError(
+                        'Invalid YAML fence: expected a complete ```yaml or ```yml block.'
+                    )
+                text = match.group('content')
 
             ret = srsly.yaml_loads(text)
 

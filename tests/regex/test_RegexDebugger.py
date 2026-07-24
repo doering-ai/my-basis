@@ -75,6 +75,27 @@ class TestRegexDebugger:
         assert debugger.match('simple', 'hello')
         assert not debugger.match('simple', 'goodbye')
 
+    @pyt.mark.parametrize('operation', ['in_place', 'union'])
+    def test_new_debugger__flag_provenance(self, operation: str):
+        """Test debugger flag provenance survives public store merges and composition."""
+        source = RegexStore.new(
+            dict(lazy_load=False),
+            flagged=re.compile(r'abc', re.I),
+        )
+        debugger = cls.new_debugger(source)
+        merged = RegexStore.new(dict(lazy_load=False))
+
+        if operation == 'in_place':
+            merged |= debugger
+        else:
+            merged = merged | debugger
+
+        with pyt.raises(
+            ValueError,
+            match=r'Cannot compose out-of-band flags from dependencies: flagged',
+        ):
+            merged['phrase'] = r'(?P>flagged)!'
+
     def test_new_debugger__preserves_patterns(self, store: RegexStore):
         """Test that debugger preserves all patterns and can compile them."""
         debugger = cls.new_debugger(store)

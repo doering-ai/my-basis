@@ -143,28 +143,62 @@ class TestEnvironment:
         assert env_instance.get('NEW_VAR') == 'test_value'
 
     @pyt.mark.parametrize(
-        'key, initial, updated',
+        'accessor, key, initial, updated, before, after, should_clear',
         [
-            pyt.param('CACHE_TEST', 'initial', 'updated', id='changed'),
-            pyt.param('SAME_VAR', 'value', 'value', id='unchanged'),
-            pyt.param('NEVER_BEFORE_SET_KEY', None, 'now_set', id='previously-unset'),
+            pyt.param(
+                'get', 'CACHE_TEXT', 'initial', 'updated', 'initial', 'updated', True, id='get'
+            ),
+            pyt.param(
+                'path',
+                'CACHE_PATH',
+                '/tmp/initial',
+                '/tmp/updated',
+                Path('/tmp/initial'),
+                Path('/tmp/updated'),
+                True,
+                id='path',
+            ),
+            pyt.param('flag', 'CACHE_FLAG', '1', '2', 1, 2, True, id='flag'),
+            pyt.param(
+                'get',
+                'NEVER_BEFORE_SET_KEY',
+                None,
+                'now_set',
+                '',
+                'now_set',
+                True,
+                id='previously-unset',
+            ),
+            pyt.param('get', 'SAME_VAR', 'value', 'value', 'value', 'value', False, id='unchanged'),
         ],
     )
     def test_set__cache_invalidation(
         self,
         env_instance: Environment,
         temp_env_var,
+        accessor: str,
         key: str,
         initial: str | None,
         updated: str,
+        before: str | Path | int,
+        after: str | Path | int,
+        should_clear: bool,
     ):
-        """A cached lookup reflects set values whether changed, unchanged, or newly created."""
+        """Test set clears every warmed lookup cache only when the value changes."""
         if initial is not None:
             temp_env_var(key, initial)
 
-        assert env_instance.get(key) == (initial or '')
+        reader = getattr(env_instance, accessor)
+        cache = getattr(cls, f'_{accessor}')
+        assert reader(key) == before
+        assert reader(key) == before
+        assert cache.cache_info().currsize == 1
+        assert cache.cache_info().hits >= 1
+
         env_instance.set(key, updated)
-        assert env_instance.get(key) == updated
+
+        assert cache.cache_info().currsize == (0 if should_clear else 1)
+        assert reader(key) == after
 
     @pyt.mark.parametrize(
         'invalid_key',

@@ -537,3 +537,155 @@ class TestMetricUtils:
             _sleep_then_raise()
 
         assert counter['blk'] > 0
+
+    # -------------------------------
+    # `setup_logging`/`setup_fire_logging` decomposition helpers
+    # -------------------------------
+    @pyt.mark.parametrize(
+        'fire_token, env_token, otlp_env, expected_token, should_raise',
+        [
+            ('explicit', None, None, 'explicit', False),
+            ('', 'env-token', None, 'env-token', False),
+            ('', None, 'http://127.0.0.1:4318', '', False),
+            ('', None, None, '', True),
+        ],
+    )
+    def test_resolve_fire_token(
+        self,
+        monkeypatch: pyt.MonkeyPatch,
+        fire_token: str,
+        env_token: str | None,
+        otlp_env: str | None,
+        expected_token: str,
+        should_raise: bool,
+    ):
+        """`_resolve_fire_token` falls back to the env var and accepts OTLP as a destination."""
+        monkeypatch.delenv('LOGFIRE_TOKEN', raising=False)
+        monkeypatch.delenv('OTEL_EXPORTER_OTLP_ENDPOINT', raising=False)
+        monkeypatch.delenv('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT', raising=False)
+        if env_token is not None:
+            monkeypatch.setenv('LOGFIRE_TOKEN', env_token)
+        if otlp_env is not None:
+            monkeypatch.setenv('OTEL_EXPORTER_OTLP_ENDPOINT', otlp_env)
+
+        if should_raise:
+            with pyt.raises(ValueError, match='No telemetry destination configured'):
+                cls._resolve_fire_token(fire_token)
+        else:
+            assert cls._resolve_fire_token(fire_token) == expected_token
+
+    def test_resolve_setup_package__auto_detect(self, monkeypatch: pyt.MonkeyPatch):
+        """`_resolve_setup_package` auto-detects when the caller passes an empty string."""
+        detected: list[bool] = []
+        monkeypatch.setattr(
+            cls, 'get_package_name', classmethod(lambda c: detected.append(True) or 'auto-pkg')
+        )
+        assert cls._resolve_setup_package('') == 'auto-pkg'
+        assert detected == [True]
+
+    def test_resolve_setup_package__passthrough(self):
+        """`_resolve_setup_package` returns the given name unchanged when non-empty."""
+        assert cls._resolve_setup_package('my-explicit-pkg') == 'my-explicit-pkg'
+
+    def test_try_fire_logging__success_marks_ready(self, monkeypatch: pyt.MonkeyPatch):
+        """`_try_fire_logging` marks the package telemetry-ready on success."""
+        logger = lg.getLogger('test-try-fire-success')
+        original_ready = cls.TELEMETRY_READY
+        cls.TELEMETRY_READY = set()
+        monkeypatch.setattr(cls, 'setup_fire_logging', classmethod(lambda *a, **kw: None))
+        try:
+            result = cls._try_fire_logging(
+                fire_token='tok',
+                package='test-pkg',
+                is_dev=False,
+                logger=logger,
+                app=None,
+                export_logs=False,
+                system_metrics=False,
+                fire_kwargs={},
+            )
+            assert result is True
+            assert 'test-pkg' in cls.TELEMETRY_READY
+        finally:
+            cls.TELEMETRY_READY = original_ready
+
+    def test_try_fire_logging__failure_warns_and_returns_false(
+        self, monkeypatch: pyt.MonkeyPatch, caplog: pyt.LogCaptureFixture
+    ):
+        """`_try_fire_logging` swallows failure, warns, and returns False without marking ready."""
+        logger = lg.getLogger('test-try-fire-fail')
+        original_ready = cls.TELEMETRY_READY
+        cls.TELEMETRY_READY = set()
+
+        def boom(**_: object) -> None:
+            raise RuntimeError('exporter down')
+
+        monkeypatch.setattr(cls, 'setup_fire_logging', classmethod(boom))
+        try:
+            with caplog.at_level(lg.WARNING):
+                result = cls._try_fire_logging(
+                    fire_token='tok',
+                    package='test-pkg',
+                    is_dev=False,
+                    logger=logger,
+                    app=None,
+                    export_logs=False,
+                    system_metrics=False,
+                    fire_kwargs={},
+                )
+        finally:
+            cls.TELEMETRY_READY = original_ready
+        assert result is False
+        assert 'test-pkg' not in cls.TELEMETRY_READY
+        assert 'Remote telemetry setup failed' in caplog.text
+
+    def test_configure_cached_logger__first_config_wins(self, caplog: pyt.LogCaptureFixture):
+        """`_configure_cached_logger` warns and returns early when telemetry is already ready."""
+        logger = lg.getLogger('test-cached-first-wins')
+        original_loggers = cls.LOGGERS
+        original_ready = cls.TELEMETRY_READY
+        cls.LOGGERS = {'test-pkg': logger}
+        cls.TELEMETRY_READY = {'test-pkg'}
+        try:
+            with caplog.at_level(lg.WARNING):
+                result = cls._configure_cached_logger(
+                    package='test-pkg',
+                    fire_token='tok',
+                    is_dev=False,
+                    app=None,
+                    export_logs=False,
+                    system_metrics=False,
+                    fire_kwargs={},
+                )
+        finally:
+            cls.LOGGERS = original_loggers
+            cls.TELEMETRY_READY = original_ready
+        assert result is logger
+        assert 'later setup options were not applied' in caplog.text
+
+    def test_configure_cached_logger__retries_on_cached(self, monkeypatch: pyt.MonkeyPatch):
+        """`_configure_cached_logger` retries fire setup when the package was not yet ready."""
+        logger = lg.getLogger('test-cached-retry')
+        original_loggers = cls.LOGGERS
+        original_ready = cls.TELEMETRY_READY
+        cls.LOGGERS = {'test-pkg': logger}
+        cls.TELEMETRY_READY = set()
+        fire_calls: list[bool] = []
+        monkeypatch.setattr(
+            cls, 'setup_fire_logging', classmethod(lambda *a, **kw: fire_calls.append(True))
+        )
+        try:
+            result = cls._configure_cached_logger(
+                package='test-pkg',
+                fire_token='tok',
+                is_dev=False,
+                app=None,
+                export_logs=False,
+                system_metrics=False,
+                fire_kwargs={},
+            )
+        finally:
+            cls.LOGGERS = original_loggers
+            cls.TELEMETRY_READY = original_ready
+        assert result is logger
+        assert fire_calls == [True]

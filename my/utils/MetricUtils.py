@@ -236,6 +236,74 @@ class MetricUtils(_UtilsBase):
         return logger
 
     @classmethod
+    def _resolve_fire_token(cls, fire_token: str) -> str:
+        """Resolve the active Logfire token, confirming a telemetry destination exists.
+
+        Falls back to the ``LOGFIRE_TOKEN`` environment variable when ``fire_token`` is
+        empty, and accepts an OTLP endpoint (in either of its two env vars) as an
+        alternative destination so an empty token is permitted only when OTLP is set.
+        """
+        token = fire_token or os.getenv('LOGFIRE_TOKEN', '')
+        otlp_destination = any(
+            os.getenv(name)
+            for name in ('OTEL_EXPORTER_OTLP_ENDPOINT', 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT')
+        )
+        if not token and not otlp_destination:
+            raise ValueError('No telemetry destination configured.')
+        return token
+
+    @classmethod
+    def _configure_fire(
+        cls,
+        package: str,
+        is_dev: bool,
+        kwargs: dict[str, Any],
+        token: str,
+    ) -> None:
+        """Build the closed Logfire settings surface and call ``fire.configure()``."""
+        settings = cls._fire_settings(package, is_dev, kwargs)
+        if token:
+            settings['token'] = token
+        if is_dev:
+            settings['console'] = fire.ConsoleOptions(
+                min_log_level='debug',
+                span_style='indented',
+                show_project_link=False,
+            )
+        fire.configure(**settings)
+
+    @classmethod
+    def _instrument_system_metrics(cls, logger: lg.Logger) -> None:
+        """Enable per-process system metrics instrumentation, warning on failure."""
+        try:
+            fire.instrument_system_metrics()
+        except Exception:
+            logger.warning('System telemetry instrumentation failed.')
+        # fire.log_slow_async_callbacks() # NOTE: not for now?
+        # fire.instrument_pydantic() # NOTE: done in pyproject.toml
+
+    @classmethod
+    def _export_python_logs(cls, logger: lg.Logger, is_dev: bool) -> None:
+        """Attach the Logfire logging handler for scrubbed events, warning on failure."""
+        try:
+            logfire_handler = fire.LogfireLoggingHandler()
+            logfire_handler.setLevel(lg.DEBUG if is_dev else lg.INFO)
+            logger.addHandler(logfire_handler)
+        except Exception:
+            logger.warning('Python log export setup failed.')
+
+    @classmethod
+    def _instrument_app(cls, app: Any, logger: lg.Logger) -> None:
+        """Instrument the ASGI app (and aiohttp client if loaded), warning on failure."""
+        try:
+            # see opentelemetry-python-contrib.readthedocs.io/en/latest/instrumentation
+            if 'aiohttp' in sys.modules:
+                fire.instrument_aiohttp_client()
+            app.asgi_app = fire.instrument_asgi(app.asgi_app)
+        except Exception:
+            logger.warning('Application telemetry instrumentation failed.')
+
+    @classmethod
     @_guard
     def setup_fire_logging(
         cls,
@@ -273,53 +341,23 @@ class MetricUtils(_UtilsBase):
         """
         if not package:
             raise ValueError('Telemetry service package is required.')
-        token = fire_token or os.getenv('LOGFIRE_TOKEN', '')
-        otlp_destination = any(
-            os.getenv(name)
-            for name in ('OTEL_EXPORTER_OTLP_ENDPOINT', 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT')
-        )
-        if not token and not otlp_destination:
-            raise ValueError('No telemetry destination configured.')
+        token = cls._resolve_fire_token(fire_token)
+
         # I. Choose basic configuration settings
-        settings = cls._fire_settings(package, is_dev, kwargs)
-        if token:
-            settings['token'] = token
-        if is_dev:
-            settings['console'] = fire.ConsoleOptions(
-                min_log_level='debug',
-                span_style='indented',
-                show_project_link=False,
-            )
-        fire.configure(**settings)
+        cls._configure_fire(package, is_dev, kwargs, token)
 
         # II. Register special handlers
         # II.i. Automatically record performance metrics only when explicitly requested
         if system_metrics:
-            try:
-                fire.instrument_system_metrics()
-            except Exception:
-                logger.warning('System telemetry instrumentation failed.')
-        # fire.log_slow_async_callbacks() # NOTE: not for now?
-        # fire.instrument_pydantic() # NOTE: done in pyproject.toml
+            cls._instrument_system_metrics(logger)
 
         # II.ii. Register logfire w/ the default python logger
         if export_logs:
-            try:
-                logfire_handler = fire.LogfireLoggingHandler()
-                logfire_handler.setLevel(lg.DEBUG if is_dev else lg.INFO)
-                logger.addHandler(logfire_handler)
-            except Exception:
-                logger.warning('Python log export setup failed.')
+            cls._export_python_logs(logger, is_dev)
 
         # II.iii. Register logfire with our ASGI HTTPS app
         if app is not None:
-            try:
-                # see opentelemetry-python-contrib.readthedocs.io/en/latest/instrumentation
-                if 'aiohttp' in sys.modules:
-                    fire.instrument_aiohttp_client()
-                app.asgi_app = fire.instrument_asgi(app.asgi_app)
-            except Exception:
-                logger.warning('Application telemetry instrumentation failed.')
+            cls._instrument_app(app, logger)
 
     @staticmethod
     def _editable_distribution_name(module_file: Path) -> str | None:
@@ -407,6 +445,82 @@ class MetricUtils(_UtilsBase):
             )
         return root_package
 
+    @classmethod
+    def _resolve_setup_package(cls, package: str) -> str:
+        """Resolve the package name, auto-detecting it when the caller passes an empty string."""
+        if not package:
+            return cls.get_package_name()
+        return package
+
+    @classmethod
+    def _try_fire_logging(
+        cls,
+        fire_token: str,
+        package: str,
+        is_dev: bool,
+        logger: lg.Logger,
+        app: Any | None,
+        export_logs: bool,
+        system_metrics: bool,
+        fire_kwargs: dict[str, Any],
+    ) -> bool:
+        """Attempt remote Logfire setup, warning (never raising) on failure.
+
+        On success the package is marked telemetry-ready. Returns True when the remote
+        exporter was configured, False when it failed and the caller should keep going
+        without export.
+        """
+        try:
+            cls.setup_fire_logging(
+                fire_token=fire_token,
+                package=package,
+                is_dev=is_dev,
+                logger=logger,
+                app=app,
+                export_logs=export_logs,
+                system_metrics=system_metrics,
+                **fire_kwargs,
+            )
+        except Exception:
+            logger.warning('Remote telemetry setup failed; continuing without export.')
+            return False
+        else:
+            cls.TELEMETRY_READY.add(package)
+            return True
+
+    @classmethod
+    def _configure_cached_logger(
+        cls,
+        package: str,
+        fire_token: str,
+        is_dev: bool,
+        app: Any | None,
+        export_logs: bool,
+        system_metrics: bool,
+        fire_kwargs: dict[str, Any],
+    ) -> lg.Logger:
+        """Re-apply telemetry options to an already-cached logger.
+
+        When the package was already marked telemetry-ready, later setup options are
+        ignored with a warning (first-configuration-wins). Otherwise the remote
+        exporter is retried on the cached logger.
+        """
+        cached = cls.LOGGERS[package]
+        if package in cls.TELEMETRY_READY:
+            cached.warning('Logging already configured; later setup options were not applied.')
+            return cached
+        cls._try_fire_logging(
+            fire_token=fire_token,
+            package=package,
+            is_dev=is_dev,
+            logger=cached,
+            app=app,
+            export_logs=export_logs,
+            system_metrics=system_metrics,
+            fire_kwargs=fire_kwargs,
+        )
+        return cached
+
     @staticmethod
     @_guard
     def setup_logging(
@@ -446,31 +560,19 @@ class MetricUtils(_UtilsBase):
                 >>> logger = ut.setup_logging(Path('logs'), True, fire_token='')  # doctest: +SKIP
         """
         cls = MetricUtils
-        if not package:
-            package = cls.get_package_name()
-
+        package = cls._resolve_setup_package(package)
         cls._validate_fire_configuration(package, is_dev, fire_kwargs)
+
         if package in cls.LOGGERS:
-            cached = cls.LOGGERS[package]
-            if package in cls.TELEMETRY_READY:
-                cached.warning('Logging already configured; later setup options were not applied.')
-                return cached
-            try:
-                cls.setup_fire_logging(
-                    fire_token=fire_token,
-                    package=package,
-                    is_dev=is_dev,
-                    logger=cached,
-                    app=app,
-                    export_logs=export_logs,
-                    system_metrics=system_metrics,
-                    **fire_kwargs,
-                )
-            except Exception:
-                cached.warning('Remote telemetry setup failed; continuing without export.')
-            else:
-                cls.TELEMETRY_READY.add(package)
-            return cached
+            return cls._configure_cached_logger(
+                package=package,
+                fire_token=fire_token,
+                is_dev=is_dev,
+                app=app,
+                export_logs=export_logs,
+                system_metrics=system_metrics,
+                fire_kwargs=fire_kwargs,
+            )
 
         logger = cls.setup_py_logging(
             logdir=logdir,
@@ -482,21 +584,16 @@ class MetricUtils(_UtilsBase):
             maxcount=maxcount,
         )
 
-        try:
-            cls.setup_fire_logging(
-                fire_token=fire_token,
-                package=package,
-                is_dev=is_dev,
-                logger=logger,
-                app=app,
-                export_logs=export_logs,
-                system_metrics=system_metrics,
-                **fire_kwargs,
-            )
-        except Exception:
-            logger.warning('Remote telemetry setup failed; continuing without export.')
-        else:
-            cls.TELEMETRY_READY.add(package)
+        cls._try_fire_logging(
+            fire_token=fire_token,
+            package=package,
+            is_dev=is_dev,
+            logger=logger,
+            app=app,
+            export_logs=export_logs,
+            system_metrics=system_metrics,
+            fire_kwargs=fire_kwargs,
+        )
 
         cls.LOGGERS[package] = logger
         return logger

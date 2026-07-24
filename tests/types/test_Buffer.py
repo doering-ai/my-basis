@@ -2,6 +2,7 @@
 ### HEAD ###
 ############
 ### STANDARD
+from collections import deque
 from typing import Any
 import itertools as it
 import functools as ft
@@ -465,3 +466,131 @@ class TestBuffer:
         assert after is not before
         assert len(after) == 1
         assert after[0][2] == ' d '
+
+    # -----------------------------
+    # `raw_pair_iterator` helpers
+    # -----------------------------
+    @pyt.mark.parametrize(
+        'text, span, params, mode, starts_before, expected_action, starts_after',
+        [
+            # pos > b1 -> break
+            ('abc', Span(0, 4), {}, 'all', [], 'break', []),
+            # fenced -> continue
+            ('`ab`', Span(1, 3), {}, 'all', [], 'continue', []),
+            # is_complete -> yield self-closing pair
+            ('<br/>', Span(0, 5), {'is_complete': 'x', 'start': None}, 'all', [], 'yield', []),
+            # start delimiter -> push and continue
+            (
+                '{{',
+                Span(0, 2),
+                {'start': '{{', 'is_complete': None},
+                'all',
+                [],
+                'continue',
+                [Span(0, 2)],
+            ),
+            # end matching a start, mode 'all' -> yield
+            (
+                '{{}}',
+                Span(2, 4),
+                {'start': None, 'is_complete': None},
+                'all',
+                [Span(0, 2)],
+                'yield',
+                [],
+            ),
+            # end matching a start, mode 'leaves' with no remaining starts -> skip (non-leaf)
+            (
+                '{{ }}',
+                Span(3, 5),
+                {'start': None, 'is_complete': None},
+                'leaves',
+                [Span(0, 2)],
+                'continue',
+                [],
+            ),
+            # end matching a start, mode 'roots' with remaining starts -> skip (non-root)
+            (
+                '{{ {{ }}',
+                Span(6, 8),
+                {'start': None, 'is_complete': None},
+                'roots',
+                [Span(0, 2), Span(3, 5)],
+                'continue',
+                [Span(0, 2)],
+            ),
+        ],
+    )
+    def test_classify_pair_match(
+        self,
+        text: str,
+        span: Span,
+        params: dict[str, str | None],
+        mode: PairMode,
+        starts_before: list[Span],
+        expected_action: str,
+        starts_after: list[Span],
+    ):
+        """`_classify_pair_match` routes each regex hit to the correct loop action.
+
+        Locks in the decomposition of `raw_pair_iterator` by exercising every branch of the
+        classification helper: break (end bound), continue (fenced / start push / mode skip),
+        yield (self-closing / matched end), and fall (unmatched end with empty stack).
+        """
+        buf = DefBuf(text)
+        s0, pos = span
+        starts: deque[Span] = deque(starts_before)
+        b1 = len(buf)
+
+        action, pair = buf._classify_pair_match(span, s0, pos, params, starts, mode, b1)
+        assert action == expected_action
+        assert list(starts) == starts_after
+        if action == 'yield':
+            assert pair is not None
+            assert isinstance(pair, tuple)
+            assert len(pair) == 2
+        else:
+            assert pair is None
+
+    def test_classify_pair_match__yield_self_closing(self):
+        """The self-closing branch yields a zero-length end span at the start's tail."""
+        buf = DefBuf('<br/>')
+        span = Span(0, 5)
+        starts: deque[Span] = deque()
+        params = {'is_complete': '<br/>', 'start': None}
+        action, pair = buf._classify_pair_match(span, 0, 5, params, starts, 'all', len(buf))
+        assert action == 'yield'
+        assert pair == (span, Span._fast(5, 5))
+
+    def test_classify_pair_match__yield_matched_end(self):
+        """The matched-end branch yields (start, end) and pops the start stack."""
+        buf = DefBuf('{{ }}')
+        start_span = Span(0, 2)
+        end_span = Span(3, 5)
+        starts: deque[Span] = deque([start_span])
+        params = {'start': None, 'is_complete': None}
+        action, pair = buf._classify_pair_match(end_span, 3, 5, params, starts, 'all', len(buf))
+        assert action == 'yield'
+        assert pair == (start_span, end_span)
+        assert len(starts) == 0
+
+    def test_classify_pair_match__unmatched_end_raises(self):
+        """An end delimiter with an empty start stack raises AssertionError (assertions on).
+
+        When Python runs without ``-O``, the ``assert`` inside ``_classify_pair_match`` fires
+        before the ``'fall'`` action can be returned. This locks in that the unmatched-end
+        path is a hard error, not a silent skip, under normal execution.
+        """
+        buf = DefBuf('}}')
+        starts: deque[Span] = deque()
+        params = {'start': None, 'is_complete': None}
+        with pyt.raises(AssertionError, match='unmatched end'):
+            buf._classify_pair_match(Span(0, 2), 0, 2, params, starts, 'all', len(buf))
+
+    @pyt.mark.parametrize('strict', [True, False])
+    def test_unmatched_starts_error(self, strict: bool):
+        """`_unmatched_starts_error` builds a descriptive message from the remaining stack."""
+        buf = DefBuf('{{ {{ ')
+        starts: deque[Span] = deque([Span(0, 2), Span(3, 5)])
+        err_text = buf._unmatched_starts_error(starts)
+        assert 'Found 2 unmatched starts' in err_text

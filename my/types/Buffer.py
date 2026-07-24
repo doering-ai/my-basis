@@ -466,6 +466,71 @@ class Buffer(pyd.BaseModel):
                 elif s1 > pos:
                     spans[i] = spans[i] + (0, delta)
 
+    _PairAction = Literal['break', 'continue', 'yield', 'fall']
+
+    def _classify_pair_match(
+        self,
+        span: Span,
+        s0: int,
+        pos: int,
+        params: dict[str, str | None],
+        starts: deque[Span],
+        mode: PairMode,
+        b1: int,
+    ) -> tuple[_PairAction, Pair | None]:
+        """Classify one regex match and mutate the start stack, returning the loop action.
+
+        Returns a ``(action, pair)`` signal consumed by `raw_pair_iterator`: ``'break'``
+        stops the scan, ``'continue'`` skips the in-flight delta adjustment, ``'yield'``
+        emits ``pair`` (then the caller applies the delta), and ``'fall'`` runs the delta
+        adjustment without yielding (only reachable for the unmatched-end branch when
+        assertions are compiled out).
+        """
+        if pos > b1:
+            # I.i. Exit when we hit the end bound
+            return 'break', None
+        if self._is_fenced(s0):
+            # I.ii. Ignore any matches within "fenced" regions
+            return 'continue', None
+        if params.get('is_complete'):
+            # II.i. Yield self-closing starts (e.g. '<span />')
+            return 'yield', (span, Span._fast(span[1], span[1]))
+        if params.get('start', ''):
+            # II.ii. We've found the start of a new pair; record it and continue
+            starts.append(span)
+            return 'continue', None
+        if len(starts) == 0:
+            # III.i. We've found an end, but don't have any recorded starts to match it to
+            if DEBUG:
+                print(f'ERROR -- unmatched ENDS for\n"""\n{self.text[0]}\n""":')
+            assert len(starts) != 0, (
+                f'Encountered unmatched end: "...{self.slice(max(0, s0 - 48), pos)}"'
+            )
+            return 'fall', None
+        # III.ii. We've found an end, which matches the top-most element of the start stack
+        #         If the mode doesn't match our current nested depth, ignore the pair
+        start, end = (starts.pop(), span)
+        if mode == ('roots' if starts else 'leaves'):
+            return 'continue', None
+        return 'yield', (start, end)
+
+    def _unmatched_starts_error(self, starts: deque[Span]) -> str:
+        """Build the ValueError message for start delimiters left on the stack."""
+        remaining = len(starts)
+        err_text = f'Found {remaining} unmatched starts'
+        err_lines = (f'`{s0}`: "{self[s0:s1]}"{self[s1 : s1 + 16]}...' for s0, s1 in starts)
+        if DEBUG:
+            err_text = '\n'.join(
+                [
+                    err_text + ', e.g.:',
+                    *(f'\t{s}' for s in err_lines),
+                    f'\n...in text:\n"""\n{self.text[0]}\n"""',
+                ]
+            )
+        else:
+            err_text += f', e.g. {mi.first(err_lines)}'
+        return err_text
+
     # -------------------
     # `+` Primary Methods
     # -------------------
@@ -502,38 +567,14 @@ class Buffer(pyd.BaseModel):
             span = Span._fast(*match.span())
             s0, pos = span
 
-            if pos > b1:
-                # I.i. Exit when we hit the end bound
+            action, pair = self._classify_pair_match(span, s0, pos, params, starts, mode, b1)
+            if action == 'break':
                 break
-
-            elif self._is_fenced(s0):
-                # I.ii. Ignore any matches within "fenced" regions
+            if action == 'continue':
                 continue
-
-            elif params.get('is_complete', None):
-                # II.i. Yield self-closing starts (e.g. '<span />')
-                yield span, Span._fast(span[1], span[1])
-
-            elif params.get('start', ''):
-                # II.ii. We've found the start of a new pair; record it and continue
-                starts.append(span)
-                continue
-
-            elif len(starts) == 0:
-                # III.i. We've found an end, but don't have any recorded starts to match it to
-                if DEBUG:
-                    print(f'ERROR -- unmatched ENDS for\n"""\n{self.text[0]}\n""":')
-
-                assert len(starts) != 0, (
-                    f'Encountered unmatched end: "...{self.slice(max(0, s0 - 48), pos)}"'
-                )
-            else:
-                # III.ii. We've found an end, which matches the top-most element of the start stack
-                #         If the mode doesn't match our current nested depth, ignore the pair
-                start, end = (starts.pop(), span)
-                if mode == ('roots' if starts else 'leaves'):
-                    continue
-                yield start, end
+            if action == 'yield':
+                assert pair is not None
+                yield pair
 
             # IV. Adjust for any changes made by the caller to the buffer during iteration
             if delta := len(self) - oldlen:
@@ -541,22 +582,10 @@ class Buffer(pyd.BaseModel):
                 b1 += delta
 
         # V. If we still have unmatched starts on the stack, raise an error (strict mode only)
-        if remaining := len(starts):
+        if starts:
             if not strict:
                 return
-            err_text = f'Found {remaining} unmatched starts'
-            err_lines = (f'`{s0}`: "{self[s0:s1]}"{self[s1 : s1 + 16]}...' for s0, s1 in starts)
-            if DEBUG:
-                err_text = '\n'.join(
-                    [
-                        err_text + ', e.g.:',
-                        *(f'\t{s}' for s in err_lines),
-                        f'\n...in text:\n"""\n{self.text[0]}\n"""',
-                    ]
-                )
-            else:
-                err_text += f', e.g. {mi.first(err_lines)}'
-            raise ValueError(err_text)
+            raise ValueError(self._unmatched_starts_error(starts))
 
     # ------------------
     # `*` Public Methods

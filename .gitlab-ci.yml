@@ -28,6 +28,8 @@ workflow:
         # job lives in. WITHOUT this rule a `v*` tag push matches nothing and GitLab
         # creates no pipeline at all, so the job-level `rules:` can never fire.
         - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
+        # The independent Typst package shares this repository, not Python's tags.
+        - if: $CI_COMMIT_TAG =~ /^typst-v\d+\.\d+\.\d+$/
 ############
 ### DATA ###
 ############
@@ -35,8 +37,11 @@ variables:
     PACKAGE: my
     USER: my
     DOCKER_TLS_CERTDIR: /certs
-    TEST_POD: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
+    # Every non-release job consumes the image built for this exact source SHA in the
+    # current pipeline. `:latest` remains a convenience tag, never a test prerequisite.
+    TEST_POD: $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
     MAIN_POD: $CI_REGISTRY_IMAGE:latest
+    PYTHON_FLOOR: '3.12'
     # Enable GitLabs free secret detection -- see `secret_detection` job
     SECRET_DETECTION_ENABLED: 'true'
     # Where uv caches wheels/downloads -- kept inside the project so GitLab can cache it.
@@ -70,15 +75,13 @@ Rebuild Pod:
         - docker build --pull -t $TEST_POD -f Containerfile .
         - docker push $TEST_POD
     rules:
-        # A release tag reuses the image built on `main`; don't rebuild on tags.
+        # A release tag points at a commit already proven on `main`; publishing uses
+        # its own uv image and remains independent of this build.
         - if: $CI_COMMIT_TAG
           when: never
-        # The image bakes only the system base (uv + task + prek + git + the `my`
-        # user); it COPYs no repo files and runs no `uv sync`, so ONLY a Containerfile
-        # change can make it stale. Deps are synced per-job at runtime, so uv.lock /
-        # Taskfile / .repo.yaml changes do not require a rebuild.
-        - changes:
-            - Containerfile
+        # Build on every MR/default-branch pipeline. The SHA tag is the proof that
+        # eval and matrix jobs cannot fall back to a stale promoted image.
+        - when: on_success
 Release Pod:
     stage: release
     extends: .docker
@@ -87,13 +90,9 @@ Release Pod:
         - docker tag $TEST_POD $MAIN_POD
         - docker push $MAIN_POD
     rules:
-        # Promote to :latest ONLY when a fresh image was just built on the default
-        # branch -- i.e. the Containerfile changed. Every other default-branch commit
-        # reuses the existing :latest, so re-tagging it is a no-op; skip it. A tag has
-        # no branch, so this also keeps Release Pod off tag pipelines.
+        # Promotion happens only after the SHA image has passed eval and tests. No
+        # earlier job consumes `:latest`, so promotion can never bootstrap the matrix.
         - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-          changes:
-            - Containerfile
 # PyPI trusted publishing (OIDC) -- no long-lived token. Triggered by a `v*` tag
 # (see the workflow rule above). GitLab mints a short-lived id_token bound to the
 # top-level pipeline; we exchange it at PyPI's mint endpoint for a project-scoped
@@ -132,6 +131,8 @@ Publish PyPI:
             aud: pypi
     rules:
         - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
+          when: manual
+    allow_failure: false
     environment: pypi
     # Decouple from the eval/test stages: the release must publish independently,
     # never blocked by a slow or hung eval-stage job (e.g. the pipeintel component,
@@ -140,6 +141,7 @@ Publish PyPI:
     cache: []
     script:
         - uv build --no-sources
+        - python3 scripts/check_release_artifacts.py dist/*.whl dist/*.tar.gz
         - |
           export UV_PUBLISH_TOKEN=$(python3 -c '
           import json, os, urllib.request
@@ -156,6 +158,12 @@ Publish PyPI:
         - uv publish
 Evaluate Python:
     stage: eval
+    image:
+        name: $TEST_POD
+        entrypoint: [""]
+    needs: ['Rebuild Pod']
+    variables:
+        UV_LOCKED: '1'
     # Lint/typecheck is always fast; a longer run is a hang, not real work. Cap it
     # so a transient runner/registry stall can't burn a full job-timeout of shared
     # compute (a 1h stall on the v0.8.2 tag pipeline is what prompted this).
@@ -167,17 +175,24 @@ Evaluate Python:
         - when: on_success
     before_script:
         - cd $CI_PROJECT_DIR
-        - uv sync --all-extras
+        - uv lock --check
+        - uv sync --locked --all-extras --python "$PYTHON_FLOOR"
     interruptible: true
     script:
-        - uv run ruff check --output-format=gitlab --output-file=code-quality-report.json
-        - uv run ruff format --diff
-        - uv run pyrefly check
+        - uv run --locked ruff check --output-format=gitlab --output-file=code-quality-report.json
+        - uv run --locked ruff format --diff
+        - uv run --locked pyrefly check
     artifacts:
         reports:
             codequality: $CI_PROJECT_DIR/code-quality-report.json
 Test Python:
     stage: test
+    image:
+        name: $TEST_POD
+        entrypoint: [""]
+    needs: ['Rebuild Pod', 'Evaluate Python']
+    variables:
+        UV_LOCKED: '1'
     timeout: 30m
     # A release tag is cut from already-green `main` -- no need to re-run tests.
     rules:
@@ -186,10 +201,50 @@ Test Python:
         - when: on_success
     before_script:
         - cd $CI_PROJECT_DIR
-        - uv sync --all-extras
+        - uv lock --check
+        - uv sync --locked --all-extras --python "$PYTHON_FLOOR"
     script:
-        - uv run task test:cov
+        - task test:cov
     coverage: '/TOTAL.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
+Test Artifacts:
+    stage: test
+    image:
+        name: $TEST_POD
+        entrypoint: [""]
+    needs: ['Rebuild Pod', 'Evaluate Python']
+    timeout: 10m
+    rules:
+        - if: $CI_COMMIT_TAG
+          when: never
+        - when: on_success
+    before_script:
+        - cd $CI_PROJECT_DIR
+        - uv lock --check
+        - uv sync --locked --all-extras --python "$PYTHON_FLOOR"
+    script:
+        - task test:artifacts
+Test Typst:
+    stage: test
+    image:
+        name: ghcr.io/typst/typst@sha256:032e292249bcd378480cc7c142cfa324b63ef8aadeb88d7e7230320c4c9c422f
+        entrypoint: [""]
+    cache: []
+    timeout: 10m
+    rules:
+        - if: $CI_COMMIT_TAG =~ /^typst-v\d+\.\d+\.\d+$/
+        - if: $CI_COMMIT_TAG
+          when: never
+        - when: on_success
+    script:
+        - |
+          if [ -n "${CI_COMMIT_TAG:-}" ]; then
+            TYPST_VERSION="$(sed -n 's/^version = "\(.*\)"/\1/p' typst/typst.toml)"
+            test "typst-v$TYPST_VERSION" = "$CI_COMMIT_TAG" || {
+              echo "Tag $CI_COMMIT_TAG does not match typst-v$TYPST_VERSION"
+              exit 1
+            }
+          fi
+        - sh typst/test.sh
 # `Test Python` above runs the image's baked-in interpreter (python3.12, the declared floor)
 # and owns the coverage report -- it stays a single job so the `coverage:` regex cannot race
 # across parallel children. This job adds every OTHER supported interpreter.
@@ -198,6 +253,12 @@ Test Python:
 # EXPLICITLY -- that is the point: no job silently acquires a runtime it did not ask for.
 Test Python Matrix:
     stage: test
+    image:
+        name: $TEST_POD
+        entrypoint: [""]
+    needs: ['Rebuild Pod', 'Evaluate Python']
+    variables:
+        UV_LOCKED: '1'
     timeout: 30m
     parallel:
         matrix:
@@ -209,6 +270,9 @@ Test Python Matrix:
     before_script:
         - cd $CI_PROJECT_DIR
         - uv python install "$PYVER"
-        - uv sync --all-extras --python "$PYVER"
+        - uv lock --check
+        - uv sync --locked --all-extras --python "$PYVER"
     script:
-        - uv run --python "$PYVER" pytest -q
+        # The environment was synchronized explicitly above. `--no-sync` makes a
+        # second, implicit resolver pass impossible while `--locked` reasserts the lock.
+        - uv run --locked --no-sync --python "$PYVER" pytest -q

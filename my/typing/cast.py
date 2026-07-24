@@ -168,14 +168,19 @@ class TypeCast(_TypingBase):
 
     @staticmethod
     def register[F: FunctionType](fn: F) -> F:
-        """Register a function as a cast transform based on its type parameters, as a decorator.
+        """Register a function as a cast transform based on its type parameters.
 
         The decorated function declares its source and target bounds as PEP 695 type parameters
         (e.g. ``def _string_to_scalar[S: String, T: Scalar](self: Transform) -> ...``); the pair is
         inserted into the transform table just before any more-general entry, so specific
-        transforms are always tried first. Registration is deferred until `setup` runs.
+        transforms are always tried first. Definitions discovered during module import queue for
+        the initial `setup`; later registrations install immediately and invalidate memoized
+        dispatch candidates, so the next cast sees the extension.
         """
-        _TRQUE.append(fn)
+        if TypeCast._SETUP:
+            TypeCast._register_impl(fn)
+        else:
+            _TRQUE.append(fn)
         return fn
 
     @classmethod
@@ -188,7 +193,7 @@ class TypeCast(_TypingBase):
 
     @classmethod
     def _register_impl(cls, fn: TransformFn) -> None:
-        """Install a queued transform into the registry, ordered before more-general entries."""
+        """Install a transform in specificity order and invalidate dispatch memoization."""
         name = getattr(fn, '__name__', 'fn')
         ty_params = cls._get_type_params(fn)
         if len(ty_params) == 0:
@@ -215,6 +220,7 @@ class TypeCast(_TypingBase):
                 pos = i
                 break
         cache.insert(pos, (k0, k1, fn))
+        Transform._dispatch_candidates.cache_clear()
 
     @staticmethod
     def _get_type_params[F: FunctionType](fn: F) -> list[tuple[str, MyType]]:
@@ -1796,14 +1802,14 @@ class Transform[T0, T1]:
         """Filter and specificity-sort `_TRANSFORMS` for a `(t0, t1, flags)` triple.
 
         This is the expensive part of every cast -- scanning the full registered-transform
-        table and re-sorting it by specificity -- and it is a pure function of its three
-        arguments: `_TRANSFORMS` is populated once at import time (`TypeCast.setup()`) and never
-        mutated afterward, and `CastFlags` is frozen/hashable (see `docs/DESIGN-cast-flags.md`).
-        `flags` is part of the key even though no transform's *bound* is flag-dependent today --
-        that keeps a future flag-sensitive registration from silently sharing a stale entry
-        across flag tiers, at the cost of one extra (harmless) cache-key dimension now. Returns a
-        `tuple`, not the `list` the un-memoized code built, so a cached entry can never be
-        mutated by a caller holding a reference to it.
+        table and re-sorting it by specificity -- and the result is pure for a fixed registry.
+        `TypeCast.register` may extend `_TRANSFORMS` after initial setup, so every successful
+        insertion clears this cache before another cast can reuse an obsolete candidate tuple.
+        `CastFlags` is frozen/hashable (see `docs/DESIGN-cast-flags.md`). `flags` remains part of
+        the key even though no transform's *bound* is flag-dependent today; that keeps a future
+        flag-sensitive registration from sharing entries across flag tiers. Returning a `tuple`,
+        rather than the `list` the un-memoized code built, prevents callers from mutating cached
+        results.
 
         Specificity is a *partial* order (subset of bounds), so a plain `.sort()` on
         `MyType.__lt__` scrambles it -- e.g. letting `object`-bound hailmary transforms beat
@@ -1875,19 +1881,4 @@ class Transform[T0, T1]:
                 if (ret := self._finalize(tr(self))) is not None:
                     return ret
             except Decline:
-                continue
-            except Exception:
-                # Transitional safety valve. Until every transform that *crashes* (rather than
-                # deliberately declines) has been converted to `raise Decline`, a stray crash is
-                # logged loudly (distinctive `decline-valve:` prefix so the latent-bug tail can be
-                # grepped out of a green run) and re-declined, so nothing user-facing breaks.
-                # TODO(decline): once the latent-crash tail is flushed, drop this valve and let
-                # non-Decline exceptions propagate instead of silently re-declining.
-                logger.error(
-                    'decline-valve: transform %s crashed casting %s -> %s',
-                    getattr(tr, '__name__', tr),
-                    self.t0,
-                    self.t1,
-                    exc_info=True,
-                )
                 continue

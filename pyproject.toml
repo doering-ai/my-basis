@@ -38,7 +38,7 @@ dependencies = [
   "mdformat-front-matters>=2.0.0", # Markdown.render()'s default template emits frontmatter
   "more-itertools>=10.7.0",
   "numpy>=2.4.1",
-  "pydantic>=2.11.7",
+  "pydantic>=2.12.2",
   "python-dateutil>=2.9.0.post0",
   "python-dotenv>=1.0.1",
   "regex>=2024.4.28",
@@ -90,7 +90,7 @@ test = [
   "pytest-asyncio>=1.1.0",
   "pytest-cov>=6.2.1",
   "pytest-timeout>=2.4.0",
-  "pytest>=8.4.1",
+  "pytest>=9.0.0",
   "syrupy>=5.1.0",
 ]
 # Documentation dependencies for building and hosting project documentation
@@ -120,8 +120,11 @@ build-backend = "uv_build"
 [tool.uv.build-backend]
 module-name = ["my"]
 module-root = ""
+# The nested Typst package is independently versioned and released.
+source-exclude = ["/typst"]
 
 [project.scripts]
+my-basis-adopt = "my.scripts.adopt_basis:main"
 regex-storefront = "my.scripts.regex_storefront:main"
 sync-docs = "my.scripts.sync_docs:main"
 

@@ -166,9 +166,118 @@ class TestFilesystem:
             cls._check_for_project_root(tmp_path)
         assert time.monotonic() - start < 5, 'timeout should fire well before this bound'
 
+    # -------------------
+    # `+` Primary Methods
+    # -------------------
+    @pyt.mark.parametrize(
+        'path, text, expected, capture',
+        [
+            ('/test/path', '/test/path/file.py', '/test/path/', 'test/path'),
+            (Path('/test/path'), './test/path/', './test/path/', 'test/path'),
+            ('/test/path', '../test/path', '../test/path', 'test/path'),
+            ('/test/path', '../../test/path/log.py', '../../test/path/', 'test/path'),
+            ('/space dir', 'trace: /space dir/log.txt', '/space dir/', 'space dir'),
+            ('/a+b/[x]', '/a+b/[x]/leaf.py', '/a+b/[x]/', 'a+b/[x]'),
+            ('/test/path', 'file:///test/path/file.py', None, None),
+            ('/test/path', 'file:/test/path/file.py', None, None),
+            ('/test/path', 'https://test/path/file.py', None, None),
+            ('/test/path', '//test/path/file.py', None, None),
+            ('/test/path', 'C:/test/path/file.py', None, None),
+            ('/test/path', './/test/path/file.py', None, None),
+            ('/test/path', './../test/path/file.py', None, None),
+            ('/test/path', '', None, None),
+            ('/test/path', 'unrelated', None, None),
+            ('/test/path', '/test/pathology', None, None),
+            ('/test/path', 'x/test/path', None, None),
+            ('/test/path', '/test/path.ext', None, None),
+        ],
+        ids=[
+            'absolute-with-child',
+            'dot-relative',
+            'parent-relative',
+            'multiple-parent-relative',
+            'escaped-space',
+            'escaped-metacharacters',
+            'file-uri',
+            'single-slash-uri',
+            'https-uri',
+            'unc-prefix',
+            'dos-subpath',
+            'double-slash-relative',
+            'mixed-relative-prefix',
+            'empty',
+            'unrelated',
+            'longer-name',
+            'word-prefix',
+            'dotted-suffix',
+        ],
+    )
+    def test_compile_rgx(
+        self,
+        path: Path | str,
+        text: str,
+        expected: str | None,
+        capture: str | None,
+    ):
+        """Test full matches and the rootless literal path exposed by capture group 1."""
+        pattern = cls.compile_rgx(path)
+        assert pattern.groups == 2
+        assert pattern.groupindex == {}
+
+        match = pattern.search(text)
+        assert (match[0] if match else None) == expected
+        assert (match[1] if match else None) == capture
+
+    @pyt.mark.parametrize(
+        'path',
+        [
+            pyt.param('C:/test/path', id='dos-forward-slash'),
+            pyt.param(r'C:\test\path', id='dos-backslash'),
+            pyt.param('file:///test/path', id='file-uri'),
+            pyt.param('https://test/path', id='https-uri'),
+            pyt.param('//server/share', id='unc-forward-slash'),
+            pyt.param(r'\\server\share', id='unc-backslash'),
+            pyt.param('/', id='posix-root'),
+            pyt.param('', id='empty'),
+        ],
+    )
+    def test_compile_rgx__rejects_non_posix(self, path: str):
+        """Test URI, UNC, DOS drive-root, and filesystem-root inputs are rejected."""
+        with pyt.raises(ValueError, match='accepts non-root POSIX paths only'):
+            cls.compile_rgx(path)
+
     # ------------------
     # `*` Public Methods
     # ------------------
+    # ---------------
+    # `*1` Properties
+    # ---------------
+    @pyt.mark.parametrize(
+        'field, expected',
+        boolmap(
+            true=[
+                'home',
+                'config',
+                'cache',
+                'data',
+                'my',
+                'creds',
+                'corpus',
+                'local',
+                'logs',
+                'models',
+                'metrics',
+            ],
+            false=['plat'],
+        ),
+    )
+    def test_rgxs(self, fs: Filesystem, field: str, expected: bool):
+        """Test rgxs compiles path fields and excludes non-path registry metadata."""
+        assert (field in fs.rgxs) == expected
+        if expected:
+            match = fs.rgxs[field].search(getattr(fs, field).as_posix())
+            assert match and match[0]
+
     # ------------
     # `*2` Methods
     # ------------

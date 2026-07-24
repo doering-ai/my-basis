@@ -22,6 +22,18 @@ cls = Typist
 typist = Typist(firsts=True, atomics=True, splits=True, wraps=True)
 
 
+@dataclass(frozen=True)
+class Record:
+    name: str
+    count: int
+
+
+class Settings(pyd.BaseModel):
+    required: int
+    defaulted: int = 2
+    optional: str | None = None
+
+
 ############
 ### BODY ###
 ############
@@ -154,15 +166,36 @@ class TestTypist:
         data = typist.from_yaml(content, tvar)
         assert data == expected
 
-    def test_serialize__dataclass(self):
-        """Dataclasses serialize as mappings instead of being treated as iterables."""
-
-        @dataclass
-        class Record:
-            name: str
-            count: int
-
-        assert typist.serialize(Record('example', 2)) == {'name': 'example', 'count': 2}
+    @pyt.mark.parametrize(
+        'data, full, expected',
+        [
+            (Record('example', 2), False, {'name': 'example', 'count': 2}),
+            (Settings(required=1), None, {'required': 1}),
+            (Settings(required=1), False, {'required': 1}),
+            (
+                Settings(required=1),
+                True,
+                {'required': 1, 'defaulted': 2, 'optional': None},
+            ),
+            (Settings(required=1, defaulted=2), False, {'required': 1}),
+            (Settings(required=1, defaulted=3), False, {'required': 1, 'defaulted': 3}),
+            (Settings(required=1, optional='x'), False, {'required': 1, 'optional': 'x'}),
+            (
+                {'nested': Settings(required=1)},
+                False,
+                {'nested': {'required': 1}},
+            ),
+            (
+                [Settings(required=1)],
+                True,
+                [{'required': 1, 'defaulted': 2, 'optional': None}],
+            ),
+        ],
+    )
+    def test_serialize(self, data: object, full: bool | None, expected: object):
+        """Serialization applies the full/sparse Pydantic contract recursively."""
+        result = typist.serialize(data) if full is None else typist.serialize(data, full=full)
+        assert result == expected
 
     @pyt.mark.parametrize(
         'data, expected',

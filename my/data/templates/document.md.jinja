@@ -4,7 +4,7 @@
 
 {% block prose %}{% endblock %}
 
-{%- for node in nodes recursive %}
+{% for node in nodes recursive %}
 {% block child_header scoped %}{% endblock %}
 
 {% block child_content scoped %}{% endblock %}

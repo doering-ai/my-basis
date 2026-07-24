@@ -36,24 +36,23 @@ class RegexDebugger(RegexStore):
     def new_debugger(cls, store: RegexStore) -> Self:
         r"""Create a debugger from an existing RegexStore.
 
-        .. note::
-            The source store must already be loaded: a store created with the (default)
-            `lazy_load` option holds no patterns until first use, so trigger its load
-            (e.g. `_ = store.load`) before wrapping it, or the debugger will be empty.
+        The source is loaded before copying, so the default lazy store is safe to pass directly.
+        Definitions, options, routers, and out-of-band flag provenance are copied; immutable
+        compiled pattern objects may be shared by the two stores.
 
         Args:
             store: RegexStore instance to create debugger from.
         Returns:
             New RegexDebugger with all patterns from the store.
         Examples:
-            Wrap a loaded store to gain the debugging methods::
+            Wrap even a lazy store directly to gain the debugging methods::
 
                 >>> from my import RegexStore, RegexDebugger
                 >>> store = RegexStore.new(word=r'\w+')
-                >>> _ = store.load
                 >>> RegexDebugger.new_debugger(store).keys()
                 ['word']
         """
+        _ = store.load
         new = cls.model_construct(**store.model_dump())
         new.options = store.options.model_copy()
         # `routers` moved to a private attr (RegexStore.routers is now a load-triggering
@@ -61,6 +60,7 @@ class RegexDebugger(RegexStore):
         # still do for the public `patterns`/`definitions` fields -- copy it explicitly to match
         # the prior behavior of carrying over whatever router state the source store had.
         new._routers = dict(store._routers)
+        new._external_flags = dict(store._external_flags)
         return new
 
     # ------------------

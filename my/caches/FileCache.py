@@ -435,25 +435,20 @@ class FileCache[T]:
         return True
 
     def flush(self) -> None:
-        """Write all in-memory items to disk and clear the memory cache.
+        """Persist all in-memory shards and clear the memory cache.
 
-        Note:
-            Prints a `Flushed N items to disk` summary line on completion. Unlike
-            `move_to_sys()`, this does not add the flushed shards to the `files` index, so
-            they are not readable again through this instance without re-initialization.
+        Updates the disk index and size counters so flushed items remain readable
+        through this instance. Calling flush on an empty cache is a silent no-op.
         """
-        for group in self.items.keys():
-            for prefix in self.items[group].keys():
-                for file in self.items[group][prefix].keys():
-                    self._write(
-                        self._path(group, prefix, file),
-                        self.items[group][prefix][file],
-                    )
+        for group, prefixes in self.items.items():
+            for prefix, shards in prefixes.items():
+                for file, items in shards.items():
+                    self._write(self._path(group, prefix, file), items)
+                    self.files[group][prefix][file] = set(items)
 
         self.items.clear()
         self.fsize += self.isize
         self.isize = 0
-        print(f'Flushed {self.fsize} items to disk')
 
     def search(
         self,

@@ -28,8 +28,9 @@ cls = RegexStore
 ### BODY ###
 ############
 class TestRegexStore:
+    @staticmethod
     @pyt.fixture(scope='class')
-    def store(self) -> RegexStore:
+    def store() -> RegexStore:
         return RegexStore.new(
             options=dict(
                 separator=r' ?',
@@ -118,9 +119,115 @@ class TestRegexStore:
         assert store.keys() == []
         assert store.values() == []
 
-    def test_top_level_matchers_forward_the_engine_timeout(self, monkeypatch) -> None:
-        """RegexStore cannot bypass the unattended-processing ReDoS deadline."""
-        calls: list[tuple[str, dict[str, float]]] = []
+    @pyt.mark.parametrize(
+        'operation',
+        ['new', 'setitem', 'ior_store', 'or_store', 'ior_mapping', 'or_mapping'],
+        ids=['new', 'assignment', 'in_place_store', 'store_union', 'in_place_map', 'map_union'],
+    )
+    def test_new__compiled_flags(self, operation: str):
+        """Compiled patterns retain their exact engine flags through every store constructor."""
+        source_pattern = re.compile(r'abc', re.I | re.V1)
+
+        if operation == 'new':
+            result = RegexStore.new(dict(lazy_load=False), flagged=source_pattern)
+        elif operation == 'setitem':
+            result = RegexStore.new(dict(lazy_load=False))
+            result['flagged'] = source_pattern
+        else:
+            operand = (
+                RegexStore.new(dict(lazy_load=False), flagged=source_pattern)
+                if operation.endswith('store')
+                else {'flagged': source_pattern}
+            )
+            result = RegexStore.new(dict(lazy_load=False))
+            if operation.startswith('ior'):
+                result |= operand
+            else:
+                result = result | operand
+
+        assert result['flagged'].flags == source_pattern.flags
+        assert result.fullmatch('flagged', 'ABC')
+
+    @pyt.mark.parametrize(
+        'source_flags, explicit_flags',
+        [
+            (re.I, re.M),
+            (re.A, re.RegexFlag(0)),
+        ],
+        ids=['conflicting_flags', 'explicit_no_flags'],
+    )
+    def test_define__compiled_flags_conflict(
+        self,
+        source_flags: re.RegexFlag,
+        explicit_flags: re.RegexFlag,
+    ):
+        """A compiled pattern and a second flag source are always ambiguous."""
+        store = RegexStore.new(dict(lazy_load=False))
+        source = re.compile(r'abc', source_flags)
+
+        with pyt.raises(ValueError, match='inline scoped flags'):
+            store.define('flagged', source, flags=explicit_flags)
+
+    @pyt.mark.parametrize(
+        'flags, accepted',
+        [
+            (re.I | re.V1, 'ABC'),
+            (re.A | re.V0, 'abc'),
+        ],
+        ids=['unicode_casefold', 'ascii_version_zero'],
+    )
+    def test_new__imports_compiled_flags(self, flags: re.RegexFlag, accepted: str):
+        """Standalone imports retain the source pattern's exact engine flags."""
+        source = RegexStore.new(dict(lazy_load=False), flagged=re.compile(r'abc', flags))
+        result = RegexStore.new(dict(lazy_load=False), imports=[(source, ['flagged'])])
+
+        assert result['flagged'].flags == source['flagged'].flags
+        assert result.fullmatch('flagged', accepted)
+
+    @pyt.mark.parametrize(
+        'origin, imported',
+        [
+            ('compiled', False),
+            ('explicit', False),
+            ('compiled', True),
+            ('explicit', True),
+        ],
+        ids=['compiled_local', 'explicit_local', 'compiled_import', 'explicit_import'],
+    )
+    def test_define__flagged_dependency(self, origin: str, imported: bool):
+        """Out-of-band flags cannot silently leak through a composed dependency."""
+        source = RegexStore.new(dict(lazy_load=False))
+        if origin == 'compiled':
+            source['word'] = re.compile(r'abc', re.I)
+        else:
+            source.define('word', r'abc', flags=re.I)
+
+        if imported:
+            store = RegexStore.new(dict(lazy_load=False), imports=[(source, ['word'])])
+        else:
+            store = source
+
+        with pyt.raises(ValueError, match='inline scoped flags'):
+            store['phrase'] = r'(?P>word)!'
+
+    @pyt.mark.parametrize('transfer', ['local', 'import', 'union'])
+    def test_define__inline_flag_dependency(self, transfer: str):
+        """Inline scoped flags remain composable across every store transfer path."""
+        source = RegexStore.new(dict(lazy_load=False), word=r'(?i:abc)')
+        if transfer == 'local':
+            store = source
+        elif transfer == 'import':
+            store = RegexStore.new(dict(lazy_load=False), imports=[(source, ['word'])])
+        else:
+            store = RegexStore.new(dict(lazy_load=False)) | source
+
+        store['phrase'] = r'(?P>word)!'
+
+        assert store.fullmatch('phrase', 'ABC!')
+
+    def test_timeout__forwarded(self, monkeypatch) -> None:
+        """Every public engine call forwards the unattended-processing ReDoS deadline."""
+        calls: list[tuple[str, dict[str, float | int]]] = []
 
         class PatternProbe:
             def search(self, _text: str, **kwargs: float):
@@ -131,6 +238,14 @@ class TestRegexStore:
                 calls.append(('finditer', kwargs))
                 return iter(())
 
+            def sub(self, _repl: str, text: str, **kwargs: float | int) -> str:
+                calls.append(('sub', kwargs))
+                return text
+
+            def subn(self, _repl: str, text: str, **kwargs: float | int) -> tuple[str, int]:
+                calls.append(('subn', kwargs))
+                return text, 0
+
         module = inspect.getmodule(RegexStore)
         assert module is not None
         monkeypatch.setattr(module, 'REGEX_TIMEOUT', 0.25)
@@ -139,9 +254,13 @@ class TestRegexStore:
 
         assert not store.search('probe', 'input')
         assert list(store.finditer('probe', 'input')) == []
+        assert store.sub('probe', '-', 'input') == 'input'
+        assert store.subn('probe', '-', 'input') == ('input', 0)
         assert calls == [
             ('search', {'timeout': 0.25}),
             ('finditer', {'timeout': 0.25}),
+            ('sub', {'count': 0, 'timeout': 0.25}),
+            ('subn', {'count': 0, 'timeout': 0.25}),
         ]
 
     @pyt.mark.parametrize(
@@ -636,6 +755,30 @@ class TestRegexStore:
         assert len(results) == 3
 
     @pyt.mark.parametrize(
+        'method, replacement, count, expected',
+        [
+            ('sub', '-', 0, '- -'),
+            ('sub', lambda match: match[0].upper(), 1, 'ONE two'),
+            ('subn', '_', 0, ('_ _', 2)),
+            ('subn', '_', 1, ('_ two', 1)),
+        ],
+        ids=['sub_all', 'sub_callable_counted', 'subn_all', 'subn_counted'],
+    )
+    def test_sub(
+        self,
+        method: str,
+        replacement: str | Any,
+        count: int,
+        expected: str | tuple[str, int],
+    ):
+        """Substitution APIs support engine replacements, counts, and replacement totals."""
+        store = RegexStore.new(dict(lazy_load=False), word=r'\w+')
+
+        result = getattr(store, method)('word', replacement, 'one two', count=count)
+
+        assert result == expected
+
+    @pyt.mark.parametrize(
         'pattern_name, text, expected_sections',
         [
             ('_word', 'one two three', ['', ' ', ' ', '']),
@@ -742,16 +885,16 @@ class TestRegexStore:
     # -------------------------
     # `*2` Functional Utilities
     # -------------------------
-    def test_parse_invocations(self):
+    @pyt.mark.parametrize('lazy_load', [True, False], ids=['lazy', 'eager'])
+    def test_parse_invocations(self, lazy_load: bool):
+        """Invocation parsing loads queued definitions before expanding dependencies."""
         store = RegexStore.new(
-            dict(lazy_load=False),
+            dict(lazy_load=lazy_load),
             alpha=r'[[:alpha:]]+',
             word=r'(?P>alpha)',
         )
 
-        invocations = store.parse_invocations(r'(?P>word)')
-        assert 'word' in invocations
-        assert 'alpha' in invocations
+        assert store.parse_invocations(r'(?P>word)') == {'word', 'alpha'}
 
     def test_partial__match(self, store: RegexStore):
         _ = store.load
@@ -811,6 +954,39 @@ class TestRegexStore:
         assert 'wrapped' in store.routers
         assert store.match('wrapped', 'abc')
 
+    @pyt.mark.parametrize('lazy_load', [True, False], ids=['lazy', 'eager'])
+    @pyt.mark.parametrize(
+        'text, expected_routes',
+        [
+            ('script/Arabic', ('generic', 'exact')),
+            ('SCRIPT/hebrew', ('generic',)),
+            ('plain', ('exact',)),
+            ('unknown', ()),
+        ],
+        ids=['overlap_prefers_first', 'casefolded_slash', 'later_route', 'no_match'],
+    )
+    def test_router_tree__preserves_semantics(
+        self,
+        lazy_load: bool,
+        text: str,
+        expected_routes: tuple[str, ...],
+    ):
+        """Main and tracking routers agree with ordered raw regex fullmatches."""
+        items = {'generic': r'script\/?\w*?', 'exact': r'(?:script/Arabic|plain)'}
+        raw_routes = tuple(
+            name for name, pattern in items.items() if re.fullmatch(rf'(?i){pattern}', text)
+        )
+        raw_route = raw_routes[0] if raw_routes else ''
+        store = RegexStore.new(dict(lazy_load=lazy_load, separator=''))
+        store.define_router_tree('kind', items, prefix=r'(?i)')
+
+        main = store.fullmatch('kind', text)
+        tracking = store.fullmatch('kind_router', text)
+
+        assert raw_routes == expected_routes
+        assert bool(main) == bool(tracking) == bool(raw_route)
+        assert store.route_match('kind', text) == raw_route
+
     @pyt.mark.parametrize(
         'lazy_load, expect_queued',
         [
@@ -833,26 +1009,17 @@ class TestRegexStore:
         store.define_router_tree('handler', dict(alpha=r'[[:alpha:]]+', nums=r'\d+'))
 
         # The raw private dict reflects whether the definition is still queued.
-        assert (store._routers == {}) is expect_queued
-
-        # The public property must trigger any pending load either way.
-        assert 'handler' in store.routers
-        assert store.routers['handler'] == ['alpha', 'nums']
-        assert store._is_loaded
-
-    def test_routers_property__already_loaded_store_unaffected(self):
-        """An eagerly-loaded store's `.routers` behaves identically before/after the property
-        access -- the load-triggering property must not mutate or re-derive already-populated
-        router data.
-        """
-        store = RegexStore.new(dict(lazy_load=False))
-        store.define_router_tree('router', dict(alpha=r'[[:alpha:]]+'))
-
         before = dict(store._routers)
+        assert (before == {}) is expect_queued
+
+        # The public property must trigger pending work once and remain stable thereafter.
         first_access = store.routers
         second_access = store.routers
-
-        assert before == first_access == second_access == {'router': ['alpha']}
+        expected = {'handler': ['alpha', 'nums']}
+        assert first_access == second_access == expected
+        if not expect_queued:
+            assert before == first_access
+        assert store._is_loaded
 
     def test_route_match__no_match(self):
         store = RegexStore.new(dict(lazy_load=False))
@@ -962,8 +1129,9 @@ class TestRegexStore:
     # -----------------------------
     # `^0` ImportAs Example Dataset
     # -----------------------------
+    @staticmethod
     @pyt.fixture(scope='class')
-    def importas_store(self, importas_data: set[str]) -> RegexStore:
+    def importas_store(importas_data: set[str]) -> RegexStore:
         data = importas_data
         return RegexStore.new(
             options=dict(lazy_load=False),

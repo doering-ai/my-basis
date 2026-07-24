@@ -45,6 +45,15 @@ class Tag(MyEnum):
     SOME = 'some'
 
 
+class NumericText(MyEnum):
+    TEN = '10'
+
+
+class CaseCollision(MyEnum):
+    LOWER = 'value'
+    UPPER = 'VALUE'
+
+
 class CustomAliasEnum(MyEnum):
     ALPHA = 'alpha'
     BETA = 'b'
@@ -81,10 +90,14 @@ class TestMyEnum:
             (Priority, 'low', Priority.LOW),
             (Priority, 'medium', Priority.MED),
             (Priority, 'large', Priority.LRG),
-            # Case-insensitive string lookup
+            # Case-insensitive member-name lookup
             (Priority, 'LOW', Priority.LOW),
             (Priority, 'MeD', Priority.MED),
             (Priority, ' LRG ', Priority.LRG),
+            # Trimmed and case-insensitive member-value lookup
+            (Priority, ' medium ', Priority.MED),
+            (Priority, ' MeDiUm ', Priority.MED),
+            (Priority, ' LARGE ', Priority.LRG),
             # String representation of integers
             (Status, '10', Status.PEND),
             (Status, '20', Status.ACTV),
@@ -94,6 +107,13 @@ class TestMyEnum:
             (Color, 'PINK', Color.PINK),
             (Color, 'CLAY', Color.CLAY),
             (Color, 'Blue', Color.BLUE),
+            # Falsy, numeric-looking, and case-colliding string values round-trip.
+            (Tag, '', Tag.NONE),
+            (Tag, 'some', Tag.SOME),
+            (NumericText, '10', NumericText.TEN),
+            (NumericText, ' 10 ', NumericText.TEN),
+            (CaseCollision, 'value', CaseCollision.LOWER),
+            (CaseCollision, ' VALUE ', CaseCollision.UPPER),
         ],
     )
     def test_read(self, cls, value, expected):
@@ -142,18 +162,19 @@ class TestMyEnum:
         assert CustomAliasEnum.read(value) == expected
 
     @pyt.mark.parametrize(
-        'cls, value',
+        'cls, value, message',
         [
-            (Color, 'invalid'),
-            (Color, 99),
-            (Priority, 'unknown'),
-            (Status, 'not_a_status'),
-            (Perm, 'invalid_permission'),
-            (CustomAliasEnum, 'not_an_alias'),
+            (Color, 'invalid', 'Invalid Color value'),
+            (Color, 99, 'Invalid Color value'),
+            (Priority, 'unknown', 'Invalid Priority value'),
+            (Status, 'not_a_status', 'Invalid Status value'),
+            (Perm, 'invalid_permission', 'Invalid Perm value'),
+            (CustomAliasEnum, 'not_an_alias', 'Invalid CustomAliasEnum value'),
+            (CaseCollision, 'VaLuE', 'Ambiguous CaseCollision value'),
         ],
     )
-    def test_read__invalid(self, cls, value):
-        with pyt.raises(ValueError, match=f'Invalid {cls.__name__} value'):
+    def test_read__invalid(self, cls, value, message: str):
+        with pyt.raises(ValueError, match=message):
             cls.read(value)
 
     # ----------------
@@ -173,6 +194,9 @@ class TestMyEnum:
             (Status.PEND, 'pend'),
             (Status.ACTV, 'actv'),
             (Status.COMP, 'comp'),
+            # Falsy and truthy string values use their values, not member names.
+            (Tag.NONE, ''),
+            (Tag.SOME, 'some'),
         ],
     )
     def test__write(self, enum_value, expected):
@@ -195,21 +219,6 @@ class TestMyEnum:
         result = enum_value.write()
         assert result == expected
         assert str(enum_value) == expected
-
-    def test_write__empty_string_value(self):
-        """Regression: `write()` must round-trip an empty-string member value.
-
-        `if self.value and isinstance(self.value, str):` treats `''` as falsy, so it fell
-        through to `self.name.lower()` and wrote `'none'` instead of `''`. The truthiness
-        check must be dropped so any string value -- including `''` -- takes this branch.
-        """
-        assert Tag.NONE.write() == ''
-        assert str(Tag.NONE) == ''
-        assert Tag.SOME.write() == 'some'
-
-    def test_read__empty_string_round_trip(self):
-        """`read()` must recover the same member from `write()`'s empty-string output."""
-        assert Tag.read(Tag.NONE.write()) == Tag.NONE
 
     # -------------
     # 3. OPERATIONS

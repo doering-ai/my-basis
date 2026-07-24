@@ -211,18 +211,47 @@ class TestFileCache:
         fresh = FileCache[str](directory=cache_dir, max_size=100)
         assert fresh.read('group', 'abcfile_newitem') == 'value'
 
-    def test_flush(self, cache: FileCache[str], cache_dir: Path):
-        cache['group1', 'aaafile1_item'] = 'value'
-        cache['group2', 'bbbfile2_item'] = 'value'
-        cache['group3', 'cccfile3_item'] = 'value'
-        assert cache.isize == 3
+    @pyt.mark.parametrize(
+        'entries',
+        [
+            pyt.param((), id='empty'),
+            pyt.param((('group1', 'aaafile_item', 'value1'),), id='single'),
+            pyt.param(
+                (
+                    ('group1', 'aaafile1_item1', 'value1'),
+                    ('group1', 'aaafile1_item2', 'value2'),
+                    ('group2', 'bbbfile2_item', 'value3'),
+                ),
+                id='multiple-digit-shards',
+            ),
+        ],
+    )
+    def test_flush(
+        self,
+        cache: FileCache[str],
+        cache_dir: Path,
+        capsys: pyt.CaptureFixture[str],
+        entries: tuple[tuple[str, str, str], ...],
+    ):
+        """Test flush persists indexed, same-instance-readable shards without output."""
+        for group, name, value in entries:
+            cache[group, name] = value
+        assert cache.isize == len(entries)
 
         cache.flush()
 
         assert cache.isize == 0
-        assert (cache_dir / 'group1/a/a/a/aaafile1.json').exists()
-        assert (cache_dir / 'group2/b/b/b/bbbfile2.json').exists()
-        assert (cache_dir / 'group3/c/c/c/cccfile3.json').exists()
+        assert cache.fsize == len(entries)
+        assert len(cache) == len(entries)
+        for group, name, _ in entries:
+            file = name.partition('_')[0]
+            prefix = file[:3]
+            assert name in cache.files[group][prefix][file]
+            assert cache_dir.joinpath(group, *prefix, f'{file}.json').exists()
+        for group, name, value in entries:
+            assert cache.read(group, name) == value
+        captured = capsys.readouterr()
+        assert (captured.out, captured.err) == ('', '')
 
     def test_search__by_file(self, cache: FileCache[str]):
         # Add items to memory

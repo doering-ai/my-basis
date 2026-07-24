@@ -9,7 +9,13 @@ from pathlib import Path
 import pytest as pyt
 
 ### INTERNAL
-from my.scripts.sync_docs import main
+from my.scripts.sync_docs import Tool, main
+
+
+############
+### DATA ###
+############
+SKIPPED_PACKAGES = ('_adoption', 'infra', 'scripts', 'templates', 'text', 'type')
 
 
 ############
@@ -18,38 +24,52 @@ from my.scripts.sync_docs import main
 class TestSyncDocs:
     """Smoke tests for the `sync-docs` console script."""
 
-    def test_main__dry_run_does_not_crash_or_write(
-        self, tmp_path: Path, capsys: pyt.CaptureFixture
+    @pyt.mark.parametrize(
+        'package, init_text, expected',
+        [
+            pyt.param(
+                'widgets',
+                '"""Widget utilities.\n\nSome more prose.\n"""\n',
+                ('widgets', 'would be updated'),
+                id='update',
+            ),
+            pyt.param(
+                'undocumented',
+                '# no module docstring here\n',
+                ('0 package(s) would be updated.',),
+                id='no-changes',
+            ),
+        ],
+    )
+    def test_main__dry_run(
+        self,
+        tmp_path: Path,
+        capsys: pyt.CaptureFixture,
+        package: str,
+        init_text: str,
+        expected: tuple[str, ...],
     ):
-        """`sync-docs --dry` runs end-to-end against a synthetic project without writing files.
-
-        basis-T1 item 4: `[project.scripts]` only declares `sync-docs = "my.scripts.sync_docs:
-        main"` -- unlike `regex-storefront` (see `test_regex_storefront.py`), it had no coverage
-        at all. Mirrors that file's pattern: build a minimal synthetic project under `tmp_path`
-        and drive `main()` directly (its `*vargs` signature takes explicit args, so this bypasses
-        `sys.argv` entirely -- safe under pytest). `--dry` is the harmless mode: it prints a diff
-        summary but never touches `docs/`.
-        """
-        pkg_dir = tmp_path / 'my' / 'widgets'
+        """Dry runs report pending or absent changes without writing documentation."""
+        pkg_dir = tmp_path / 'my' / package
         pkg_dir.mkdir(parents=True)
         (tmp_path / 'my' / '__init__.py').write_text('"""Top-level, excluded from sync."""\n')
-        (pkg_dir / '__init__.py').write_text('"""Widget utilities.\n\nSome more prose.\n"""\n')
+        (pkg_dir / '__init__.py').write_text(init_text)
 
         main('--dry', str(tmp_path))
 
         out = capsys.readouterr().out
-        assert 'widgets' in out
-        assert 'would be updated' in out
+        assert all(text in out for text in expected)
         assert not (tmp_path / 'docs').exists()
 
-    def test_main__dry_run_no_changes_needed(self, tmp_path: Path, capsys: pyt.CaptureFixture):
-        """A package with no `__init__.py` docstring is skipped, not treated as an update."""
-        pkg_dir = tmp_path / 'my' / 'undocumented'
+    @pyt.mark.parametrize('package', SKIPPED_PACKAGES)
+    def test_main__skips_internal(self, tmp_path: Path, package: str):
+        """Internal implementation packages never generate public API pages."""
+        assert frozenset(SKIPPED_PACKAGES) == Tool.SKIP
+        pkg_dir = tmp_path / 'my' / package
         pkg_dir.mkdir(parents=True)
-        (pkg_dir / '__init__.py').write_text('# no module docstring here\n')
+        (tmp_path / 'my' / '__init__.py').write_text('"""Public package."""\n')
+        (pkg_dir / '__init__.py').write_text('"""Internal package."""\n')
 
-        main('--dry', str(tmp_path))
+        main(str(tmp_path))
 
-        out = capsys.readouterr().out
-        assert '0 package(s) would be updated.' in out
-        assert not (tmp_path / 'docs').exists()
+        assert not (tmp_path / 'docs' / f'{package}.md').exists()

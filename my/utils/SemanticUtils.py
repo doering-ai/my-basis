@@ -137,28 +137,31 @@ class SemanticUtils(_UtilsBase):
         Args:
             amount: Number to format.
             unit: Format type - 'num' for numeric (K/M/B) or 'mem' for memory (KB/MB/GB).
-            width: Fixed width for formatting (default: 0 for no fixed width).
+            width: Width hint for fractional formatting. Zero rounds to a whole amount;
+                a positive value preserves the scaled fraction.
         Returns:
             Formatted string with appropriate suffix.
         Examples:
-            Abbreviate counts and byte sizes::
+            Abbreviate counts and byte sizes, preserving useful precision on request::
 
                 >>> from my import ut
                 >>> ut.format_amount(2_300_000)
                 '2M'
                 >>> ut.format_amount(1_500_000, 'mem')
                 '2MB'
+                >>> ut.format_amount(1_500, width=6)
+                '1.500K'
                 >>> ut.format_amount(42)
                 '42'
         """
         index = iter_utils.find(cls.BASELINES, lambda trip: amount >= trip[0])
         if index > -1:
             suffix = str(cls.BASELINES[index][1 if unit == 'num' else 2])
-            content = round(amount / cls.BASELINES[index][0])
+            content = amount / cls.BASELINES[index][0]
             if width:
                 return f'{content:>{width - len(suffix)}.{width - 3}f}{suffix}'
             else:
-                return f'{content}{suffix}'
+                return f'{round(content)}{suffix}'
         return f'{amount}'
 
     # -----------------

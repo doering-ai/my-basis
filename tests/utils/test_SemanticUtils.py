@@ -107,12 +107,14 @@ class TestSemanticUtils:
             (1000000000, 'mem', 0, '1GB'),
             # With width formatting
             (1000, 'num', 5, '1.00K'),
+            (1500, 'num', 6, '1.500K'),
             (1000000, 'mem', 6, '1.000MB'),
         ],
     )
     def test_format_amount(
         self, amount: int, unit: Literal['num', 'mem'], width: int, expected: str
     ):
+        """Preserve fractional magnitude when fixed-width formatting is requested."""
         assert unit in {'num', 'mem'}
         assert cls.format_amount(amount, unit, width) == expected
 

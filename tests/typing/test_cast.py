@@ -19,7 +19,7 @@ from my.infra import Time
 from my.types import Buffer, Span
 from my.regex import MatchData, GroupKind
 from my.typing import CastFlags, TypeCast, Typist
-from my.typing.cast import CastPreset, Decline, Transform
+from my.typing.cast import CastPreset, Decline, Transform, _TRANSFORMS, _TRQUE
 from ..conftest import type_ids
 
 ############
@@ -416,7 +416,7 @@ class TestCast:
     def test_cast__atomics(self, data: Any, target: type, expected: object):
         assert typist.cast(data, target) == expected
 
-    def test_cast__zero_argument_function_to_atomic_return(self):
+    def test_cast__zero_arg_callable(self):
         """A typed zero-argument function is evaluated for an atomic target."""
 
         def answer() -> int:
@@ -500,9 +500,9 @@ class TestCast:
         'data, target',
         [
             # A regression net for the Decline migration: each pair used to make a candidate
-            # transform *crash* (and be silently rescued by the loop's blanket suppress) rather
-            # than cleanly decline. A `decline-valve:` log record on any of them means a transform
-            # is crashing again -- the exact bug class the Decline channel exists to kill.
+            # transform crash (and be silently rescued by the old blanket suppress) rather than
+            # cleanly decline. The dispatcher now catches only `Decline`, so any such regression
+            # propagates and fails this test.
             # -- parametrized-container source/target hitting the model transforms (_t0/_t1) --
             (['a', 'b'], dict),
             ({'a': [1]}, list[int]),
@@ -526,15 +526,11 @@ class TestCast:
         ],
     )
     def test_cast__no_latent_crash(self, data: Any, target: type, caplog: pyt.LogCaptureFixture):
-        """A transform must *decline* (not crash) on inputs it can't handle.
+        """A transform must explicitly decline, rather than crash, on an unsupported pair.
 
-        The cast loop's transitional safety valve logs a `decline-valve:` record whenever a
-        transform raises something other than `Decline`. Asserting the log stays empty locks in
-        the latent-crash fixes and guards against any future transform regressing into a crash.
-
-        More generally, a *successful* cast should never emit an ERROR-level record at all: any
-        exception caught along the way (by the decline-valve, by `Typist.invoke`, ...) represents
-        a declined candidate, not a real failure, and should be logged no louder than debug.
+        The dispatcher catches only `Decline`, so any other exception now propagates directly.
+        A successful cast must likewise emit no ERROR record: routine candidate rejection (for
+        example inside `Typist.invoke`) is expected control flow and belongs at debug level.
         """
         with caplog.at_level(logging.DEBUG):
             typist.cast(data, target)
@@ -633,7 +629,7 @@ class TestCast:
         flex_typist.wraps = True
         assert typist.cast('A.B', set[str], flags=flags) == expected
 
-    def test_cast_flags__singleton_snapshot_default(self, flex_typist: Typist):
+    def test_cast_flags__singleton_snapshot(self, flex_typist: Typist):
         """`flags=None` (the default) snapshots the live singleton's fields exactly once."""
         flex_typist.firsts = True
         flex_typist.atomics = False
@@ -646,15 +642,13 @@ class TestCast:
         assert typist.cast('A.B', set[str]) == {'A.B'}  # splits=False -> no split
         assert typist.cast(['A.B'], set[str]) == {'A.B'}  # wraps=True -> wrap-preserved
 
-    def test_cast_flags__resolve_explicit_instance_identity(self, flex_typist: Typist):
+    def test_cast_flags__explicit_identity(self, flex_typist: Typist):
         """An explicit `CastFlags` instance passes through `resolve` unchanged (no copy)."""
         flex_typist.splits = True
         explicit = CastFlags(firsts=False, atomics=False, splits=False, wraps=False)
         assert CastFlags.resolve(explicit) is explicit
 
-    def test_cast_flags__mid_cast_singleton_mutation_does_not_affect_inflight_cast(
-        self, flex_typist: Typist
-    ):
+    def test_cast_flags__inflight_snapshot(self, flex_typist: Typist):
         """The new guarantee: once a `Transform`'s flags are snapshotted, a later mutation of the
         global `Typist` singleton (e.g. another thread/agent toggling `ty.splits`) cannot change
         the outcome of a cast already in flight -- unlike the old live `self.ty.X` reads this
@@ -682,33 +676,110 @@ class TestCast:
         yield
         Transform._dispatch_candidates.cache_clear()
 
-    def test_cast_flags__dispatch_memoization_hits_on_repeat(self, clear_dispatch_cache: None):
-        """The dispatch-scan memo (keyed on `(t0, t1, flags)`) hits on a repeated cast.
+    @pyt.fixture
+    def isolated_cast_registry(self) -> abc.Iterator[None]:
+        """Restore the process-wide extension registry after a registration test."""
+        transforms = list(_TRANSFORMS)
+        queue = deque(_TRQUE)
+        Transform._dispatch_candidates.cache_clear()
+        yield
+        _TRANSFORMS[:] = transforms
+        _TRQUE.clear()
+        _TRQUE.extend(queue)
+        Transform._dispatch_candidates.cache_clear()
 
-        `'a'/'b' -> str` would be a same-type NOOP that never reaches the dispatch scan at all
-        (`Transform.__call__` short-circuits on `self.t1.check(self.data)`), so this uses
-        `str -> int`, which must actually walk `_TRANSFORMS`.
-        """
-        assert typist.cast('123', int) == 123
-        assert typist.cast('123', int) == 123
-        assert typist.cast('456', int) == 456  # same (t0, t1, flags) key as above
-
-        info = Transform._dispatch_candidates.cache_info()
-        assert info.misses == 1  # one distinct (t0, t1, flags) key was ever computed
-        assert info.hits == 2  # the second and third calls reused it
-
-    def test_cast_flags__dispatch_memoization_distinct_flags_distinct_entries(
-        self, clear_dispatch_cache: None
+    @pyt.mark.parametrize(
+        'casts, expected_hits, expected_misses',
+        [
+            pyt.param(
+                [('123', None), ('123', None), ('456', None)],
+                2,
+                1,
+                id='repeated-defaults',
+            ),
+            pyt.param(
+                [('123', 'flex'), ('123', 'strict'), ('123', 'flex')],
+                1,
+                2,
+                id='distinct-flags',
+            ),
+        ],
+    )
+    def test_cast_flags__dispatch_memoization(
+        self,
+        clear_dispatch_cache: None,
+        casts: list[tuple[str, CastPreset | None]],
+        expected_hits: int,
+        expected_misses: int,
     ):
-        """Distinct `flags` produce distinct memo entries, even for the same `(t0, t1)` pair."""
-        assert typist.cast('123', int, flags='flex') == 123
-        assert typist.cast('123', int, flags='strict') == 123
-        assert typist.cast('123', int, flags='flex') == 123  # repeats the first key
+        """Dispatch memoization reuses matching keys and separates distinct flag bundles."""
+        for data, flags in casts:
+            result = (
+                typist.cast(data, int) if flags is None else typist.cast(data, int, flags=flags)
+            )
+            assert result == int(data)
 
         info = Transform._dispatch_candidates.cache_info()
-        assert info.misses == 2  # 'flex' and 'strict' are separate keys
-        assert info.hits == 1  # only the repeated 'flex' call reused its entry
-        assert info.currsize == 2
+        assert info.hits == expected_hits
+        assert info.misses == expected_misses
+        assert info.currsize == expected_misses
+
+    def test_register__late_dispatch(self, isolated_cast_registry: None):
+        """A transform registered after setup must affect the very next cast."""
+
+        class Source:
+            pass
+
+        class Target:
+            def __init__(self, *, marker: str):
+                self.marker = marker
+
+        source = Source()
+        assert typist.cast(source, Target) is None
+        assert Transform._dispatch_candidates.cache_info().currsize == 1
+
+        @TypeCast.register
+        def late_extension[S: Source, T: Target](_transform: Transform) -> Target:
+            return Target(marker='late')
+
+        assert Transform._dispatch_candidates.cache_info().currsize == 0
+        result = typist.cast(source, Target)
+        assert isinstance(result, Target)
+        assert result.marker == 'late'
+        assert typist.cast('42', int) == 42
+
+    @pyt.mark.parametrize(
+        'error, should_raise',
+        [
+            (Decline, False),
+            (RuntimeError, True),
+            (ValueError, True),
+        ],
+    )
+    def test_cast__extension_errors(
+        self,
+        isolated_cast_registry: None,
+        error: type[Exception],
+        should_raise: bool,
+    ):
+        """Dispatch catches only an extension's explicit `Decline` signal."""
+
+        class Source:
+            pass
+
+        class Target:
+            def __init__(self, *, marker: str):
+                self.marker = marker
+
+        @TypeCast.register
+        def broken_extension[S: Source, T: Target](_transform: Transform) -> Target:
+            raise error('extension failed')
+
+        if should_raise:
+            with pyt.raises(error, match='extension failed'):
+                typist.cast(Source(), Target)
+        else:
+            assert typist.cast(Source(), Target) is None
 
     @pyt.mark.parametrize(
         'data, target, expected',
@@ -858,7 +929,7 @@ class TestCast:
 
     # ---- MEMY-326 regression: AutocastModel must accept >=3-char field names ----
 
-    def test_cast__autocast_model_long_field_names(self):
+    def test_cast__long_model_fields(self):
         """Constructing an ``AutocastModel`` with field names >= 3 chars must not raise.
 
         Previously ``AutocastModel._auto_validate`` handed the raw ``data`` mapping to
@@ -934,7 +1005,7 @@ class TestCast:
             'str-int',
         ],
     )
-    def test_dispatch_candidates__specificity_is_a_total_order(self, data: Any, target: type):
+    def test_dispatch_candidates__total_order(self, data: Any, target: type):
         """No candidate may be strictly narrower than one dispatched before it.
 
         Specificity is a *partial* order, and ordering it with a `cmp_to_key` comparator that

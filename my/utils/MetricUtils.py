@@ -8,15 +8,18 @@ from time import perf_counter_ns
 from typing import Any, ClassVar
 from types import FunctionType
 from urllib.parse import urlsplit
+from urllib.request import url2pathname
 import contextlib as ctx
 import functools as ft
 import importlib.metadata as impm
+import json
 import logging as lg
 import logging.handlers as lgh
 import os
 import re
 import shutil
 import sys
+import tomllib
 import warnings
 import inspect
 
@@ -318,17 +321,91 @@ class MetricUtils(_UtilsBase):
             except Exception:
                 logger.warning('Application telemetry instrumentation failed.')
 
+    @staticmethod
+    def _editable_distribution_name(module_file: Path) -> str | None:
+        """Find the nearest editable distribution containing a module file."""
+        matches: list[tuple[int, str]] = []
+        for distribution in impm.distributions():
+            name = distribution.metadata.get('Name')
+            direct_url = distribution.read_text('direct_url.json')
+            if not name or not direct_url:
+                continue
+            try:
+                origin = json.loads(direct_url)
+            except (json.JSONDecodeError, TypeError):
+                continue
+            if not isinstance(origin, dict):
+                continue
+            directory = origin.get('dir_info')
+            url = origin.get('url')
+            if (
+                not isinstance(directory, dict)
+                or directory.get('editable') is not True
+                or not isinstance(url, str)
+            ):
+                continue
+            parsed = urlsplit(url)
+            if parsed.scheme != 'file' or parsed.netloc not in {'', 'localhost'}:
+                continue
+            project_root = Path(url2pathname(parsed.path)).resolve()
+            if module_file.is_relative_to(project_root):
+                matches.append((len(project_root.parts), name))
+        return max(matches, default=(0, ''))[1] or None
+
+    @staticmethod
+    def _source_project_name(module_file: Path) -> str | None:
+        """Read the nearest source tree's project name without importing it."""
+        for directory in module_file.parents:
+            pyproject = directory / 'pyproject.toml'
+            if not pyproject.is_file():
+                continue
+            try:
+                with pyproject.open('rb') as stream:
+                    data = tomllib.load(stream)
+            except (OSError, tomllib.TOMLDecodeError):
+                continue
+            project = data.get('project')
+            if isinstance(project, dict) and isinstance(name := project.get('name'), str):
+                return name
+        return None
+
     @classmethod
     @_guard
     def get_package_name(cls) -> str:
-        """Retrieve the current package name from metadata."""
+        """Retrieve this utility's distribution or source-project name.
+
+        Standard installed-package metadata is preferred. Editable installs often omit
+        the import-to-distribution map, so their ``direct_url.json`` project root is matched
+        against this module; a source checkout falls back to its nearest ``pyproject.toml``.
+        A standalone script without either kind of metadata retains the root import name.
+
+        Returns:
+            Canonical distribution/project name, or the root import name as a fallback.
+        Examples:
+            Identify the distribution even from an editable checkout::
+
+                >>> from my import ut
+                >>> ut.get_package_name()
+                'my-basis'
+        """
         current_module = sys.modules[__name__]
         package_name = current_module.__package__ or __name__
         root_package = package_name.split('.', 1)[0]
-        ret = impm.packages_distributions().get(root_package, root_package)
-        if isinstance(ret, list):
-            ret = ret[0]
-        return ret
+        for distribution_name in impm.packages_distributions().get(root_package, []):
+            try:
+                return impm.metadata(distribution_name)['Name']
+            except (impm.PackageNotFoundError, KeyError):
+                continue
+
+        raw_module_file = getattr(current_module, '__file__', None)
+        if raw_module_file:
+            module_file = Path(raw_module_file).resolve()
+            return (
+                cls._editable_distribution_name(module_file)
+                or cls._source_project_name(module_file)
+                or root_package
+            )
+        return root_package
 
     @staticmethod
     @_guard

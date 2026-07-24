@@ -202,14 +202,49 @@ class Filesystem(pyd.BaseModel):
     @staticmethod
     @ft.lru_cache(maxsize=256)
     def compile_rgx(path: Path | str) -> re.Pattern[str]:
-        """Compile a regex pattern matching the given path, allowing for relative leading parts."""
-        pathstr = re.escape(Path(path).as_posix().strip('/'))
-        expr = ut.multi_rgx(
-            r'(?<![-\w\/.])',
-            r'(?:\.{0,2}\/)+',
-            rf'({pathstr})',
-            r'(?![-.\w])(\/?)',
+        """Compile a boundary-aware pattern for a non-root POSIX path.
+
+        The match starts with `/`, `./`, or one or more `../` segments. It will not begin
+        inside a URI, UNC path, or DOS drive-root path. URI, UNC, DOS/backslash, empty, and
+        filesystem-root inputs are rejected rather than interpreted heuristically.
+
+        Capture group 1 contains the literal path without its leading slash. Capture group 2
+        contains one optional trailing slash.
+
+        Args:
+            path: Non-root POSIX path to escape and match literally.
+        Returns:
+            Compiled path pattern with the literal body and trailing slash captured.
+        Raises:
+            ValueError: If path is not a non-root POSIX path.
+        Examples:
+            Relative prefixes are part of the match but not the literal-body capture::
+
+                >>> from my.apis import Filesystem
+                >>> pattern = Filesystem.compile_rgx('/srv/app')
+                >>> match = pattern.search('from ../srv/app/logs')
+                >>> match[0], match[1]
+                ('../srv/app/', 'srv/app')
+                >>> pattern.search('file:///srv/app') is None
+                True
+        """
+        raw = str(path)
+        normalized = Path(path).as_posix()
+        unsupported = (
+            not raw
+            or normalized in {'.', '..', '/'}
+            or '\\' in raw
+            or raw.startswith('//')
+            or re.match(r'^[A-Za-z][A-Za-z0-9+.-]*:', raw)
         )
+        if unsupported:
+            raise ValueError(
+                'Filesystem.compile_rgx accepts non-root POSIX paths only; '
+                'URI, UNC, DOS/backslash, empty, and filesystem-root inputs are unsupported.'
+            )
+
+        literal = re.escape(normalized.strip('/'))
+        expr = rf'(?<![-\w/.:])(?:(?:\.\./)+|\./|/(?!/))({literal})(?![-.\w])(/?)'
         return re.compile(expr)
 
     # ------------------
@@ -227,8 +262,26 @@ class Filesystem(pyd.BaseModel):
 
     @ft.cached_property
     def rgxs(self) -> dict[str, re.Pattern[str]]:
-        """A map from registry field names to regex patterns matching each registered path."""
-        return {name: self.compile_rgx(path) for name, path in reversed(self.model_dump().items())}
+        """Compile patterns for every path-valued registry field.
+
+        Non-path metadata such as `plat` is omitted.
+
+        Returns:
+            Map from path field name to its compiled literal-path pattern.
+        Examples:
+            Platform metadata is not a path pattern::
+
+                >>> from my.apis import fs
+                >>> 'plat' in fs.rgxs
+                False
+                >>> bool(fs.rgxs['home'].search(fs.home.as_posix()))
+                True
+        """
+        return {
+            name: self.compile_rgx(path)
+            for name, path in reversed(self.model_dump().items())
+            if isinstance(path, Path)
+        }
 
     @classmethod
     def is_possible(cls, raw: str | Path | None) -> bool:

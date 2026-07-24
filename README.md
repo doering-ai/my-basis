@@ -22,8 +22,8 @@ Several other packages in this workspace — [`syntect`](https://gitlab.com/doer
 
 See [`SUBLIME_DEV_REPORT.md`](../syntaxes/SUBLIME_DEV_REPORT.md) for a full analysis of the ecosystem, the broader ST plugin development landscape, and Package Control supply-chain security.
 
-ST4 ships a Python 3.8 runtime with an untyped, stringly-keyed API: commands receive `**kwargs` without a schema, test modules fail to import outside a live process, and event listeners can't declare what they expect.
-`mySublimeBasis` addresses all three directly.
+Current Sublime Text development builds ship a Python 3.14 plugin host; this package deliberately targets that modern host and requires Python 3.13 or newer for headless use. The API remains largely untyped and stringly keyed: commands receive `**kwargs` without a schema, test modules normally fail to import outside a live process, and event listeners cannot declare what they expect.
+`mySublimeBasis` addresses all three directly while delegating generic Python utilities to the canonical [`my-basis`](https://gitlab.com/doering-ai/libs/basis) implementation.
 
 ______________________________________________________________________
 
@@ -50,9 +50,11 @@ Autobind can be narrowed to a specific list of method names or disabled entirely
 ```python
 from myBasis import _MyViewCommand, CommandArguments
 
+
 class OpenArgs(CommandArguments):
     path: str
     readonly: bool = False
+
 
 class OpenFileCommand(_MyViewCommand[OpenArgs]):
     def run(self):
@@ -68,7 +70,7 @@ class OpenFileCommand(_MyViewCommand[OpenArgs]):
 The mock layer is what allows plugin modules to import cleanly in any Python environment, making unit tests, CLI tooling, and type-checking all work without a running editor:
 
 ```python
-from myBasis import IS_LIVE          # False outside ST
+from myBasis import IS_LIVE  # False outside ST
 from myPlugin import OpenFileCommand  # imports fine; stubs are in sys.modules
 ```
 
@@ -108,12 +110,14 @@ Set the corresponding env var (or `ST_PKGS`) to silence it and point the mock at
 
 ### As an ST package
 
-Clone into your ST `Packages/` directory so the runtime loads it:
+The package targets Sublime Text development builds whose embedded host is Python 3.14. Its committed `.python-version` selects that host. Clone into the editor's `Packages/` directory:
 
 ```bash
 git clone https://gitlab.com/doering-ai/sublime/basis \
     ~/.config/sublime-text/Packages/mySublimeBasis
 ```
+
+`dependencies.json` declares `my-basis` and its runtime libraries for Package Control. Until the `my-basis` 1.0 release is published and indexed, development checkouts use the immutable Git commit pinned in `pyproject.toml`; that publication is an explicit live-install gate, not a silent fallback to a copied utility module.
 
 ### As a Python dependency
 
@@ -131,10 +135,10 @@ The mock layer activates automatically on first import, so plugin modules can be
 task sync          # Install dependencies (uv sync --all-extras)
 task lint          # ruff check .
 task format        # ruff format .
-task typecheck     # ty check
-task test          # Run tests inside a live ST instance via st_pytest
+task typecheck     # pyrefly check
+task test          # Run the mock-backed pytest suite
+uv run --python 3.14 pytest -q  # Match the live development host
 task build         # Build wheel
 ```
 
-Tests are run inside a live ST instance via [`sublime-test`](https://gitlab.com/doering-ai/sublime/pytest) — `mySublimeBasis`'s companion testing toolkit.
-See the `sublime-test` README for test-writing patterns and CI configuration.
+The repository's unit suite runs directly against the mock layer on CPython 3.13 and 3.14. [`myTest`](https://gitlab.com/doering-ai/sublime/pytest) remains the companion integration toolkit for downstream plugins and live-host checks.

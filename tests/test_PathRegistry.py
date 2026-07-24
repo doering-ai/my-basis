@@ -4,6 +4,7 @@
 ### STANDARD
 from __future__ import annotations
 from pathlib import Path
+import sys
 
 ### EXTERNAL
 import pytest as pyt
@@ -72,7 +73,8 @@ class TestPathRegistry:
 
     def test_venv_is_home_child(self):
         reg = PATHS
-        assert reg.venv == reg.home / 'Lib' / 'python38'
+        version = f'python{sys.version_info.major}{sys.version_info.minor}'
+        assert reg.venv == reg.home / 'Lib' / version
 
     # ---- Types ----
     def test_host_is_directory(self):

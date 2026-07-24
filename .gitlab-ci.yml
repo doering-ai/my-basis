@@ -28,6 +28,8 @@ workflow:
         # job lives in. WITHOUT this rule a `v*` tag push matches nothing and GitLab
         # creates no pipeline at all, so the job-level `rules:` can never fire.
         - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
+        # The independent Typst package shares this repository, not Python's tags.
+        - if: $CI_COMMIT_TAG =~ /^typst-v\d+\.\d+\.\d+$/
 ############
 ### DATA ###
 ############
@@ -139,6 +141,7 @@ Publish PyPI:
     cache: []
     script:
         - uv build --no-sources
+        - python3 scripts/check_release_artifacts.py dist/*.whl dist/*.tar.gz
         - |
           export UV_PUBLISH_TOKEN=$(python3 -c '
           import json, os, urllib.request
@@ -203,6 +206,45 @@ Test Python:
     script:
         - task test:cov
     coverage: '/TOTAL.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
+Test Artifacts:
+    stage: test
+    image:
+        name: $TEST_POD
+        entrypoint: [""]
+    needs: ['Rebuild Pod', 'Evaluate Python']
+    timeout: 10m
+    rules:
+        - if: $CI_COMMIT_TAG
+          when: never
+        - when: on_success
+    before_script:
+        - cd $CI_PROJECT_DIR
+        - uv lock --check
+        - uv sync --locked --all-extras --python "$PYTHON_FLOOR"
+    script:
+        - task test:artifacts
+Test Typst:
+    stage: test
+    image:
+        name: ghcr.io/typst/typst@sha256:032e292249bcd378480cc7c142cfa324b63ef8aadeb88d7e7230320c4c9c422f
+        entrypoint: [""]
+    cache: []
+    timeout: 10m
+    rules:
+        - if: $CI_COMMIT_TAG =~ /^typst-v\d+\.\d+\.\d+$/
+        - if: $CI_COMMIT_TAG
+          when: never
+        - when: on_success
+    script:
+        - |
+          if [ -n "${CI_COMMIT_TAG:-}" ]; then
+            TYPST_VERSION="$(sed -n 's/^version = "\(.*\)"/\1/p' typst/typst.toml)"
+            test "typst-v$TYPST_VERSION" = "$CI_COMMIT_TAG" || {
+              echo "Tag $CI_COMMIT_TAG does not match typst-v$TYPST_VERSION"
+              exit 1
+            }
+          fi
+        - sh typst/test.sh
 # `Test Python` above runs the image's baked-in interpreter (python3.12, the declared floor)
 # and owns the coverage report -- it stays a single job so the `coverage:` regex cannot race
 # across parallel children. This job adds every OTHER supported interpreter.

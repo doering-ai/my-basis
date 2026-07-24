@@ -92,6 +92,20 @@ my-basis = { path = "../libs/basis", editable = true }
 
 Adjust the relative `path` to wherever this repo lives on disk from the consuming project, then run `uv sync`.
 
+### Refactor an existing repository
+
+The 1.0 line also packages a read-only intake tool and the `adopt-my-basis` agent skill. From a Python repository you want to assess:
+
+```sh
+uvx --from my-basis my-basis-adopt skill path
+uvx --from my-basis my-basis-adopt skill export .agents/skills/adopt-my-basis
+uvx --from my-basis my-basis-adopt prepare .
+```
+
+Give the printed `intake.json` path to your agent and ask it to use `adopt-my-basis`. The scanner inventories files, dependency declarations, Python compatibility, candidate native gates, and regex structure without importing the target package or editing its source. The agent then validates an evidence-bound proposal and can render a high-level MyST, standalone HTML, or Typst/PDF report with exact merge and revision instructions. A justified decline or no-op is a successful result; the skill is designed to preserve dependency budgets and deliberate failure paths, not maximize adoption.
+
+The one-shot commands above require no persistent installation. `skill path` exposes the packaged source directly; `skill export` is only needed when the receiving agent needs its own catalog copy. See [`my/skills/adopt-my-basis/SKILL.md`](my/skills/adopt-my-basis/SKILL.md) for the full workflow and the runnable [`RegexStore` adoption guide](my/skills/adopt-my-basis/references/regexstore.md) for complex grammars.
+
 ### Optional extras
 
 Core stays as small as this library knows how to be; everything heavier hangs off an extra you opt into with `pip install my-basis[<extra>]` (or `uv add my-basis --extra <extra>`):

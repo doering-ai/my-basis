@@ -247,6 +247,22 @@ tasks:
         aliases: [audit-tests, test-audit]
         desc: Audit test conventions against the pre-July baseline and emit JSON/MyST evidence.
 
+    test:artifacts:
+        aliases: [artifact-test, test-artifact]
+        desc: Build wheel and sdist, then verify the Python/Typst and packaged-skill boundaries.
+        cmd: |
+            set -eu
+            artifact_root="$(mktemp -d "${TMPDIR:-/tmp}/basis-artifacts.XXXXXX")"
+            trap 'rm -rf "$artifact_root"' EXIT
+            {{.UV}} build --no-sources --out-dir "$artifact_root"
+            {{.UV}} run --locked python scripts/check_release_artifacts.py \
+              "$artifact_root"/*.whl "$artifact_root"/*.tar.gz
+
+    test:typst:
+        aliases: [typst-test, test-typst]
+        desc: Compile the independent @dtm/basis fixtures and verify their report envelope.
+        cmd: sh '{{._0}}/typst/test.sh'
+
     test:dev:
         cmd: '{{.UV}} run --locked pytest --sw -vv {{.CLI_ARGS}}'
         aliases: [dev-test]

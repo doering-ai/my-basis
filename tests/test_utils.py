@@ -14,6 +14,7 @@ import pickle
 import pytest as pyt
 import regex as re
 import sublime as sb
+from my import Utils as BasisUtils
 
 ### INTERNAL
 from myBasis.infra import utils as utils_module
@@ -31,9 +32,46 @@ def _run(coro: Any) -> Any:
     return asyncio.run(coro)
 
 
+#: Generic helpers now inherited from my-basis instead of maintained as a parallel copy.
+CANONICAL_METHODS = (
+    '_clean_nonwords',
+    '_multiprint_data',
+    'clear_cached_properties',
+    'debug_fence',
+    'indexof',
+    'multi_rgx',
+    'multiprint',
+    'posix',
+    'replace',
+    'roman_to_decimal',
+)
+
+
 ############
 ### BODY ###
 ############
+class TestCanonicalBasis:
+    @pyt.mark.parametrize('name', CANONICAL_METHODS)
+    def test_method_ownership(self, name: str):
+        """Generic helpers have one implementation owner in my-basis."""
+        assert name not in Utils.__dict__
+        assert hasattr(BasisUtils, name)
+
+    @pyt.mark.parametrize(
+        'name, args, kwargs',
+        [
+            ('indexof', (['a', 'bb'], 'bb'), {}),
+            ('multi_rgx', ('cat', 'dog'), {}),
+            ('posix', (0,), {}),
+            ('replace', ('a1b2', (r'\d', '#')), {}),
+            ('roman_to_decimal', ('MCMXCIV',), {}),
+        ],
+    )
+    def test_behavior(self, name: str, args: tuple[Any, ...], kwargs: dict[str, Any]):
+        """The adapter exposes the canonical result for representative contracts."""
+        assert getattr(Utils, name)(*args, **kwargs) == getattr(BasisUtils, name)(*args, **kwargs)
+
+
 class TestCleanShellArgs:
     """Tests for ``Utils._clean_shell_args``."""
 

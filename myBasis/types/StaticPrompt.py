@@ -26,10 +26,10 @@ from ..infra.constants import RGXS
 InputHandler = sbp.CommandInputHandler
 TextHandler = sbp.TextInputHandler
 ListHandler = sbp.ListInputHandler
-Spans: TypeAlias = 'list[tuple[int, int]]'
+Spans: TypeAlias = list[tuple[int, int]]
 
-_ListItems: TypeAlias = 'list[str] | list[tuple[str, Any]] | list[sb.ListInputItem]'
-ListItems: TypeAlias = '_ListItems | tuple[_ListItems, int]'
+_ListItems: TypeAlias = list[str] | list[tuple[str, Any]] | list[sb.ListInputItem]
+ListItems: TypeAlias = _ListItems | tuple[_ListItems, int]
 
 
 ############

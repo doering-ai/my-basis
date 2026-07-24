@@ -27,8 +27,8 @@ class BaseProtocol(Protocol):
 
 C = TypeVar('C', bound=BaseProtocol)
 R = TypeVar('R', bound=object)
-Method: TypeAlias = 'Callable[[C], R]'
-Decorator: TypeAlias = 'Callable[[Callable[[C], R]], property]'
+Method: TypeAlias = Callable[[C], R]
+Decorator: TypeAlias = Callable[[Callable[[C], R]], property]
 
 
 ############

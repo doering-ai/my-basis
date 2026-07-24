@@ -49,7 +49,6 @@ __pycache__
 dmypy.json
 
 # Dependencies
-.python-version
 .venv/
 venv/
 /.pypirc

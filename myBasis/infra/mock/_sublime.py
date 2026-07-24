@@ -22,7 +22,7 @@ from __future__ import annotations
 from typing import Any, Callable, Iterator, Literal, ClassVar
 from pathlib import Path
 from unittest.mock import MagicMock
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import itertools as it
 import json
 import os
@@ -409,7 +409,7 @@ def _find_text_command(name: str) -> 'type | None':
 
     for cls in _all_subclasses(sbp.TextCommand):
         try:
-            dummy = cls.__new__(cls)
+            dummy = cls.__new__(cls)  # type: ignore
             if dummy.name() == name:
                 return cls
         except Exception:
@@ -1145,7 +1145,7 @@ class SymbolRegion:
 
     name: str = ''
     """The name of the symbol."""
-    region: Region = NULL_REGION
+    region: Region = field(default_factory=lambda: Region(0, 0))
     """The location of the symbol within the `View`."""
     syntax: str = ''
     """The name of the syntax for the symbol."""

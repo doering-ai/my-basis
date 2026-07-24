@@ -28,9 +28,7 @@ workflow:
 ############
 variables:
   PACKAGE: myBasis
-  # basis has no Containerfile of its own; jobs run inside the shared Sublime test-harness
-  # image built and pushed by the sibling `test` project (ST runtime + task + uv).
-  MAIN_POD: registry.gitlab.com/doering-ai/sublime/pytest@sha256:996367c924f86d9270872928a41b9ec5d2cbdbddde8e6343ee02d1b69ffbe1e4
+  PYTHON_VERSION: '3.14'
   SECRET_DETECTION_ENABLED: 'true'
   UV_CACHE_DIR: .uv-cache
   USER: my
@@ -47,48 +45,39 @@ cache:
 ############
 default:
   image:
-    name: $MAIN_POD
+    name: ghcr.io/astral-sh/uv:python3.14-bookworm-slim
     entrypoint: [""]
 
 secret_detection:
   stage: eval
   cache: []
 
-# The digest-pinned harness image is isolated per Docker job, so ST_TEST is trusted after
-# validating its directory, executable, and import contract; writable paths are not shared.
-test-plugin:
-  stage: test
+.python:
   before_script:
     - cd "$CI_PROJECT_DIR"
-    - test -n "$ST_TEST"
-    - test -d "$ST_TEST"
-    - test -x "$ST_TEST/.venv/bin/python"
-    - >-
-      "$ST_TEST/.venv/bin/python" -c
-      "import myBasis, pytest, sublime, sublime_plugin, unittesting"
+    - apt-get update -qq && apt-get install -y -qq --no-install-recommends git
+    - uv sync --frozen --no-default-groups --group test --python "$PYTHON_VERSION"
+
+test-plugin:
+  extends: .python
+  stage: test
+  parallel:
+    matrix:
+      - PYTHON_VERSION: ['3.13', '3.14']
   script:
-    - uv run --project "$ST_TEST" --no-sync python -m pytest tests
+    - mkdir -p /tmp/myBasis-mock/home/Packages
+      '/tmp/myBasis-mock/home/Installed Packages'
+    - uv run --no-sync pytest -q
 
 Evaluate Python:
+  extends: .python
   stage: eval
-  before_script:
-    - cd "$CI_PROJECT_DIR"
-    - test -n "$ST_TEST"
-    - test -d "$ST_TEST"
-    - test -x "$ST_TEST/.venv/bin/python"
-    - test -x "$ST_TEST/.venv/bin/ruff"
-    - test -x "$ST_TEST/.venv/bin/pyrefly"
-    - >-
-      "$ST_TEST/.venv/bin/python" -c
-      "import myBasis, pytest, sublime, sublime_plugin, unittesting"
   interruptible: true
   script:
-    - >-
-      "$ST_TEST/.venv/bin/ruff" check --no-cache
-      --output-format=gitlab --output-file=code-quality-report.json .
-    - uv pip install --python "$ST_TEST/.venv/bin/python"
-      'types-regex==2024.11.6.20241221'
-    - site_packages=$("$ST_TEST/.venv/bin/python" -c
+    - uvx ruff check --no-cache .
+    - uvx ruff check --no-cache --output-format=gitlab --output-file=code-quality-report.json .
+    - uvx ruff format --diff .
+    - site_packages=$(.venv/bin/python -c
       'import sysconfig; print(sysconfig.get_path("purelib"))')
     - test -d "$site_packages"
     - api_path=$(mktemp -d)
@@ -96,9 +85,9 @@ Evaluate Python:
     - cp "$CI_PROJECT_DIR/myBasis/infra/mock/_sublime_plugin.py" "$api_path/sublime_plugin.py"
     - cp "$CI_PROJECT_DIR/myBasis/infra/mock/_unittesting.py" "$api_path/unittesting.py"
     - >-
-      "$ST_TEST/.venv/bin/pyrefly" check
+      uvx --with types-regex pyrefly check
       --config "$CI_PROJECT_DIR/pyproject.toml"
-      --python-interpreter-path "$ST_TEST/.venv/bin/python"
+      --python-interpreter-path "$CI_PROJECT_DIR/.venv/bin/python"
       --site-package-path "$site_packages"
       --search-path "$CI_PROJECT_DIR" --search-path "$api_path"
       "$CI_PROJECT_DIR/myBasis" "$CI_PROJECT_DIR/tests"

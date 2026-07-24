@@ -5,12 +5,13 @@
 name = "sublime-basis"
 version = "0.7.0"
 description = "A basis for using, extending, and designing SublimeText plugins."
-requires-python = "==3.8.*"
+requires-python = ">=3.13"
 urls = { Homepage = "https://gitlab.com/doering-ai/libs/sublime/basis" }
 authors = [{ name = "Robb Doering", email = "robb@doering.ai" }]
 classifiers = [
   "Development Status :: 3 - Alpha",
-  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
   "Operating System :: OS Independent",
   "Framework :: Pydantic :: 2",
   "Topic :: Text Editors :: Integrated Development Environments (IDE)",
@@ -25,26 +26,20 @@ classifiers = [
 ### II. DEPENDENCIES ###
 ########################
 dependencies = [
+  "my-basis @ git+https://gitlab.com/doering-ai/libs/basis.git@9b33c09991ccdb62afce0ed06bf2299a07e7c9ed",
   "jinja2>=3.1.6",
   "more-itertools>=10.5.0",
   "pydantic>=2.10.6",
   "regex>=2024.11.6",
-  "ruamel-yaml>=0.18.16",
+  "ruamel-yaml>=0.19.1",
   "sublime-lib",
   "sublime-aio",
   "toml>=0.10.2",
   "anyio>=4.5.2",
-  # Required at runtime (not just for dev/eval tooling): myBasis uses PEP 585 generics
-  # (e.g. `dict[str, int]`) on pydantic Generic models under `from __future__ import
-  # annotations`, which pydantic can only resolve on Python 3.8 via eval_type_backport.
-  # Any downstream consumer that imports myBasis needs this present, not just this repo's
-  # own dev environment.
-  "eval-type-backport>=0.3.1",
 ]
 
 [dependency-groups]
 dev = [
-  "better-exceptions>=0.3.3",
   { include-group = "eval" },
   { include-group = "test" },
 ]
@@ -58,7 +53,7 @@ eval = [
   "typing-extensions>=4.13.2",
 ]
 
-test = ["sublime-test", "pytest>=8.3.5", "coverage>=7.6.1"]
+test = ["pytest>=8.3.5", "coverage>=7.6.1"]
 
 
 #########################
@@ -76,7 +71,6 @@ namespace = true
 sublime-stubs = { path = "../.pkgs/sublime-stubs" }
 sublime-lib = { url = "https://github.com/SublimeText/sublime_lib/releases/download/v2.1.0/sublime_lib-2.1.0-py3-none-any.whl" }
 sublime-aio = { url = "https://github.com/packagecontrol/sublime_aio/releases/download/v0.1.6/sublime_aio-0.1.6-py3-none-any.whl" }
-sublime-test = { path = "../test", editable = true }
 
 [project.scripts]
 setup-sublime = "myBasis.infra.setup_sublime:main"
@@ -109,7 +103,7 @@ ignore_errors = true
 # ------
 [tool.pyrefly]
 min-severity = 'warn'
-python-version = '3.8'
+python-version = '3.13'
 check-unannotated-defs = true
 permissive-ignores = true
 search-path = ['.']
@@ -191,6 +185,11 @@ ignore = [
   "SIM114", # combine if branches
   "SIM118",
 
+  # Type Checking -- these imports are evaluated by Pydantic or the live Sublime host.
+  "TC001",
+  "TC002",
+  "TC003",
+
   # PyDocStyle
   "D100", # docstrings for modules
   "D104", # docstrings for packages 
@@ -198,10 +197,6 @@ ignore = [
   "D410", # blank line after docstring sections
   "D411", # blank line before docstring sections
 
-  # Type Checking
-  "TC001", # TYPE_CHECKING blocks in python3.8 (internal)
-  "TC002", # TYPE_CHECKING blocks in python3.8 (external)
-  "TC003", # TYPE_CHECKING blocks in python3.8
 ]
 
 [tool.ruff.lint.per-file-ignores]

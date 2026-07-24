@@ -1,6 +1,7 @@
 """Deterministic intake, validation, and reporting for my-basis adoption."""
 
 from .models import (
+    AtomicDiff,
     Baseline,
     ChangeProposal,
     EvidenceRef,
@@ -34,6 +35,7 @@ from .proposal import (
 from .scanner import scan_repository
 
 __all__ = [
+    'AtomicDiff',
     'Baseline',
     'ChangeProposal',
     'EvidenceRef',

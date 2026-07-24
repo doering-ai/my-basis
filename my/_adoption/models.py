@@ -61,7 +61,7 @@ class Signal(pyd.BaseModel):
 class Intake(pyd.BaseModel):
     """Contain deterministic facts used to plan a my-basis adoption."""
 
-    schema_version: Literal[1] = 1
+    schema_version: Literal[2] = 2
     repository: dict[str, str | None]
     source_digest: str
     python: dict[str, str | int | bool | None | list[str]]
@@ -69,6 +69,7 @@ class Intake(pyd.BaseModel):
     commands: dict[str, list[str]]
     imports: list[ImportFact]
     regex: dict[str, int | bool | list[RegexPatternFact]]
+    sublime: dict[str, str | bool | list[str] | None]
     exclusions: dict[str, int]
     parse_errors: list[str]
     disposition: dict[str, str]
@@ -171,6 +172,29 @@ class Verification(ContractModel):
         return self
 
 
+class AtomicDiff(ContractModel):
+    """Bind one copy-ready transformation patch to exact Git revisions."""
+
+    base_commit: str = pyd.Field(pattern=r'^[0-9a-f]{40,64}$')
+    head_commit: str = pyd.Field(pattern=r'^[0-9a-f]{40,64}$')
+    patch_path: str
+    patch_sha256: str = pyd.Field(pattern=r'^[0-9a-f]{64}$')
+    bytes: int = pyd.Field(ge=1)
+    diff_stat: str
+    summary: str
+
+    @pyd.model_validator(mode='after')
+    def _validate_patch(self) -> AtomicDiff:
+        path = self.patch_path.replace('\\', '/')
+        if path.startswith('/') or '..' in path.split('/'):
+            raise ValueError('patch_path must be a repository-relative artifact path')
+        if self.base_commit == self.head_commit:
+            raise ValueError('atomic diff base_commit and head_commit must differ')
+        if not self.summary.strip():
+            raise ValueError('atomic diff summary must be non-empty')
+        return self
+
+
 class VcsResult(ContractModel):
     """Describe the local version-control result without implying a remote review."""
 
@@ -178,6 +202,7 @@ class VcsResult(ContractModel):
     work_branch: str | None = None
     commits: list[str] = pyd.Field(default_factory=list)
     diff_stat: str = ''
+    diffs: list[AtomicDiff] = pyd.Field(default_factory=list)
 
 
 class ReportResult(ContractModel):
@@ -208,7 +233,7 @@ class ProblemSpace(ContractModel):
 class Proposal(ContractModel):
     """Represent the canonical agent-authored adoption proposal and handoff."""
 
-    schema_version: Literal['my-basis-adoption/proposal/v1'] = 'my-basis-adoption/proposal/v1'
+    schema_version: Literal['my-basis-adoption/proposal/v2'] = 'my-basis-adoption/proposal/v2'
     intake_sha256: str = pyd.Field(
         pattern=r'^[0-9a-f]{64}$',
         description='SHA-256 of the canonical serialized intake payload.',

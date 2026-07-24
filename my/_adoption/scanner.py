@@ -121,6 +121,7 @@ def _file_kind(
     if path.suffix == '.py':
         return 'python'
     if path.name in {
+        '.python-version',
         'Makefile',
         'Pipfile',
         'Pipfile.lock',
@@ -130,6 +131,7 @@ def _file_kind(
         'pyproject.toml',
         'setup.cfg',
         'setup.py',
+        'sublime-package.json',
         'uv.lock',
     }:
         return 'config'
@@ -732,6 +734,47 @@ def scan_repository(repository: Path | str) -> Intake:
         patterns=patterns,
     )
 
+    imports_by_module = {item.module: item for item in imports}
+    sublime_imports = imports_by_module.get('sublime')
+    mybasis_imports = imports_by_module.get('myBasis') or imports_by_module.get('mybasis')
+    copied_mybasis_files = sorted(
+        item.path for item in evidence if item.path.startswith(('myBasis/', 'mybasis/'))
+    )
+    host_python = texts.get('.python-version', '').strip() or None
+    sublime: dict[str, str | bool | list[str] | None] = {
+        'detected': bool(sublime_imports or host_python or copied_mybasis_files),
+        'host_python': host_python,
+        'imports': sublime_imports.files if sublime_imports else [],
+        'mybasis_imports': mybasis_imports.files if mybasis_imports else [],
+        'copied_mybasis_files': copied_mybasis_files,
+    }
+    if sublime['detected']:
+        signals.append(
+            Signal(
+                id='sublime.host',
+                level='info',
+                summary=(
+                    'Sublime plugin-host repository detected; marker is '
+                    f'{host_python or "not set"}.'
+                ),
+                evidence=(['.python-version'] if host_python else [])
+                + (sublime_imports.files if sublime_imports else []),
+            )
+        )
+    if copied_mybasis_files:
+        signals.append(
+            Signal(
+                id='sublime.copied-mybasis',
+                level='opportunity',
+                summary=(
+                    f'{len(copied_mybasis_files)} local myBasis file(s) may duplicate canonical '
+                    'my-basis structures; compare behavior before replacement.'
+                ),
+                evidence=copied_mybasis_files,
+            )
+        )
+    signals = sorted(signals, key=lambda item: item.id)
+
     distribution = str(project['name']) if project.get('name') is not None else None
     python: dict[str, str | int | bool | None | list[str]] = {
         'requires_python': python_specifier,
@@ -776,6 +819,7 @@ def scan_repository(repository: Path | str) -> Intake:
         commands=commands,
         imports=imports,
         regex=regex,
+        sublime=sublime,
         exclusions=exclusion_counts,
         parse_errors=sorted(parse_errors),
         disposition=disposition,

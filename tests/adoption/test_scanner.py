@@ -337,6 +337,32 @@ class TestScanRepository:
             assert intake.regex['production_calls'] == 0
             assert intake.regex['test_calls'] == 3
 
+    def test_scan_repository__sublime_host(self, tmp_path: Path):
+        """Test Sublime host markers and copied myBasis seams become explicit evidence."""
+        root = make_repository(
+            tmp_path / 'repo',
+            python='import sublime\nfrom myBasis import ut\nVALUE = ut.fn.identity(1)\n',
+            requires_python='>=3.13',
+        )
+        (root / '.python-version').write_text('3.14\n')
+        copied = root / 'myBasis'
+        copied.mkdir()
+        (copied / '__init__.py').write_text('from .infra import utils as ut\n')
+        (copied / 'infra.py').write_text('class utils:\n    pass\n')
+
+        intake = scan_repository(root)
+
+        assert intake.schema_version == 2
+        assert intake.sublime == {
+            'detected': True,
+            'host_python': '3.14',
+            'imports': ['fixture/__init__.py'],
+            'mybasis_imports': ['fixture/__init__.py'],
+            'copied_mybasis_files': ['myBasis/__init__.py', 'myBasis/infra.py'],
+        }
+        signal_ids = {item.id for item in intake.signals}
+        assert {'sublime.host', 'sublime.copied-mybasis'} <= signal_ids
+
     def test_scan_repository__regexstore_evidence(self, tmp_path: Path):
         """Test existing RegexStore idioms include exact source evidence paths."""
         root = make_repository(

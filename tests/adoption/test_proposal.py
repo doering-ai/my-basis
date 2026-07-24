@@ -86,6 +86,17 @@ def make_proposal(intake: Intake, **updates: Any) -> Proposal:
             'work_branch': 'agent/MEMY-754-fixture',
             'commits': ['abc1234'],
             'diff_stat': '2 files changed',
+            'diffs': [
+                {
+                    'base_commit': 'a' * 40,
+                    'head_commit': 'b' * 40,
+                    'patch_path': 'diffs/regex-router.patch',
+                    'patch_sha256': 'c' * 64,
+                    'bytes': 312,
+                    'diff_stat': '2 files changed',
+                    'summary': 'Replace the ad-hoc router with one named RegexStore grammar.',
+                }
+            ],
         },
         'report': {'format': 'myst', 'source': 'report.md', 'rendered': 'report.html'},
         'handoff': {
@@ -194,6 +205,7 @@ class TestProposal:
             ('handoff-revision', 'revision_prompt'),
             ('handoff-none', 'implemented changes require a merge handoff'),
             ('handoff-none-commands', 'forbids merge_commands'),
+            ('diff-corpus', 'implemented changes require an atomic diff artifact'),
         ],
     )
     def test_validate_proposal__invalid(
@@ -235,6 +247,8 @@ class TestProposal:
         elif mutation == 'handoff-none-commands':
             proposal.changes = []
             proposal.handoff.merge_kind = 'none'
+        elif mutation == 'diff-corpus':
+            proposal.vcs.diffs = []
 
         with pyt.raises(ProposalValidationError, match=expected_error):
             validate_proposal(proposal, intake)
@@ -450,4 +464,4 @@ class TestProposal:
         assert proposal.intake_sha256 == intake_sha256(intake)
         assert proposal.intake_sha256 != intake.source_digest
         assert proposal.baseline.commands == []
-        assert proposal.schema_version == 'my-basis-adoption/proposal/v1'
+        assert proposal.schema_version == 'my-basis-adoption/proposal/v2'

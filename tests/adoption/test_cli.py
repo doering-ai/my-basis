@@ -6,6 +6,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 import json
+import subprocess as sbp
 
 ### EXTERNAL
 import pytest as pyt
@@ -241,6 +242,41 @@ class TestAdoptionCli:
 
         assert status == 0
         assert isinstance(output, dict)
+
+    def test_capture_atomic_diff(self, tmp_path: Path):
+        """Test committed transformations become SHA-bound, copy-ready corpus artifacts."""
+        root = make_repository(tmp_path / 'repo')
+
+        def git(*args: str) -> None:
+            sbp.run(['git', *args], cwd=root, check=True, capture_output=True, text=True)
+
+        git('init', '-b', 'main')
+        git('config', 'user.name', 'Fixture')
+        git('config', 'user.email', 'fixture@example.test')
+        git('add', '.')
+        git('commit', '-m', 'baseline')
+        (root / 'fixture' / '__init__.py').write_text('VALUE = 2\n')
+        git('add', '.')
+        git('commit', '-m', 'replace copied helper')
+        output = tmp_path / 'corpus' / 'fixture'
+
+        result = adopt_basis.capture_atomic_diff(
+            root,
+            base='HEAD~1',
+            head='HEAD',
+            output_dir=output,
+            summary='Replace the copied helper with the canonical API.',
+        )
+
+        manifest = json.loads((output / 'manifest.json').read_text())
+        patch = output / 'change.patch'
+        assert result['manifest'] == str(output / 'manifest.json')
+        assert (
+            manifest['patch_sha256'] == adopt_basis.hashlib.sha256(patch.read_bytes()).hexdigest()
+        )
+        assert manifest['base_commit'] != manifest['head_commit']
+        assert manifest['summary'].startswith('Replace the copied helper')
+        assert 'VALUE = 2' in patch.read_text()
 
     @pyt.mark.parametrize('json_output', [False, True])
     def test_skill__path(

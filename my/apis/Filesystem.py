@@ -202,29 +202,49 @@ class Filesystem(pyd.BaseModel):
     @staticmethod
     @ft.lru_cache(maxsize=256)
     def compile_rgx(path: Path | str) -> re.Pattern[str]:
-        """Compile a pattern that consumes a literal path with a relative prefix.
+        """Compile a boundary-aware pattern for a non-root POSIX path.
 
-        The match starts with `/`, `./`, or one or more `../` segments, captures the path
-        without its leading slash, and consumes one optional trailing slash. This shape lets
-        callers replace registered paths inside text without matching longer word or dotted-path
-        segments.
+        The match starts with `/`, `./`, or one or more `../` segments. It will not begin
+        inside a URI, UNC path, or DOS drive-root path. URI, UNC, DOS/backslash, empty, and
+        filesystem-root inputs are rejected rather than interpreted heuristically.
+
+        Capture group 1 contains the literal path without its leading slash. Capture group 2
+        contains one optional trailing slash.
 
         Args:
-            path: Path to escape and match literally.
+            path: Non-root POSIX path to escape and match literally.
         Returns:
-            Compiled path pattern.
+            Compiled path pattern with the literal body and trailing slash captured.
+        Raises:
+            ValueError: If path is not a non-root POSIX path.
         Examples:
-            Relative prefixes and a trailing slash are part of the match::
+            Relative prefixes are part of the match but not the literal-body capture::
 
                 >>> from my.apis import Filesystem
                 >>> pattern = Filesystem.compile_rgx('/srv/app')
-                >>> pattern.search('from ../srv/app/logs')[0]
-                '../srv/app/'
-                >>> pattern.search('unrelated') is None
+                >>> match = pattern.search('from ../srv/app/logs')
+                >>> match[0], match[1]
+                ('../srv/app/', 'srv/app')
+                >>> pattern.search('file:///srv/app') is None
                 True
         """
-        pathstr = re.escape(Path(path).as_posix().strip('/'))
-        expr = rf'(?<![-\w\/.])(?:\.{{0,2}}\/)+({pathstr})(?![-.\w])(\/?)'
+        raw = str(path)
+        normalized = Path(path).as_posix()
+        unsupported = (
+            not raw
+            or normalized in {'.', '..', '/'}
+            or '\\' in raw
+            or raw.startswith('//')
+            or re.match(r'^[A-Za-z][A-Za-z0-9+.-]*:', raw)
+        )
+        if unsupported:
+            raise ValueError(
+                'Filesystem.compile_rgx accepts non-root POSIX paths only; '
+                'URI, UNC, DOS/backslash, empty, and filesystem-root inputs are unsupported.'
+            )
+
+        literal = re.escape(normalized.strip('/'))
+        expr = rf'(?<![-\w/.:])(?:(?:\.\./)+|\./|/(?!/))({literal})(?![-.\w])(/?)'
         return re.compile(expr)
 
     # ------------------

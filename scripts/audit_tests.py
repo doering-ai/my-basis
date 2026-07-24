@@ -47,6 +47,9 @@ TEST_FILE_PATTERNS = ('test_*.py', '*_test.py')
 #: Section markers recognized by the house Python layout.
 IMPORT_SECTIONS = ('STANDARD', 'EXTERNAL', 'INTERNAL')
 
+#: Parse diagnostics that identify modules PyTest cannot collect.
+BLOCKING_DIAGNOSTICS = frozenset({'syntax-error'})
+
 
 ############
 ### BODY ###
@@ -212,10 +215,128 @@ class Worker(pyd.BaseModel):
 
     @staticmethod
     def _literal_sequence(node: ast.expr | None) -> list[ast.expr] | None:
-        """Return statically enumerable elements, or ``None`` for dynamic values."""
+        """Return fixed literal elements, or ``None`` for dynamic values."""
         if isinstance(node, ast.List | ast.Tuple | ast.Set):
+            if any(isinstance(element, ast.Starred) for element in node.elts):
+                return None
             return list(node.elts)
         return None
+
+    @staticmethod
+    def _parametrize_arguments(
+        call: ast.Call,
+    ) -> tuple[ast.expr | None, ast.expr | None, ast.expr | None]:
+        """Return the argnames, argvalues, and IDs expressions from one decorator."""
+        names_node = call.args[0] if call.args else None
+        rows_node = call.args[1] if len(call.args) > 1 else None
+        ids_node: ast.expr | None = None
+        for keyword in call.keywords:
+            if keyword.arg == 'argnames' and names_node is None:
+                names_node = keyword.value
+            elif keyword.arg == 'argvalues' and rows_node is None:
+                rows_node = keyword.value
+            elif keyword.arg == 'ids':
+                ids_node = keyword.value
+        return names_node, rows_node, ids_node
+
+    @staticmethod
+    def _literal_parametrize_names(node: ast.expr | None) -> tuple[list[str] | None, bool]:
+        """Return literal parameter names and PyTest's single-value wrapping mode."""
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            names = [name.strip() for name in node.value.split(',') if name.strip()]
+            force_tuple = len(names) == 1 and not node.value.rstrip().endswith(',')
+            return names, force_tuple
+        if isinstance(node, ast.List | ast.Tuple):
+            if any(isinstance(element, ast.Starred) for element in node.elts):
+                return None, False
+            names = [
+                element.value
+                for element in node.elts
+                if isinstance(element, ast.Constant) and isinstance(element.value, str)
+            ]
+            if len(names) == len(node.elts):
+                return names, False
+        return None, False
+
+    @classmethod
+    def _literal_row_arity(cls, row: ast.expr, force_tuple: bool) -> int | None:
+        """Return one literal parameter row's PyTest value arity when knowable."""
+        if isinstance(row, ast.Call):
+            chain = cls._attribute_chain(row.func)
+            if chain == 'param' or (chain and chain.endswith('.param')):
+                if any(isinstance(argument, ast.Starred) for argument in row.args):
+                    return None
+                return len(row.args)
+        if force_tuple:
+            return 1
+        values = cls._literal_sequence(row)
+        return len(values) if values is not None else None
+
+    @classmethod
+    def _parametrize_violations(
+        cls,
+        function: ast.FunctionDef | ast.AsyncFunctionDef,
+        path: str,
+        scope: str,
+    ) -> list[dict[str, Any]]:
+        """Return collection-blocking literal parametrization mismatches."""
+        violations: list[dict[str, Any]] = []
+        for decorator in function.decorator_list:
+            call = cls._is_parametrize(decorator)
+            if call is None:
+                continue
+            names_node, rows_node, ids_node = cls._parametrize_arguments(call)
+            rows = cls._literal_sequence(rows_node)
+            ids = cls._literal_sequence(ids_node)
+
+            if rows is not None and ids is not None:
+                effective_rows = len(rows) or 1
+                if len(ids) not in {0, effective_rows}:
+                    row_label = 'row' if effective_rows == 1 else 'rows'
+                    id_label = 'ID' if len(ids) == 1 else 'IDs'
+                    violations.append(
+                        {
+                            'code': 'parametrize-ids-count',
+                            'path': path,
+                            'line': decorator.lineno,
+                            'scope': scope,
+                            'name': function.name,
+                            'message': (
+                                f'{function.name} has {effective_rows} {row_label} but '
+                                f'{len(ids)} literal {id_label}'
+                            ),
+                        }
+                    )
+
+            names, force_tuple = cls._literal_parametrize_names(names_node)
+            if names is None or rows is None:
+                continue
+            mismatches: list[tuple[int, int]] = []
+            for index, row in enumerate(rows, start=1):
+                arity = cls._literal_row_arity(row, force_tuple)
+                if arity is not None and arity != len(names):
+                    mismatches.append((index, arity))
+            if mismatches:
+                parameter_label = 'parameter' if len(names) == 1 else 'parameters'
+                details = '; '.join(
+                    (
+                        f'row {index} has {arity} '
+                        f'{"value" if arity == 1 else "values"} for '
+                        f'{len(names)} {parameter_label}'
+                    )
+                    for index, arity in mismatches
+                )
+                violations.append(
+                    {
+                        'code': 'parametrize-row-arity',
+                        'path': path,
+                        'line': decorator.lineno,
+                        'scope': scope,
+                        'name': function.name,
+                        'message': f'{function.name} {details}',
+                    }
+                )
+        return violations
 
     @classmethod
     def _parametrize_info(cls, function: ast.FunctionDef | ast.AsyncFunctionDef) -> dict[str, Any]:
@@ -228,28 +349,9 @@ class Worker(pyd.BaseModel):
             call = cls._is_parametrize(decorator)
             if call is None:
                 continue
-            names_node = call.args[0] if call.args else None
-            rows_node = call.args[1] if len(call.args) > 1 else None
-            ids_node: ast.expr | None = None
-            for keyword in call.keywords:
-                if keyword.arg == 'argnames' and names_node is None:
-                    names_node = keyword.value
-                elif keyword.arg == 'argvalues' and rows_node is None:
-                    rows_node = keyword.value
-                elif keyword.arg == 'ids':
-                    ids_node = keyword.value
-
-            if isinstance(names_node, ast.Constant) and isinstance(names_node.value, str):
-                names = [name.strip() for name in names_node.value.split(',')]
-            elif isinstance(names_node, ast.List | ast.Tuple):
-                names = [
-                    element.value
-                    for element in names_node.elts
-                    if isinstance(element, ast.Constant) and isinstance(element.value, str)
-                ]
-                if len(names) != len(names_node.elts):
-                    names = []
-            else:
+            names_node, rows_node, ids_node = cls._parametrize_arguments(call)
+            names, _force_tuple = cls._literal_parametrize_names(names_node)
+            if names is None:
                 names = []
 
             rows = cls._literal_sequence(rows_node)
@@ -606,7 +708,10 @@ class Worker(pyd.BaseModel):
         ]
         for function in module_functions:
             collected.add(id(function))
-            tests.append(cls._test_record(function, 'module'))
+            function_violations = cls._parametrize_violations(function, path, 'module')
+            violations.extend(function_violations)
+            if not function_violations:
+                tests.append(cls._test_record(function, 'module'))
         violations.extend(cls._shadow_violations(tree.body, path, 'module'))
 
         test_classes = [
@@ -623,9 +728,38 @@ class Worker(pyd.BaseModel):
                 if isinstance(statement, ast.FunctionDef | ast.AsyncFunctionDef)
                 and statement.name.startswith('test_')
             ]
-            for method in methods:
-                collected.add(id(method))
-                tests.append(cls._test_record(method, test_class.name))
+            collected.update(id(method) for method in methods)
+            constructors = [
+                statement
+                for statement in test_class.body
+                if isinstance(statement, ast.FunctionDef | ast.AsyncFunctionDef)
+                and statement.name in {'__init__', '__new__'}
+            ]
+            if constructors:
+                names = [constructor.name for constructor in constructors]
+                violations.append(
+                    {
+                        'code': 'test-class-constructor',
+                        'path': path,
+                        'line': constructors[0].lineno,
+                        'scope': test_class.name,
+                        'name': test_class.name,
+                        'message': (
+                            f'{test_class.name} defines {" and ".join(names)}; PyTest will not '
+                            'collect tests from classes with constructors'
+                        ),
+                    }
+                )
+            else:
+                for method in methods:
+                    method_violations = cls._parametrize_violations(
+                        method,
+                        path,
+                        test_class.name,
+                    )
+                    violations.extend(method_violations)
+                    if not method_violations:
+                        tests.append(cls._test_record(method, test_class.name))
             violations.extend(cls._shadow_violations(test_class.body, path, test_class.name))
         for name, lines in sorted(class_bindings.items()):
             if len(lines) > 1:
@@ -1064,7 +1198,7 @@ def _cli(*vargs: str) -> ap.Namespace:
     parser.add_argument(
         '--check',
         action='store_true',
-        help='Exit 1 only for objective naming, collection, or import-section violations.',
+        help='Exit 1 for objective naming, collection, syntax, or import-section hazards.',
     )
     args = parser.parse_args(vargs or None)
     if args.json == Path('-') and args.markdown == Path('-'):
@@ -1094,7 +1228,10 @@ def main(*vargs: str) -> int:
     if args.json is None and args.markdown is None:
         print(markdown_output, end='')
 
-    return int(bool(args.check and report['violations']))
+    blocking_diagnostic = any(
+        diagnostic['code'] in BLOCKING_DIAGNOSTICS for diagnostic in report['diagnostics']
+    )
+    return int(bool(args.check and (report['violations'] or blocking_diagnostic)))
 
 
 if __name__ == '__main__':

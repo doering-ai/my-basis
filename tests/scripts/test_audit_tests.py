@@ -94,6 +94,64 @@ class TestValue:
                 """\
 import pytest as pyt
 
+@pyt.mark.parametrize('left, right', [(1, 2), (3, 4)], ids=['low', 'high'])
+def test_pair(left, right):
+    assert left < right
+""",
+                {
+                    'functions': 1,
+                    'parameterized': 1,
+                    'cases': 2,
+                    'minimum': 2,
+                    'unknown': 0,
+                    'depth': 1,
+                    'async': False,
+                    'rows': [2],
+                    'ids': ['low', 'high'],
+                },
+            ),
+            (
+                """\
+import pytest as pyt
+
+@pyt.mark.parametrize('value', [1, 2], ids=[])
+def test_auto_ids(value):
+    assert value
+""",
+                {
+                    'functions': 1,
+                    'parameterized': 1,
+                    'cases': 2,
+                    'minimum': 2,
+                    'unknown': 0,
+                    'depth': 1,
+                    'async': False,
+                    'rows': [2],
+                },
+            ),
+            (
+                """\
+import pytest as pyt
+
+@pyt.mark.parametrize('pair', [(1, 2)])
+def test_tuple_value(pair):
+    assert pair
+""",
+                {
+                    'functions': 1,
+                    'parameterized': 1,
+                    'cases': 1,
+                    'minimum': 1,
+                    'unknown': 0,
+                    'depth': 1,
+                    'async': False,
+                    'rows': [1],
+                },
+            ),
+            (
+                """\
+import pytest as pyt
+
 @pyt.mark.parametrize('left', [1, 2])
 @pyt.mark.parametrize('right', [3, 4, 5])
 def test_product__matrix(left, right):
@@ -417,37 +475,192 @@ def test_second():
         assert baseline['delta']['functions'] == 1
 
     @pyt.mark.parametrize(
-        'source, expected_diagnostic, expected_code',
+        'source, expected',
         [
-            ('def test_broken(:\n', 'syntax-error', 0),
-            ('def test_plain():\n    assert True\n', None, 0),
+            (
+                'def test_broken(:\n',
+                {
+                    'violation': None,
+                    'diagnostic': 'syntax-error',
+                    'code': 1,
+                    'functions': 0,
+                    'detail': 'invalid syntax',
+                },
+            ),
+            (
+                """\
+def test_control():
+    assert True
+
+class TestHidden:
+    def __init__(self):
+        pass
+
+    def test_never_collected(self):
+        assert True
+""",
+                {
+                    'violation': 'test-class-constructor',
+                    'diagnostic': None,
+                    'code': 1,
+                    'functions': 1,
+                    'detail': '__init__',
+                },
+            ),
+            (
+                """\
+def test_control():
+    assert True
+
+class TestHidden:
+    def __new__(cls):
+        return super().__new__(cls)
+
+    def test_never_collected(self):
+        assert True
+""",
+                {
+                    'violation': 'test-class-constructor',
+                    'diagnostic': None,
+                    'code': 1,
+                    'functions': 1,
+                    'detail': '__new__',
+                },
+            ),
+            (
+                """\
+############
+### HEAD ###
+############
+### EXTERNAL
+import pytest as pyt
+
+############
+### BODY ###
+############
+def test_control():
+    assert True
+
+@pyt.mark.parametrize('value', [1, 2], ids=['only'])
+def test_value(value):
+    assert value
+""",
+                {
+                    'violation': 'parametrize-ids-count',
+                    'diagnostic': None,
+                    'code': 1,
+                    'functions': 1,
+                    'detail': '2 rows but 1 literal ID',
+                },
+            ),
+            (
+                """\
+############
+### HEAD ###
+############
+### EXTERNAL
+import pytest as pyt
+
+############
+### BODY ###
+############
+def test_control():
+    assert True
+
+@pyt.mark.parametrize('left, right', [(1, 2), (3,)])
+def test_pair(left, right):
+    assert left < right
+""",
+                {
+                    'violation': 'parametrize-row-arity',
+                    'diagnostic': None,
+                    'code': 1,
+                    'functions': 1,
+                    'detail': 'row 2 has 1 value for 2 parameters',
+                },
+            ),
+            (
+                """\
+############
+### HEAD ###
+############
+### EXTERNAL
+import pytest as pyt
+
+############
+### BODY ###
+############
+def test_control():
+    assert True
+
+@pyt.mark.parametrize('left, right', [pyt.param(1, id='one')])
+def test_pair(left, right):
+    assert left < right
+""",
+                {
+                    'violation': 'parametrize-row-arity',
+                    'diagnostic': None,
+                    'code': 1,
+                    'functions': 1,
+                    'detail': 'row 1 has 1 value for 2 parameters',
+                },
+            ),
+            (
+                'def test_plain():\n    assert True\n',
+                {
+                    'violation': None,
+                    'diagnostic': None,
+                    'code': 0,
+                    'functions': 1,
+                    'detail': None,
+                },
+            ),
             (
                 'def test_this_name_is_deliberately_long_but_remains_an_advisory_only_signal():\n'
                 '    assert True\n',
-                None,
-                0,
+                {
+                    'violation': None,
+                    'diagnostic': None,
+                    'code': 0,
+                    'functions': 1,
+                    'detail': None,
+                },
             ),
         ],
+        ids=[
+            'syntax_error',
+            'init_constructor',
+            'new_constructor',
+            'ids_count',
+            'row_arity',
+            'parameter_set_arity',
+            'plain',
+            'long_name_advisory',
+        ],
     )
-    def test_advisories(
+    def test_check__collection_hazards(
         self,
         project: ProjectFactory,
         source: str,
-        expected_diagnostic: str | None,
-        expected_code: int,
+        expected: dict[str, Any],
     ):
-        """Test that syntax, long names, and low parametrization remain advisory."""
+        """Test blocking collection hazards without promoting style advisories."""
         tests = project(source)
         output = tests / 'audit.json'
 
         result = main('--tests', str(tests), '--check', '--json', str(output))
         report = json.loads(output.read_text())
+        violations = [item['code'] for item in report['violations']]
+        diagnostics = [item['code'] for item in report['diagnostics']]
 
-        assert result == expected_code
-        assert report['violations'] == []
-        assert [item['code'] for item in report['diagnostics']] == (
-            [expected_diagnostic] if expected_diagnostic else []
-        )
+        assert result == expected['code']
+        assert report['summary']['functions'] == expected['functions']
+        assert report['summary']['cases']['minimum'] == expected['functions']
+        assert violations == ([expected['violation']] if expected['violation'] else [])
+        assert diagnostics == ([expected['diagnostic']] if expected['diagnostic'] else [])
+        if detail := expected['detail']:
+            messages = [item['message'] for item in report['violations'] + report['diagnostics']]
+            assert any(detail in message for message in messages)
 
     def test_without_git(self, project: ProjectFactory):
         """Test that a requested baseline degrades clearly outside Git."""

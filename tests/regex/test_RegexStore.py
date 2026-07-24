@@ -956,34 +956,34 @@ class TestRegexStore:
 
     @pyt.mark.parametrize('lazy_load', [True, False], ids=['lazy', 'eager'])
     @pyt.mark.parametrize(
-        'text, expected',
+        'text, expected_routes',
         [
-            ('script/Arabic', 'generic'),
-            ('SCRIPT/hebrew', 'generic'),
-            ('plain', 'exact'),
-            ('unknown', ''),
+            ('script/Arabic', ('generic', 'exact')),
+            ('SCRIPT/hebrew', ('generic',)),
+            ('plain', ('exact',)),
+            ('unknown', ()),
         ],
-        ids=['slash_lazy_quantifier', 'casefolded_slash', 'later_route', 'no_match'],
+        ids=['overlap_prefers_first', 'casefolded_slash', 'later_route', 'no_match'],
     )
     def test_router_tree__preserves_semantics(
         self,
         lazy_load: bool,
         text: str,
-        expected: str,
+        expected_routes: tuple[str, ...],
     ):
         """Main and tracking routers agree with ordered raw regex fullmatches."""
-        items = {'generic': r'script\/?\w*?', 'exact': r'plain'}
-        raw_route = next(
-            (name for name, pattern in items.items() if re.fullmatch(rf'(?i){pattern}', text)),
-            '',
+        items = {'generic': r'script\/?\w*?', 'exact': r'(?:script/Arabic|plain)'}
+        raw_routes = tuple(
+            name for name, pattern in items.items() if re.fullmatch(rf'(?i){pattern}', text)
         )
+        raw_route = raw_routes[0] if raw_routes else ''
         store = RegexStore.new(dict(lazy_load=lazy_load, separator=''))
         store.define_router_tree('kind', items, prefix=r'(?i)')
 
         main = store.fullmatch('kind', text)
         tracking = store.fullmatch('kind_router', text)
 
-        assert raw_route == expected
+        assert raw_routes == expected_routes
         assert bool(main) == bool(tracking) == bool(raw_route)
         assert store.route_match('kind', text) == raw_route
 

@@ -12,39 +12,38 @@
 
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit)](https://github.com/pre-commit/pre-commit) [![pyrefly](https://img.shields.io/endpoint?url=https://pyrefly.org/badge.json)](https://github.com/facebook/pyrefly) [![ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-The myBasis package — imported, immodestly, as `my` — is a broad extension of the Python standard library centered on text processing, functional programming, and runtime type coercion.
-It is released, typed, tested, and in daily use as the shared foundation of every other project in its author's ecosystem; it is also young, so while the APIs below are stable in spirit, pre-1.0 minor versions may still move them (pin accordingly).
+The myBasis utility package — imported as `my` — is a broad extension of the Python standard library centered on text processing, functional programming, and runtime type coercion.
+The use cases are diverse enough to not enumerate them all here, but they all share a strong sense of discipline: all code is thoroughly typed, tested, and [documented](https://my-basis.readthedocs.io) following my best pass at best practices (it does get easier!).
 
-Its breadth is somewhat unusual: any given application will probably use a small subset of the contents, so it shines where dependency purity isn't paramount — personal projects, local dev scripts, offline data processing, prototypes.
-As a rough sense of scale: a bare `pip install my-basis` pulls a couple dozen distributions (on the order of ~80 MB unpacked), and turning on every optional extra can push a full environment past ~290 MB.
+I made this module to streamline some patterns that seemed both A) frequently-relevant and feasible to streamline.
+The repo thus grew alongside my projects over time, a genesis which gives it the advantage of being in daily use by the original author in multiple examples right off the bat.
 
-______________________________________________________________________
+Its breadth is somewhat unusual: any given application will probably use a small subset of the contents, so it shines where dependency purity isn't paramount — personal projects, local dev scripts, offline data processing, prototypes, and the project you're working on right now are the ideal usecases.[^1].
+As a rough sense of scale: a bare `pip install my-basis` pulls a couple dozen distributions (on the order of ~80 MB unpacked), and turning on every optional extra can push a full environment past ~290 MB because of heavy common dependencies like `pandas`, `numpy`, and various pieces of rubble amongst the ruins Google's Python SDK ecosystem.
+I do still kinda recommend that for personal scripts/admin/env/dev projects, where having the ability to easily work with google sheets, cast types, or performantly write all kinds of filetypes is worth more than some disk space.
 
-## See it in action
+## Demonstrations
 
-Two everyday chores, rewritten in front of you.
-Each clip is real `my` code: the fragile, hand-rolled version on the left collapses into the one-liner on the right.
+You know that feeling where a nasty, buggy, verbose set of code gets replaced with a few intuitive lines?
+I'd like to sell you some of that feeling -- today!
 
-### One cast. Every field.
+### Universal Vibe Typing
 
 ![Coercing a raw config dict into a fully-typed Settings model with ty.cast](assets/vinegif/cast.gif)
 
 `ty.cast` reads the _target_ type and coerces every field to match — `int`, `tuple`, `bool`, nested models and all.
 A whole page of `int(...)` / `.split(",")` / `.lower() == "true"` hand-parsing becomes a single, honest line.
 
-### A document, not a string.
+### Hierarchial Markdown Semantics
 
 ![Parsing markdown into a fence-aware node tree with Markdown.parse](assets/vinegif/markdown.gif)
 
 `Markdown.parse` turns a document into a real, fence-aware tree you can `.walk()` to any depth.
 So pulling the sections out of a file stops being a `startswith("## ")` slicing exercise that silently breaks the moment a `##` appears inside a code fence.
 
-______________________________________________________________________
+## Exports
 
-## What's inside
-
-Roughly ninety exports across seven subpackages, every one of them surfaced at the single `import my` root.
-This table is the map; each link lands on the corresponding page of the rendered docs (`task docs` builds them locally — see [Documentation](#documentation)).
+The package is built into a mostly-flat tree with 7 branches, but the exception ends up making the rule: the first branch is `utils`, the catch-all for dependency-free, relatively-stateless utility functions covering six distinct arenas.
 
 | Area                                                                             | Exports                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -70,14 +69,13 @@ A few conventions worth knowing up front:
 
 ## Install
 
-`my-basis` [is on PyPI](https://pypi.org/project/my-basis):
+`my-basis` [is on PyPI](https://pypi.org/project/my-basis), which makes it instantly available instantly via `pip install my-basis`, `uv add my-basis`, etc.
 
-```sh
-pip install my-basis          # or: uv add my-basis
-```
+The 1.0 release has been cut, beyond which I intend to enforce strict semver; don't expect breaking changes any time in the foreseeable future.
+If you're like me (i.e. have ADHD?), this library will spark the most joy when you are vaguely aware of its contents and know it's at your fingertips at any time while coding; not only can it save you a bunch of time writing functions, but the prospect of attempting functions with it in hand is so much more approachable that a lot more ends up getting done.
 
-It's pre-1.0, so if you consume it from the outside, pin at least the minor version.
-Within its home ecosystem, every sibling project consumes it as an editable local path wired through `uv`, so a change here is felt everywhere immediately with no release round-trip:
+If that makes sense?
+I guess I'm really trying to sell you the promise of **bolder, quicker software engineering.**
 
 ```toml
 # pyproject.toml
@@ -275,7 +273,8 @@ If an older runtime blocks you, either let me know — or lift the one or two mo
 
 ## Development
 
-GitLab is the canonical development forge. The GitHub repository is a read-only source mirror; report issues and propose changes at <https://gitlab.com/doering-ai/libs/basis>.
+GitLab is the canonical development forge.
+The GitHub repository is a read-only source mirror; report issues and propose changes at <https://gitlab.com/doering-ai/libs/basis>.
 
 ## Contributing
 
@@ -283,3 +282,5 @@ The project was built over the course of 2025 for its author's own use, so it's 
 If any of that resonates: get in touch, or open an issue or merge request on GitLab.
 
 Licensed under [MPL-2.0](/LICENSE).
+
+[^1]:

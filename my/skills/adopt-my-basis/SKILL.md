@@ -17,6 +17,8 @@ From the target repository, use the packaged command without a persistent instal
 uvx --from my-basis my-basis-adopt skill path
 uvx --from my-basis my-basis-adopt skill export .agents/skills/adopt-my-basis
 uvx --from my-basis my-basis-adopt prepare .
+# When the authorized refactor includes retiring an old runtime:
+uvx --from my-basis my-basis-adopt prepare . --target-python 3.13
 ```
 
 Run `skill path` to give the agent the packaged skill directly. Export only when the
@@ -46,7 +48,9 @@ is regex-focused; inspect the other inventory categories manually.
 ## Workflow
 
 01. Read the nearest agent instructions and repository documentation.
-02. Run `my-basis-adopt prepare <repo>` and read the resulting `intake.json`.
+02. Run `my-basis-adopt prepare <repo>` and read the resulting `intake.json`. If the
+    user explicitly authorized raising the repository floor, pass `--target-python X.Y`;
+    this records the mission and turns the old floor into a reviewable modernization lead.
 03. Inspect every cited source site. Detector signals and candidate native gates are
     leads, not conclusions.
 04. Read [the opportunity map](references/opportunity-map.md). If any regex signal
@@ -160,9 +164,11 @@ accepted changes must not be silently reopened.
 
 ## Fleet dogfood
 
-For each repository, run the scanner before manual inspection. Record each detector
-as confirmed, false-positive, or missed. Change deterministic rules only for
-repeatable symbolic evidence seen in two repositories (unless it is an invariant);
+For each repository, run the scanner before manual inspection. Pass the campaign's
+explicit `--target-python` when floor retirement is part of the mission; otherwise an
+incompatible declared floor correctly remains a constraint. Record each detector as
+confirmed, false-positive, or missed. Change deterministic rules only for repeatable
+symbolic evidence seen in two repositories (unless it is an invariant);
 change this guidance for judgment errors and the report template for communication
 errors. Re-run earlier fixtures after every rule change. Never let the scanner
 self-modify its detectors or this skill.

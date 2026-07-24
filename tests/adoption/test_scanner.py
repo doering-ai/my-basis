@@ -143,6 +143,19 @@ class TestScanRepository:
         assert 'detector.scope' in signal_ids
         assert ('adoption.zero-runtime-dependencies' in signal_ids) is not dependencies
 
+    @pyt.mark.parametrize('target', ['3.13', '3.14.2'])
+    def test_scan_repository__modernization_target(self, tmp_path: Path, target: str):
+        """A requested compatible floor turns an old-runtime constraint into an opportunity."""
+        root = make_repository(tmp_path / 'repo', requires_python='==3.8.*')
+
+        intake = scan_repository(root, target_python=target)
+
+        expected = '.'.join(target.split('.')[:2])
+        assert intake.disposition['status'] == 'review'
+        assert intake.python['target'] == expected
+        assert 'adoption.python-modernization' in {signal.id for signal in intake.signals}
+        assert 'adoption.python-floor' not in {signal.id for signal in intake.signals}
+
     @pyt.mark.parametrize(
         'metadata, lockfile, workflow, expected_manager, expected_command',
         [

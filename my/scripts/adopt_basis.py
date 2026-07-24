@@ -202,6 +202,7 @@ def prepare_repository(
     repository: Path | str,
     *,
     output_dir: Path | str | None = None,
+    target_python: str | None = None,
     dry: bool = False,
 ) -> dict[str, Any]:
     """Create or refresh deterministic adoption artifacts for a repository.
@@ -209,6 +210,7 @@ def prepare_repository(
     Args:
         repository: Repository root to scan.
         output_dir: Explicit artifact directory. Defaults to ``.basis-adoption`` in the root.
+        target_python: Optional floor to reach as part of the requested refactor.
         dry: Report paths without writing artifacts.
     Returns:
         Machine-readable summary of the scan and artifact paths.
@@ -233,7 +235,13 @@ def prepare_repository(
         except (OSError, pyd.ValidationError):
             previous_intake = None
 
-    intake = scan_repository(root)
+    if target_python is None and previous_intake is not None:
+        saved_target = previous_intake.python.get('target')
+        target_python = saved_target if isinstance(saved_target, str) else None
+    try:
+        intake = scan_repository(root, target_python=target_python)
+    except ValueError as exc:
+        raise AdoptionCommandError(str(exc)) from exc
     template_path, template_text = _template_destination(
         artifact_dir,
         intake,
@@ -242,13 +250,18 @@ def prepare_repository(
     for path in (context_path, intake_path, prompt_path, template_path):
         _refuse_symlink_path(path)
 
-    _write(context_path, _json_text({'repository': str(root)}), dry=dry)
+    _write(
+        context_path,
+        _json_text({'repository': str(root), 'target_python': target_python}),
+        dry=dry,
+    )
     _write(intake_path, _json_text(intake), dry=dry)
     _write(prompt_path, _prompt(intake, template_path.name), dry=dry)
     _write(template_path, template_text, dry=dry)
     return {
         'repository': str(root),
         'disposition': intake.disposition,
+        'target_python': target_python,
         'source_digest': intake.source_digest,
         'written': not dry,
         'template': str(template_path),
@@ -265,6 +278,7 @@ def refresh_intake(
     path: Path | str,
     *,
     repository: Path | str | None = None,
+    target_python: str | None = None,
     dry: bool = False,
 ) -> dict[str, Any]:
     """Refresh an intake in place using explicit or prepared repository context."""
@@ -273,7 +287,12 @@ def refresh_intake(
     if intake_path.name != INTAKE_NAME:
         raise AdoptionCommandError(f'expected an {INTAKE_NAME!r} path: {intake_path}')
     root = _repository_for_artifact(intake_path.parent, repository)
-    return prepare_repository(root, output_dir=intake_path.parent, dry=dry)
+    return prepare_repository(
+        root,
+        output_dir=intake_path.parent,
+        target_python=target_python,
+        dry=dry,
+    )
 
 
 def validate_file(
@@ -535,6 +554,10 @@ def _cli(*vargs: str) -> ap.Namespace:
         type=Path,
         help='write artifacts outside the target repository (recommended for fleet scans)',
     )
+    prepare.add_argument(
+        '--target-python',
+        help='review adoption together with a requested Python floor migration (for example 3.13)',
+    )
     prepare.add_argument('-n', '--dry-run', action='store_true')
     prepare.add_argument('--json', action='store_true')
 
@@ -553,6 +576,7 @@ def _cli(*vargs: str) -> ap.Namespace:
     refresh = commands.add_parser('refresh', help='refresh an existing intake from current source')
     refresh.add_argument('intake', type=Path)
     refresh.add_argument('--repository', type=Path)
+    refresh.add_argument('--target-python', help='replace the saved modernization target')
     refresh.add_argument('-n', '--dry-run', action='store_true')
     refresh.add_argument('--json', action='store_true')
 
@@ -602,6 +626,7 @@ def main(*vargs: str) -> int:
             result = prepare_repository(
                 args.repository,
                 output_dir=args.output_dir,
+                target_python=args.target_python,
                 dry=args.dry_run,
             )
         elif args.command == 'capture':
@@ -617,6 +642,7 @@ def main(*vargs: str) -> int:
             result = refresh_intake(
                 args.intake,
                 repository=args.repository,
+                target_python=args.target_python,
                 dry=args.dry_run,
             )
         elif args.command == 'validate':

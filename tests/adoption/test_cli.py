@@ -82,6 +82,25 @@ class TestAdoptionCli:
         assert load_intake(output / 'intake.json').source_digest != first
         assert not (root / '.basis-adoption').exists()
 
+    @pyt.mark.parametrize('target', ['3.13', '3.14.2'])
+    def test_prepare_repository__target(self, tmp_path: Path, target: str):
+        """Prepare records a modernization target and refresh retains it by default."""
+        root = make_repository(tmp_path / 'repo', requires_python='==3.8.*')
+        output = tmp_path / 'artifacts'
+
+        result = adopt_basis.prepare_repository(root, output_dir=output, target_python=target)
+        first = load_intake(output / 'intake.json')
+        refreshed = adopt_basis.refresh_intake(output / 'intake.json')
+        second = load_intake(output / 'intake.json')
+
+        expected = '.'.join(target.split('.')[:2])
+        assert result['disposition']['status'] == 'review'
+        assert result['target_python'] == target
+        assert first.python['target'] == expected
+        assert second.python['target'] == expected
+        assert refreshed['target_python'] == expected
+        assert json.loads((output / 'context.json').read_text())['target_python'] == expected
+
     @pyt.mark.parametrize('case', ['parent', 'prepare-file', 'render-file', 'build-file'])
     def test_artifact_writes__symlinks(self, tmp_path: Path, case: str):
         """Test artifact writers refuse symlink destinations and parents."""

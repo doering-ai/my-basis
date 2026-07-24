@@ -209,6 +209,16 @@ def _minimum_python(specifier: str | None) -> tuple[int, int] | None:
     return min(versions) if versions else None
 
 
+def _target_python(version: str | None) -> tuple[int, int] | None:
+    """Parse an explicit modernization target such as ``3.13`` or ``3.14.2``."""
+    if version is None:
+        return None
+    match = re.fullmatch(r'\s*(\d+)\.(\d+)(?:\.\d+)?\s*', version)
+    if match is None:
+        raise ValueError(f'invalid target Python version: {version!r}')
+    return int(match.group(1)), int(match.group(2))
+
+
 def _load_pyproject(text: str | None) -> tuple[dict[str, Any], str | None]:
     """Load captured pyproject metadata, returning a parse error instead of raising."""
     if text is None:
@@ -519,6 +529,7 @@ def _signals(
     *,
     python_count: int,
     python_specifier: str | None,
+    target_python: tuple[int, int] | None,
     dependency_present: bool,
     explicit_zero_runtime_dependencies: bool,
     regex_store_references: int,
@@ -557,18 +568,40 @@ def _signals(
                 summary=disposition['reason'],
             )
         )
-    elif minimum is not None and minimum < MY_BASIS_PYTHON_FLOOR:
+    elif (
+        minimum is not None
+        and minimum < MY_BASIS_PYTHON_FLOOR
+        and (target_python is None or target_python < MY_BASIS_PYTHON_FLOOR)
+    ):
         disposition = {
             'status': 'defer',
             'reason': (
                 f'The declared Python floor {minimum[0]}.{minimum[1]} is below '
-                'my-basis 1.0 floor 3.12.'
+                'my-basis 1.0 floor 3.12; no compatible modernization target was supplied.'
             ),
         }
         output.append(
             Signal(
                 id='adoption.python-floor',
                 level='constraint',
+                summary=disposition['reason'],
+                evidence=['pyproject.toml'],
+            )
+        )
+    elif minimum is not None and minimum < MY_BASIS_PYTHON_FLOOR:
+        assert target_python is not None
+        disposition = {
+            'status': 'review',
+            'reason': (
+                f'The declared Python floor {minimum[0]}.{minimum[1]} is below my-basis 1.0, '
+                f'but the requested {target_python[0]}.{target_python[1]} target makes a '
+                'floor-raising refactor reviewable.'
+            ),
+        }
+        output.append(
+            Signal(
+                id='adoption.python-modernization',
+                level='opportunity',
                 summary=disposition['reason'],
                 evidence=['pyproject.toml'],
             )
@@ -654,11 +687,16 @@ def _signals(
     return disposition, sorted(output, key=lambda item: item.id)
 
 
-def scan_repository(repository: Path | str) -> Intake:
+def scan_repository(
+    repository: Path | str,
+    *,
+    target_python: str | None = None,
+) -> Intake:
     """Return deterministic adoption facts for a local repository.
 
     Args:
         repository: Repository root to inspect.
+        target_python: Optional operator-requested modernization target.
     Returns:
         Content-derived facts with relative evidence paths and stable hashes.
     Raises:
@@ -666,6 +704,7 @@ def scan_repository(repository: Path | str) -> Intake:
         NotADirectoryError: If the repository path is not a directory.
     """
     root = Path(repository).expanduser().resolve()
+    target = _target_python(target_python)
     if not root.exists():
         raise FileNotFoundError(f'repository does not exist: {root}')
     if not root.is_dir():
@@ -727,6 +766,7 @@ def scan_repository(repository: Path | str) -> Intake:
     disposition, signals = _signals(
         python_count=counts['files'],
         python_specifier=python_specifier,
+        target_python=target,
         dependency_present=bool(dependencies['my_basis_present']),
         explicit_zero_runtime_dependencies=bool(dependencies['explicit_zero_runtime_dependencies']),
         regex_store_references=regex_store_references,
@@ -779,6 +819,7 @@ def scan_repository(repository: Path | str) -> Intake:
     python: dict[str, str | int | bool | None | list[str]] = {
         'requires_python': python_specifier,
         'minimum': f'{minimum[0]}.{minimum[1]}' if minimum else None,
+        'target': f'{target[0]}.{target[1]}' if target else None,
         'my_basis_floor_compatible': minimum is not None and minimum >= MY_BASIS_PYTHON_FLOOR,
         'files': counts['files'],
         'test_files': counts['test_files'],

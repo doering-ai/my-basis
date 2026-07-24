@@ -212,17 +212,12 @@ class TestMetaDoBindMethod:
 
         assert not Meta.do_bind_method(method, 'my_method', True, set())
 
-    def test_does_not_bind_private_methods(self):
+    @pyt.mark.parametrize('name', ['_private', 'is_enabled'])
+    def test_does_not_bind_special_names(self, name: str):
         def method(self, view: sb.View) -> None:
             pass
 
-        assert not Meta.do_bind_method(method, '_private', True, set())
-
-    def test_does_not_bind_is_methods(self):
-        def method(self, view: sb.View) -> None:
-            pass
-
-        assert not Meta.do_bind_method(method, 'is_enabled', True, set())
+        assert not Meta.do_bind_method(method, name, True, set())
 
     def test_does_not_bind_non_callable(self):
         assert not Meta.do_bind_method(42, 'value', True, set())
@@ -600,27 +595,20 @@ class TestLineComment:
         assert lc.text == 'hello'
         assert lc.punct == '#'
 
-    def test_split_true_different_row(self):
+    @pyt.mark.parametrize(
+        'lc2_row, lc2_col, lc2_punct',
+        [(2, 1, '#'), (1, 2, '#'), (1, 1, '//')],
+    )
+    def test_split_true(self, lc2_row: int, lc2_col: int, lc2_punct: str):
+        """Adjacent rows but different columns or punctuation start a new block."""
         lc1 = LineComment(sb.Region(0, 5), 0, 1, 'a', '#')
-        lc2 = LineComment(sb.Region(6, 10), 2, 1, 'b', '#')
+        lc2 = LineComment(sb.Region(6, 10), lc2_row, lc2_col, 'b', lc2_punct)
         assert lc1.split(lc2)
 
     def test_split_false_same_row(self):
         lc1 = LineComment(sb.Region(0, 5), 0, 1, 'a', '#')
         lc2 = LineComment(sb.Region(6, 10), 1, 1, 'b', '#')
         assert not lc1.split(lc2)
-
-    def test_split_true_different_col(self):
-        """Adjacent rows but different columns start a new block."""
-        lc1 = LineComment(sb.Region(0, 5), 0, 1, 'a', '#')
-        lc2 = LineComment(sb.Region(6, 10), 1, 2, 'b', '#')
-        assert lc1.split(lc2)
-
-    def test_split_true_different_punct(self):
-        """Adjacent rows but different punctuation start a new block."""
-        lc1 = LineComment(sb.Region(0, 5), 0, 1, 'a', '#')
-        lc2 = LineComment(sb.Region(6, 10), 1, 1, 'b', '//')
-        assert lc1.split(lc2)
 
 
 class TestIndent:
@@ -1058,13 +1046,16 @@ class TestMyBaseOperationalSurface:
         some_caller()
         assert 'some_caller()' in capsys.readouterr().out
 
-    def test__log_indents_output(self, capsys: pyt.CaptureFixture):
-        _TestViewCmd._log('msg', time=False, indent=4)
-        assert capsys.readouterr().out.startswith('    [')
-
-    def test__log_custom_name_bracketed(self, capsys: pyt.CaptureFixture):
-        _TestViewCmd._log('msg', time=False, name='custom')
-        assert capsys.readouterr().out.startswith('[custom]')
+    @pyt.mark.parametrize(
+        'kwargs, prefix',
+        [
+            ({'time': False, 'indent': 4}, '    ['),
+            ({'time': False, 'name': 'custom'}, '[custom]'),
+        ],
+    )
+    def test__log(self, capsys: pyt.CaptureFixture, kwargs: dict, prefix: str):
+        _TestViewCmd._log('msg', **kwargs)
+        assert capsys.readouterr().out.startswith(prefix)
 
     # ---- context & settings ----
     def test_with_context_edit_restores(self, make_view: sb.View):
@@ -1082,14 +1073,13 @@ class TestMyBaseOperationalSurface:
         cmd = _TestViewCmd(make_view)
         assert cmd.tabsize == 4
 
-    def test_mutable_settings_rejects_empty(self, make_view: sb.View):
+    @pyt.mark.parametrize(
+        'name, match',
+        [('', 'non-empty'), ('sub/dir', 'single name')],
+    )
+    def test_mutable_settings_rejects(self, make_view: sb.View, name: str, match: str):
         cmd = _TestViewCmd(make_view)
-        with pyt.raises(AssertionError, match='non-empty'), cmd.mutable_settings(''):
-            pass
-
-    def test_mutable_settings_rejects_paths(self, make_view: sb.View):
-        cmd = _TestViewCmd(make_view)
-        with pyt.raises(AssertionError, match='single name'), cmd.mutable_settings('sub/dir'):
+        with pyt.raises(AssertionError, match=match), cmd.mutable_settings(name):
             pass
 
     def test_mutable_settings_yields_settings(self, make_view: sb.View):

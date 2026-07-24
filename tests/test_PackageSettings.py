@@ -63,17 +63,16 @@ class TestPackageSettingsConstruction:
 class TestPackageSettingsNormKey:
     """Tests for ``normkey``."""
 
-    def test_simple_key(self):
-        result = PackageSettings.normkey('debug')
-        assert result == 'debug'
+    @pyt.mark.parametrize(
+        'key, expected',
+        [('debug', 'debug'), ('"debug"', 'debug')],
+    )
+    def test_normkey(self, key: str, expected: str):
+        assert PackageSettings.normkey(key) == expected
 
     def test_dotted_key(self):
         result = PackageSettings.normkey('my.package.debug')
         assert '.' in result
-
-    def test_strips_quotes(self):
-        result = PackageSettings.normkey('"debug"')
-        assert result == 'debug'
 
     def test_caches(self):
         """normkey uses lru_cache."""

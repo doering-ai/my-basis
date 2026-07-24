@@ -114,14 +114,16 @@ class TestGenerateInputHandlerBoundMethod:
         handler.list_items()
         assert command.calls == [{'depth': 2}]
 
-    def test_missing_method_asserts(self):
-        dp = DynamicPrompt(keyword='pick', generator='no_such_method')
-        with pyt.raises(AssertionError, match='does not exist'):
-            dp.generate_input_handler(command=_FakeCommand(), raw_args={})
-
-    def test_non_callable_attribute_asserts(self):
-        dp = DynamicPrompt(keyword='pick', generator='not_callable')
-        with pyt.raises(AssertionError, match='is not callable'):
+    @pyt.mark.parametrize(
+        'generator, match',
+        [
+            ('no_such_method', 'does not exist'),
+            ('not_callable', 'is not callable'),
+        ],
+    )
+    def test_asserts_on_bad_generator(self, generator: str, match: str):
+        dp = DynamicPrompt(keyword='pick', generator=generator)
+        with pyt.raises(AssertionError, match=match):
             dp.generate_input_handler(command=_FakeCommand(), raw_args={})
 
 

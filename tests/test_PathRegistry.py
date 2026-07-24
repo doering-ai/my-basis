@@ -25,16 +25,15 @@ class TestNormalize:
         result = _normalize('~')
         assert result == Path.home()
 
-    def test_absolute_path_unchanged(self):
-        result = _normalize('/usr/bin')
-        assert result == Path('/usr/bin')
-
-    def test_relative_existing_path_resolved(self, tmp_path: Path):
-        # Create a file in cwd's parent so _normalize can find it relative to cwd
-        # Actually _normalize checks Path.cwd() / path, so we need something in cwd
-        result = _normalize('nonexistent_relative_path_xyz')
-        # Since it doesn't exist relative to cwd, it returns the path as-is
-        assert result == Path('nonexistent_relative_path_xyz')
+    @pyt.mark.parametrize(
+        'path, expected',
+        [
+            ('/usr/bin', Path('/usr/bin')),
+            ('nonexistent_relative_path_xyz', Path('nonexistent_relative_path_xyz')),
+        ],
+    )
+    def test_passthrough(self, path: str, expected: Path):
+        assert _normalize(path) == expected
 
     def test_relative_existing_path(self, tmp_path: Path, monkeypatch: pyt.MonkeyPatch):
         monkeypatch.chdir(tmp_path)

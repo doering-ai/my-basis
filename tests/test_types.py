@@ -99,21 +99,23 @@ class TestValidateSyntax:
         with pyt.raises(ValueError, match='Syntax object'):
             _validate_syntax(syn)
 
-    def test_normalizes_packages_path(self):
-        result = _validate_syntax('Packages/Python/Python.sublime-syntax')
-        assert result == 'Packages/Python/Python.sublime-syntax'
+    @pyt.mark.parametrize(
+        'path, expected',
+        [
+            ('Packages/Python/Python.sublime-syntax', 'Packages/Python/Python.sublime-syntax'),
+            (
+                '/some/prefix/Packages/Python/Python.sublime-syntax',
+                'Packages/Python/Python.sublime-syntax',
+            ),
+            ('"Packages/Python/Python.sublime-syntax"', 'Packages/Python/Python.sublime-syntax'),
+        ],
+    )
+    def test_normalizes(self, path: str, expected: str):
+        assert _validate_syntax(path) == expected
 
     def test_appends_extension(self):
         result = _validate_syntax('Packages/Python/Python')
         assert result.endswith('.sublime-syntax')
-
-    def test_strips_prefix_before_packages(self):
-        result = _validate_syntax('/some/prefix/Packages/Python/Python.sublime-syntax')
-        assert result == 'Packages/Python/Python.sublime-syntax'
-
-    def test_strips_quotes(self):
-        result = _validate_syntax('"Packages/Python/Python.sublime-syntax"')
-        assert result == 'Packages/Python/Python.sublime-syntax'
 
     @pyt.mark.parametrize('bad_input', [None, 42, [], {}])
     def test_rejects_non_string_non_syntax(self, bad_input):

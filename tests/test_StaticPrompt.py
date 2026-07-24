@@ -22,13 +22,13 @@ class TestStaticPromptConstruction:
         with pyt.raises(pyd.ValidationError):
             StaticPrompt.model_validate({})
 
-    def test_basic_construction(self):
-        sp = StaticPrompt(keyword='my_arg')
-        assert sp.keyword == 'my_arg'
-
-    def test_keyword_stripped(self):
-        sp = StaticPrompt(keyword='  my_arg  ')
-        assert sp.keyword == 'my_arg'
+    @pyt.mark.parametrize(
+        'keyword, expected',
+        [('my_arg', 'my_arg'), ('  my_arg  ', 'my_arg')],
+    )
+    def test_keyword(self, keyword: str, expected: str):
+        sp = StaticPrompt(keyword=keyword)
+        assert sp.keyword == expected
 
     def test_default_classname_generated(self):
         sp = StaticPrompt(keyword='my_arg')

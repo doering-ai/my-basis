@@ -197,44 +197,26 @@ class TestSplitSgrParams:
     @pyt.mark.parametrize(
         'code, expected',
         [
+            # Independent params split one-to-one
             ('1', ['1']),
             ('1;31', ['1', '31']),
             ('1;3;4', ['1', '3', '4']),
-        ],
-    )
-    def test_independent_params_split_one_to_one(self, code: str, expected: list):
-        assert OutputPanel._split_sgr_params(code) == expected
-
-    @pyt.mark.parametrize(
-        'code, expected',
-        [
+            # Recognized extended color groups consumed as one code
             ('38;5;208', ['38;5;208']),
             ('48;5;208', ['48;5;208']),
             ('38;2;100;150;200', ['38;2;100;150;200']),
             ('48;2;100;150;200', ['48;2;100;150;200']),
             ('1;38;5;208', ['1', '38;5;208']),
             ('38;5;208;1', ['38;5;208', '1']),
+            # Incomplete but recognized mode falls through per-param
+            ('38', ['38']),
+            ('38;5', ['38', '5']),
+            ('38;2;100;150', ['38', '2', '100', '150']),
         ],
     )
-    def test_recognized_extended_color_groups_as_one_code(self, code: str, expected: list):
-        """A real ``5`` (256-color) or ``2`` (truecolor) mode consumes exactly its own
-        value(s), leaving any surrounding independent codes untouched."""
-        assert OutputPanel._split_sgr_params(code) == expected
-
-    @pyt.mark.parametrize(
-        'code, expected',
-        [
-            ('38', ['38']),  # bare marker, no mode digit at all
-            ('38;5', ['38', '5']),  # recognized mode, missing index -- unaffected by this fix
-            ('38;2;100;150', ['38', '2', '100', '150']),  # recognized mode, missing components
-        ],
-    )
-    def test_incomplete_but_recognized_mode_still_falls_through_per_param(
-        self, code: str, expected: list
-    ):
-        """Pre-existing behavior for a *recognized* mode (5/2) with missing value components is
-        unchanged: each leaked token is still individually safe, since none of ``38``, ``5``,
-        ``2``, or bare digit fragments match a real SGR code in `_apply_ansi_code`."""
+    def test_split_sgr_params(self, code: str, expected: list):
+        """Independent params split one-to-one; recognized extended-color modes (5/2) consume
+        their value(s) as one code; incomplete recognized modes fall through per-param."""
         assert OutputPanel._split_sgr_params(code) == expected
 
     @pyt.mark.parametrize(
@@ -294,20 +276,24 @@ class TestReplaceAnsiColors:
         assert result == '<span class="red">r</span><span class="green">g</span>'
 
     # ---- Multi-part SGR (semicolon-separated) end-to-end coverage ----
-    def test_256_color_end_to_end(self):
-        """A real ``38;5;N`` escape must reach _apply_ansi_code through the full pipeline."""
-        result = OutputPanel._replace_ansi_colors('\x1b[38;5;208mpalette\x1b[0m')
-        assert result == '<span style="color: rgb(255, 102, 0)">palette</span>'
-
-    def test_truecolor_end_to_end(self):
-        """A real ``38;2;R;G;B`` escape must reach _apply_ansi_code through the full pipeline."""
-        result = OutputPanel._replace_ansi_colors('\x1b[38;2;100;150;200mtruecolor\x1b[0m')
-        assert result == '<span style="color: rgb(100, 150, 200)">truecolor</span>'
-
-    def test_unterminated_extended_color_closed_at_end(self):
-        """Reset/close path also applies to extended (256/truecolor) spans."""
-        result = OutputPanel._replace_ansi_colors('\x1b[38;5;208mdangling')
-        assert result == '<span style="color: rgb(255, 102, 0)">dangling</span>'
+    @pyt.mark.parametrize(
+        'escape, expected',
+        [
+            (
+                '\x1b[38;5;208mpalette\x1b[0m',
+                '<span style="color: rgb(255, 102, 0)">palette</span>',
+            ),
+            (
+                '\x1b[38;2;100;150;200mtruecolor\x1b[0m',
+                '<span style="color: rgb(100, 150, 200)">truecolor</span>',
+            ),
+            ('\x1b[38;5;208mdangling', '<span style="color: rgb(255, 102, 0)">dangling</span>'),
+        ],
+    )
+    def test_extended_color_end_to_end(self, escape: str, expected: str):
+        """Real 256-color and truecolor escapes must reach _apply_ansi_code through the full
+        pipeline, including the reset/close path for unterminated spans."""
+        assert OutputPanel._replace_ansi_colors(escape) == expected
 
     @pyt.mark.parametrize(
         'escape, expected',
@@ -364,14 +350,16 @@ class TestConversions:
         result = OutputPanel.shell_to_html(f'{RED}a < b{RESET}')
         assert result == '<span class="red">a &lt; b</span>'
 
-    def test_html_to_plain_strips_tags(self):
-        assert OutputPanel.html_to_plain('<p>hi <strong>there</strong></p>') == 'hi there'
-
-    def test_html_to_plain_unescapes(self):
-        assert OutputPanel.html_to_plain('a &lt; b') == 'a < b'
-
-    def test_html_to_plain_removes_head_block(self):
-        assert OutputPanel.html_to_plain('<head><style>x</style></head>body') == 'body'
+    @pyt.mark.parametrize(
+        'html, expected',
+        [
+            ('<p>hi <strong>there</strong></p>', 'hi there'),
+            ('a &lt; b', 'a < b'),
+            ('<head><style>x</style></head>body', 'body'),
+        ],
+    )
+    def test_html_to_plain(self, html: str, expected: str):
+        assert OutputPanel.html_to_plain(html) == expected
 
     def test_html_to_shell_is_passthrough(self, capsys: pyt.CaptureFixture):
         assert OutputPanel.html_to_shell('<b>x</b>') == '<b>x</b>'

@@ -65,13 +65,12 @@ class TestFramework:
         fw = Framework()
         assert fw.kind == Kind.NONE
 
-    def test_seek_map_item(self):
-        result = Framework._seek_map_item('some output\nvenv: /path/to/venv')
-        assert result == '/path/to/venv'
-
-    def test_seek_map_item_no_match(self):
-        result = Framework._seek_map_item('no venv here')
-        assert result == ''
+    @pyt.mark.parametrize(
+        'output, expected',
+        [('some output\nvenv: /path/to/venv', '/path/to/venv'), ('no venv here', '')],
+    )
+    def test_seek_map_item(self, output: str, expected: str):
+        assert Framework._seek_map_item(output) == expected
 
 
 class TestVenvBool:

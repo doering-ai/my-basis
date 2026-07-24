@@ -86,21 +86,17 @@ class TestCommentBool:
 class TestCommentStr:
     """Tests for ``Comment.__str__``."""
 
-    def test_single_line(self):
-        c = _make_comment(texts=['hello'], col=1, punct='#')
-        assert str(c) == '#hello'
+    @pyt.mark.parametrize(
+        'col, punct, expected',
+        [(1, '#', '#hello'), (3, '#', '  #hello'), (2, '//', '//hello')],
+    )
+    def test_str(self, col: int, punct: str, expected: str):
+        c = _make_comment(texts=['hello'], col=col, punct=punct)
+        assert str(c) == expected
 
     def test_multi_line(self):
         c = _make_comment(lines=[_r(0, 5), _r(6, 10)], texts=['line1', 'line2'], col=1, punct='#')
         assert str(c) == '#line1\n#line2'
-
-    def test_indent_from_col(self):
-        c = _make_comment(texts=['hello'], col=3, punct='#')
-        assert str(c) == '  #hello'
-
-    def test_double_slash_punct(self):
-        c = _make_comment(texts=['hello'], col=2, punct='//')
-        assert str(c) == '//hello'
 
 
 class TestCommentHash:
@@ -140,14 +136,13 @@ class TestCommentEq:
 class TestCommentLt:
     """Tests for ``Comment.__lt__`` (total_ordering)."""
 
-    def test_lt_by_row_col(self):
+    @pyt.mark.parametrize(
+        'row2, col2',
+        [(1, 1), (0, 2)],
+    )
+    def test_lt(self, row2: int, col2: int):
         c1 = _make_comment(row=0, col=1)
-        c2 = _make_comment(row=1, col=1)
-        assert c1 < c2
-
-    def test_lt_by_col(self):
-        c1 = _make_comment(row=0, col=1)
-        c2 = _make_comment(row=0, col=2)
+        c2 = _make_comment(row=row2, col=col2)
         assert c1 < c2
 
     def test_lt_with_int(self):
@@ -337,47 +332,33 @@ class TestCommentProperties:
         assert c.rowspan == (3, 5)
 
     # ---- indent ----
-    def test_indent(self):
-        c = _make_comment(col=1, punct='#')
-        assert c.indent == 0
-
-    def test_indent_with_whitespace(self):
-        c = _make_comment(col=4, punct='#')
-        assert c.indent == 3
-
-    def test_indent_double_slash(self):
-        c = _make_comment(col=2, punct='//')
-        assert c.indent == 0
-
-    def test_indent_large_col(self):
-        c = _make_comment(col=5, punct='//')
-        assert c.indent == 3
+    @pyt.mark.parametrize(
+        'col, punct, expected',
+        [(1, '#', 0), (4, '#', 3), (2, '//', 0), (5, '//', 3)],
+    )
+    def test_indent(self, col: int, punct: str, expected: int):
+        c = _make_comment(col=col, punct=punct)
+        assert c.indent == expected
 
 
 class TestCommentMethods:
     """Tests for Comment methods."""
 
-    def test_follows_true(self):
-        c1 = _make_comment(lines=[_r(0, 10)], texts=['a'], row=0, col=1, punct='#')
-        c2 = _make_comment(lines=[_r(11, 20)], texts=['b'], row=1, col=1, punct='#')
-        assert c2.follows(c1)
-
-    def test_follows_false_different_row(self):
-        c1 = _make_comment(lines=[_r(0, 10)], texts=['a'], row=0, col=1, punct='#')
-        c2 = _make_comment(lines=[_r(11, 20)], texts=['b'], row=5, col=1, punct='#')
-        assert not c2.follows(c1)
-
-    def test_follows_false_different_col(self):
-        c1 = _make_comment(lines=[_r(0, 10)], texts=['a'], row=0, col=1, punct='#')
-        c2 = _make_comment(lines=[_r(11, 20)], texts=['b'], row=1, col=2, punct='#')
-        assert not c2.follows(c1)
-
-    def test_follows_false_different_punct(self):
+    @pyt.mark.parametrize('punct2', ['#', '//'])
+    def test_follows__punct_independent(self, punct2: str):
         """follows() does not check punct - it only checks row and col."""
         c1 = _make_comment(lines=[_r(0, 10)], texts=['a'], row=0, col=1, punct='#')
-        c2 = _make_comment(lines=[_r(11, 20)], texts=['b'], row=1, col=1, punct='//')
-        # follows() returns True because it only checks row + col, not punct
+        c2 = _make_comment(lines=[_r(11, 20)], texts=['b'], row=1, col=1, punct=punct2)
         assert c2.follows(c1)
+
+    @pyt.mark.parametrize(
+        'row2, col2',
+        [(5, 1), (1, 2)],
+    )
+    def test_follows__false(self, row2: int, col2: int):
+        c1 = _make_comment(lines=[_r(0, 10)], texts=['a'], row=0, col=1, punct='#')
+        c2 = _make_comment(lines=[_r(11, 20)], texts=['b'], row=row2, col=col2, punct='#')
+        assert not c2.follows(c1)
 
     def test_contains_row_true(self):
         c = _make_comment(lines=[_r(0, 5), _r(6, 10)], texts=['a', 'b'], row=3)

@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 ### EXTERNAL
+import pytest as pyt
 import pydantic as pyd
 
 ### INTERNAL
@@ -64,10 +65,18 @@ class TestInterpolate:
         CommandArguments._interpolate(data)
         assert data == original
 
-    def test_replaces_character_in_string(self):
-        data = {'character': 'x', 'target': '<character> + y'}
+    @pyt.mark.parametrize(
+        'character, target, expected',
+        [
+            ('x', '<character> + y', 'x + y'),
+            ('x', 'no placeholder here', 'no placeholder here'),
+            ('', '<character>_test', '_test'),
+        ],
+    )
+    def test_interpolate__target(self, character: str, target: str, expected: str):
+        data = {'character': character, 'target': target}
         CommandArguments._interpolate(data)
-        assert data['target'] == 'x + y'
+        assert data['target'] == expected
 
     def test_replaces_character_and_converts_digit(self):
         data = {'character': '5', 'target': '<character>'}
@@ -80,11 +89,6 @@ class TestInterpolate:
         CommandArguments._interpolate(data)
         assert data['first'] == 'a_1'
         assert data['second'] == 'a_2'
-
-    def test_no_placeholder_unchanged(self):
-        data = {'character': 'x', 'target': 'no placeholder here'}
-        CommandArguments._interpolate(data)
-        assert data['target'] == 'no placeholder here'
 
     def test_interpolates_in_nested_dict(self):
         """Nested dicts are interpolated in-place but need their own 'character' key."""
@@ -104,11 +108,6 @@ class TestInterpolate:
         CommandArguments._interpolate(data)
         assert data['items'][0] == 7
         assert isinstance(data['items'][0], int)
-
-    def test_empty_character_value(self):
-        data = {'character': '', 'target': '<character>_test'}
-        CommandArguments._interpolate(data)
-        assert data['target'] == '_test'
 
     def test_does_not_affect_non_string_values(self):
         data = {'character': 'x', 'num': 42, 'flag': True}

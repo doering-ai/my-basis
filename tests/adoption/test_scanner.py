@@ -143,6 +143,19 @@ class TestScanRepository:
         assert 'detector.scope' in signal_ids
         assert ('adoption.zero-runtime-dependencies' in signal_ids) is not dependencies
 
+    @pyt.mark.parametrize('target', ['3.13', '3.14.2'])
+    def test_scan_repository__modernization_target(self, tmp_path: Path, target: str):
+        """A requested compatible floor turns an old-runtime constraint into an opportunity."""
+        root = make_repository(tmp_path / 'repo', requires_python='==3.8.*')
+
+        intake = scan_repository(root, target_python=target)
+
+        expected = '.'.join(target.split('.')[:2])
+        assert intake.disposition['status'] == 'review'
+        assert intake.python['target'] == expected
+        assert 'adoption.python-modernization' in {signal.id for signal in intake.signals}
+        assert 'adoption.python-floor' not in {signal.id for signal in intake.signals}
+
     @pyt.mark.parametrize(
         'metadata, lockfile, workflow, expected_manager, expected_command',
         [
@@ -336,6 +349,32 @@ class TestScanRepository:
         if layout == 'test-only':
             assert intake.regex['production_calls'] == 0
             assert intake.regex['test_calls'] == 3
+
+    def test_scan_repository__sublime_host(self, tmp_path: Path):
+        """Test Sublime host markers and copied myBasis seams become explicit evidence."""
+        root = make_repository(
+            tmp_path / 'repo',
+            python='import sublime\nfrom myBasis import ut\nVALUE = ut.fn.identity(1)\n',
+            requires_python='>=3.13',
+        )
+        (root / '.python-version').write_text('3.14\n')
+        copied = root / 'myBasis'
+        copied.mkdir()
+        (copied / '__init__.py').write_text('from .infra import utils as ut\n')
+        (copied / 'infra.py').write_text('class utils:\n    pass\n')
+
+        intake = scan_repository(root)
+
+        assert intake.schema_version == 2
+        assert intake.sublime == {
+            'detected': True,
+            'host_python': '3.14',
+            'imports': ['fixture/__init__.py'],
+            'mybasis_imports': ['fixture/__init__.py'],
+            'copied_mybasis_files': ['myBasis/__init__.py', 'myBasis/infra.py'],
+        }
+        signal_ids = {item.id for item in intake.signals}
+        assert {'sublime.host', 'sublime.copied-mybasis'} <= signal_ids
 
     def test_scan_repository__regexstore_evidence(self, tmp_path: Path):
         """Test existing RegexStore idioms include exact source evidence paths."""

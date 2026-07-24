@@ -86,7 +86,7 @@ def proposal_template(intake: Intake) -> Proposal:
         baseline={'head': None, 'commands': []},
         changes=[],
         verification=[],
-        vcs={'diff_stat': ''},
+        vcs={'diff_stat': '', 'diffs': []},
         report={'format': 'myst', 'source': 'report.md', 'rendered': None},
         handoff={
             'merge_kind': 'none',
@@ -156,6 +156,8 @@ def validate_proposal(
         errors.append(
             'an implemented change requires verification or an explicit unavailable result'
         )
+    if implemented and not proposal.vcs.diffs:
+        errors.append('implemented changes require an atomic diff artifact')
 
     identifiers = [change.id for change in proposal.changes]
     duplicates = sorted(
@@ -356,6 +358,25 @@ def render_myst(proposal: Proposal) -> str:
         lines.extend(['**Diff stat**', '', '```text', proposal.vcs.diff_stat.rstrip(), '```', ''])
     else:
         lines.extend(['**Diff stat:** Not recorded.', ''])
+    lines.extend(['### Atomic transformation corpus', ''])
+    if proposal.vcs.diffs:
+        for diff in proposal.vcs.diffs:
+            lines.extend(
+                [
+                    f'**`{diff.base_commit[:12]}..{diff.head_commit[:12]}`** — {diff.summary}',
+                    '',
+                    f'- Patch: [`{diff.patch_path}`]({diff.patch_path})',
+                    f'- SHA-256: `{diff.patch_sha256}`',
+                    f'- Size: `{diff.bytes}` bytes',
+                    '',
+                    '```text',
+                    diff.diff_stat.rstrip(),
+                    '```',
+                    '',
+                ]
+            )
+    else:
+        lines.extend(['No atomic diff artifact is recorded.', ''])
 
     lines.extend(['## Merge or apply', '', f'**Handoff:** `{proposal.handoff.merge_kind}`', ''])
     lines.extend(
@@ -482,6 +503,17 @@ def render_html(proposal: Proposal) -> str:
         if proposal.vcs.diff_stat
         else '<p>Not recorded.</p>'
     )
+    atomic_diffs = (
+        ''.join(
+            '<li>'
+            f'<a href="{escape(item.patch_path)}"><code>{escape(item.patch_path)}</code></a> '
+            f'(<code>{escape(item.base_commit[:12])}..{escape(item.head_commit[:12])}</code>): '
+            f'{escape(item.summary)}; SHA-256 <code>{escape(item.patch_sha256)}</code>'
+            '</li>'
+            for item in proposal.vcs.diffs
+        )
+        or '<li>No atomic diff artifact is recorded.</li>'
+    )
     review = (
         f'<code>{escape(proposal.handoff.review_url)}</code>'
         if proposal.handoff.review_url
@@ -513,6 +545,7 @@ def render_html(proposal: Proposal) -> str:
         + f'<p><strong>Work branch:</strong> {work_branch}</p>'
         + f'<p><strong>Commits:</strong></p><ul>{commits}</ul>'
         + f'<p><strong>Diff stat:</strong></p>{diff_stat}'
+        + f'<h3>Atomic transformation corpus</h3><ul>{atomic_diffs}</ul>'
         + '<h2>Merge or apply</h2>'
         + f'<p><strong>Handoff:</strong> <code>{proposal.handoff.merge_kind}</code></p>'
         + f'<ol>{merge}</ol><p><strong>Review:</strong> {review}</p>'
@@ -703,6 +736,23 @@ def render_typst(proposal: Proposal) -> str:
         lines.extend(['*Diff stat*', '', _typst_raw(proposal.vcs.diff_stat, block=True), ''])
     else:
         lines.extend(['*Diff stat:* Not recorded.', ''])
+    lines.extend(['=== Atomic transformation corpus', ''])
+    if proposal.vcs.diffs:
+        for diff in proposal.vcs.diffs:
+            lines.extend(
+                [
+                    f'- {_typst_raw(diff.patch_path)}: {_typst_text(diff.summary)}',
+                    (
+                        f'  - commits: {_typst_raw(diff.base_commit)} '
+                        f'to {_typst_raw(diff.head_commit)}'
+                    ),
+                    f'  - SHA-256: {_typst_raw(diff.patch_sha256)}',
+                    f'  - bytes: {diff.bytes}',
+                ]
+            )
+        lines.append('')
+    else:
+        lines.extend(['No atomic diff artifact is recorded.', ''])
 
     lines.extend(
         [

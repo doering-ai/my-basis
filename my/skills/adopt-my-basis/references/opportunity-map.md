@@ -1,8 +1,9 @@
 # my-basis opportunity map
 
-Use this as a map, not a replacement quota. Inspect the local behavior and its tests
-before accepting any signal. Deterministic opportunity detection is regex-focused;
-treat the other rows as manual review categories, not scanner coverage.
+Use this as a map, not a replacement quota. In structural mode, however, deliberately
+follow a confirmed duplicate through the whole module so one abstraction retains ownership.
+Inspect local behavior and tests before accepting any signal. Deterministic opportunity
+detection is regex- and Sublime-seam-focused; treat other rows as manual review categories.
 
 | Local shape                                              | Candidate                                           | Adopt when                                         | Decline or defer when                                            |
 | -------------------------------------------------------- | --------------------------------------------------- | -------------------------------------------------- | ---------------------------------------------------------------- |
@@ -17,6 +18,7 @@ treat the other rows as manual review categories, not scanner coverage.
 | Markdown structure                                       | `Markdown`                                          | headings must be fence-aware and round-trip        | only a tiny, well-bounded transform is needed                    |
 | observability plumbing                                   | `MetricUtils`                                       | the repository already accepts the optional extra  | failure-path or core tools require near-zero dependencies        |
 | related or generated regex patterns                      | `RegexStore`, `MatchData`                           | they form a grammar, router, or repeated transform | the pattern is isolated and obvious                              |
+| copied general utilities inside an adapter                | canonical `my` API plus a thin adapter              | one shared owner removes parallel structures       | behavior is editor- or framework-specific                        |
 
 ## Required preflight
 
@@ -46,7 +48,7 @@ its agent instructions specify another gate.
 For machine-enforced evidence, every `proposed` or `implemented` change cites at
 least one intake-relative path and that entry's full-file SHA-256. A `signal_id` is
 optional; when present, the signal must cite the same path. Line numbers, symbols,
-and excerpts are useful narrative context but are not proposal-v1 evidence fields.
+and excerpts are useful narrative context but are not proposal-v2 evidence fields.
 Always state the required behavior contract.
 
 Report explicit reasons for deliberate non-changes. Prefer a partial adoption with

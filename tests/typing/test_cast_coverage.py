@@ -12,6 +12,7 @@ import pytest as pyt
 
 ### INTERNAL
 from my.typing import TypeCast, Typist
+
 # Reuse the enum fixtures from test_cast.py to avoid class-identity conflicts
 # (two `Color` classes with the same members are still distinct types).
 from .test_cast import Color, Status, Permission
@@ -114,6 +115,7 @@ class TestCastEnumConversions:
     # ---- Enum -> Enum ----
     def test_cast__enum_to_enum_by_name(self):
         """Cast an enum member to another enum with a matching member name."""
+
         class Source(Enum):
             RED = 10
             GREEN = 20

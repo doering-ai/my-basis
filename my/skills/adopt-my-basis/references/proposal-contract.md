@@ -1,7 +1,7 @@
 # Adoption proposal contract
 
 The machine-readable proposal is
-`my-basis-adoption/proposal/v1`. It references one exact intake by SHA-256 and
+`my-basis-adoption/proposal/v2`. It references one exact intake by SHA-256 and
 contains stable change IDs.
 
 ## Intake linkage
@@ -60,6 +60,14 @@ vcs:
   work_branch
   commits[]
   diff_stat
+  diffs[]:
+    base_commit
+    head_commit
+    patch_path
+    patch_sha256
+    bytes
+    diff_stat
+    summary
 report:
   format: myst | typst | html
   source
@@ -101,8 +109,8 @@ Each `EvidenceRef` contains:
   `evidence` list contains the same path.
 
 A reference does not need a signal ID. Reject an unknown path, a changed full-file
-hash, an unknown signal, or a signal that does not cite the path. Line numbers,
-symbols, and excerpts can improve the narrative, but proposal v1 does not carry or
+Line numbers,
+symbols, and excerpts can improve the narrative, but proposal v2 does not carry or
 validate them.
 
 `mode` records authorization; `status` records the result. Apply these rules:
@@ -111,6 +119,8 @@ validate them.
 - `implemented` is valid only in `mode: implement`.
 - Any implemented result requires at least one proposal-level verification with
   state `passed`, `failed`, or `unavailable`; `not-run` does not satisfy that rule.
+- Any implemented result requires at least one `vcs.diffs` entry. Its patch path is
+  relative, its two full commit IDs differ, and its SHA-256 binds the complete patch.
 - `declined`, `deferred`, and `already-present` may omit evidence, although cited
   evidence is useful when it supports the decision.
 - Change IDs remain stable across revisions and must be unique.

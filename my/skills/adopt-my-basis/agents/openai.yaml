@@ -1,4 +1,4 @@
 interface:
   display_name: "Adopt my-basis"
-  short_description: "Plan and guide repo-wide my-basis adoption"
-  default_prompt: "Use $adopt-my-basis to scan this Python repository, propose a verified refactor, and render a report I can revise or merge."
+  short_description: "Build verified, copy-ready my-basis refactors"
+  default_prompt: "Use $adopt-my-basis to scan this Python repository, replace obsolete structures with canonical my-basis APIs, capture atomic full diffs, and render a report I can revise or merge."

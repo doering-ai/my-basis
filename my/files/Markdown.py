@@ -137,7 +137,11 @@ class Markdown(pyd.BaseModel):
         return kwargs
 
     @classmethod
-    def new(cls, source: str | Path | Iterable[str] | None = None, **kwargs: Any) -> Self:
+    def new(
+        cls,
+        source: str | bytes | Path | Buffer | Iterable[str] | None = None,
+        **kwargs: Any,
+    ) -> Self:
         """Create a new Markdown node with proper type conversions and tree building.
 
         Handles conversion of prose strings to Buffers, tags to lists, and recursive

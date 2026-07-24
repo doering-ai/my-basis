@@ -1256,6 +1256,7 @@ list:
     def test_new__path_object_discarded(self):
         """`new()` must not crash on a `Path` source (discarded)."""
         from pathlib import Path
+
         node = cls.new(Path('/nonexistent/file.md'), title='FromPath')
         assert str(node.prose) == ''
 
@@ -1520,6 +1521,7 @@ list:
         """replace must accept a regex pattern."""
         node = cls.new(title='Root', prose='foo bar baz')
         import regex
+
         node.replace(regex.compile('foo'), 'X')
         assert str(node.prose) == 'X bar baz'
 
@@ -1616,9 +1618,9 @@ list:
         node = cls.new(title='Root', nodes=[{'title': 'Child'}])
         assert node.get_title(title='') is None
 
-    # ------------
-    # `pop` with child index
-    # ------------
+        # ------------
+        # `pop` with child index
+        # ------------
         node = cls.new(
             title='Root',
             nodes=[

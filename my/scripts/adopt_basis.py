@@ -13,6 +13,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Literal
 import argparse as ap
+import hashlib
 import json
 import shutil
 import subprocess as sbp
@@ -186,12 +187,14 @@ test ! -e proposal.json && cp {template_name} proposal.json
 
 {command_lines}
 
-Write `proposal.json` against `my-basis-adoption/proposal/v1`. Its `intake_sha256` hashes
+Write `proposal.json` against `my-basis-adoption/proposal/v2`. Its `intake_sha256` hashes
 the intake's canonical JSON model, not the source digest or the pretty-printed file bytes.
 Each evidence reference carries a path and full-file SHA-256 from the intake; an optional
 `signal_id` must name a signal that cites that same path. Every `regexstore` change needs a
 concrete `dsl_example`; complex expressions also need positive and negative examples plus
-caveats. Run `my-basis-adopt validate <proposal.json>` before rendering.
+caveats. Implemented results also require a clean committed patch captured with
+`my-basis-adopt capture`; copy its manifest into `vcs.diffs`. Run
+`my-basis-adopt validate <proposal.json>` before rendering.
 """
 
 
@@ -199,6 +202,7 @@ def prepare_repository(
     repository: Path | str,
     *,
     output_dir: Path | str | None = None,
+    target_python: str | None = None,
     dry: bool = False,
 ) -> dict[str, Any]:
     """Create or refresh deterministic adoption artifacts for a repository.
@@ -206,6 +210,7 @@ def prepare_repository(
     Args:
         repository: Repository root to scan.
         output_dir: Explicit artifact directory. Defaults to ``.basis-adoption`` in the root.
+        target_python: Optional floor to reach as part of the requested refactor.
         dry: Report paths without writing artifacts.
     Returns:
         Machine-readable summary of the scan and artifact paths.
@@ -230,7 +235,13 @@ def prepare_repository(
         except (OSError, pyd.ValidationError):
             previous_intake = None
 
-    intake = scan_repository(root)
+    if target_python is None and previous_intake is not None:
+        saved_target = previous_intake.python.get('target')
+        target_python = saved_target if isinstance(saved_target, str) else None
+    try:
+        intake = scan_repository(root, target_python=target_python)
+    except ValueError as exc:
+        raise AdoptionCommandError(str(exc)) from exc
     template_path, template_text = _template_destination(
         artifact_dir,
         intake,
@@ -239,13 +250,18 @@ def prepare_repository(
     for path in (context_path, intake_path, prompt_path, template_path):
         _refuse_symlink_path(path)
 
-    _write(context_path, _json_text({'repository': str(root)}), dry=dry)
+    _write(
+        context_path,
+        _json_text({'repository': str(root), 'target_python': target_python}),
+        dry=dry,
+    )
     _write(intake_path, _json_text(intake), dry=dry)
     _write(prompt_path, _prompt(intake, template_path.name), dry=dry)
     _write(template_path, template_text, dry=dry)
     return {
         'repository': str(root),
         'disposition': intake.disposition,
+        'target_python': target_python,
         'source_digest': intake.source_digest,
         'written': not dry,
         'template': str(template_path),
@@ -262,6 +278,7 @@ def refresh_intake(
     path: Path | str,
     *,
     repository: Path | str | None = None,
+    target_python: str | None = None,
     dry: bool = False,
 ) -> dict[str, Any]:
     """Refresh an intake in place using explicit or prepared repository context."""
@@ -270,7 +287,12 @@ def refresh_intake(
     if intake_path.name != INTAKE_NAME:
         raise AdoptionCommandError(f'expected an {INTAKE_NAME!r} path: {intake_path}')
     root = _repository_for_artifact(intake_path.parent, repository)
-    return prepare_repository(root, output_dir=intake_path.parent, dry=dry)
+    return prepare_repository(
+        root,
+        output_dir=intake_path.parent,
+        target_python=target_python,
+        dry=dry,
+    )
 
 
 def validate_file(
@@ -368,6 +390,89 @@ def render_file(
     }
 
 
+def _git(
+    repository: Path,
+    *args: str,
+) -> str:
+    """Run one read-only Git query and return its standard output."""
+    result = sbp.run(
+        ['git', *args],
+        cwd=repository,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode:
+        detail = result.stderr.strip() or result.stdout.strip() or 'unknown Git error'
+        raise AdoptionCommandError(f'git {" ".join(args)} failed: {detail}', status=3)
+    return result.stdout
+
+
+def capture_atomic_diff(
+    repository: Path | str,
+    *,
+    base: str,
+    head: str = 'HEAD',
+    output_dir: Path | str,
+    summary: str,
+    dry: bool = False,
+) -> dict[str, Any]:
+    """Capture one clean, committed transformation as a SHA-bound patch corpus entry."""
+    root = Path(repository).expanduser().resolve()
+    if not root.is_dir():
+        raise AdoptionCommandError(f'repository does not exist: {root}')
+    if not summary.strip():
+        raise AdoptionCommandError('--summary must be non-empty')
+    if _git(root, 'status', '--porcelain', '--untracked-files=no').strip():
+        raise AdoptionCommandError('refusing to capture a dirty tracked worktree; commit first')
+
+    base_commit = _git(root, 'rev-parse', '--verify', f'{base}^{{commit}}').strip()
+    head_commit = _git(root, 'rev-parse', '--verify', f'{head}^{{commit}}').strip()
+    if base_commit == head_commit:
+        raise AdoptionCommandError('base and head resolve to the same commit')
+    patch = _git(
+        root,
+        'diff',
+        '--no-ext-diff',
+        '--no-color',
+        '--find-renames',
+        '--patch',
+        base_commit,
+        head_commit,
+    )
+    if not patch:
+        raise AdoptionCommandError('the selected revisions have no textual diff')
+    patch_bytes = patch.encode()
+    if len(patch_bytes) > 2_000_000:
+        raise AdoptionCommandError('atomic diff exceeds the 2 MB corpus limit', status=3)
+    diff_stat = _git(root, 'diff', '--stat', '--no-color', base_commit, head_commit).rstrip()
+
+    target = _absolute_path(output_dir)
+    patch_path = target / 'change.patch'
+    manifest_path = target / 'manifest.json'
+    for path in (target, patch_path, manifest_path):
+        _refuse_symlink_path(path)
+    manifest = {
+        'schema_version': 'my-basis-adoption/diff/v1',
+        'repository': str(root),
+        'base_commit': base_commit,
+        'head_commit': head_commit,
+        'patch_path': patch_path.name,
+        'patch_sha256': hashlib.sha256(patch_bytes).hexdigest(),
+        'bytes': len(patch_bytes),
+        'diff_stat': diff_stat,
+        'summary': summary.strip(),
+    }
+    _write(patch_path, patch, dry=dry)
+    _write(manifest_path, _json_text(manifest), dry=dry)
+    return {
+        **manifest,
+        'patch': str(patch_path),
+        'manifest': str(manifest_path),
+        'written': not dry,
+    }
+
+
 def skill_root() -> Path:
     """Return the packaged adopt-my-basis skill directory."""
     path = Path(__file__).resolve().parents[1] / 'skills' / 'adopt-my-basis'
@@ -449,12 +554,29 @@ def _cli(*vargs: str) -> ap.Namespace:
         type=Path,
         help='write artifacts outside the target repository (recommended for fleet scans)',
     )
+    prepare.add_argument(
+        '--target-python',
+        help='review adoption together with a requested Python floor migration (for example 3.13)',
+    )
     prepare.add_argument('-n', '--dry-run', action='store_true')
     prepare.add_argument('--json', action='store_true')
+
+    capture = commands.add_parser(
+        'capture',
+        help='capture a clean committed refactor as a SHA-bound atomic patch',
+    )
+    capture.add_argument('repository', nargs='?', default='.', type=Path)
+    capture.add_argument('--base', required=True, help='baseline commit or ref')
+    capture.add_argument('--head', default='HEAD', help='result commit or ref')
+    capture.add_argument('--output-dir', required=True, type=Path)
+    capture.add_argument('--summary', required=True)
+    capture.add_argument('-n', '--dry-run', action='store_true')
+    capture.add_argument('--json', action='store_true')
 
     refresh = commands.add_parser('refresh', help='refresh an existing intake from current source')
     refresh.add_argument('intake', type=Path)
     refresh.add_argument('--repository', type=Path)
+    refresh.add_argument('--target-python', help='replace the saved modernization target')
     refresh.add_argument('-n', '--dry-run', action='store_true')
     refresh.add_argument('--json', action='store_true')
 
@@ -504,12 +626,23 @@ def main(*vargs: str) -> int:
             result = prepare_repository(
                 args.repository,
                 output_dir=args.output_dir,
+                target_python=args.target_python,
+                dry=args.dry_run,
+            )
+        elif args.command == 'capture':
+            result = capture_atomic_diff(
+                args.repository,
+                base=args.base,
+                head=args.head,
+                output_dir=args.output_dir,
+                summary=args.summary,
                 dry=args.dry_run,
             )
         elif args.command == 'refresh':
             result = refresh_intake(
                 args.intake,
                 repository=args.repository,
+                target_python=args.target_python,
                 dry=args.dry_run,
             )
         elif args.command == 'validate':

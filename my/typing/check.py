@@ -285,7 +285,9 @@ class TypeCheck[T0, T1](_TypingBase, pyd.BaseModel):
 
     @overload
     @classmethod
-    def check_all[V](cls, data: MapT, tvar: TypeArg[V]) -> TypeIs[MapT[Any, V]]: ...
+    def check_all[V](cls, data: MapT, tvar: TypeArg[V]) -> TypeIs[MapT[Any, V]]:  # noqa: D418
+        """Check all values in a collection against a type."""
+
     @overload
     @classmethod
     def check_all[V](cls, data: VecT, tvar: TypeArg[V]) -> TypeIs[VecT[V]]: ...

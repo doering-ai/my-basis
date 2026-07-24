@@ -240,13 +240,15 @@ class TypeCast(_TypingBase):
     # --------------
     @overload
     @staticmethod
-    def cast[A, B](
+    def cast[A, B](  # noqa: D418
         data: A,
         target: AnyType[B],
         default: B,
         *,
         flags: CastFlags | CastPreset | None = None,
-    ) -> B: ...
+    ) -> B:
+        """Cast data to a target type with a default fallback."""
+
     @overload
     @staticmethod
     def cast[A, B, C](
@@ -619,6 +621,7 @@ class Transform[T0, T1]:
 
     @property
     def _t0(self) -> type[T0]:
+        """The concrete source type (`type[T0]`), or raise `Decline` if not a plain class."""
         ret = self.t0.root
         if not isinstance(ret, type):
             # A transform reaching for the concrete source class got a parametrized/non-type form
@@ -632,6 +635,7 @@ class Transform[T0, T1]:
 
     @property
     def _t1(self) -> type[T1]:
+        """The concrete target type (`type[T1]`), or raise `Decline` if not a plain class."""
         ret = self.t1.root
         if not isinstance(ret, type):
             if not self.t1.origin and isinstance(self.t1.main, type):
@@ -647,6 +651,7 @@ class Transform[T0, T1]:
         return ret
 
     def _finalize(self, data: object) -> T1 | None:
+        """Finalize a cast result: encode/decode str<->bytes and build the target type."""
         t1 = self.t1
         if data is None or t1 is None:
             # A transform that produced nothing is a non-match -- propagate None so the
@@ -729,6 +734,7 @@ class Transform[T0, T1]:
 
     @register
     def _stream_to_bytes[S: Stream, T: bytes](self: Transform) -> bytes | None:
+        """``Stream -> bytes`` -- coerce a byte-stream object to raw bytes."""
         ret = self.data
         if isinstance(ret, bytearray):
             return bytes(ret)
@@ -742,10 +748,12 @@ class Transform[T0, T1]:
 
     @register
     def _stream_to_string[S: Stream, T: String](self: Transform) -> str | None:
+        """``Stream -> String`` -- coerce a byte-stream object to a string."""
         return self.to(str)
 
     @register
     def _string_to_stream[S: String, T: Stream](self: Transform) -> str | bytes | None:
+        """``String -> Stream`` -- coerce a string to a byte-stream object."""
         if issubclass(self._t1, (bytearray, memoryview, BytesIO)):
             return tyt.cast(self.data, bytes, flags=self.flags)
         else:
@@ -753,6 +761,7 @@ class Transform[T0, T1]:
 
     @register
     def _string_to_str[S: String, T: str](self: Transform) -> str | None:
+        """``String -> str`` -- decode bytes to a plain string if needed."""
         val = self.data
         if isinstance(val, bytes):
             val = val.decode()
@@ -769,6 +778,7 @@ class Transform[T0, T1]:
 
     @register
     def _string_to_scalar[S: String, T: Scalar](self: Transform[S, T]) -> Scalar | None:
+        """``String -> Scalar`` -- parse a string into a scalar (int, float, bool)."""
         if (text := self.to(str)) is None:
             return
         elif issubclass(self._t1, bool):
@@ -788,6 +798,7 @@ class Transform[T0, T1]:
     def _atom_to_scalar[S: Atom, T: Scalar](self: Transform[S, T]) -> Scalar | None:
         # Strings are handled by the more-specific `_string_to_scalar`; recursing through
         # `by(str)` here (str -> str -> scalar) would loop forever on non-numeric strings.
+        """``Atom -> Scalar`` -- coerce a non-string atom to a scalar via string routing."""
         if isinstance(self.data, String):
             return None
         return self.by(str)
@@ -795,6 +806,7 @@ class Transform[T0, T1]:
     @register
     def _string_to_time[S: String, T: Time](self: Transform[S, T]) -> Time | None:
         # I. Normalize & analyze data
+        """``String -> Time`` -- parse a string into a datetime, date, time, or timedelta."""
         data = self.to(str)
         if data is None:
             return None
@@ -804,6 +816,7 @@ class Transform[T0, T1]:
             data = f'20{data}'
 
         def _to_timedelta(_t: type[timedelta]) -> timedelta:
+            """Parse timedelta components and build the target timedelta type."""
             if matches := list(self.ty.RGXS['timedelta'].finditer(data)):
                 return _t(
                     **{
@@ -847,6 +860,7 @@ class Transform[T0, T1]:
 
     @register
     def _string_to_map[S: String, T: Map](self: Transform[S, T]) -> Map | None:
+        """``String -> Map`` -- parse a YAML/JSON string into a mapping."""
         if not (text := self.to(str)):
             return
         if text:
@@ -858,6 +872,7 @@ class Transform[T0, T1]:
 
     @register
     def _string_to_vec[S: String, T: Vec](self: Transform[S, T]) -> Vec | None:
+        """``String -> Vec`` -- split a string into a list on common delimiters."""
         if not (text := self.to(str)):
             return
 
@@ -922,6 +937,7 @@ class Transform[T0, T1]:
 
     @register
     def _time_to_string[S: Time, T: String](self: Transform[S, T]) -> String | None:
+        """``Time -> String`` -- serialize a datetime/date/time/timedelta to ISO string."""
         if isinstance(self.data, datetime | time):
             # All times are UTC unless stated otherwise, so the offset is implicit: serialize
             # the bare wall-clock form (`...T10:20:30`, not `...T10:20:30+00:00`).
@@ -933,6 +949,7 @@ class Transform[T0, T1]:
 
     @register
     def _time_to_scalar[S: Time, T: Scalar](self: Transform[S, T]) -> Time | Scalar | None:
+        """``Time -> Scalar`` -- convert a time object to a numeric scalar."""
         d = self.data
         if isinstance(d, datetime):
             return d.timestamp()
@@ -946,10 +963,12 @@ class Transform[T0, T1]:
 
     @register
     def _time_to_struct[S: Time, T: Struct](self: Transform[S, T]) -> object | None:
+        """``Time -> Struct`` -- decline: time objects have no struct representation."""
         return None
 
     @register
     def _datetime_to_time[S: datetime, T: Time](self: Transform[S, T]) -> Time | None:
+        """``datetime -> Time`` -- narrow a datetime to a date, time, or timedelta."""
         if issubclass(self._t1, time):
             return self.data.time().replace(tzinfo=UTC)
         elif issubclass(self._t1, date):
@@ -960,6 +979,7 @@ class Transform[T0, T1]:
 
     @register
     def _date_to_time[S: date, T: Time](self: Transform[S, T]) -> Time | None:
+        """``date -> Time`` -- promote a date to a datetime or narrow to a time/timedelta."""
         ret = self.data
         if issubclass(self._t1, time):
             return time()
@@ -971,6 +991,7 @@ class Transform[T0, T1]:
 
     @register
     def _time_to_time[S: time, T: Time](self: Transform[S, T]) -> T | None:
+        """``time -> Time`` -- attempt to convert a bare time to other Time subtypes."""
         if issubclass(self._t1, datetime):
             pass
         elif issubclass(self._t1, date):
@@ -980,10 +1001,12 @@ class Transform[T0, T1]:
 
     @register
     def _timedelta_to_time[S: timedelta, T: Time](self: Transform[S, T]) -> T | None:
+        """``timedelta -> Time`` -- route a timedelta to the target Time type via int seconds."""
         return self.by(int)
 
     @register
     def _enum_to_string[S: Enum, T: String](self: Transform[S, T]) -> object | None:
+        """``Enum -> String`` -- serialize an enum member to a string (value or name)."""
         if ret := self.ty.try_method(self._t1, 'write', _tvar=str):
             return ret
 
@@ -992,12 +1015,14 @@ class Transform[T0, T1]:
 
     @register
     def _enum_to_scalar[S: Enum, T: Scalar](self: Transform[S, T]) -> T | None:
+        """``Enum -> Scalar`` -- extract and cast an enum member's value to a scalar."""
         value = self.data.value
         if value and isinstance(value, (String, Scalar)):
             return tyt.cast(value, self._t1, flags=self.flags)
 
     @register
     def _enum_to_time[S: Enum, T: Time](self: Transform[S, T]) -> T | None:
+        """``Enum -> Time`` -- extract and cast an enum member's value to a Time type."""
         value = self.data.value
         if value and isinstance(value, (String, Scalar)):
             return tyt.cast(value, self._t1, flags=self.flags)
@@ -1005,6 +1030,7 @@ class Transform[T0, T1]:
     @register
     def _enum_to_enum[S: Enum, T: Enum](self: Transform[S, T]) -> T | None:
         # I. If the enum has it's own read method, try that on the name and value
+        """``Enum -> Enum`` -- map an enum member to the target by name, value, or custom read."""
         name, value = self.data.name, self.data.value
         for val in (name, value):
             if ret := self.ty.try_method(self._t1, 'read', val, _tvar=self._t1):
@@ -1025,22 +1051,27 @@ class Transform[T0, T1]:
 
     @register
     def _enum_to_vec[S: Enum, T: Vec](self: Transform[S, T]) -> T | None:
+        """``Enum -> Vec`` -- decline: enums have no vector representation."""
         return None
 
     @register
     def _enum_to_map[S: Enum, T: Map](self: Transform[S, T]) -> T | None:
+        """``Enum -> Map`` -- decline: enums have no mapping representation."""
         return None
 
     @register
     def _enum_to_iter[S: Enum, T: Iter](self: Transform[S, T]) -> T | None:
+        """``Enum -> Iter`` -- decline: enums have no iterator representation."""
         return None
 
     @register
     def _enum_to_model[S: Enum, T: Model](self: Transform[S, T]) -> T | None:
+        """``Enum -> Model`` -- decline: enums have no model representation."""
         return None
 
     @register
     def _object_to_enum[S: Object, T: Enum](self: Transform[S, T]) -> T | None:
+        """``Object -> Enum`` -- coerce an object to an enum member by value or name."""
         target, data = self._t1, self.data
         # 0. Already a member of the target enum
         if isinstance(data, target):
@@ -1068,6 +1099,7 @@ class Transform[T0, T1]:
 
     @register
     def _string_to_flag[S: String, T: Flag](self: Transform[S, T]) -> T | None:
+        """``String -> Flag`` -- parse a CSV-style string into a combined Flag enum value."""
         if not (text := self.to(str)):
             return
         elif match := self.RGXS['csv'].fullmatch(text.strip()):
@@ -1091,10 +1123,12 @@ class Transform[T0, T1]:
 
     @register
     def _scalar_to_enum[S: Scalar, T: Enum](self: Transform[S, T]) -> T | None:
+        """``Scalar -> Enum`` -- construct an enum member from a scalar value."""
         return self._t1(self.data)
 
     @register
     def _string_to_enum[S: String, T: Enum](self: Transform[S, T]) -> str | Enum | None:
+        """``String -> Enum`` -- resolve a string to an enum member by name or coerced value."""
         if not (text := self.to(str)):
             return
         text = text.strip()
@@ -1114,28 +1148,34 @@ class Transform[T0, T1]:
 
     @register
     def _atom_to_vec[S: Atom, T: Vec](self: Transform[S, T]) -> list | None:
+        """``Atom -> Vec`` -- wrap a single atom into a one-element list."""
         if self.flags.wraps and self.data and self.t1.vals:
             with ctx.suppress(TypeError):
                 return [self.to(self.t1.vals)]
 
     @register
     def _flag_to_vec[S: Flag, T: Vec](self: Transform[S, T]) -> list | None:
+        """``Flag -> Vec`` -- expand a Flag enum into a list of active member values."""
         return [self._t0(member.value) for member in self._t0 if member in self.data]
 
     @register
     def _flag_to_map[S: Flag, T: Map](self: Transform[S, T]) -> dict | None:
+        """``Flag -> Map`` -- expand a Flag enum into a mapping of active member names to values."""
         return {member.name: member.value for member in self._t0 if member in self.data}
 
     @register
     def _atom_to_map[S: Atom, T: Map](self: Transform[S, T]) -> dict | None:
+        """``Atom -> Map`` -- decline: atoms have no mapping representation."""
         return None
 
     @register
     def _atom_to_struct[S: Atom, T: Struct](self: Transform[S, T]) -> list | dict | Model | None:
+        """``Atom -> Struct`` -- decline: atoms have no struct representation."""
         return None
 
     @register
     def _vec_to_flag[S: Vec, T: Flag](self: Transform[S, T]) -> T | None:
+        """``Vec -> Flag`` -- combine a list of values into a single Flag enum value."""
         ret = self._t1(0)
         for member in self.data:
             if (_new := tyt.cast(member, self._t1, flags=self.flags)) is not None:
@@ -1144,7 +1184,7 @@ class Transform[T0, T1]:
 
     @register
     def _vec_to_time[S: Vec, T: Time](self: Transform[S, T]) -> Time | list | None:
-
+        """``Vec -> Time`` -- build a Time object from a numeric sequence (constructor fields)."""
         if not (d := list(self.data)):
             pass
         elif len(d) == 1 and (_vt := self.t0.vals) and tym.is_atom_type(_vt):
@@ -1156,6 +1196,7 @@ class Transform[T0, T1]:
             parts = d
 
             def _to_time(target: type[time]) -> time:
+                """Build a `time` from a 3- or 4-element numeric vector (h, m, s[, us])."""
                 if len(parts) not in {3, 4}:
                     raise ValueError('time vectors require 3 or 4 components')
                 hour, minute, second = parts[:3]
@@ -1182,6 +1223,7 @@ class Transform[T0, T1]:
 
     @register
     def _vec_to_atom[S: Vec, T: Atom](self: Transform[S, T]) -> T | None:
+        """``Vec -> Atom`` -- collapse a series to its first element or unwrap a singleton."""
         if not self.data:
             return None
         # A multi-element series needs `firsts`; a single-element one needs `atomics`.
@@ -1192,6 +1234,7 @@ class Transform[T0, T1]:
 
     @register
     def _vec_to_vec[S: Vec, T: Vec](self: Transform[S, T]) -> list | None:
+        """``Vec -> Vec`` -- re-cast a list with different element types via multicast."""
         data = self.to(list)
         if data is not None and self.t1.vals and self.t0.vals != self.t1.vals:
             # Element types differ -> coerce each element, don't cast the whole list.
@@ -1200,6 +1243,7 @@ class Transform[T0, T1]:
 
     @register
     def _vec_to_map[S: Vec, T: Map](self: Transform[S, T]) -> T | None:
+        """``Vec -> Map`` -- convert a list of key-value pairs into a mapping."""
         data = self.data
         if self.ty.is_map_type(self.t1) and data:
             # I. A list of 2-element pairs -> map items. `normalize` listifies tuples, so
@@ -1232,11 +1276,13 @@ class Transform[T0, T1]:
         # blindly do `dict(iter(self.data))` on the resulting iterator -- which for e.g.
         # `['AB', 'CD']` silently "succeeds" via Python's 2-char-string dict gotcha (`{'A':
         # 'B', 'C': 'D'}`) instead of leaving map-shaped targets to the map transforms.
+        """``Vec -> Iter`` -- wrap a sequence as an iterator (sync or async)."""
         if tym.is_map_type(self.t1):
             return None
         elif isinstance(self.data, AsyncIterable):
 
             async def _gen() -> AsyncGenerator:
+                """Async generator yielding items from the source async iterable."""
                 async for item in self.data:
                     yield item
 
@@ -1246,7 +1292,7 @@ class Transform[T0, T1]:
 
     @register
     def _vec_to_model[S: Vec, T: Model](self: Transform[S, T]) -> T | None:
-
+        """``Vec -> Model`` -- route a list to model construction via `_object_to_model`."""
         if issubclass(self._t1, pyd.BaseModel):
             return self._object_to_model()
         return None
@@ -1272,10 +1318,12 @@ class Transform[T0, T1]:
 
     @register
     def _map_to_enum[S: Map, T: Enum](self: Transform[S, T]) -> T | None:
+        """``Map -> Enum`` -- decline: mappings have no direct enum representation."""
         return None
 
     @register
     def _map_to_vec[S: Map, T: Vec](self: Transform[S, T]) -> list | T | None:
+        """``Map -> Vec`` -- extract values, keys, or stringified pairs from a mapping."""
         v0, v1 = self.t0.vals, self.t1.vals
         if not self.map_items or not v1:
             # I. Without guidance, skip casting altogether
@@ -1302,6 +1350,7 @@ class Transform[T0, T1]:
 
     @register
     def _map_to_map[S: Map, T: Map](self: Transform[S, T]) -> T | None:
+        """``Map -> Map`` -- re-cast a mapping with different key/value types."""
         if not tym.is_map_type(self.t1) or self.t1.main is None:
             # A model target (e.g. a pydantic `BaseModel` subclass like `MatchData`) matches the
             # broad `Map` bound but is not a mapping constructor: the closing `cls(data)` would be
@@ -1339,6 +1388,7 @@ class Transform[T0, T1]:
 
     @register
     def _iter_to_vec[S: Iter, T: Vec](self: Transform[S, T]) -> list | None:
+        """``Iter -> Vec`` -- materialize an iterator into a concrete list."""
         if isinstance(self.data, (str, bytes)):
             # A string/bytes has its own dedicated `_string_to_vec` transform, gated by the
             # `splits`/`wraps` flags -- don't let this generic iterable fallback explode it
@@ -1348,6 +1398,7 @@ class Transform[T0, T1]:
         if isinstance(data, AsyncIterable):
 
             async def _coalesce() -> list:
+                """Coalesce a list of candidate values, returning the first non-None entry."""
                 _ret = []
                 async for item in data:
                     _ret.append(item)  # noqa: PERF401
@@ -1385,6 +1436,7 @@ class Transform[T0, T1]:
     def _object_to_iter[S: Map, T: Iter](self: Transform[S, T]) -> T | None:
         # A Mapping is itself an Iterable, so this would fire for map->map targets and explode
         # the dict into a list of keys (then loop). Leave map targets to the map transforms.
+        """``Object -> Iter`` -- wrap an arbitrary iterable object as a typed iterator."""
         if tym.is_map_type(self.t1):
             return None
         elif tym.is_string_type(self.t1):
@@ -1415,6 +1467,7 @@ class Transform[T0, T1]:
         # Only genuine model sources convert here. A loose target like `MutableSet` matches the
         # `Map` bound, so without this guard the dict produced below would `proxy()` straight back
         # into this transform and recurse forever.
+        """``Model -> Map`` -- serialize a pydantic model or dataclass to a plain dict."""
         if not tym.is_model_type(self.t0):
             return None
 
@@ -1434,12 +1487,14 @@ class Transform[T0, T1]:
 
     @register
     def _model_to_model[S: Model, T: Model](self: Transform[S, T]) -> T | None:
+        """``Model -> Model`` -- re-cast one model into another via dict round-trip."""
         f0, f1 = self._model_fields(self._t0), self._model_fields(self._t1)
         if f0 and f1 and (shared := set(f0.keys()) & set(f1.keys())):
             return self.proxy({f: getattr(self.data, f) for f in shared})
 
     @register
     def _model_to_object[S: Model, T: Object](self: Transform[S, T]) -> T | None:
+        """``Model -> Object`` -- convert a model instance to a plain Python object."""
         fields = self._model_fields(self._t0)
         if 'root' in fields:
             return self.proxy(getattr(self.data, 'root'))
@@ -1464,10 +1519,12 @@ class Transform[T0, T1]:
 
     @register
     def _func_to_str[S: Func, T: str](self: Transform[S, str]) -> str | None:
+        """``Func -> String`` -- serialize a callable to its string representation."""
         return self.data.__name__ if self.data else None
 
     @register
     def _func_to_atom[S: Func, T: Atom](self: Transform[S, T]) -> T | None:
+        """``Func -> Atom`` -- convert a callable to an atomic value (length or None)."""
         args, rets = tyc.describe_func(self.data)
         if len(rets) == 1 and len(args) == 0 and tym.is_atom_type(rets[0]):
             return self.proxy(self.data())
@@ -1660,6 +1717,7 @@ class Transform[T0, T1]:
         _map: Callable[[Map], T] | None = None,
         **kwargs: Callable[[type], T],
     ) -> T | None:
+        """Dispatch a cast across candidate target types, returning the first non-None result."""
         return cls._branch(
             data,
             isinstance,
@@ -1697,6 +1755,7 @@ class Transform[T0, T1]:
         _map: Callable[[type[Map]], Map] | None = None,
         **kwargs: Callable[[type], T],
     ) -> T | None:
+        """Dispatch to a type-specific lambda based on the target Time subtype."""
         return type_cast(
             'T | None',
             cls._branch(
@@ -1768,6 +1827,7 @@ class Transform[T0, T1]:
     # ------------------
     @classmethod
     def _try_read_enum[T: Enum](cls, data: object, target: type[T]) -> object | None:
+        """Attempt to read an enum member via a custom `read` class method, if present."""
         if read_method := _TypingBase._ty().get_method(target, 'read'):
             if (ret := _TypingBase._ty().invoke(read_method, data)) is not None:
                 return ret
@@ -1843,6 +1903,7 @@ class Transform[T0, T1]:
             return (a0 == b0 or a0 in b0) and (a1 == b1 or a1 in b1)
 
         def _strictly_narrower(a: TransformEntry, b: TransformEntry) -> bool:
+            """Check whether one type is strictly narrower than another."""
             return _within(a, b) and not _within(b, a)
 
         candidates = [(k0, k1, tr) for k0, k1, tr in _TRANSFORMS if t0 in k0 and t1 in k1]

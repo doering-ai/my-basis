@@ -248,7 +248,9 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
 
     @overload
     @staticmethod
-    def new() -> MyType[Any]: ...
+    def new() -> MyType[Any]:  # noqa: D418
+        """Create a MyType from a type annotation or MyType."""
+
     @overload
     @staticmethod
     def new(root: None) -> MyType[NoneType]: ...
@@ -302,7 +304,9 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
 
     @overload
     @classmethod
-    def parse[Rm: MyType](cls, root: Rm, throw: bool = False) -> Rm: ...
+    def parse[Rm: MyType](cls, root: Rm, throw: bool = False) -> Rm:  # noqa: D418
+        """Parse a type annotation into a MyType."""
+
     @overload
     @classmethod
     def parse[R](cls, root: type[R], throw: bool = False) -> MyType[R]: ...
@@ -434,6 +438,7 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
     @pyd.field_validator('root', mode='before')
     @classmethod
     def _process_root(cls, root: Any) -> Any:
+        """Process the root type form during MyType parsing."""
         if isinstance(root, MyType):
             return root.root
         elif isinstance(root, TypeVar):
@@ -726,15 +731,19 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
 
     #### `*M` #####################################################################################
     def __len__(self) -> int:
+        """Return the number of type arguments."""
         return len(self.args)
 
     def __bool__(self) -> bool:
+        """Return whether the type is non-empty (has a concrete main type)."""
         return self.main is not None or len(self.literal_members) > 0
 
     def __str__(self) -> str:
+        """Return the string representation of the type."""
         return f'{self.root}'
 
     def __repr__(self) -> str:
+        """Return a developer-facing string representation."""
         parts = []
         if self.main is not None:
             parts.append(f'main={self.main}')
@@ -747,6 +756,7 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
         return f'MyType[{self.root}]' + (f'({", ".join(parts)})' if parts else '')
 
     def __eq__(self, other: object) -> bool:
+        """Check type equality by comparing main, args, and metadata."""
         if other is None:
             return self.main is None
         elif isinstance(other, MyType):
@@ -756,9 +766,11 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
         return False
 
     def __hash__(self) -> int:
+        """Return a hash based on the stringified type form."""
         return self.uid
 
     def __lt__(self, other: object) -> bool:
+        """Order types by their string representation for sorting."""
         if isinstance(other, MyType) and self != other:
             return self.match(other)
         return False
@@ -822,6 +834,7 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
     def _match[T1](cls, t0: tuple[type, ...], t1: TypeArg[T1]) -> TypeIs[tuple[type[T1], ...]]: ...
     @classmethod
     def _match[T0, T1](cls, t0: TypeArg[T0], t1: TypeArg[T1], inter: bool = False) -> bool:
+        """Recursively match type arguments against a target type."""
         if t0 is None or t1 is None:
             return False
 

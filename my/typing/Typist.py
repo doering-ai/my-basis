@@ -423,6 +423,7 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
     # `+` Primary Methods
     # -------------------
     def __repr__(self) -> str:
+        """Return a developer-facing string representation."""
         return 'Typist'
 
     @staticmethod
@@ -692,9 +693,11 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
     # `*4` TRANSFORMATION
     # -------------------
     @overload
-    def serialize(
+    def serialize(  # noqa: D418
         self, data: Scalar, full: bool = False, cases: dict[CaseKey, CaseVal] | None = None
-    ) -> Scalar: ...
+    ) -> Scalar:
+        """Serialize data with automatic type simplification."""
+
     @overload
     def serialize(
         self, data: Atom, full: bool = False, cases: dict[CaseKey, CaseVal] | None = None
@@ -929,7 +932,9 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
     # NOTE: The actual file I/O lives in `SystemUtils` (import-order constraints); these are thin
     # convenience wrappers so callers can reach it through the `typist` interface.
     @overload
-    def from_file(self, file: FileParam) -> dict: ...
+    def from_file(self, file: FileParam) -> dict:  # noqa: D418
+        """Load and parse a file into an instance."""
+
     @overload
     def from_file(self, file: FileParam, tvar: type[F], cast: bool = True) -> F: ...
     def from_file(self, file: FileParam, tvar: type = dict, cast: bool = True) -> Any:
@@ -1127,6 +1132,7 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
     def _attempt_binding(
         cls, sig: inspect.Signature, args: tuple, kwargs: dict
     ) -> inspect.BoundArguments | None:
+        """Attempt to bind call arguments to the function signature, returning the bound result."""
         params = list(sig.parameters.values())
 
         # II.i. Naive attempt

@@ -136,7 +136,9 @@ class TypeMatch(_TypingBase):
     # ------------------
     @overload
     @classmethod
-    def match(cls, t0: None, t1: Any, intersect: bool = False) -> Literal[False]: ...
+    def match(cls, t0: None, t1: Any, intersect: bool = False) -> Literal[False]:  # noqa: D418
+        """Check if the first type is a subset of the second."""
+
     @overload
     @classmethod
     def match(cls, t0: Any, t1: None, intersect: bool = False) -> Literal[False]: ...

@@ -1,0 +1,10 @@
+[package]
+name = "basis"
+version = "0.1.0"
+entrypoint = "lib.typ"
+authors = ["Robb Doering <robb@doering.ai>"]
+license = "MIT"
+description = "House Typst package for the fleet: theme, callouts, per-genre report templates with a queryable metadata envelope, and the problem-space frontier component."
+# Local house package. Resolved as `@dtm/basis` from the data-dir package tree
+# (~/.local/share/typst/packages/dtm/basis/<version>/). Not published to Typst Universe.
+# The `dtm` namespace is installed by ./install.sh.

@@ -1,0 +1,8 @@
+# Compiled render artifacts (PDF/SVG are built on-demand, never canonical).
+*.pdf
+*.svg
+*.png
+/tests/out/
+
+# Editor / OS noise
+.DS_Store

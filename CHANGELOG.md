@@ -6,6 +6,16 @@ Where a change is a behavior break rather than an internal fix, it's called out 
 
 ## [Unreleased]
 
+### 1.0 candidate hardening
+
+- `RegexStore` now preserves externally compiled flags through construction, import, union, and debugging; refuses dependent composition that would silently discard out-of-band flags; keeps ordered-router first-match semantics; and applies the configured timeout to substitution as well as matching.
+- Persistence and text surgery now preserve their public contracts across nested filesystem concatenation, `FileCache` index flushing, headerless/frontmatter-bearing Markdown, and explicit opt-in fenced `Buffer` replacement. `Filesystem.compile_rgx()` now fails loudly outside its documented non-root POSIX grammar instead of partially matching URI, UNC, or drive-root text.
+- Runtime coercion closes ambiguous edges in string predicates, enum normalization, `Typist` polarity/default handling, and late transform registration while continuing to catch only the explicit `Decline` protocol.
+- The full test suite was normalized around parameter tables and a maximum two-level name shape. A deterministic AST audit now reports exact/minimum case counts and fails closed on naming depth, collection shadowing, syntax errors, uncollectable `Test*` constructors, malformed literal parametrization, and import-section drift.
+- Added `my-basis-adopt`: a packaged beginner-facing agent skill and safe CLI that scans one repository into a content-hashed intake, guides an evidence-bound refactor proposal, highlights bounded `RegexStore` opportunities, validates the result against the live tree, and renders MyST, standalone HTML, or Typst/PDF merge-and-revision handoffs.
+- Folded the independent `@dtm/basis` Typst package into top-level `typst/` with its complete history, MIT boundary, POSIX installer, hermetic compile/envelope test, and `typst-v*` release namespace. Python wheel/sdist gates prove that `typst/` is excluded while the adoption skill is included.
+- Release CI now consumes exact-SHA test images, exercises the real Python 3.12 dependency floor and supported-version matrix, verifies the lock and built artifacts, keeps PyPI publishing protected/manual, and gives Typst its own pinned official-image gate.
+
 ### Python floor lowered to 3.12, with a real version matrix
 
 `requires-python` is now `>= 3.12` (was `>= 3.13`), and the suite runs against **3.12, 3.13, and 3.14** on every pipeline.
@@ -57,9 +67,9 @@ The documentation campaign: every non-trivial public feature now carries an exec
 - `GoogleSheet.mtime` lacked the `@_import_guard` decorator, hitting a mock instead of the actionable `[google]`-extra `ImportError` its siblings raise.
 - `TypeMatch.is_map_type`/`is_struct_type` overloads subscripted `type[]` with parametrized aliases, which the typing spec disallows (and which broke autodoc signature rendering); they now narrow to the bare base classes.
 
-## [0.9.0] - 2026-07-20
+**Release-history correction (2026-07-23).** The change set below was prepared as `0.9.0` on 2026-07-20, but no `v0.9.0` tag or PyPI release was created; `0.8.4` remains the latest public release. These changes therefore remain part of `[Unreleased]` and will ship with the eventual 1.0.
 
-The release-readiness release toward a confident 1.0: a cluster of reproduced security and correctness fixes (each landed with a regression test), the `py.typed` marker, a lazy import facade that roughly halves the module count of a bare `import my`, and dependency/packaging cleanup.
+This release-readiness change set contains reproduced security and correctness fixes (each landed with a regression test), the `py.typed` marker, a lazy import facade that roughly halves the module count of a bare `import my`, and dependency/packaging cleanup.
 
 ### Security
 

@@ -10,6 +10,7 @@ from collections.abc import (
     Sequence,
     MutableSequence,
     Iterable,
+    Collection,
     Generator,
 )
 from pathlib import Path
@@ -22,7 +23,7 @@ import textwrap
 import itertools as it
 import os
 from enum import Enum, auto
-from datetime import timedelta, datetime
+from datetime import timedelta, datetime, timezone
 from uuid import uuid4
 from io import TextIOWrapper
 import subprocess
@@ -38,7 +39,6 @@ import regex as re
 from regex import Pattern
 import pydantic as pyd
 import more_itertools as mi
-from my import Utils as BasisUtils
 
 import json
 import toml
@@ -50,7 +50,7 @@ from .PathRegistry import PathRegistry, PATHS
 from .types import TypesMixin
 from .Multiplex import Multiplex
 
-re.DEFAULT_VERSION = re.VERSION1  # type: ignore[bad-assignment]
+re.DEFAULT_VERSION = re.VERSION1
 
 ViewClass: TypeAlias = Union[sbp.ViewEventListener, sbp.TextCommand]
 T = TypeVar('T')
@@ -60,8 +60,8 @@ F = TypeVar('F', bound=FunctionType)
 P = ParamSpec('P')
 R = TypeVar('R')
 V = TypeVar('V', bound=ViewClass)
-MetaDecorator: TypeAlias = Callable[[Callable[P, R]], Callable[P, R]]
-ViewPropertyDecorator: TypeAlias = Callable[[Callable[[V], R]], Callable[[V], R]]
+MetaDecorator: TypeAlias = 'Callable[[Callable[P, R]], Callable[P, R]]'
+ViewPropertyDecorator: TypeAlias = 'Callable[[Callable[[V], R]], Callable[[V], R]]'
 
 Rest = TypeVarTuple('Rest')
 
@@ -75,7 +75,7 @@ RGX_REF_RGX = re.compile(NO_ESC + r'\{\{\.(?P<name>[_[:lower:]][_[:lower:]\d]*)\
 ############
 ### BODY ###
 ############
-class Utils(TypesMixin, BasisUtils):
+class Utils(TypesMixin):
     """Simple static class for exporting typed utilities en-masse.
 
     Originally entirely copied from the `my-basis` PyPi plugin (by the same original developer 🙂).
@@ -110,7 +110,7 @@ class Utils(TypesMixin, BasisUtils):
             )
 
             # II. Setup RGXS
-            cls.RGXS = BasisUtils.RGXS | cls.rgx_dict(
+            cls.RGXS = cls.rgx_dict(
                 no_esc=NO_ESC,
                 roman=r'(?i:M{1,4}|CM|C?D|D?C{1,3}|XC|X?L|L?X{1,3}|IX|I?V|V?I{1,3})',
                 roman_quad=r'(?i:C{4}|X{4}|I{4})',
@@ -152,9 +152,34 @@ class Utils(TypesMixin, BasisUtils):
             cls._IS_SETUP = True
 
     @classmethod
+    def posix(cls, val: int | float | datetime | None = None) -> datetime:
+        """Convert a timestamp or datetime to UTC datetime.
+
+        Args:
+            val: Unix timestamp (int/float), datetime object, or None for current time.
+        Returns:
+            Timezone-aware datetime in UTC.
+        """
+        if val is None:
+            return datetime.now(timezone.utc)
+        elif isinstance(val, datetime):
+            return val.astimezone(timezone.utc)
+        else:
+            return datetime.fromtimestamp(val, timezone.utc)
+
+    @classmethod
     def posix_since(cls, val: int | float | datetime | None = None) -> timedelta:
-        """Preserve the Sublime adapter's convention that falsy timestamps mean unset."""
-        return timedelta(0) if not val else super().posix_since(val)
+        """Calculate time elapsed since a given timestamp.
+
+        Args:
+            val: Unix timestamp (int/float), datetime object, or None.
+        Returns:
+            Timedelta representing elapsed time, or zero if val is falsy.
+        """
+        if not val:
+            return timedelta(0)
+        else:
+            return cls.posix() - cls.posix(val)
 
     @classmethod
     def milliseconds(cls, val: int | float | datetime | timedelta | None = None) -> int:
@@ -363,6 +388,31 @@ class Utils(TypesMixin, BasisUtils):
         return ret
 
     @classmethod
+    def multi_rgx(
+        cls,
+        *expressions: str | list[str],
+        branching: bool = False,
+        sep: str = r' ?',
+        pre: str = '',
+        suf: str = '',
+    ) -> str:
+        """Combine expression clauses into a single alternating group that matches any of them.
+
+        Args:
+            *expressions: Regex patterns to be combined.
+            sep: Separator for joining list patterns (default: ` ?`).
+            pre: Prefix to add before combined pattern (default: empty).
+            suf: Suffix to add after combined pattern (default: empty).
+            branching: If True, use branching group (resets group names b/w branches)
+        Returns:
+            Combined regex pattern in group format `(?|...)` or `(?:...)`.
+        """
+        parts = [(expr if isinstance(expr, str) else sep.join(expr)) for expr in expressions]
+        contents = r'|'.join(parts)
+        start = '?|' if branching else '?:'
+        return rf'{pre}({start}{contents}){suf}'
+
+    @classmethod
     def define_rgx(cls, **kwargs: str) -> str:
         """Define a regex pattern with named capture groups.
 
@@ -440,14 +490,196 @@ class Utils(TypesMixin, BasisUtils):
             delims.pop(i)
             sections.pop(i)
 
-    ROMAN_ARR: ClassVar[list[str]] = ['M', 'D', 'C', 'L', 'X', 'V', 'I']
+    ROMAN_ARR: ClassVar[str] = 'MDCLXVI'
     ROMAN_MAP: ClassVar[dict[str, int]] = dict(M=1000, D=500, C=100, L=50, X=10, V=5, I=1)
 
     @classmethod
     def decimal_to_roman(cls, decimal: int) -> str:
-        """Preserve the Sublime adapter's historical 3999 upper bound."""
+        """Convert a decimal number to its Roman numeral representation.
+
+        Only supports numbers up to 3999 (MMMCMXCIX).
+        """
         assert decimal <= 3999, f'Decimal {decimal} too large for Roman numeral form (max 3999).'
-        return super().decimal_to_roman(decimal)
+        ans = ''
+        for char, val in cls.ROMAN_MAP.items():
+            while decimal >= val:
+                ans += char
+                decimal -= val
+
+            if decimal == 0:
+                break
+
+        # Fix quads of tens-places (e.g. IIII -> IV, XXXX -> XL, CCCC -> CD)
+        for match in reversed(list(cls.RGXS['roman_quad'].finditer(ans))):
+            char = match[0][0]
+            d_idx = cls.ROMAN_ARR.index(char)
+            x0, x1 = match.span()
+            half = cls.ROMAN_ARR[d_idx - 1]
+            if x0 > 0 and ans[x0 - 1] == half:
+                ans = ans[: x0 - 1] + char + cls.ROMAN_ARR[d_idx - 2] + ans[x1:]
+            else:
+                ans = ans[:x0] + char + half + ans[x1:]
+
+        return ans
+
+    @classmethod
+    def roman_to_decimal(cls, roman: str) -> int:
+        """Convert a Roman numeral string to its decimal representation.
+
+        Only supports valid Roman numeral strings up to MMMCMXCIX (3999).
+        Invalid strings will return 0.
+        """
+        ans = 0
+        last_index = 0
+        for match in cls.RGXS['roman'].finditer(roman.upper()):
+            if match.start() != last_index:
+                return 0
+            else:
+                last_index = match.end()
+
+            v = [cls.ROMAN_MAP[char] for char in match[0]]
+            n_unique = len(set(v))
+            if n_unique == 2:
+                mod = v[0] * (-1 if v[1] > v[0] else 1)
+                main = v[1] * (len(v) - 1)
+                ans += main + mod
+            elif n_unique == 1:
+                ans += v[0] * len(v)
+            else:
+                return 0
+        if last_index != len(roman):
+            return 0
+
+        return ans
+
+    @staticmethod
+    @ctx.contextmanager
+    def debug_fence(
+        content: Any,
+        mark: str = '-',
+        width: int = 128,
+        indent: int = 0,
+    ) -> Generator:
+        """Context manager for printing debug information with a clear visual fence."""
+        if indent:
+            width -= indent
+            pre = ' ' * indent
+        else:
+            pre = ''
+        print(f'{pre}{mark * width}\n{pre}{" " + str(content) + " ":{mark}^{width}}')
+        yield
+        print(f'{pre}{mark * width}\n')
+
+    @staticmethod
+    def _multiprint_data(
+        data: Collection[tuple | pyd.BaseModel | dict] | pyd.BaseModel | dict | Any | None,
+        shorten: bool = False,
+        depth: int = 0,
+    ) -> Iterable[str]:
+        _in = '\t' * depth
+        if data is None:
+            return
+
+        # I. Series
+        elif isinstance(data, str):
+            yield f'{_in}{textwrap.shorten(data, 64, placeholder="...")}'
+            return
+        elif isinstance(data, (set, Sequence)):
+            if len(str(data)) < 32:
+                yield f'{_in}{data}'
+                return
+
+            for item in data:
+                for child_line in Utils._multiprint_data(item, shorten, depth + 1):
+                    if mi.ilen(it.takewhile(lambda s: s == '\t', child_line)) == depth + 1:
+                        yield f'{_in}- {child_line.strip()}'
+                    else:
+                        yield f'  {child_line}'
+
+        # II. Mappings
+        elif isinstance(data, (dict, pyd.BaseModel)):
+            if isinstance(data, pyd.BaseModel):
+                data = data.model_dump(exclude_defaults=True)
+
+            if len(str(data)) < 32:
+                yield f'{_in}{data}'
+                return
+
+            for key, val in data.items():
+                children = list(Utils._multiprint_data(val, shorten, depth + 1))
+                if len(children) == 1:
+                    yield f'{_in}{key}: {children[0].strip()}'
+                else:
+                    yield f'{_in}{key}:'
+                    yield from children
+
+        # III. All Others
+        elif isinstance(data, type):
+            yield f'{_in}{data.__name__}'
+        else:
+            yield f'{_in}{data}'
+
+    @classmethod
+    def multiprint(
+        cls,
+        *items: Any,
+        title: str = '',
+        lines: Iterable[str] | None = None,
+        data: dict | pyd.BaseModel | set | Sequence | None = None,
+        indent: int = 0,
+        indent_range: tuple[int, int] = (0, 0),
+        shorten: bool = False,
+        quiet: bool = False,
+        margins: tuple[int, int] = (0, 1),
+        **kwargs: Any,
+    ) -> str:
+        """Flexibly print multiple lines with a few convenient features for plaintext formatting.
+
+        Args:
+            *items: Items to print after being converted to strings.
+            title: Title line(s) to print before any indented content. Sets indent to 4 if unset.
+            lines: Additional lines to print (in addition to the items), as an iterable of strings.
+            data: Additional key-value pairs to print as "key: value" lines after the items.
+            indent: Number of spaces to indent each line by.
+            indent_range: Optional subset of line indices to apply the indent to.
+            shorten: If true, apply some basic shortening techniques to the output.
+            quiet: Do not print anything to stdout, just return the formatted string.
+            margins: Number of newlines to print before and after the content.
+            **kwargs: Additional keyword arguments to pass to `print()`.
+        Returns:
+            The constructed multiline string.
+        """
+        # I. Preprocess items into lines
+        lines = list(
+            mi.flatten(
+                map(
+                    str.splitlines,
+                    it.chain(
+                        lines or [],
+                        map(str, items),
+                        cls._multiprint_data(data, shorten),
+                    ),
+                )
+            )
+        )
+
+        # II. Handle title lines, which are merely shorthand for indented lines at the top
+        if title:
+            indent = indent or 4
+            indent_range = (indent_range[0] + 1, indent_range[1])
+            lines.insert(0, title)
+
+        # III. Handle indents, which can apply to all or just some of the output
+        if indent:
+            prefix = ' ' * indent
+            for i in range(indent_range[0], (indent_range[1] or len(lines))):
+                lines[i] = f'{prefix}{lines[i]}'
+
+        # IV. Join the lines into a single result, and optionally print it to stdout if requested
+        ret = ('\n' * margins[0]) + '\n'.join(lines) + ('\n' * margins[1])
+        if not quiet:
+            print(ret, **kwargs)
+        return ret
 
     @overload
     @classmethod
@@ -552,6 +784,16 @@ class Utils(TypesMixin, BasisUtils):
         yield from ((key, list(items)) for key, items in it.groupby(_iter, key=pred))
 
     @classmethod
+    def indexof(cls, iterable: Sequence[T], *preds: Callable[[T], bool] | T) -> int:
+        """Return the first index in the given iterable that satisfies the predicate."""
+        _preds = tuple(
+            (pred if (callable(pred) and isinstance(pred, FunctionType)) else pred.__eq__)
+            for pred in preds
+        )
+        uni_pred = lambda item: any(fn(item) for fn in _preds)
+        return mi.first(mi.locate(iterable, uni_pred), default=-1)
+
+    @classmethod
     def locate(cls, seq: Sequence[T], pred: Callable[[T], bool]) -> tuple[int, T]:
         """Return the object+index in the given seq that satisfies the predicate.
 
@@ -572,6 +814,24 @@ class Utils(TypesMixin, BasisUtils):
         )
         return sequence[:index] + sequence[index + 1 :]
 
+    @staticmethod
+    def clear_cached_properties(inst: object, *properties: str) -> None:
+        """Clear cached properties from an object instance.
+
+        If no properties specified, clears all properties listed in instance's
+        CACHED_PROPERTIES attribute.
+
+        Args:
+            inst: Object instance to clear cached properties from.
+            *properties: Property names to clear. If empty, uses inst.CACHED_PROPERTIES.
+        """
+        if not properties and hasattr(inst, 'CACHED_PROPERTIES'):
+            properties = tuple(getattr(inst, 'CACHED_PROPERTIES'))
+
+        for prop in properties:
+            if prop in inst.__dict__:
+                del inst.__dict__[prop]
+
     @classmethod
     def plural(cls, count: int | float, singular: str, plural: str | None = None) -> str:
         """Return the singular or plural form of a word based on the given count."""
@@ -580,7 +840,7 @@ class Utils(TypesMixin, BasisUtils):
     # -------
     # WRITING
     # -------
-    ViewPosition: TypeAlias = sb.Region | int | tuple[int, ...]
+    ViewPosition: TypeAlias = 'sb.Region | int | tuple[int, ...]'
 
     class Write(NamedTuple):
         """A simple container for batching writes to a view, used by `batch_write()` especially."""
@@ -631,7 +891,7 @@ class Utils(TypesMixin, BasisUtils):
             """The change in length that this write would produce."""
             return len(self.region) - len(self.text)
 
-    Writer: TypeAlias = Callable[[ViewPosition, Any], None]
+    Writer: TypeAlias = 'Callable[[ViewPosition, Any], None]'
 
     @classmethod
     @ctx.contextmanager
@@ -666,6 +926,43 @@ class Utils(TypesMixin, BasisUtils):
                 view.insert(edit, old_region.a, new_text)
             else:
                 view.replace(edit, old_region, new_text)
+
+    @staticmethod
+    def replace(
+        string: str,
+        *args: tuple[str | Pattern, str | Callable[[re.Match[str]], str]],
+    ) -> str:
+        """Apply multiple regex replacements sequentially to a string.
+
+        Args:
+            string: Input string to transform.
+            *args: Tuples of (pattern, replacement) for sequential application.
+        Returns:
+            String with all replacements applied in order.
+        """
+        for pattern, repl in args:
+            string = re.sub(pattern, repl, string)
+        return string
+
+    @classmethod
+    def _clean_nonwords(cls, string: str) -> str:
+        """Clean non-word characters from string using standard replacements.
+
+        Internal method that normalizes newlines, punctuation, spaces, and hyphens.
+
+        Args:
+            string: String to clean.
+        Returns:
+            Cleaned string with normalized spacing and punctuation.
+        """
+        return cls.replace(
+            string,
+            (cls.RGXS['newlines'], ' '),
+            (cls.RGXS['punctuation'], ''),
+            (cls.RGXS['nonwords'], '_'),
+            (cls.RGXS['spaces'], '-'),
+            (cls.RGXS['multihyphens'], '-'),
+        ).strip('_-')
 
     class TextCase(Enum):
         """Enumeration of common text case styles."""
@@ -897,10 +1194,10 @@ class Utils(TypesMixin, BasisUtils):
             None,
         )
 
-    @classmethod
-    def path(cls, raw: str | Path | None) -> Path:
+    @staticmethod
+    def path(path: str | Path) -> Path:
         """Coerce a string path to a Path object, normalizing separators and redundant parts."""
-        return Path(raw or '').expanduser()
+        return Path(path).expanduser()
 
     @classmethod
     def qualify_resource_names(cls, *targets: str) -> list[str]:

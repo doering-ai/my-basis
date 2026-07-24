@@ -26,7 +26,7 @@ class LogToDiskCommand(sbp.ApplicationCommand):
     def run(
         self,
         *,
-        target: bool | str | Path | None = True,
+        target: bool | None | str | Path = True,
         **_kwargs,
     ) -> None:
         """Write the content to the specified file path.

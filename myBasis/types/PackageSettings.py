@@ -125,7 +125,7 @@ class PackageSettings(pyd.BaseModel):
 
     def refresh(self, settings: sb.Settings) -> Self:
         """Refresh the state of this object based on new readings from a file."""
-        for key in type(self).model_fields.keys():
+        for key in self.model_fields.keys():
             if val := settings.get(key, settings.get(f'PKG.{key}', None)):
                 setattr(self, key, val)
         return self

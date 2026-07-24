@@ -8,10 +8,9 @@ from collections.abc import Iterator
 
 ### EXTERNAL
 import pytest as pyt
+import sublime as sb
 
 ### INTERNAL
-import myBasis  # noqa: F401  # installs the mock Sublime modules before their first import
-import sublime as sb
 
 
 ############

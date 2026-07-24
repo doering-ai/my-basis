@@ -1,36 +1,21 @@
 {
   "$schema": "sublime://packagecontrol.io/schemas/dependencies",
   "*": {
-    ">=4205": [
-      "annotated-types",
-      "catalogue",
+    ">=4096": [
       "jinja2",
-      "markdown-it-py",
-      "markupsafe",
-      "mdformat",
-      "mdformat-front-matters",
-      "mdit-py-plugins",
-      "mdpopups",
-      "mdurl",
       "more-itertools",
-      "my-basis",
-      "numpy",
       "pydantic",
       "pydantic-core",
-      "python-dateutil",
-      "python-dotenv",
       "regex",
       "ruamel.yaml",
       "ruamel.yaml.clib",
-      "six",
-      "srsly",
-      "sublime_aio",
       "sublime_lib",
+      "sublime_aio",
+      "mdpopups",
       "toml",
-      "tomli-w",
-      "typing-extensions",
-      "typing-inspection",
-      "unidecode"
+      "annotated-types",
+      "eval_type_backport",
+      "typing-extensions"
     ]
   }
 }

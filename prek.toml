@@ -15,20 +15,12 @@ hooks = [
 repo = "local"
 
 [[repos.hooks]]
-id = "lint"
-name="Run the ruff linter on the filesystem."
-language="system"
-files=".*\\.py$"
-pass_filenames=false
-entry="task eval:lint"
-
-[[repos.hooks]]
-id = "format"
-name="Run the ruff formatter on the filesystem."
-language="system"
-files=".*\\.py$"
-pass_filenames=false
-entry="task format"
+id = "precommit"
+name = "task precommit (format + lint, staged)"
+language = "system"
+files = "\\.(?i:py|ya?ml|to?ml|md)$"
+pass_filenames = false
+entry = "task precommit"
 
 [[repos.hooks]]
 id = "check-sync"

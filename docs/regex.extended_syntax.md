@@ -23,7 +23,9 @@ If you're new to regex in general, I recommend you start by reading [python's qu
 _([regular-expressions.info lesson](https://www.regular-expressions.info/modifiers.html))_
 
 ```{admonition} [Basic Syntax](https://docs.python.org/3/library/re.html#flags)
-:class: hint
+---
+class: hint
+---
 See Python's standard-library `re` documentation for the basic, global flag syntax; the sections below cover the scoped and extended flags added by the `regex` module.
 ```
 
@@ -34,12 +36,15 @@ Scoped flags can apply to only part of a pattern and can be turned on or off.
 #### Encoding
 
 ##### `(?u)` UNICODE
+
 The default encoding of a regex string, matching everything according to international Unicode standards.
 
 ##### `(?a)` ASCII
+
 Makes `\w`, `\W`, `\b`, `\B`, `\d`, `\D`, `\s` and `\S` match only ASCII characters.
 
 ##### `(?L)` LOCALE
+
 Makes `\w`, `\W`, `\b`, `\B`, `\d`, `\D`, `\s` and `\S` match according to the current locale settings.
 
 ```{caution}
@@ -50,9 +55,11 @@ We recommended you use `UNICODE` instead.
 #### Case
 
 ##### `(?i)` IGNORECASE
+
 Upper and lower case alphabet characters are matched as if they were identical.
 
 ##### `(?f)` FULLCASE
+
 When combined with `(?i)`, enables "full" [case-folding](https://www.w3.org/TR/charmod-norm/#definitionCaseFolding) of Unicode text, which is critical if dealing with non-romance languages.
 
 The flag is off by default in V0, and on by default in V1.
@@ -65,16 +72,19 @@ regex.match(r"(?iV1)stra\N{LATIN SMALL LETTER SHARP S}e", "STRASSE").span() # ->
 #### Whitespace
 
 ##### `(?m)` MULTILINE
+
 _([regular-expressions.info lesson](https://www.regular-expressions.info/anchors.html))_
 
 The `^` and `$` literals now match the beginnings and ends of lines, rather than of the whole string/file.
 
 ##### `(?s)` DOTALL
+
 _([regular-expressions.info lesson](https://www.regular-expressions.info/dot.html))_
 
 The catch-all literal `.` now also catches line separators.
 
 ##### `(?x)` VERBOSE (i.e. Extended)
+
 _([regular-expressions.info lesson](https://www.regular-expressions.info/freespacing.html))_
 
 Ignores all raw whitespace characters in the following pattern, allowing the user to include whitespace between components for clarity.
@@ -83,6 +93,7 @@ Also allows comments, which begin with an "#" and continue until the end of the 
 To match whitespace in an extended expression, wrap it in a character set (e.g. ` ?` -> `[ ]?`).
 
 ##### `(?w)` WORD
+
 Changes the definition of a 'word boundary' (`\b`/`\B`) to that of a default Unicode word boundary, a better choice for a variety of non-romance languages.
 
 It also affects line separators (and, in turn, `(?s)` and `(?m)`):
@@ -98,6 +109,7 @@ Global flags apply to the entire pattern and can only be turned on -- if these p
 #### General
 
 ##### `(?p)` Posix
+
 Enables POSIX (leftmost longest) matching.
 
 Note that it will take longer to find matches because when it finds a match at a certain position, it won't return that immediately, but will keep looking to see if there's another longer match there.
@@ -111,6 +123,7 @@ regex.search(r'(?p)one(self)?(selfsufficient)?', 'oneselfsufficient') # -> onese
 ```
 
 ##### `(?r)` Reverse
+
 Enables reverse matching (from the end of the string to the beginning).
 
 ```python
@@ -128,17 +141,21 @@ regex.findall(r"(?r)..", "abcde") # -> ['de', 'bc']
 #### Version
 
 ##### `(?V0)` Version0
+
 Enables version 0 behaviour (old behaviour, compatible with the re module).
 
 ##### `(?V1)` Version1
+
 Enables version 1 behaviour (new behaviour, possibly different from the re module).
 
 #### Fuzzy Match Modes
 
 ##### `(?b)` Best Match
+
 Enables [fuzzy matching](#fuzzy-matching) search for the best match instead of the next match.
 
 ##### `(?e)` Enhance Match
+
 Enables [fuzzy matching](#fuzzy-matching) to attempt to improve the fit of the next match that it finds.
 
 ## Sets
@@ -311,6 +328,7 @@ A lookbehind can match a variable-length string.
 ## Other Literals
 
 (unicode)=
+
 ### Unicode Properties (`\p{property}`)
 
 _([regular-expressions.info lesson](https://www.regular-expressions.info/unicode.html))_
@@ -340,6 +358,7 @@ In addition to the usual properties, you can also use:
 - `\p{Vert_Space}`/`\p{V}` matches vertical whitespace.
 
 (posix)=
+
 ### POSIX Character Classes (`[[:class:]]`)
 
 _([regular-expressions.info lesson](https://www.regular-expressions.info/posixbrackets.html))_

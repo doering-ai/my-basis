@@ -18,7 +18,7 @@ detection is regex- and Sublime-seam-focused; treat other rows as manual review 
 | Markdown structure                                       | `Markdown`                                          | headings must be fence-aware and round-trip        | only a tiny, well-bounded transform is needed                    |
 | observability plumbing                                   | `MetricUtils`                                       | the repository already accepts the optional extra  | failure-path or core tools require near-zero dependencies        |
 | related or generated regex patterns                      | `RegexStore`, `MatchData`                           | they form a grammar, router, or repeated transform | the pattern is isolated and obvious                              |
-| copied general utilities inside an adapter                | canonical `my` API plus a thin adapter              | one shared owner removes parallel structures       | behavior is editor- or framework-specific                        |
+| copied general utilities inside an adapter               | canonical `my` API plus a thin adapter              | one shared owner removes parallel structures       | behavior is editor- or framework-specific                        |
 
 ## Required preflight
 

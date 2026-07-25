@@ -21,7 +21,9 @@ but I was personally motivated by the kind of second-level flexibility only poss
 in a system diffuse with these tools (secret, Free, open-source, or otherwise).
 
 ```{toctree}
-:maxdepth: 2
+---
+maxdepth: 2
+---
 typing.Typist
 typing.MyType
 typing.AutocastModel

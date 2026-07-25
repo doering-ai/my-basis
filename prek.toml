@@ -4,28 +4,28 @@ default_language_version.python = "3.13"
 repo = "https://github.com/pre-commit/pre-commit-hooks"
 rev = "v6.0.0"
 hooks = [
-  { id = "check-yaml" },
-  { id = "check-toml" },
-  { id = "check-added-large-files" },
-  { id = "end-of-file-fixer" },
-  { id = "trailing-whitespace" },
+    { id = "check-yaml" },
+    { id = "check-toml" },
+    { id = "check-added-large-files" },
+    { id = "end-of-file-fixer" },
+    { id = "trailing-whitespace" },
 ]
 
 [[repos]]
 repo = "local"
 
 [[repos.hooks]]
-id = "precommit"
-name = "task precommit (format + lint, staged)"
-language = "system"
-files = "\\.(?i:py|ya?ml|to?ml|md)$"
+id             = "precommit"
+name           = "task precommit (format + lint, staged)"
+language       = "system"
+files          = "\\.(?i:py|ya?ml|to?ml|md)$"
 pass_filenames = false
-entry = "task precommit"
+entry          = "task precommit"
 
 [[repos.hooks]]
-id = "check-sync"
-name="Check that uv is synced and locked."
-language="system"
-files="(pyproject.toml|uv.lock)$"
-pass_filenames=false
-entry="uv lock --check"
+id             = "check-sync"
+name           = "Check that uv is synced and locked."
+language       = "system"
+files          = "(pyproject.toml|uv.lock)$"
+pass_filenames = false
+entry          = "uv lock --check"

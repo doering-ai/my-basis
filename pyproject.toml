@@ -11,21 +11,21 @@ license-files = ["LICENSE"]
 authors = [{ name = "Robb Doering", email = "robb@doering.ai" }]
 requires-python = ">=3.12"
 classifiers = [
-  "Programming Language :: Python :: 3.12",
-  "Programming Language :: Python :: 3.13",
-  "Programming Language :: Python :: 3.14",
-  "Framework :: Pydantic :: 2",
-  "Intended Audience :: Developers",
-  "Topic :: Software Development :: Libraries :: Python Modules",
-  "Topic :: Text Processing :: General",
-  "Topic :: Utilities",
-  "Typing :: Typed",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Framework :: Pydantic :: 2",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Text Processing :: General",
+    "Topic :: Utilities",
+    "Typing :: Typed",
 ]
 
 # PyPI renders these as the sidebar "Project links".
-urls.Homepage = "https://gitlab.com/doering-ai/libs/basis"
-urls.Source = "https://gitlab.com/doering-ai/libs/basis"
-urls.Issues = "https://gitlab.com/doering-ai/libs/basis/-/issues"
+urls.Homepage      = "https://gitlab.com/doering-ai/libs/basis"
+urls.Source        = "https://gitlab.com/doering-ai/libs/basis"
+urls.Issues        = "https://gitlab.com/doering-ai/libs/basis/-/issues"
 urls.Documentation = "https://my-basis.readthedocs.io"
 
 
@@ -33,75 +33,75 @@ urls.Documentation = "https://my-basis.readthedocs.io"
 ### II. DEPENDENCIES ###
 ########################
 dependencies = [
-  "jinja2>=3.1.6",
-  "mdformat>=0.7.22",
-  "mdformat-front-matters>=2.0.0", # Markdown.render()'s default template emits frontmatter
-  "more-itertools>=10.7.0",
-  "numpy>=2.4.1",
-  "pydantic>=2.12.2",
-  "python-dateutil>=2.9.0.post0",
-  "python-dotenv>=1.0.1",
-  "regex>=2024.4.28",
-  "srsly>=2.5.1",
-  "tomli-w>=1.2.0",
-  "typing-extensions>=4.15.0",
-  "unidecode>=1.4.0",
+    "jinja2>=3.1.6",
+    "mdformat>=0.7.22",
+    "mdformat-front-matters>=2.0.0", # Markdown.render()'s default template emits frontmatter
+    "more-itertools>=10.7.0",
+    "numpy>=2.4.1",
+    "pydantic>=2.12.2",
+    "python-dateutil>=2.9.0.post0",
+    "python-dotenv>=1.0.1",
+    "regex>=2024.4.28",
+    "srsly>=2.5.1",
+    "tomli-w>=1.2.0",
+    "typing-extensions>=4.15.0",
+    "unidecode>=1.4.0",
 ]
 
 [project.optional-dependencies]
 aiohttp = ["aiohttp>=3.12.15"]
 myst = ["mdformat-myst>=0.3.0"]
 metrics = [
-  "opentelemetry-instrumentation-aiohttp-client>=0.57b0",
-  "opentelemetry-instrumentation-asgi>=0.57b0",
-  "logfire[system-metrics]>=4.37.0",
-  "pandas>=2.3.2",
+    "opentelemetry-instrumentation-aiohttp-client>=0.57b0",
+    "opentelemetry-instrumentation-asgi>=0.57b0",
+    "logfire[system-metrics]>=4.37.0",
+    "pandas>=2.3.2",
 ]
 google = [
-  "google-api-python-client>=2.179.0",
-  "google-auth-httplib2>=0.2.0",
-  "google-auth-oauthlib>=1.2.2",
-  "pandas>=2.3.2",
+    "google-api-python-client>=2.179.0",
+    "google-auth-httplib2>=0.2.0",
+    "google-auth-oauthlib>=1.2.2",
+    "pandas>=2.3.2",
 ]
 terminal = ["pyratatui>=0.2.9"]
 
 [dependency-groups]
 dev = [
-  { include-group = "cli" },
-  { include-group = "eval" },
-  { include-group = "test" },
-  { include-group = "docs" },
+    { include-group = "cli" },
+    { include-group = "eval" },
+    { include-group = "test" },
+    { include-group = "docs" },
 ]
 
 # Sub-groups for development dependencies
 cli = ["bpython>=0.26", "better-exceptions>=0.3.3", "prek>=0.3.13"]
 # Evaluation dependencies for type checking, linting, and code analysis
 eval = [
-  "ruff>=0.14.10",
-  "types-python-dateutil>=2.9.0.20250822",
-  "types-regex>=2025.7.34.20250809",
-  "types-tqdm>=4.67.0.20250809",
-  "pandas-stubs>=2.3.0.250703",
-  "pyrefly>=0.62.0",
+    "ruff>=0.14.10",
+    "types-python-dateutil>=2.9.0.20250822",
+    "types-regex>=2025.7.34.20250809",
+    "types-tqdm>=4.67.0.20250809",
+    "pandas-stubs>=2.3.0.250703",
+    "pyrefly>=0.62.0",
 ]
 # Testing dependencies for unit tests, coverage, and test utilities
 test = [
-  "coverage>=7.10.5",
-  "pytest-asyncio>=1.1.0",
-  "pytest-cov>=6.2.1",
-  "pytest-timeout>=2.4.0",
-  "pytest>=9.0.0",
-  "syrupy>=5.1.0",
+    "coverage>=7.10.5",
+    "pytest-asyncio>=1.1.0",
+    "pytest-cov>=6.2.1",
+    "pytest-timeout>=2.4.0",
+    "pytest>=9.0.0",
+    "syrupy>=5.1.0",
 ]
 # Documentation dependencies for building and hosting project documentation
 docs = [
-  "furo>=2025.12.19",                  # HTML Theme
-  "linkify-it-py>=2.0.3",              # Nested sphinx dependency
-  "myst-parser>=4.0.1",                # Support myst syntax
-  "sphinx>=8.2.3",                     # Documentation generator
-  "sphinx-hoverxref>=1.4.2",           # Cross-referencing tool
-  "sphinx-last-updated-by-git>=0.3.8", # Git integration for last updated info
-  "sphinx-notfound-page>=1.1.0",       # Custom 404 page for missing docs
+    "furo>=2025.12.19",                  # HTML Theme
+    "linkify-it-py>=2.0.3",              # Nested sphinx dependency
+    "myst-parser>=4.0.1",                # Support myst syntax
+    "sphinx>=8.2.3",                     # Documentation generator
+    "sphinx-hoverxref>=1.4.2",           # Cross-referencing tool
+    "sphinx-last-updated-by-git>=0.3.8", # Git integration for last updated info
+    "sphinx-notfound-page>=1.1.0",       # Custom 404 page for missing docs
 ]
 
 [tool.uv]
@@ -115,7 +115,7 @@ exclude-newer = "10 days"
 ### III. BUILD SYSTEM ###
 #########################
 [build-system]
-requires = ["uv_build>=0.11.7,<0.12"]
+requires      = ["uv_build>=0.11.7,<0.12"]
 build-backend = "uv_build"
 [tool.uv.build-backend]
 module-name = ["my"]
@@ -124,9 +124,9 @@ module-root = ""
 source-exclude = ["/typst"]
 
 [project.scripts]
-my-basis-adopt = "my.scripts.adopt_basis:main"
+my-basis-adopt   = "my.scripts.adopt_basis:main"
 regex-storefront = "my.scripts.regex_storefront:main"
-sync-docs = "my.scripts.sync_docs:main"
+sync-docs        = "my.scripts.sync_docs:main"
 
 #############################
 ### IV. DEVELOPMENT TOOLS ###
@@ -143,14 +143,14 @@ timeout = 15
 [tool.coverage.report]
 # Regexes for lines to exclude from consideration
 exclude_also = [
-  'def __repr__',
-  'if[- \w.]+\b(?i:debug):',
-  'assert ',
-  'raise (Assertion|NotImplemented)Error',
-  'if 0:',
-  'if __name__ == .__main__.:',
-  '@(abc\.)?abstractmethod',
-  '^([a-z]\w+?\.)?[A-Z][_A-Z]+(:[^=\n]+)? *=[^\n]+(?=\n\S)',
+    'def __repr__',
+    'if[- \w.]+\b(?i:debug):',
+    'assert ',
+    'raise (Assertion|NotImplemented)Error',
+    'if 0:',
+    'if __name__ == .__main__.:',
+    '@(abc\.)?abstractmethod',
+    '^([a-z]\w+?\.)?[A-Z][_A-Z]+(:[^=\n]+)? *=[^\n]+(?=\n\S)',
 ]
 ignore_errors = true
 
@@ -159,20 +159,20 @@ ignore_errors = true
 # ------
 [tool.pyrefly]
 project-includes = ["my/**/*.py*", "tests/**/*.py*"]
-min-severity = 'warn'
+min-severity     = 'warn'
 # Typecheck at the FLOOR, not the newest interpreter: 3.12 is where the version-gated
 # diagnostics surface. `task eval:typecheck:matrix` sweeps the rest of the supported range.
-python-version = '3.12'
+python-version         = '3.12'
 check-unannotated-defs = true
-permissive-ignores = true
-search-path = ['.']
+permissive-ignores     = true
+search-path            = ['.']
 
 [tool.pyrefly.errors]
-missing-source = false
-implicit-any = false
+missing-source        = false
+implicit-any          = false
 unannotated-parameter = false
-no-access = 'error'
-unused-ignore = 'error'
+no-access             = 'error'
+unused-ignore         = 'error'
 unannotated-attribute = 'error'
 
 # No diagnostic baseline: `task eval:typecheck` is the ratchet. Keep intentional violations
@@ -183,84 +183,84 @@ unannotated-attribute = 'error'
 # -------
 [tool.ruff]
 indent-width = 4
-line-length = 100
+line-length  = 100
 
 [tool.ruff.format]
-quote-style = "single"
-indent-style = "space"
-skip-magic-trailing-comma = false
-line-ending = "auto"
-docstring-code-format = true
+quote-style                = "single"
+indent-style               = "space"
+skip-magic-trailing-comma  = false
+line-ending                = "auto"
+docstring-code-format      = true
 docstring-code-line-length = "dynamic"
 
 [tool.ruff.lint]
 select = [
-  "A",     # builtins
-  "ASYNC", # async
-  "B",     # bugbear
-  "C4",    # comprehensions
-  "D",     # PyDocStyle
-  "E",     # PyCodeStyle errors
-  "F",     # PyFlakes
-  "FA",    # annotations
-  "FAST",  # FastAPI
-  "ISC",   # implicit-str-concat
-  "N",     # Naming
-  "TC",    # type checking
-  "NPY",   # numpy
-  "PIE",   # misc.
-  "PLE",   # PyLint errors
-  "PTH",   # use pathlib
-  "PERF",  # performance
-  "PT",    # pytest
-  "PD",    # pandas
-  "RUF",   # ruff
-  "SIM",   # simplification
-  "UP",    # upgrade 2.7 idioms
+    "A",     # builtins
+    "ASYNC", # async
+    "B",     # bugbear
+    "C4",    # comprehensions
+    "D",     # PyDocStyle
+    "E",     # PyCodeStyle errors
+    "F",     # PyFlakes
+    "FA",    # annotations
+    "FAST",  # FastAPI
+    "ISC",   # implicit-str-concat
+    "N",     # Naming
+    "TC",    # type checking
+    "NPY",   # numpy
+    "PIE",   # misc.
+    "PLE",   # PyLint errors
+    "PTH",   # use pathlib
+    "PERF",  # performance
+    "PT",    # pytest
+    "PD",    # pandas
+    "RUF",   # ruff
+    "SIM",   # simplification
+    "UP",    # upgrade 2.7 idioms
 ]
 
 ignore = [
-  # Bugbear
-  "B009",
-  "B905",
+    # Bugbear
+    "B009",
+    "B905",
 
-  # Comprehensions
-  "C408",
-  "C413",
+    # Comprehensions
+    "C408",
+    "C413",
 
-  # PyCodeStyle
-  "E266",
-  "E731", # allow lambdas
+    # PyCodeStyle
+    "E266",
+    "E731", # allow lambdas
 
-  # Naming
-  "N999",
+    # Naming
+    "N999",
 
-  # PyLint errors
-  "PT013",
-  "PT018",
+    # PyLint errors
+    "PT013",
+    "PT018",
 
-  # Ruff
-  "RUF022",
+    # Ruff
+    "RUF022",
 
-  # Simplify
-  "SIM102", # combine nested ifs
-  "SIM114", # combine if branches
-  "SIM118",
+    # Simplify
+    "SIM102", # combine nested ifs
+    "SIM114", # combine if branches
+    "SIM118",
 
-  # PyDocStyle
-  "D100", # docstrings for modules
-  "D104", # docstrings for packages
-  "D105", # docstrings for magic methods
-  "D410", # blank line after docstring sections
-  "D411", # blank line before docstring sections
+    # PyDocStyle
+    "D100", # docstrings for modules
+    "D104", # docstrings for packages
+    "D105", # docstrings for magic methods
+    "D410", # blank line after docstring sections
+    "D411", # blank line before docstring sections
 
-  # Upgrade
-  "UP007",
+    # Upgrade
+    "UP007",
 
-  # Type Checking
-  "TC001",
-  "TC002",
-  "TC003",
+    # Type Checking
+    "TC001",
+    "TC002",
+    "TC003",
 ]
 
 [tool.ruff.lint.per-file-ignores]

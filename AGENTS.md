@@ -165,7 +165,6 @@ Each public class and function should have a docstring describing its purpose, p
 Docstrings follow the Google format for python docstrings.
 Do not include type annotations in the docstring.
 
-
 ______________________________________________________________________
 
 ## Task Backlog — `~/local/tasks` (read this first)

@@ -19,7 +19,9 @@ It's aimed at Python developers of all kinds, but it's especially worth a perusa
 The package is organized into seven subpackages, which are (in rough order from most- to least-general):
 
 ```{toctree}
-:maxdepth: 2
+---
+maxdepth: 2
+---
 1. My Utilities <utils>
 2. Type Casting <typing>
 3. Useful Types <types>

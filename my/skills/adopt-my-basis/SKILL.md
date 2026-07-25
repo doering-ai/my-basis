@@ -73,8 +73,7 @@ is regex-focused; inspect the other inventory categories manually.
 10. Run repository-native tests, lint, typing, build, and docs gates as applicable.
     Record exact commands, working directories, exit codes, and concise output.
 11. Commit each behavior-preserving transformation atomically. Capture it with
-    `my-basis-adopt capture <repo> --base <base> --head <head> --output-dir <dir> \
-    --summary <story>`. Keep small patches directly copy-ready and summarize large ones.
+    `my-basis-adopt capture <repo> --base <base> --head <head> --output-dir <dir> \ --summary <story>`. Keep small patches directly copy-ready and summarize large ones.
 12. Write `proposal.json` against proposal v2, include every captured manifest under
     `vcs.diffs`, run `my-basis-adopt validate`, and render MyST or Typst.
 13. Return the rendered artifact, source proposal, branch/commit or patch, exact

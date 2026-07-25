@@ -14,7 +14,7 @@ consequences:
 1. **Action at a distance.** Any caller mutating `ty.splits = …` changes every other
    caller's cast results process-wide. The suite already needs a save/restore fixture
    (`flex_typist` in `tests/typing/test_cast.py`) just to survive its own flag tests.
-1. **No memoization, ever.** A cast's output depends on ambient mutable state, so results
+2. **No memoization, ever.** A cast's output depends on ambient mutable state, so results
    can never be cached — every repeated `cast('a.b', list[str])` re-runs the full dispatch.
 
 ## Proposal

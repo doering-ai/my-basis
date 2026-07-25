@@ -53,9 +53,9 @@ Summaries should use this form:
 
 For a fleet campaign, create one index row per atomic commit:
 
-| Repository | Transformation | APIs | Tests | Patch SHA-256 |
-| --- | --- | --- | --- | --- |
-| plugin | copied helper to canonical facade | `my.ut` | contract matrix | manifest value |
+| Repository | Transformation                    | APIs    | Tests           | Patch SHA-256  |
+| ---------- | --------------------------------- | ------- | --------------- | -------------- |
+| plugin     | copied helper to canonical facade | `my.ut` | contract matrix | manifest value |
 
 Do not combine unrelated repositories into one patch. A fleet report may group
 the narratives, but each repository retains its own branch, commits, gates, and

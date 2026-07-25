@@ -234,7 +234,7 @@ Core-only `Markdown.render(fix=True)` (the default) silently corrupts.
 
 PyPI JSON API: `my-basis` 0.8.1/0.8.2/0.8.3 all live — README says "not yet published".
 Quickstart `ty.cast('a,b,c', list[str])` → `['a,b,c']` (not `['a','b','c']`; deliberate MEMY-325 change).
-Also: "Built for Python 3.12+" vs `requires-python >=3.13`; dead link `my/base/utils.py` (no `my/base/`); \~25 empty "Modules" headers.
+Also: "Built for Python 3.12+" vs `requires-python >=3.13`; dead link `my/base/utils.py` (no `my/base/`); ~25 empty "Modules" headers.
 
 ______________________________________________________________________
 

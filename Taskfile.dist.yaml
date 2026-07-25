@@ -151,7 +151,7 @@ tasks:
 
     agent:merge:
         cmd: '{{.AWT}} merge {{.CLI_ARGS}}'
-        desc: 'Land a reviewed branch into local main (never pushes): `task agent:merge -- agent/<branch>`.'
+        desc: 'Land a reviewed branch into main and push by default: `task agent:merge -- agent/<branch>`.'
         aliases: [wt:merge, wt:land]
 
     agent:abandon:
@@ -174,11 +174,12 @@ tasks:
     # Evaluation
     # ----------
     eval:
-        desc: Statically assess the codebase without applying formatting.
+        desc: Format the codebase (python, markdown, yaml, toml), then run static assessment.
         deps:
-            - eval:lint
-            - eval:typecheck
             - eval:format
+        cmds:
+            - task: eval:lint
+            - task: eval:typecheck
 
     eval:lint:
         cmd: '{{.UV}} run ruff check {{.CLI_ARGS}}'
@@ -190,10 +191,117 @@ tasks:
         desc: Verify types and import structure with `pyrefly check`.
         aliases: [ty, types]
 
+    eval:typecheck:matrix:
+        desc: Typecheck against every supported interpreter (`3.pyver .. 3.pymax`). `pyrefly`'s
+            configured `python-version` should be the FLOOR, so this adds the newer ones.
+        aliases: [tym, types-matrix, typecheck-matrix]
+        vars:
+            PYVERS:
+                sh: seq {{get .REPO "pyver"}} {{get .REPO "pymax" | default (get .REPO "pyver")}}
+                    | sed 's/^/3./' | tr '\n' ' '
+        cmd: |
+            set -e
+            for v in {{.PYVERS}}; do
+              printf '\033[1m── pyrefly @ py%s ──\033[0m\n' "$v"
+              {{.UV}} run pyrefly check . --python-version "$v" {{.CLI_ARGS}}
+            done
+
+    # Formatting — `eval:format` is the umbrella that runs every formatter in place.
+    # Each leaf accepts `{{.CLI_ARGS}}` for targeted runs (e.g. `task eval:format:py -- f.py`);
+    # with no args the leaves format the whole tree. Config lives in the per-project
+    # `.mdformat.toml` / `.taplo.toml` / `.yamlfmt.yaml` (these tools do not read pyproject.toml).
     eval:format:
-        cmd: '{{.UV}} run ruff format {{.CLI_ARGS}}'
-        desc: Fix any formatting issues in our python code, saving the files in place with changes.
+        desc: Format python, markdown, yaml, and toml in place.
         aliases: [fm, fmt, format]
+        cmds:
+            - task: eval:format:py
+            - task: eval:format:md
+            - task: eval:format:yaml
+            - task: eval:format:toml
+
+    eval:format:py:
+        cmd: '{{.UV}} run ruff format {{.CLI_ARGS}}'
+        desc: Format python in place with `ruff format`.
+        aliases: [fmt:py, format:py]
+
+    eval:format:md:
+        desc: Format markdown in place with `mdformat` (reads `.mdformat.toml`); skipped if
+            mdformat is not installed in the env.
+        cmd: |
+            if ! {{.UV}} run --quiet mdformat --version >/dev/null 2>&1; then
+              echo "mdformat not installed in this env — skipping markdown formatting." >&2
+            elif [ -n "{{.CLI_ARGS}}" ]; then
+              {{.UV}} run mdformat {{.CLI_ARGS}}
+            else
+              {{.UV}} run mdformat .
+            fi
+
+    eval:format:yaml:
+        desc: Format yaml in place with `yamlfmt` (reads `.yamlfmt.yaml`); skipped if yamlfmt is
+            not on PATH (it is a Go binary, not pip-installable).
+        cmd: |
+            if ! command -v yamlfmt >/dev/null 2>&1; then
+              echo "yamlfmt not found on PATH — skipping yaml formatting." >&2
+            elif [ -n "{{.CLI_ARGS}}" ]; then
+              yamlfmt {{.CLI_ARGS}}
+            else
+              yamlfmt
+            fi
+
+    eval:format:toml:
+        desc: Format toml in place with `taplo format` (reads `.taplo.toml`); skipped if taplo is
+            not installed in the env.
+        cmd: |
+            unset TAPLO_CONFIG 2>/dev/null || true
+            if ! {{.UV}} run --quiet taplo --version >/dev/null 2>&1; then
+              echo "taplo not installed in this env — skipping toml formatting." >&2
+            elif [ -n "{{.CLI_ARGS}}" ]; then
+              {{.UV}} run taplo format {{.CLI_ARGS}}
+            else
+              {{.UV}} run taplo format '**/*.toml'
+            fi
+
+    # ----------
+    # Pre-commit
+    # ----------
+    # The fast, high-frequency per-commit gate: format then lint STAGED FILES ONLY, fail-fast.
+    # `eval` is the whole-tree CI/manual analogue; pyrefly and pytest stay out of the per-commit
+    # path. Wire the git hook (prek.toml / .pre-commit-config.yaml) to a single thin `local` hook
+    # that runs `task precommit` with `pass_filenames: false` — this task does its own git-diff
+    # scoping so the hook stays declarative and tool versions live in uv.lock, not the hook config.
+    precommit:
+        desc: Fast per-commit gate — format + lint staged files only.
+        aliases: [pre-commit, quick]
+        cmds:
+            - task: precommit:format
+            - task: precommit:lint
+
+    precommit:format:
+        desc: Format staged python, markdown, yaml, and toml files.
+        cmd: |
+            set -e
+            unset TAPLO_CONFIG 2>/dev/null || true
+            git diff -z --diff-filter=d --cached --name-only -- '*.py' \
+              | xargs -0 -r {{.UV}} run ruff format
+            if {{.UV}} run --quiet mdformat --version >/dev/null 2>&1; then
+              git diff -z --diff-filter=d --cached --name-only -- '*.md' \
+                | xargs -0 -r {{.UV}} run mdformat
+            fi
+            if {{.UV}} run --quiet taplo --version >/dev/null 2>&1; then
+              git diff -z --diff-filter=d --cached --name-only -- '*.toml' \
+                | xargs -0 -r {{.UV}} run taplo format
+            fi
+            if command -v yamlfmt >/dev/null 2>&1; then
+              git diff -z --diff-filter=d --cached --name-only -- '*.yaml' '*.yml' \
+                | xargs -0 -r yamlfmt
+            fi
+
+    precommit:lint:
+        desc: Lint staged python files with `ruff check --fix`.
+        cmd: |
+            set -e
+            git diff -z --diff-filter=d --cached --name-only -- '*.py' \
+              | xargs -0 -r {{.UV}} run ruff check --fix
 
     # -------------
     # Sublime Tests

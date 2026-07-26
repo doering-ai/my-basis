@@ -1,0 +1,7 @@
+myBasis for Sublime Text
+========================
+
+Typed infrastructure for Sublime Text 4 plugin development.
+
+See the README for full documentation on mockable APIs, typed plugin
+base classes, and headless testing.

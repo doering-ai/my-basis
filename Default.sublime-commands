@@ -1,1 +1,10 @@
-[]
+[
+    {
+        "caption": "Preferences: myBasis Settings",
+        "command": "edit_settings",
+        "args": {
+            "base_file": "${packages}/myBasis/myBasis.sublime-settings",
+            "default": "// Settings in here override those in \"myBasis/myBasis.sublime-settings\"\n{\n\t$0\n}\n",
+        },
+    },
+]

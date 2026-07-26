@@ -1,2 +1,43 @@
-# Specify filepatterns you want to assign special attributes.
+# Exclude non-runtime files from Package Control archives (git export-ignore).
+# Package Control uses `git archive` to build the .sublime-package file;
+# patterns listed here are stripped from the archive.
 
+# Build / CI config
+.gitignore          export-ignore
+.gitlab-ci.yml      export-ignore
+.pre-commit-config.yaml export-ignore
+Taskfile.yaml       export-ignore
+Taskfile.dist.yaml  export-ignore
+
+# Python packaging
+pyproject.toml      export-ignore
+uv.lock             export-ignore
+.python-version     export-ignore
+.coverage           export-ignore
+__pycache__/        export-ignore
+.pytest_cache/      export-ignore
+
+# Repo / formatter config
+.taplo.toml         export-ignore
+.yamlfmt.yaml       export-ignore
+.mdformat.toml      export-ignore
+.release.json       export-ignore
+.repo.yaml          export-ignore
+
+# Agent / docs
+AGENTS.md           export-ignore
+CLAUDE.md           export-ignore
+.claude/            export-ignore
+docs/               export-ignore
+
+# Tests
+tests/              export-ignore
+syntax_test_*       export-ignore
+pytest_out.html     export-ignore
+
+# Sublime dev files
+*.sublime-project   export-ignore
+*.sublime-workspace export-ignore
+
+# This file itself
+.gitattributes      export-ignore

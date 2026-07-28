@@ -7,7 +7,7 @@ import functools as ft
 import importlib
 import logging as lg
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 import time
 
 ### EXTERNAL
@@ -65,6 +65,38 @@ class TestMetricUtils:
 
         name = cls.get_package_name()
         assert name == expected
+
+    def test_setup_py_logging__pid_suffix_prevents_same_second_collision(
+        self,
+        monkeypatch: pyt.MonkeyPatch,
+        tmp_path: Path,
+    ):
+        """Parallel sessions in the same second with the same logger name get distinct log files."""
+        fixed_time = metric_module.SystemUtils.posix(0)
+        monkeypatch.setattr(
+            metric_module.SystemUtils,
+            'posix',
+            classmethod(lambda cls, val=None: fixed_time),
+        )
+
+        logger = lg.getLogger('test-same-second')
+        logger.handlers.clear()
+
+        # First process
+        monkeypatch.setattr(metric_module.os, 'getpid', lambda: 1001)
+        first = cls.setup_py_logging(tmp_path, True, 'test-same-second', logger=logger)
+        first_file = cast('lg.FileHandler', first.handlers[-1]).baseFilename
+
+        # Second process with the same logger name, same second, different PID
+        monkeypatch.setattr(metric_module.os, 'getpid', lambda: 1002)
+        second = cls.setup_py_logging(tmp_path, True, 'test-same-second', logger=logger)
+        second_file = cast('lg.FileHandler', second.handlers[-1]).baseFilename
+
+        assert Path(first_file).name == 'test-same-second_700101-000000_1001.log'
+        assert Path(second_file).name == 'test-same-second_700101-000000_1002.log'
+        assert first_file != second_file
+        assert Path(first_file).exists()
+        assert Path(second_file).exists()
 
     def test_setup_fire_logging__private(self, monkeypatch: pyt.MonkeyPatch):
         """OTLP-only setup keeps content capture off and expensive metrics opt-in."""

@@ -161,7 +161,7 @@ project-includes = ["my/**/*.py*", "tests/**/*.py*"]
 min-severity     = 'warn'
 # Typecheck at the FLOOR, not the newest interpreter: 3.12 is where the version-gated
 # diagnostics surface. `task eval:typecheck:matrix` sweeps the rest of the supported range.
-python-version         = '3.12'
+python-version         = '3.13'
 check-unannotated-defs = true
 permissive-ignores     = true
 search-path            = ['.']

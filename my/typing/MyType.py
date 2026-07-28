@@ -33,7 +33,7 @@ from typing import (
     Union,
     Never,
 )
-from typing_extensions import TypeIs  # 3.13 in the stdlib `typing`; our floor is 3.12
+from typing import TypeIs  # 3.13 in the stdlib `typing`; our floor is 3.13
 from collections import Counter, deque
 from collections.abc import (
     Iterator,

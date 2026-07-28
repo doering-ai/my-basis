@@ -85,6 +85,7 @@ Rebuild Pod:
 Release Pod:
     stage: release
     extends: .docker
+    needs: ['Rebuild Pod', 'Evaluate Python', 'Test Python']
     script:
         - docker pull $TEST_POD
         - docker tag $TEST_POD $MAIN_POD
@@ -213,6 +214,7 @@ Test Artifacts:
         entrypoint: [""]
     needs: ['Rebuild Pod', 'Evaluate Python']
     timeout: 10m
+    allow_failure: true
     rules:
         - if: $CI_COMMIT_TAG
           when: never

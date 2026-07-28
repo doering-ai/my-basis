@@ -41,7 +41,7 @@ variables:
     # current pipeline. `:latest` remains a convenience tag, never a test prerequisite.
     TEST_POD: $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
     MAIN_POD: $CI_REGISTRY_IMAGE:latest
-    PYTHON_FLOOR: '3.12'
+    PYTHON_FLOOR: '3.13'
     # Enable GitLabs free secret detection -- see `secret_detection` job
     SECRET_DETECTION_ENABLED: 'true'
     # Where uv caches wheels/downloads -- kept inside the project so GitLab can cache it.
@@ -245,7 +245,7 @@ Test Typst:
             }
           fi
         - sh typst/test.sh
-# `Test Python` above runs the image's baked-in interpreter (python3.12, the declared floor)
+# `Test Python` above runs the image's baked-in interpreter (python3.13, the declared floor)
 # and owns the coverage report -- it stays a single job so the `coverage:` regex cannot race
 # across parallel children. This job adds every OTHER supported interpreter.
 #
@@ -262,7 +262,7 @@ Test Python Matrix:
     timeout: 30m
     parallel:
         matrix:
-            - PYVER: ['3.13', '3.14']
+            - PYVER: ['3.14']
     rules:
         - if: $CI_COMMIT_TAG
           when: never

@@ -5,13 +5,13 @@
 ##################
 # ---- debian ----
 # See https://docs.astral.sh/uv/guides/integration/docker/#available-images
-FROM ghcr.io/astral-sh/uv:python3.12-trixie-slim AS system
-# The distribution contract starts at Python 3.12. Keep the runtime and uv's default
+FROM ghcr.io/astral-sh/uv:python3.13-trixie-slim AS system
+# The distribution contract starts at Python 3.13. Keep the runtime and uv's default
 # interpreter explicit so local, floor, and CI jobs cannot drift to the host Python.
 ENV DEBIAN_FRONTEND=noninteractive \
     LANG=C.UTF-8 \
-    PYTHON_FLOOR=3.12 \
-    UV_PYTHON=3.12 \
+    PYTHON_FLOOR=3.13 \
+    UV_PYTHON=3.13 \
     _APT="apt-get update && apt-get install -y --no-install-recommends" \
     _APT_CLEAN="apt-get clean && rm -rf /var/lib/apt/lists/*"
 
@@ -50,7 +50,7 @@ ENV UV_LINK_MODE=copy \
     UV_CACHE_DIR=/home/my/.cache/uv
 
 RUN mkdir -p $UV_CACHE_DIR && \
-    python -c 'import sys; assert sys.version_info[:2] == (3, 12), sys.version'
+    python -c 'import sys; assert sys.version_info[:2] == (3, 13), sys.version'
 
 #################
 ### `2` FINAL ###

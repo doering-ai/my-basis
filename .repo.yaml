@@ -19,7 +19,7 @@ precommit: true
 priority: P1
 pypi_uid: my-basis
 pymax: 14
-pyver: 12
+pyver: 13
 rtd_uid: my-basis
 tagline: Ergonomic Python Utilities
 tags:

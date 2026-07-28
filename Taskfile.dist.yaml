@@ -367,6 +367,28 @@ tasks:
             {{.UV}} sync --python '{{.PYMIN}}' --all-extras --resolution lowest-direct
             {{.UV}} run --python '{{.PYMIN}}' pytest -q {{.CLI_ARGS}}
 
+    # -------------------------
+    # Project-specific tasks
+    # -------------------------
+    # These are hand-added to this generated file and are NOT part of the corpus template.
+    # The `tests/test_ci_taskfile.py` regression test guards them against copier sync drops
+    # (commit 4b6167f once silently removed them, breaking the `Test Artifacts` CI job).
+    test:artifacts:
+        aliases: [artifact-test, test-artifact]
+        desc: Build wheel and sdist, then verify the Python/Typst and packaged-skill boundaries.
+        cmd: |
+            set -eu
+            artifact_root="$(mktemp -d "${TMPDIR:-/tmp}/basis-artifacts.XXXXXX")"
+            trap 'rm -rf "$artifact_root"' EXIT
+            {{.UV}} build --no-sources --out-dir "$artifact_root"
+            {{.UV}} run --locked python scripts/check_release_artifacts.py \
+              "$artifact_root"/*.whl "$artifact_root"/*.tar.gz
+
+    test:typst:
+        aliases: [typst-test, test-typst]
+        desc: Compile the independent @dtm/basis fixtures and verify their report envelope.
+        cmd: sh '{{._0}}/typst/test.sh'
+
     # -------------
     # Documentation
     # -------------

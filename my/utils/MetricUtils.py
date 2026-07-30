@@ -216,8 +216,10 @@ class MetricUtils(_UtilsBase):
             logger = lg.getLogger(name)
 
         # II. Name and setup a new file in this dir
-        file = logdir / f'{logger.name}_{SystemUtils.posix().strftime("%y%m%d-%H%M%S")}.log'
-        assert not file.exists(), f'Log file {file} already exists.'
+        # Include the process ID so parallel sessions (e.g. agent gate runs in separate
+        # worktrees) starting in the same second do not collide on the filename.
+        timestamp = SystemUtils.posix().strftime('%y%m%d-%H%M%S')
+        file = logdir / f'{logger.name}_{timestamp}_{os.getpid()}.log'
 
         file_handler = lgh.RotatingFileHandler(file, maxBytes=maxsize, backupCount=maxcount)
         file_handler.setLevel(lg.DEBUG if is_dev else lg.INFO)

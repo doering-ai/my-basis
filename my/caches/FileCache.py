@@ -425,10 +425,9 @@ class FileCache[T]:
                 path.unlink()
         elif was_on_disk:
             # Shard was on disk and still has items -- persist the trimmed version.
-            path = self._path(group, prefix, file)
-            self._write(path, items)
-            self.files[group][prefix][file] = set(items.keys())
-            self.fsize -= 1  # the deleted item is gone from the disk count
+            # read_from_cache moved the shard to memory (isize up, fsize down);
+            # move_to_sys moves the survivors back to disk, fixing both counters.
+            self.move_to_sys(group, file, prefix=prefix)
         # else: shard was already in memory and still has items; the in-place
         # mutation above is sufficient and will be persisted by the next prune/flush.
 

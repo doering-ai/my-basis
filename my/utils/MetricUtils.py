@@ -230,10 +230,14 @@ class MetricUtils(_UtilsBase):
 
         # IV. Register logger with our ASGI HTTPS app, if present
         if app is not None:
-            for handler in logger.handlers:
-                app.logger.addHandler(handler)
-            app.logger.setLevel(logger.level)
-            app.config['DEBUG'] = is_dev
+            app_logger = getattr(app, 'logger', None)
+            if app_logger is not None:
+                # Flask/Quart: propagate file handlers to the framework's own logger.
+                for handler in logger.handlers:
+                    app_logger.addHandler(handler)
+                app_logger.setLevel(logger.level)
+            if hasattr(app, 'config'):
+                app.config['DEBUG'] = is_dev
 
         return logger
 
@@ -301,7 +305,11 @@ class MetricUtils(_UtilsBase):
             # see opentelemetry-python-contrib.readthedocs.io/en/latest/instrumentation
             if 'aiohttp' in sys.modules:
                 fire.instrument_aiohttp_client()
-            app.asgi_app = fire.instrument_asgi(app.asgi_app)
+            # Flask/Quart expose `app.asgi_app` -- wrapping it instruments request spans.
+            # FastAPI is itself the ASGI callable (no `.asgi_app`), so it cannot be rewrapped
+            # from the outside; `instrument_asgi` is a no-op there.
+            if hasattr(app, 'asgi_app'):
+                app.asgi_app = fire.instrument_asgi(app.asgi_app)
         except Exception:
             logger.warning('Application telemetry instrumentation failed.')
 

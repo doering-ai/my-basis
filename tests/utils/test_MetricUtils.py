@@ -6,6 +6,7 @@ from collections.abc import Callable
 import functools as ft
 import importlib
 import logging as lg
+import logging.handlers as lgh
 from pathlib import Path
 from typing import Any, cast
 import time
@@ -721,3 +722,111 @@ class TestMetricUtils:
             cls.TELEMETRY_READY = original_ready
         assert result is logger
         assert fire_calls == [True]
+
+
+############
+### FASTAPI REGRESSION (LIBS-12)
+############
+class TestFastApiAppShape:
+    """`setup_py_logging` and `_instrument_app` duck-type Flask vs. FastAPI app shapes.
+
+    LIBS-12: `MetricUtils.setup_py_logging(app=...)` assumed a Flask-shaped ASGI app
+    (`app.logger`, `app.config`), and `_instrument_app` assumed `app.asgi_app`. A real
+    `FastAPI()` instance has neither `.logger` nor `.asgi_app` -- passing one raised
+    `AttributeError: 'FastAPI' object has no attribute 'logger'`. These tests exercise a
+    real `FastAPI()` instance (not a mock) so the regression is caught at the integration
+    boundary, not just at the duck-type shim.
+    """
+
+    def test_setup_py_logging__fastapi_app_does_not_raise(self, tmp_path: Path):
+        """`setup_py_logging(app=<a real FastAPI() instance>)` no longer raises AttributeError."""
+        fastapi = pyt.importorskip('fastapi')
+        app = fastapi.FastAPI()
+
+        logger = lg.getLogger('test-fastapi-py-logging')
+        logger.handlers.clear()
+        result = cls.setup_py_logging(
+            logdir=tmp_path,
+            is_dev=True,
+            package='test-fastapi-py-logging',
+            logger=logger,
+            app=app,
+        )
+
+        assert result is logger
+        # The file handler was attached despite the app lacking `.logger`/`.config`.
+        assert any(isinstance(h, lgh.RotatingFileHandler) for h in logger.handlers)
+
+    def test_setup_py_logging__flask_shaped_app_still_attaches_handlers(
+        self, tmp_path: Path
+    ):
+        """Flask/Quart-shaped apps (with `.logger` and `.config`) keep their handlers."""
+        flask_app = _FlaskShapedApp()
+
+        logger = lg.getLogger('test-flask-py-logging')
+        logger.handlers.clear()
+        cls.setup_py_logging(
+            logdir=tmp_path,
+            is_dev=False,
+            package='test-flask-py-logging',
+            logger=logger,
+            app=flask_app,
+        )
+
+        # The framework logger received our file handler.
+        assert any(isinstance(h, lgh.RotatingFileHandler) for h in flask_app.logger.handlers)
+        assert flask_app.config['DEBUG'] is False
+
+    def test_instrument_app__fastapi_app_does_not_raise(self):
+        """`_instrument_app` skips wrapping a FastAPI app (no `.asgi_app`) without error."""
+        fastapi = pyt.importorskip('fastapi')
+        app = fastapi.FastAPI()
+        logger = lg.getLogger('test-fastapi-instrument')
+        logger.handlers.clear()
+
+        # instrument_asgi is monkeypatched to avoid requiring a live OTLP collector.
+        instrumented: list[bool] = []
+        monkey = pyt.MonkeyPatch()
+        monkey.setattr(
+            metric_module.fire, 'instrument_asgi', lambda asgi: instrumented.append(True) or asgi
+        )
+        try:
+            cls._instrument_app(app, logger)
+        finally:
+            monkey.undo()
+
+        # FastAPI is the ASGI callable itself (no `.asgi_app`), so it cannot be rewrapped.
+        assert instrumented == []
+
+    def test_instrument_app__flask_shaped_app_wraps_asgi(self):
+        """Flask/Quart-shaped apps (with `.asgi_app`) are wrapped by `instrument_asgi`."""
+        app = _FlaskShapedApp()
+        logger = lg.getLogger('test-flask-instrument')
+        logger.handlers.clear()
+
+        instrumented: list[object] = []
+        monkey = pyt.MonkeyPatch()
+        monkey.setattr(
+            metric_module.fire, 'instrument_asgi', lambda asgi: instrumented.append(asgi) or asgi
+        )
+        try:
+            cls._instrument_app(app, logger)
+        finally:
+            monkey.undo()
+
+        # The original asgi_app was wrapped (returned from instrument_asgi).
+        assert instrumented == [app.asgi_app]
+
+
+############
+### FASTAPI REGRESSION HELPERS
+############
+class _FlaskShapedApp:
+    """A minimal stand-in for Flask/Quart with `.logger`, `.config`, and `.asgi_app`."""
+
+    def __init__(self) -> None:
+        self.logger = lg.getLogger('test-flask-shaped-app')
+        self.logger.handlers.clear()
+        self.config: dict[str, object] = {}
+        self.asgi_app = object()
+

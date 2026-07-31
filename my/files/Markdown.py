@@ -937,12 +937,49 @@ class Markdown(pyd.BaseModel):
             Rendered markdown string.
         """
         body = get_template(self.TEMPLATE).render(data)
+        # Ensure blank lines separate each top-level section (header, prose, child
+        # headers). The Jinja template emits only single newlines between blocks
+        # (trim_blocks=True collapses blank lines), and mdformat alone cannot fix
+        # prose that ends with YAML content immediately followed by a `##` header
+        # (it treats the run-together `prose## header` as one paragraph). This
+        # deterministic split guarantees every `#`/`##` heading starts on its own
+        # blank-line-separated block, matching the on-disk `.my` shape that
+        # `Markdown.parse` requires for a lossless round-trip. Run before mdformat
+        # so the formatter sees well-formed markdown rather than trying to repair
+        # ambiguity it cannot resolve.
+        body = self._ensure_blank_lines(body)
         if fix:
             # `front_matters` keeps a leading `---...---` YAML frontmatter block intact; without
             # it mdformat has no notion of frontmatter and mangles the block into a thematic
             # break plus a stray header. It's a no-op for documents that don't open with one.
             body = mdformat.text(body, extensions={'front_matters'})
         return body
+
+    @staticmethod
+    def _ensure_blank_lines(text: str) -> str:
+        r"""Ensure blank lines separate markdown headers from surrounding content.
+
+        Inserts a blank line before any ``#``-prefixed heading that follows non-empty
+        content on the previous line, and after a heading that is immediately followed
+        by non-empty content. This guarantees the on-disk shape ``Markdown.parse``
+        requires (each header on its own blank-line-separated block) without depending
+        on mdformat to repair template-output ambiguity.
+
+        Args:
+            text: Raw rendered markdown text with possibly run-together headers.
+        Returns:
+            Text with blank lines separating every header from adjacent content.
+        """
+        import re
+
+        # Ensure every header starts on its own line. Handles both `text## header`
+        # (no newline) and `text\n## header` (single newline) by inserting a blank
+        # line before any header that follows non-empty, non-newline content. The
+        # `(?m)^` anchor ensures we only split at line starts, never inside `##`.
+        text = re.sub(r'(?m)(?<=[^\n#])(\n?)(#{1,6} )', r'\n\n\2', text)
+        # Insert blank line after a header that is followed by non-empty, non-header content.
+        text = re.sub(r'(#{1,6} [^\n]*)\n(?=[^#\n])', r'\1\n\n', text)
+        return text
 
     def to_string(self, strip_notes: bool = False, fix: bool = True) -> str:
         r"""Render this node and its children as markdown text.

@@ -981,6 +981,68 @@ class TestMarkdown:
         assert '---' not in output
         assert 'key: value' not in output
 
+    @pyt.mark.parametrize('fix', [False, True])
+    def test_to_string__blank_line_before_section_headers(self, fix: bool):
+        """Regression (LIBS-7): blank lines must separate prose from section headers.
+
+        The Jinja template emits only single newlines between blocks (trim_blocks=True
+        collapses blank lines), and mdformat alone cannot fix prose that ends with YAML
+        content immediately followed by a ``##`` header (it treats the run-together
+        ``prose## header`` as one paragraph). The render path must ensure every header
+        starts on its own blank-line-separated block so ``Markdown.parse`` can recover
+        the tree structure.
+        """
+        node = cls.new(
+            title='Frame',
+            tags=['0200'],
+            prose='Ingested content description.',
+            nodes=[
+                dict(title='Slots', prose='modality: text\n'),
+                dict(title='Notes', prose='uid: abc-123\nsha256: def\n'),
+            ],
+        )
+        output = node.to_string(fix=fix)
+        # Every header must be preceded by a blank line (or start of document)
+        lines = output.split('\n')
+        for i, line in enumerate(lines):
+            if line.startswith('#') and i > 0:
+                assert lines[i - 1] == '', (
+                    f'Header on line {i} not preceded by blank line: {line!r}'
+                )
+
+    def test_to_string__roundtrip_with_multiline_yaml_prose(self):
+        """Regression (LIBS-7): Frame markdown serialization round-trips without data loss.
+
+        ``to_markdown`` -> ``to_string`` -> ``parse_one`` must round-trip a frame with
+        prose + slots + notes where the slots and notes carry multiline YAML content.
+        This is the exact shape the ``ai/ingest.py`` CLI builds (and previously worked
+        around with a hand-formatter because the library path dropped the blank line
+        before the ``## Slots`` header, breaking ``parse`` on re-read).
+        """
+        node = cls.new(
+            title='Test Title',
+            tags=['0200'],
+            prose='Some prose body text here.',
+            nodes=[
+                dict(title='Slots', prose='modality: text\n'),
+                dict(
+                    title='Notes',
+                    prose='payload: vault:abc123def\nsha256: abc123def\nuid: 12345\n',
+                ),
+            ],
+        )
+        output = node.to_string()
+        reparsed = cls.parse(output)[0]
+
+        assert reparsed.title == 'Test Title'
+        assert str(reparsed.prose).strip() == 'Some prose body text here.'
+        # Notes child is auto-absorbed into doc.notes by _stack_nodes
+        assert 'uid' in reparsed.notes or reparsed.get(title='Notes') is not None
+        # Slots child must survive as a literal child
+        slots = reparsed.get(title='Slots')
+        assert slots is not None
+        assert 'modality' in str(slots.prose)
+
     def test_str(self):
         node = cls.new(title='Test')
         assert isinstance(str(node), str)

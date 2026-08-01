@@ -757,9 +757,7 @@ class TestFastApiAppShape:
         # The file handler was attached despite the app lacking `.logger`/`.config`.
         assert any(isinstance(h, lgh.RotatingFileHandler) for h in logger.handlers)
 
-    def test_setup_py_logging__flask_shaped_app_still_attaches_handlers(
-        self, tmp_path: Path
-    ):
+    def test_setup_py_logging__flask_shaped_app_still_attaches_handlers(self, tmp_path: Path):
         """Flask/Quart-shaped apps (with `.logger` and `.config`) keep their handlers."""
         flask_app = _FlaskShapedApp()
 
@@ -829,4 +827,3 @@ class _FlaskShapedApp:
         self.logger.handlers.clear()
         self.config: dict[str, object] = {}
         self.asgi_app = object()
-

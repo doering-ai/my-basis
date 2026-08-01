@@ -15,7 +15,8 @@ vars:
         ref: fromYaml .REPO_YAML
     _PACKAGE_DEFAULT: '{{get .REPO "package"}}'
     PYVERS:
-        sh: seq {{get .REPO "pyver"}} {{get .REPO "pymax" | default (get .REPO "pyver")}} | sed 's/^/3./' | tr '\n' ' '
+        sh: seq {{get .REPO "pyver"}} {{get .REPO "pymax" | default (get .REPO "pyver")}} |
+            sed 's/^/3./' | tr '\n' ' '
     _PACKAGE: '{{get .REPO "package"}}'
     SRC_DIR: '{{._0}}/{{._PACKAGE}}'
     DOC_DIR: '{{._0}}/docs'
@@ -149,27 +150,27 @@ tasks:
     agent:new:
         cmd: '{{.AWT}} new {{.CLI_ARGS}}'
         desc: 'Provision an isolated worktree+branch: `task agent:new -- MEMY-88 "short desc"`.'
-        aliases: [wt:new]
+        aliases: ['wt:new']
 
     agent:list:
         cmd: '{{.AWT}} list'
         desc: List the live agent/* worktrees with ahead/dirty status.
-        aliases: [wt:list, wt:ls]
+        aliases: ['wt:list', 'wt:ls']
 
     agent:merge:
         cmd: '{{.AWT}} merge {{.CLI_ARGS}}'
         desc: 'Land a reviewed branch into main and push by default: `task agent:merge -- agent/<branch>`.'
-        aliases: [wt:merge, wt:land]
+        aliases: ['wt:merge', 'wt:land']
 
     agent:abandon:
         cmd: '{{.AWT}} abandon {{.CLI_ARGS}}'
         desc: 'Discard a rejected branch + its worktree: `task agent:abandon -- agent/<branch>`.'
-        aliases: [wt:abandon]
+        aliases: ['wt:abandon']
 
     agent:gc:
         cmd: '{{.AWT}} gc'
         desc: Prune merged agent/* branches past the grace window.
-        aliases: [wt:gc]
+        aliases: ['wt:gc']
 
     sync:
         cmd: '{{.UV}} sync --all-extras {{.CLI_ARGS}}'
@@ -229,7 +230,7 @@ tasks:
     eval:format:py:
         cmd: '{{.UV}} run ruff format {{.CLI_ARGS}}'
         desc: Format python in place with `ruff format`.
-        aliases: [fmt:py, format:py]
+        aliases: ['fmt:py', 'format:py']
 
     eval:format:md:
         desc: Format markdown in place with `mdformat` (reads `.mdformat.toml`); skipped if
@@ -244,8 +245,8 @@ tasks:
             fi
 
     eval:format:yaml:
-        desc: Format yaml in place with `yamlfmt` (reads `.yamlfmt.yaml`); skipped if yamlfmt is
-            not on PATH (it is a Go binary, not pip-installable).
+        desc: Format yaml in place with `yamlfmt` (reads `.yamlfmt.yaml`); skipped if yamlfmt
+            is not on PATH (it is a Go binary, not pip-installable).
         cmd: |
             if ! command -v yamlfmt >/dev/null 2>&1; then
               echo "yamlfmt not found on PATH — skipping yaml formatting." >&2
@@ -256,8 +257,8 @@ tasks:
             fi
 
     eval:format:toml:
-        desc: Format toml in place with `taplo format` (reads `.taplo.toml`); skipped if taplo is
-            not installed in the env.
+        desc: Format toml in place with `taplo format` (reads `.taplo.toml`); skipped if taplo
+            is not installed in the env.
         cmd: |
             unset TAPLO_CONFIG 2>/dev/null || true
             if ! {{.UV}} run --quiet taplo --version >/dev/null 2>&1; then

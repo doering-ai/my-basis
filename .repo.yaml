@@ -2,8 +2,8 @@
 _commit: v0.1.8-45-geab3cc4
 _src_path: /home/robbd/my/corpus
 build_system: uv
-caption: An extensive utility library for python, focusing especially on iterables
-    and a Regex "Store".
+caption: An extensive utility library for python, focusing especially on iterables and a Regex
+    "Store".
 cicd: true
 current: private
 deps: []
@@ -23,9 +23,9 @@ pyver: 13
 rtd_uid: my-basis
 tagline: Ergonomic Python Utilities
 tags:
-- lib
-- py
-- pypi
+    - lib
+    - py
+    - pypi
 title: myBasis
 uid: my-basis
 wf_stage: 8

@@ -283,3 +283,97 @@ class TestFileCache:
         name_rgx = re.compile(r'item2')
         results = list(cache.search('group', file_rgx, name_rgx, mode='files'))
         assert results == []
+
+    # ------------------
+    # `*2` delete
+    # ------------------
+    def test_delete__removes_item_from_memory(self, cache: FileCache[str]):
+        """delete removes the specified entry from the in-memory cache."""
+        cache['group', 'abcfile_item'] = 'value'
+        assert cache['group', 'abcfile_item'] == 'value'
+
+        deleted = cache.delete('group', 'abcfile_item')
+        assert deleted is True
+
+        # Subsequent lookups for deleted key return cache miss
+        assert cache['group', 'abcfile_item'] is None
+
+    def test_delete__returns_false_for_missing(self, cache: FileCache[str]):
+        """delete returns False when the item does not exist."""
+        assert cache.delete('group', 'nonexistent') is False
+
+    def test_delete__removes_item_from_disk(self, cache: FileCache[str], cache_dir: Path):
+        """delete removes an item that has been pruned to disk."""
+        cache['group', 'abcfile_item'] = 'value'
+        # Write to disk
+        cache.prune()
+        assert cache.fsize == 1
+
+        deleted = cache.delete('group', 'abcfile_item')
+        assert deleted is True
+
+        # No orphaned cache files remain
+        assert cache['group', 'abcfile_item'] is None
+        shards = list(cache_dir.rglob('*.json'))
+        assert len(shards) == 0, 'orphaned shard file remains on disk'
+
+    def test_delete__unlinks_empty_shard_file(self, cache: FileCache[str], cache_dir: Path):
+        """When the last item in a shard file is deleted, the file is unlinked."""
+        cache['group', 'abcfile_item'] = 'value'
+        cache.prune()
+
+        shards = list(cache_dir.rglob('*.json'))
+        assert len(shards) == 1
+
+        cache.delete('group', 'abcfile_item')
+
+        shards_after = list(cache_dir.rglob('*.json'))
+        assert len(shards_after) == 0, 'orphaned shard file remains on disk'
+
+    def test_delete__preserves_other_items_in_memory_shard(self, cache: FileCache[str]):
+        """When a memory shard has multiple items, deleting one preserves the others."""
+        cache['group', 'abcfile_item1'] = 'value1'
+        cache['group', 'abcfile_item2'] = 'value2'
+
+        deleted = cache.delete('group', 'abcfile_item1')
+        assert deleted is True
+
+        assert cache['group', 'abcfile_item1'] is None
+        assert cache['group', 'abcfile_item2'] == 'value2'
+
+    def test_delete__preserves_other_items_in_disk_shard(
+        self, cache: FileCache[str], cache_dir: Path
+    ):
+        """When a disk shard has multiple items, deleting one preserves the others on disk."""
+        cache['group', 'abcfile_item1'] = 'value1'
+        cache['group', 'abcfile_item2'] = 'value2'
+        cache.prune()
+
+        deleted = cache.delete('group', 'abcfile_item1')
+        assert deleted is True
+
+        assert cache['group', 'abcfile_item1'] is None
+        assert cache['group', 'abcfile_item2'] == 'value2'
+
+        # The shard file should still exist with the remaining item
+        shards = list(cache_dir.rglob('*.json'))
+        assert len(shards) >= 1, 'shard file with remaining items was incorrectly deleted'
+
+    def test_delete__updates_size_counters(self, cache: FileCache[str]):
+        """delete updates isize and fsize correctly."""
+        cache['group', 'abcfile_item1'] = 'value1'
+        cache['group', 'abcfile_item2'] = 'value2'
+        assert cache.isize == 2
+
+        cache.delete('group', 'abcfile_item1')
+        assert cache.isize == 1
+
+    def test_delete__updates_fsize_for_disk_item(self, cache: FileCache[str]):
+        """delete updates fsize correctly when removing a disk-resident item."""
+        cache['group', 'abcfile_item1'] = 'value1'
+        cache['group', 'abcfile_item2'] = 'value2'
+        cache.prune()
+        assert cache.fsize == 2
+
+        cache.delete('group', 'abcfile_item1')
+        assert cache.fsize == 1

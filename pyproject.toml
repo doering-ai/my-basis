@@ -86,6 +86,7 @@ eval = [
 # Testing dependencies for unit tests, coverage, and test utilities
 test = [
     "coverage>=7.10.5",
+    "fastapi>=0.118.0", # regression test exercises a real FastAPI() ASGI app (LIBS-12)
     "pytest-asyncio>=1.1.0",
     "pytest-cov>=6.2.1",
     "pytest-timeout>=2.4.0",

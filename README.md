@@ -66,10 +66,10 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-my-basis = { path = "../libs/basis", editable = true }
+my-basis = { git = "https://gitlab.com/doering-ai/libs/basis.git", tag = "stable" }
 ```
 
-Adjust the relative `path` to wherever this repo lives on disk from the consuming project, then run `uv sync`.
+Run `uv sync` to install.
 
 ### Refactor an existing repository
 

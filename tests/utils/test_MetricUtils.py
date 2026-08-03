@@ -32,6 +32,18 @@ def _unknown_scrubbing() -> object:
     return scrubbing
 
 
+class _RecordingHandler(lg.NullHandler):
+    """A `LogfireLoggingHandler` double that captures the level passed to `setLevel`."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.recorded_level: int | str | None = None
+
+    def setLevel(self, level: int | str) -> None:  # noqa: N802  # stdlib camelCase override
+        self.recorded_level = level
+        super().setLevel(level)
+
+
 ############
 ### BODY ###
 ############
@@ -298,6 +310,113 @@ class TestMetricUtils:
 
         assert system_metrics == [True]
         assert len(logger.handlers) == 1
+
+    @pyt.mark.parametrize(
+        'is_dev, expected',
+        [
+            pyt.param(True, lg.DEBUG, id='dev_debug'),
+            pyt.param(False, lg.INFO, id='prod_info'),
+        ],
+    )
+    def test_setup_fire_logging__log_level_default(
+        self, monkeypatch: pyt.MonkeyPatch, is_dev: bool, expected: int
+    ):
+        """Without `log_level`, the export handler floor keeps the environment default."""
+        logger = lg.getLogger('test-log-level-default')
+        logger.handlers.clear()
+        handler = _RecordingHandler()
+        monkeypatch.setattr(metric_module.fire, 'configure', lambda **_: None)
+        monkeypatch.setattr(metric_module.fire, 'LogfireLoggingHandler', lambda: handler)
+
+        cls.setup_fire_logging(
+            'synthetic-token', 'test-package', logger, is_dev=is_dev, export_logs=True
+        )
+
+        assert handler.recorded_level == expected
+        assert logger.handlers == [handler]
+
+    @pyt.mark.parametrize(
+        'log_level, expected',
+        [
+            pyt.param('WARNING', lg.WARNING, id='standard_name'),
+            pyt.param('warning', lg.WARNING, id='case_insensitive'),
+            pyt.param('ERROR', lg.ERROR, id='higher_floor'),
+        ],
+    )
+    def test_setup_fire_logging__log_level_explicit(
+        self, monkeypatch: pyt.MonkeyPatch, log_level: str, expected: int
+    ):
+        """An explicit `log_level` overrides the environment default, case-insensitively."""
+        logger = lg.getLogger('test-log-level-explicit')
+        logger.handlers.clear()
+        handler = _RecordingHandler()
+        monkeypatch.setattr(metric_module.fire, 'configure', lambda **_: None)
+        monkeypatch.setattr(metric_module.fire, 'LogfireLoggingHandler', lambda: handler)
+
+        cls.setup_fire_logging(
+            'synthetic-token',
+            'test-package',
+            logger,
+            is_dev=False,
+            export_logs=True,
+            log_level=log_level,
+        )
+
+        assert handler.recorded_level == expected
+
+    @pyt.mark.parametrize(
+        'log_level',
+        [
+            pyt.param('BOGUS', id='unknown_name'),
+            pyt.param('warn level', id='malformed_name'),
+        ],
+    )
+    def test_setup_fire_logging__log_level_rejects_invalid(
+        self, monkeypatch: pyt.MonkeyPatch, log_level: str
+    ):
+        """Junk level names fail before the telemetry provider is configured."""
+        configured: list[bool] = []
+        monkeypatch.setattr(metric_module.fire, 'configure', lambda **_: configured.append(True))
+
+        with pyt.raises(ValueError, match='Unsupported telemetry log level'):
+            cls.setup_fire_logging(
+                'synthetic-token',
+                'test-package',
+                lg.getLogger('test-log-level-invalid'),
+                export_logs=True,
+                log_level=log_level,
+            )
+
+        assert configured == []
+
+    def test_setup_logging__log_level_threads_through(self, monkeypatch: pyt.MonkeyPatch):
+        """`log_level` reaches the export handler through the full `setup_logging` chain."""
+        logger = lg.getLogger('test-log-level-thread')
+        logger.handlers.clear()
+        handler = _RecordingHandler()
+        original_loggers = cls.LOGGERS
+        original_ready = cls.TELEMETRY_READY
+        cls.LOGGERS = {}
+        cls.TELEMETRY_READY = set()
+        monkeypatch.setattr(cls, 'setup_py_logging', staticmethod(lambda **_: logger))
+        monkeypatch.setattr(metric_module.fire, 'configure', lambda **_: None)
+        monkeypatch.setattr(metric_module.fire, 'LogfireLoggingHandler', lambda: handler)
+        try:
+            cls.setup_logging(
+                logdir=Path(),
+                is_dev=False,
+                fire_token='synthetic-token',
+                package='test-package',
+                export_logs=True,
+                log_level='ERROR',
+            )
+            assert 'test-package' in cls.TELEMETRY_READY
+        finally:
+            cls.LOGGERS = original_loggers
+            cls.TELEMETRY_READY = original_ready
+
+        assert handler.recorded_level == lg.ERROR
+        assert logger.handlers == [handler]
 
     def test_setup_fire_logging__isolates_instrument_failure(
         self, monkeypatch: pyt.MonkeyPatch, caplog: pyt.LogCaptureFixture

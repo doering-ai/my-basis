@@ -288,12 +288,29 @@ class MetricUtils(_UtilsBase):
         # fire.log_slow_async_callbacks() # NOTE: not for now?
         # fire.instrument_pydantic() # NOTE: done in pyproject.toml
 
+    @staticmethod
+    def _resolve_log_level(log_level: str | None, is_dev: bool) -> int:
+        """Resolve the log-export handler level, defaulting to DEBUG in dev and INFO otherwise.
+
+        A given name is matched case-insensitively against the stdlib level names, so
+        ``'warning'`` and ``'WARNING'`` both resolve to `logging.WARNING`.
+        """
+        if log_level is None:
+            return lg.DEBUG if is_dev else lg.INFO
+        level = lg.getLevelNamesMapping().get(log_level.upper())
+        if level is None:
+            raise ValueError(f'Unsupported telemetry log level: {log_level}.')
+        return level
+
     @classmethod
-    def _export_python_logs(cls, logger: lg.Logger, is_dev: bool) -> None:
+    def _export_python_logs(
+        cls, logger: lg.Logger, is_dev: bool, log_level: str | None = None
+    ) -> None:
         """Attach the Logfire logging handler for scrubbed events, warning on failure."""
+        level = cls._resolve_log_level(log_level, is_dev)
         try:
             logfire_handler = fire.LogfireLoggingHandler()
-            logfire_handler.setLevel(lg.DEBUG if is_dev else lg.INFO)
+            logfire_handler.setLevel(level)
             logger.addHandler(logfire_handler)
         except Exception:
             logger.warning('Python log export setup failed.')
@@ -324,6 +341,7 @@ class MetricUtils(_UtilsBase):
         app: Any | None = None,
         export_logs: bool = False,
         system_metrics: bool = False,
+        log_level: str | None = None,
         **kwargs: Any,
     ) -> None:
         """Configure Logfire observability and logging.
@@ -337,6 +355,8 @@ class MetricUtils(_UtilsBase):
             app: Optional ASGI app to instrument.
             export_logs: Attach the Python logging handler for already-scrubbed event names.
             system_metrics: Enable Logfire's per-process system metrics instrumentation.
+            log_level: Stdlib level name (e.g. `WARNING`) for the exported log handler;
+                when None, the handler floor stays DEBUG in dev and INFO otherwise.
             **kwargs: Additional configuration options for Logfire.
         Raises:
             ValueError: If the service identity/destination is missing or a privacy control
@@ -351,6 +371,7 @@ class MetricUtils(_UtilsBase):
         """
         if not package:
             raise ValueError('Telemetry service package is required.')
+        cls._resolve_log_level(log_level, is_dev)  # fail before changing global providers
         token = cls._resolve_fire_token(fire_token)
 
         # I. Choose basic configuration settings
@@ -363,7 +384,7 @@ class MetricUtils(_UtilsBase):
 
         # II.ii. Register logfire w/ the default python logger
         if export_logs:
-            cls._export_python_logs(logger, is_dev)
+            cls._export_python_logs(logger, is_dev, log_level)
 
         # II.iii. Register logfire with our ASGI HTTPS app
         if app is not None:
@@ -472,7 +493,8 @@ class MetricUtils(_UtilsBase):
         app: Any | None,
         export_logs: bool,
         system_metrics: bool,
-        fire_kwargs: dict[str, Any],
+        log_level: str | None = None,
+        fire_kwargs: dict[str, Any] | None = None,
     ) -> bool:
         """Attempt remote Logfire setup, warning (never raising) on failure.
 
@@ -489,7 +511,8 @@ class MetricUtils(_UtilsBase):
                 app=app,
                 export_logs=export_logs,
                 system_metrics=system_metrics,
-                **fire_kwargs,
+                log_level=log_level,
+                **(fire_kwargs or {}),
             )
         except Exception:
             logger.warning('Remote telemetry setup failed; continuing without export.')
@@ -507,7 +530,8 @@ class MetricUtils(_UtilsBase):
         app: Any | None,
         export_logs: bool,
         system_metrics: bool,
-        fire_kwargs: dict[str, Any],
+        log_level: str | None = None,
+        fire_kwargs: dict[str, Any] | None = None,
     ) -> lg.Logger:
         """Re-apply telemetry options to an already-cached logger.
 
@@ -527,6 +551,7 @@ class MetricUtils(_UtilsBase):
             app=app,
             export_logs=export_logs,
             system_metrics=system_metrics,
+            log_level=log_level,
             fire_kwargs=fire_kwargs,
         )
         return cached
@@ -544,6 +569,7 @@ class MetricUtils(_UtilsBase):
         maxcount: int = 2**10,  # 1024 backups
         export_logs: bool = False,
         system_metrics: bool = False,
+        log_level: str | None = None,
         **fire_kwargs: Any,
     ) -> lg.Logger:
         """Configure comprehensive logging (Python file logging + Logfire).
@@ -559,6 +585,9 @@ class MetricUtils(_UtilsBase):
             maxcount: Maximum number of backup files (default: 1024).
             export_logs: Export already-scrubbed Python log records through Logfire.
             system_metrics: Enable per-process system metrics instrumentation.
+            log_level: Stdlib level name (e.g. `WARNING`) for the exported log handler;
+                when None, the handler floor stays DEBUG in dev and INFO otherwise. Like the
+                other options, only a package's first configuration applies it.
             **fire_kwargs: Additional Logfire configuration options.
         Returns:
             Configured Logger instance (cached per package).
@@ -572,6 +601,7 @@ class MetricUtils(_UtilsBase):
         cls = MetricUtils
         package = cls._resolve_setup_package(package)
         cls._validate_fire_configuration(package, is_dev, fire_kwargs)
+        cls._resolve_log_level(log_level, is_dev)  # fail before changing local logger state
 
         if package in cls.LOGGERS:
             return cls._configure_cached_logger(
@@ -581,6 +611,7 @@ class MetricUtils(_UtilsBase):
                 app=app,
                 export_logs=export_logs,
                 system_metrics=system_metrics,
+                log_level=log_level,
                 fire_kwargs=fire_kwargs,
             )
 
@@ -602,6 +633,7 @@ class MetricUtils(_UtilsBase):
             app=app,
             export_logs=export_logs,
             system_metrics=system_metrics,
+            log_level=log_level,
             fire_kwargs=fire_kwargs,
         )
 

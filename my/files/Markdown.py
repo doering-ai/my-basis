@@ -283,27 +283,6 @@ class Markdown(pyd.BaseModel):
         else:
             raise ValueError(f'Invalid index digit: {digit}')
 
-    def indent(self, num: int) -> Self:
-        """Increase the header level of this node and all descendants.
-
-        Args:
-            num: Number of levels to indent (can be negative to outdent).
-        Returns:
-            Self for chaining.
-        Examples:
-            Shift a subtree one level deeper::
-
-                >>> from my import Markdown
-                >>> sub = dict(title='Sub', prose='x.')
-                >>> sec = Markdown.new(title='Section', level=2, nodes=[sub])
-                >>> _ = sec.indent(1)
-                >>> [(node.title, node.level) for node in sec.tree]
-                [('Section', 3), ('Sub', 4)]
-        """
-        for node in self.tree:
-            node.level += num
-        return self
-
     @classmethod
     def _trace_path(cls, ancestor: Markdown, target: str | list[int]) -> list[Markdown]:
         """Returns all nodes between the ancestor and descendant (inclusive).
@@ -334,34 +313,6 @@ class Markdown(pyd.BaseModel):
             ret.append(ret[-1].nodes[digit])
         return ret
 
-    def refresh_indices(self, start: int = 0, end: int | None = None) -> None:
-        """Update the indices of child nodes in a range.
-
-        Args:
-            start: First child index to update (default: 0).
-            end: Last child index (exclusive, default: all children).
-        Examples:
-            Repair indices after reordering children by hand::
-
-                >>> from my import Markdown
-                >>> doc = Markdown.new(
-                ...     title='Guide',
-                ...     nodes=[dict(title='A', prose='a.'), dict(title='B', prose='b.')],
-                ... )
-                >>> doc.nodes.reverse()
-                >>> doc.refresh_indices()
-                >>> [(node.idx, node.title) for node in doc.nodes]
-                [('0', 'B'), ('1', 'A')]
-        """
-        n = len(self.nodes)
-        if start >= n:
-            return
-
-        end = end if end is not None else n
-        assert 0 <= start <= end <= n, f'Invalid range: ({start}, {end}) where n={n}'
-        for i, child in enumerate(self.nodes[start:end], start):
-            child.set_idx(self.idx, i)
-
     @classmethod
     def _stack_nodes(cls, nodes: deque[Self], level: int) -> list[Self]:
         """Recursively stack nodes into a hierarchical tree based on header levels.
@@ -390,6 +341,55 @@ class Markdown(pyd.BaseModel):
     # -------------------
     # `+` Primary Methods
     # -------------------
+    def indent(self, num: int) -> Self:
+        """Increase the header level of this node and all descendants.
+
+        Args:
+            num: Number of levels to indent (can be negative to outdent).
+        Returns:
+            Self for chaining.
+        Examples:
+            Shift a subtree one level deeper::
+
+                >>> from my import Markdown
+                >>> sub = dict(title='Sub', prose='x.')
+                >>> sec = Markdown.new(title='Section', level=2, nodes=[sub])
+                >>> _ = sec.indent(1)
+                >>> [(node.title, node.level) for node in sec.tree]
+                [('Section', 3), ('Sub', 4)]
+        """
+        for node in self.tree:
+            node.level += num
+        return self
+
+    def refresh_indices(self, start: int = 0, end: int | None = None) -> None:
+        """Update the indices of child nodes in a range.
+
+        Args:
+            start: First child index to update (default: 0).
+            end: Last child index (exclusive, default: all children).
+        Examples:
+            Repair indices after reordering children by hand::
+
+                >>> from my import Markdown
+                >>> doc = Markdown.new(
+                ...     title='Guide',
+                ...     nodes=[dict(title='A', prose='a.'), dict(title='B', prose='b.')],
+                ... )
+                >>> doc.nodes.reverse()
+                >>> doc.refresh_indices()
+                >>> [(node.idx, node.title) for node in doc.nodes]
+                [('0', 'B'), ('1', 'A')]
+        """
+        n = len(self.nodes)
+        if start >= n:
+            return
+
+        end = end if end is not None else n
+        assert 0 <= start <= end <= n, f'Invalid range: ({start}, {end}) where n={n}'
+        for i, child in enumerate(self.nodes[start:end], start):
+            child.set_idx(self.idx, i)
+
     def walk(
         self,
         skip_self: bool = False,

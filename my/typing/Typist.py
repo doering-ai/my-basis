@@ -285,24 +285,6 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
     # -------------------
     # `-` Private Methods
     # -------------------
-    def sort_options(self, data: object, *options: MyType) -> list[MyType]:
-        """Sort type options by how well they fit the given data for coercion.
-
-        Args:
-            data: The source data to be cast.
-            *options: Type options to sort by fitness.
-        Returns:
-            List of MyType options sorted by fitness score (best first).
-        """
-        # NOTE: `data` must bind positionally -- a `ft.partial(..., data=data)` keyword bind
-        # collides with the option that `sorted` passes positionally (it lands in the `data`
-        # slot) and raises `TypeError: got multiple values for argument 'data'`.
-        fn = ft.partial(self._score_option, data)
-        # `sorted` is stable and `reverse=True` preserves source order among equal scores, so
-        # score ties fall back to declaration order -- meaningful for unions (e.g. a constrained
-        # TypeVar's first constraint is the canonical choice).
-        return list(sorted(options, key=fn, reverse=True))
-
     @classmethod
     def _score_option(cls, data: object, option: MyType) -> int:
         """Score how well a type option fits the given data for coercion.
@@ -425,6 +407,24 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
     def __repr__(self) -> str:
         """Return a developer-facing string representation."""
         return 'Typist'
+
+    def sort_options(self, data: object, *options: MyType) -> list[MyType]:
+        """Sort type options by how well they fit the given data for coercion.
+
+        Args:
+            data: The source data to be cast.
+            *options: Type options to sort by fitness.
+        Returns:
+            List of MyType options sorted by fitness score (best first).
+        """
+        # NOTE: `data` must bind positionally -- a `ft.partial(..., data=data)` keyword bind
+        # collides with the option that `sorted` passes positionally (it lands in the `data`
+        # slot) and raises `TypeError: got multiple values for argument 'data'`.
+        fn = ft.partial(self._score_option, data)
+        # `sorted` is stable and `reverse=True` preserves source order among equal scores, so
+        # score ties fall back to declaration order -- meaningful for unions (e.g. a constrained
+        # TypeVar's first constraint is the canonical choice).
+        return list(sorted(options, key=fn, reverse=True))
 
     @staticmethod
     def specify(tvar: type[F]) -> type[F]:

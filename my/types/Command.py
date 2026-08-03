@@ -141,42 +141,6 @@ class Command(pyd.BaseModel):
     # -------------------
     # `-` Private Methods
     # -------------------
-    @property
-    def positional_args(self) -> list[str]:
-        """Convert positional arguments to shell-safe values.
-
-        Returns:
-            String representations with appropriate quoting.
-        """
-        return [_shell_quote(str(a)) for a in self.args]
-
-    @property
-    def named_args(self) -> list[str]:
-        """Convert keyword arguments to shell-safe flags.
-
-        Returns:
-            Formatted command-line flags (e.g., `--key value`, `-k`).
-        """
-        ret = []
-        for key, val in self.kwargs.items():
-            # I.i. Format python identifiers for the command line (e.g. my_arg -> my-arg)
-            if not self.options.preserve_underscores and '_' in key:
-                key = key.replace('_', '-')
-            # I.ii. Determine single vs double dash prefix
-            key = ('-' if self.options.single_dashes or len(key) == 1 else '--') + key
-
-            # II. Write plain arg if it's an atomic type, otherwise wrap in quotes
-
-            if isinstance(val, bool) and val:
-                ret.append(key)
-            else:
-                quoted = _shell_quote(str(val))
-                if self.options.flag_assignment:
-                    ret.append(f'{key}={quoted}')
-                else:
-                    ret.append(f'{key} {quoted}')
-        return ret
-
     def _exec_key(self, key: str) -> str:
         """Format a kwarg key into a flag name, mirroring `named_args`'s key formatting."""
         if not self.options.preserve_underscores and '_' in key:
@@ -269,6 +233,42 @@ class Command(pyd.BaseModel):
     def __bool__(self) -> bool:
         """A command is truthy if it has any content."""
         return bool(self.command or self.args)
+
+    @property
+    def positional_args(self) -> list[str]:
+        """Convert positional arguments to shell-safe values.
+
+        Returns:
+            String representations with appropriate quoting.
+        """
+        return [_shell_quote(str(a)) for a in self.args]
+
+    @property
+    def named_args(self) -> list[str]:
+        """Convert keyword arguments to shell-safe flags.
+
+        Returns:
+            Formatted command-line flags (e.g., `--key value`, `-k`).
+        """
+        ret = []
+        for key, val in self.kwargs.items():
+            # I.i. Format python identifiers for the command line (e.g. my_arg -> my-arg)
+            if not self.options.preserve_underscores and '_' in key:
+                key = key.replace('_', '-')
+            # I.ii. Determine single vs double dash prefix
+            key = ('-' if self.options.single_dashes or len(key) == 1 else '--') + key
+
+            # II. Write plain arg if it's an atomic type, otherwise wrap in quotes
+
+            if isinstance(val, bool) and val:
+                ret.append(key)
+            else:
+                quoted = _shell_quote(str(val))
+                if self.options.flag_assignment:
+                    ret.append(f'{key}={quoted}')
+                else:
+                    ret.append(f'{key} {quoted}')
+        return ret
 
     def execute(self) -> Result:
         """Execute a command synchronously via direct argv invocation (no shell).

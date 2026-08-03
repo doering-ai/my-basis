@@ -295,38 +295,6 @@ class Buffer(pyd.BaseModel):
                 ]
                 self._pair_cache[(rgx_id, mode, b0, b1, self._version)] = updated
 
-    def update_fences(self, start: int, len_old: int, delta: int, diff: int = 0) -> None:
-        """(Re-)calculates the fence spans for the given region.
-
-        Handles both fences that are completely internal to the region, and fences that cross one of
-        the boundaries. Sometimes, new cross-boundary fences can form where none existed before.
-
-        No changes are needed for fences that contain the region entirely; the normal index shifting
-        after a replacement handles that case on its own.
-
-        Args:
-            start: The start position of the replaced region.
-            len_old: The length of the old text that was replaced.
-            delta: The change in length (new length - old length).
-            diff: When set, indicates that any fences found within the old text are still there, but
-                have simply moved by this static amount.
-        """
-        if self.fence_rgx is None:
-            return
-
-        pre, post = self._split_spans(self.fences, Span._fast(start, start + len_old), delta)
-        n, n_pre, n_post = self.fences.shape[0], pre.shape[0], post.shape[0]
-        if diff == 0:
-            # I. Handle fences in new text, or that appeared b/c of old text
-            b0 = pre[-1][1] if n_pre else 0
-            b1 = post[0][0] if n_post else len(self)
-            new = self._build_fences(self[b0:b1], b0)
-        else:
-            # II. Simply shift any existing fences in this region by the given static `diff`
-            new = self.fences[n_pre : n - n_post] + diff
-
-        self.fences = np.concatenate((pre, new, post))
-
     def _replace_string(self, old: str, new: str, count: int = 0, diff: int = 0) -> None:
         """Replace one or more occurrences of a substring with new text, updating fences.
 
@@ -534,6 +502,38 @@ class Buffer(pyd.BaseModel):
     # -------------------
     # `+` Primary Methods
     # -------------------
+    def update_fences(self, start: int, len_old: int, delta: int, diff: int = 0) -> None:
+        """(Re-)calculates the fence spans for the given region.
+
+        Handles both fences that are completely internal to the region, and fences that cross one of
+        the boundaries. Sometimes, new cross-boundary fences can form where none existed before.
+
+        No changes are needed for fences that contain the region entirely; the normal index shifting
+        after a replacement handles that case on its own.
+
+        Args:
+            start: The start position of the replaced region.
+            len_old: The length of the old text that was replaced.
+            delta: The change in length (new length - old length).
+            diff: When set, indicates that any fences found within the old text are still there, but
+                have simply moved by this static amount.
+        """
+        if self.fence_rgx is None:
+            return
+
+        pre, post = self._split_spans(self.fences, Span._fast(start, start + len_old), delta)
+        n, n_pre, n_post = self.fences.shape[0], pre.shape[0], post.shape[0]
+        if diff == 0:
+            # I. Handle fences in new text, or that appeared b/c of old text
+            b0 = pre[-1][1] if n_pre else 0
+            b1 = post[0][0] if n_post else len(self)
+            new = self._build_fences(self[b0:b1], b0)
+        else:
+            # II. Simply shift any existing fences in this region by the given static `diff`
+            new = self.fences[n_pre : n - n_post] + diff
+
+        self.fences = np.concatenate((pre, new, post))
+
     def raw_pair_iterator(
         self,
         rgx: Pattern,

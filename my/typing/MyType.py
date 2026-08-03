@@ -602,11 +602,6 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
         return head
 
     @classmethod
-    def get_name(cls, val: Any) -> str:
-        """Get the name of a type or a value's type if possible, or '' if not."""
-        return Meta._name(val)
-
-    @classmethod
     def _resolve_typevar(cls, tvar: TypeVar) -> Any:
         """Concretize a bare (unsubstituted) TypeVar into a sensible stand-in type.
 
@@ -699,6 +694,10 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
     # -------------------
     # `+` Primary Methods
     # -------------------
+    @classmethod
+    def get_name(cls, val: Any) -> str:
+        """Get the name of a type or a value's type if possible, or '' if not."""
+        return Meta._name(val)
 
     # ------------------
     # `*` Public Methods

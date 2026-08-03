@@ -7,25 +7,23 @@ sid: MEMY-754
 
 # my-basis 1.0 readiness handoff
 
-This is the maintainer-facing account of the final pre-1.0 campaign. It is meant
-to answer three questions without requiring a tour through the implementation:
+This is the maintainer-facing account of the final pre-1.0 campaign.
+It is meant to answer three questions without requiring a tour through the implementation:
 
 1. Is the Basis change itself ready to merge?
 2. What did applying Basis across the public Python fleet teach us?
 3. What remains a human release decision rather than an engineering task?
 
-> **Disposition:** the campaign has a coherent merge shape, and every local 1.0
-> engineering gate is green. Do not cut `v1.0.0` from this document alone.
-> Merge only after the submitted GitLab pipeline is green and the maintainer has
-> authored the 1.0 stability promise.
+> **Disposition:** the campaign has a coherent merge shape, and every local 1.0 engineering gate is green.
+> Do not cut `v1.0.0` from this document alone.
+> Merge only after the submitted GitLab pipeline is green and the maintainer has authored the 1.0 stability promise.
 
 ## Executive disposition
 
-The work supports merging the Basis branch once its final integrated gates are
-green. It does **not** claim that 1.0 has been released, tagged, or published.
-PyPI still reports `0.8.4` as the latest public release; there was no `0.9.0`
-tag or publication. The current work therefore remains an unreleased candidate,
-not a retroactive release claim.
+The work supports merging the Basis branch once its final integrated gates are green.
+It does **not** claim that 1.0 has been released, tagged, or published.
+PyPI still reports `0.8.4` as the latest public release; there was no `0.9.0` tag or publication.
+The current work therefore remains an unreleased candidate, not a retroactive release claim.
 
 The three requested outcomes have the following disposition:
 
@@ -35,20 +33,16 @@ The three requested outcomes have the following disposition:
 | Fleet adoption and reusable skill | Complete as a decision pass; two downstream drafts remain intentionally open | Every canonical public Python repository received an evidence-backed disposition. The resulting scanner, proposal contract, report renderer, and packaged skill turn that judgment process into a repeatable beginner workflow. |
 | `typst-basis` fold                | Folded on the candidate at `c63d6eed`                                        | Its complete Git history now lives under top-level `typst/`, while its license, version, tags, installation, tests, and release lifecycle remain independent from the Python distribution.                                      |
 
-The campaign deliberately did not maximize use of Basis. Five of the nine
-repositories were declined, deferred, or left as already-adopted because their
-Python floor, zero-dependency promise, failure-path constraints, or lack of a
-coherent replacement outweighed any code reduction. That restraint is part of
-the 1.0 result.
+The campaign deliberately did not maximize use of Basis.
+Five of the nine repositories were declined, deferred, or left as already-adopted because their Python floor, zero-dependency promise, failure-path constraints, or lack of a coherent replacement outweighed any code reduction.
+That restraint is part of the 1.0 result.
 
 ## What changed
 
 ### Tests: house style became an enforceable contract
 
-The test pass preserves behavior while moving scenario variation into
-parameter tables. Long names were not mechanically shortened at the expense of
-meaning; repeated arrangements became rows with readable IDs, and the remaining
-two-level names identify a genuinely different subtype or failure mode.
+The test pass preserves behavior while moving scenario variation into parameter tables.
+Long names were not mechanically shortened at the expense of meaning; repeated arrangements became rows with readable IDs, and the remaining two-level names identify a genuinely different subtype or failure mode.
 
 The new deterministic audit treats the following as objective failures:
 
@@ -60,14 +54,14 @@ The new deterministic audit treats the following as objective failures:
 - collection hazards that would let a style report look green while tests were
   silently absent.
 
-The audit also reports suite-wide shape: files, functions, parameterized
-functions, and represented cases. It is a guardrail, not a demand that every
-test be parameterized. A single focused behavior remains a single focused test.
+The audit also reports suite-wide shape: files, functions, parameterized functions, and represented cases.
+It is a guardrail, not a demand that every test be parameterized.
+A single focused behavior remains a single focused test.
 
 ### The library: tests exposed contract defects worth fixing before 1.0
 
-The review was not merely editorial. Consolidating the tests made several
-public contracts legible enough to repair:
+The review was not merely editorial.
+Consolidating the tests made several public contracts legible enough to repair:
 
 - **Regex composition** now preserves compiled flags across construction,
   assignment, import, and union; rejects lossy reuse of externally flagged
@@ -86,15 +80,13 @@ public contracts legible enough to repair:
   metric setup, and semantic width calculations now have compact,
   parameterized regression coverage.
 
-These are stability fixes, not a redesign of the public surface. Their common
-theme is that provenance, boundaries, flags, and persistence should survive a
-round trip or fail loudly.
+These are stability fixes, not a redesign of the public surface.
+Their common theme is that provenance, boundaries, flags, and persistence should survive a round trip or fail loudly.
 
 ### Adoption tooling: a beginner can produce evidence before asking for judgment
 
-The package now carries an `adopt-my-basis` skill and exposes the
-`my-basis-adopt` command. A beginner can discover or export the skill and build
-an intake without installing a permanent development environment:
+The package now carries an `adopt-my-basis` skill and exposes the `my-basis-adopt` command.
+A beginner can discover or export the skill and build an intake without installing a permanent development environment:
 
 ```sh
 uvx --from my-basis my-basis-adopt skill path
@@ -102,21 +94,16 @@ uvx --from my-basis my-basis-adopt skill export .agents/skills/adopt-my-basis
 uvx --from my-basis my-basis-adopt prepare .
 ```
 
-`prepare` inventories the repository without importing or executing its
-package. It avoids secret-like inputs, virtual environments, generated and
-vendor trees, oversized files, and symlinks that escape the repository. Its
-regex findings and candidate native gates are explicitly leads for an agent to
-confirm, not self-authorizing refactors.
+`prepare` inventories the repository without importing or executing its package.
+It avoids secret-like inputs, virtual environments, generated and vendor trees, oversized files, and symlinks that escape the repository.
+Its regex findings and candidate native gates are explicitly leads for an agent to confirm, not self-authorizing refactors.
 
-The resulting proposal contract binds a report to the canonical SHA-256 of one
-exact intake. Proposed and implemented changes cite complete-file evidence;
-implemented claims require implementation mode and an honest verification
-result. Stale or mismatched evidence fails validation. Stable change IDs let a
-maintainer accept most of a proposal while requesting another round for only a
-few items.
+The resulting proposal contract binds a report to the canonical SHA-256 of one exact intake.
+Proposed and implemented changes cite complete-file evidence; implemented claims require implementation mode and an honest verification result.
+Stale or mismatched evidence fails validation.
+Stable change IDs let a maintainer accept most of a proposal while requesting another round for only a few items.
 
-The same proposal can be rendered as MyST Markdown, standalone HTML, or Typst
-source and PDF:
+The same proposal can be rendered as MyST Markdown, standalone HTML, or Typst source and PDF:
 
 ```sh
 my-basis-adopt validate .basis-adoption/proposal.json
@@ -125,17 +112,14 @@ my-basis-adopt render .basis-adoption/proposal.json --format html
 my-basis-adopt render .basis-adoption/proposal.json --format typst --build
 ```
 
-The report leads with the repository story, adoption thesis, deliberate
-non-changes, verification, and merge or revision handoff. File inventories and
-logs belong in appendices. The tool can render evidence; it cannot decide that a
-dependency belongs on a latency-sensitive hook or zero-dependency core.
+The report leads with the repository story, adoption thesis, deliberate non-changes, verification, and merge or revision handoff.
+File inventories and logs belong in appendices.
+The tool can render evidence; it cannot decide that a dependency belongs on a latency-sensitive hook or zero-dependency core.
 
 ### Typst: one repository, two deliberately separate products
 
 Folding `typst-basis` into this repository is the lower-maintenance topology.
-The prepared history import preserves its four source commits, relocates it to
-top-level `typst/`, and adds the boundary material needed for life inside a
-monorepo:
+The prepared history import preserves its four source commits, relocates it to top-level `typst/`, and adds the boundary material needed for life inside a monorepo:
 
 - nested MIT licensing for `@dtm/basis`;
 - its own `typst.toml` version;
@@ -144,23 +128,18 @@ monorepo:
 - `typst-vX.Y.Z` tags rather than Python's bare `vX.Y.Z`; and
 - explicit exclusion from Python wheels and source distributions.
 
-The source repository head being preserved is
-`fc46f3700af5415db0692f30bc955df361638aee`. The recovery bundle is
-`/home/robbd/ai/artifacts/typst-basis-fc46f370.bundle`, with SHA-256
-`1548bd0050fe4a6681de85d294cc5064fc324b36972e08dea599905bf5023370`.
+The source repository head being preserved is `fc46f3700af5415db0692f30bc955df361638aee`.
+The recovery bundle is `/home/robbd/ai/artifacts/typst-basis-fc46f370.bundle`, with SHA-256 `1548bd0050fe4a6681de85d294cc5064fc324b36972e08dea599905bf5023370`.
 The prepared relocation and boundary commits are `8ee77b2` and `4656775`.
-The history merge entered Basis as
-`c63d6eed41b9a490d43cfce6f3b180b0ab1f9275`.
+The history merge entered Basis as `c63d6eed41b9a490d43cfce6f3b180b0ab1f9275`.
 
-The old checkout should remain in place until the Basis merge, package
-installation, and downstream Corpus gate all succeed. History preservation is
-the safety net; a hurried directory copy followed by deletion is not.
+The old checkout should remain in place until the Basis merge, package installation, and downstream Corpus gate all succeed.
+History preservation is the safety net; a hurried directory copy followed by deletion is not.
 
 ## Fleet dispositions
 
-The canonical pass covered these nine public Python repositories. “No change”
-is a result when it protects a deliberate compatibility or dependency
-boundary.
+The canonical pass covered these nine public Python repositories.
+“No change” is a result when it protects a deliberate compatibility or dependency boundary.
 
 | Repository        | Disposition            | Result and rationale                                                                                                                                                                                        | Review surface                                                                                                       |
 | ----------------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
@@ -174,8 +153,7 @@ boundary.
 | `arch`            | Implemented as a draft | Reused Basis where document and assay grammars already meet RegexStore. The focused 41-test slice passed; the broader run passed 966 tests after separating 3 known stale defects.                          | [Draft MR !2](https://gitlab.com/doering-ai/libs/arch/-/merge_requests/2), commit `7252d68`; merge after Basis.      |
 | `model`           | Reference adopter      | It already demonstrates the intended Basis and RegexStore relationship. Five unrelated regex calls did not form another grammar worth consolidating. Refresh its `0.8.1` lock only after 1.0.               | No MR; repository remained clean.                                                                                    |
 
-Two supporting Corpus changes sit outside the nine-repository disposition
-matrix:
+Two supporting Corpus changes sit outside the nine-repository disposition matrix:
 
 - [Corpus MR !47](https://gitlab.com/doering-ai/libs/corpus/-/merge_requests/47)
   fixed a RegexStore-backed Markdown fence backreference and is merged at
@@ -186,18 +164,16 @@ matrix:
 
 ## RegexStore DSL walkthrough
 
-RegexStore is valuable when patterns form a vocabulary: reusable pieces, a
-grammar, a router, a recursive structure, or a repeated transform. One obvious
-`re.compile` should stay one obvious `re.compile`.
+RegexStore is valuable when patterns form a vocabulary: reusable pieces, a grammar, a router, a recursive structure, or a repeated transform.
+One obvious `re.compile` should stay one obvious `re.compile`.
 
-The examples below are executable against this candidate. Each uses
-`lazy_load=False` so a malformed production grammar fails at construction
-rather than on its first user input.
+The examples below are executable against this candidate.
+Each uses `lazy_load=False` so a malformed production grammar fails at construction rather than on its first user input.
 
 ### Exact composition and repeated captures
 
-Lists normally use an optional-space separator. Set `separator=''` when every
-character is part of the grammar:
+Lists normally use an optional-space separator.
+Set `separator=''` when every character is part of the grammar:
 
 ```python
 from my import RegexStore
@@ -219,9 +195,8 @@ assert match.flat == {
 }
 ```
 
-`MatchData` keeps all repeated named captures as lists. Its `flat` view selects
-the last non-empty capture, which is convenient but should not replace
-`match.data` when repetition matters.
+`MatchData` keeps all repeated named captures as lists.
+Its `flat` view selects the last non-empty capture, which is convenient but should not replace `match.data` when repetition matters.
 
 ### Named subroutine is not a backreference
 
@@ -244,19 +219,14 @@ assert PAIRS.fullmatch('same_text', 'cat:cat')
 assert not PAIRS.fullmatch('same_text', 'cat:dog')
 ```
 
-This distinction is especially important because the default
-`force_reinvocations=True` behavior normalizes `(?P=word)` as a subroutine
-invocation. Use `\g<word>` when equality with the earlier capture is the actual
-contract. The Corpus fence fix is the practical version of this lesson: the
-closing fence must repeat the opening delimiter, not merely match the delimiter
-grammar again.
+This distinction is especially important because the default `force_reinvocations=True` behavior normalizes `(?P=word)` as a subroutine invocation.
+Use `\g<word>` when equality with the earlier capture is the actual contract.
+The Corpus fence fix is the practical version of this lesson: the closing fence must repeat the opening delimiter, not merely match the delimiter grammar again.
 
 ### Flags must travel with reusable definitions
 
-A compiled pattern's flags are preserved while that pattern stands alone,
-including through store import and union. Those compile-time flags cannot be
-embedded into a larger pattern's source, so RegexStore now refuses a composed
-dependency that would silently lose them.
+A compiled pattern's flags are preserved while that pattern stands alone, including through store import and union.
+Those compile-time flags cannot be embedded into a larger pattern's source, so RegexStore now refuses a composed dependency that would silently lose them.
 
 Put reusable flags inside the definition:
 
@@ -273,16 +243,14 @@ assert WORDS.fullmatch('command', 'PUBLISHING')
 assert not WORDS.fullmatch('command', 'publisher')
 ```
 
-For a standalone imported `regex.Pattern`, external flags are fine. For a
-definition referenced by `(?P>name)`, use scoped inline flags such as
-`(?i:...)`. Supplying both a compiled pattern and another `flags=` value is
-ambiguous and fails loudly.
+For a standalone imported `regex.Pattern`, external flags are fine.
+For a definition referenced by `(?P>name)`, use scoped inline flags such as `(?i:...)`.
+Supplying both a compiled pattern and another `flags=` value is ambiguous and fails loudly.
 
 ### Substitution inherits the unattended-processing timeout
 
-`sub` and `subn` route replacement through the same store-wide regex deadline
-as the other public matching operations. The caller does not add a separate
-`timeout=` argument:
+`sub` and `subn` route replacement through the same store-wide regex deadline as the other public matching operations.
+The caller does not add a separate `timeout=` argument:
 
 ```python
 from my import RegexStore
@@ -305,14 +273,13 @@ assert CLEANUP.subn(
 ) == ('alpha beta gamma', 2)
 ```
 
-The timeout is a containment boundary, not a proof that a hostile pattern is
-safe. Security-sensitive patterns should still be eagerly compiled, exercised
-against adversarially long inputs, and kept as simple as the behavior permits.
+The timeout is a containment boundary, not a proof that a hostile pattern is safe.
+Security-sensitive patterns should still be eagerly compiled, exercised against adversarially long inputs, and kept as simple as the behavior permits.
 
 ### Router order is public behavior
 
-Router mappings are ordered. When categories overlap, the first matching branch
-wins:
+Router mappings are ordered.
+When categories overlap, the first matching branch wins:
 
 ```python
 from my import RegexStore
@@ -331,10 +298,9 @@ assert TOKENS.route_match('token', 'alpha_2') == 'wordish'
 assert TOKENS.route_match('token', '+foo') == ''
 ```
 
-Reversing those two mapping entries classifies `'42'` as `wordish`. Router
-tests therefore need an overlap example, not only disjoint happy paths.
-Routers deliberately use ordinary ordered alternation: optimized atomic
-condensation can change the meaning of lazy or overlapping branches.
+Reversing those two mapping entries classifies `'42'` as `wordish`.
+Router tests therefore need an overlap example, not only disjoint happy paths.
+Routers deliberately use ordinary ordered alternation: optimized atomic condensation can change the meaning of lazy or overlapping branches.
 
 ### The compact DSL vocabulary
 
@@ -359,8 +325,7 @@ Before accepting a complex RegexStore change, ask:
 
 ## Independent Python and Typst release boundaries
 
-The monorepo removes a repository without pretending the two packages are one
-artifact.
+The monorepo removes a repository without pretending the two packages are one artifact.
 
 | Concern        | Python `my-basis`                                      | Typst `@dtm/basis`                                                            |
 | -------------- | ------------------------------------------------------ | ----------------------------------------------------------------------------- |
@@ -379,13 +344,12 @@ The Python build checker must prove both halves of the packaging promise:
 - every source-controlled file in `my/skills/adopt-my-basis/` is present in both
   Python artifacts.
 
-That keeps a Typst checkout from inflating the Python package while ensuring the
-new agent workflow actually ships to Python users.
+That keeps a Typst checkout from inflating the Python package while ensuring the new agent workflow actually ships to Python users.
 
 ## Verification ledger
 
-Local proof is literal below. The submitted review and its exact-source pipeline
-are explicit pre-merge gates, not soft passes.
+Local proof is literal below.
+The submitted review and its exact-source pipeline are explicit pre-merge gates, not soft passes.
 
 | Surface                        | Command or evidence                                                                                                   | Status                                                                                                                                                                                                                     |
 | ------------------------------ | --------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -413,8 +377,8 @@ are explicit pre-merge gates, not soft passes.
 
 ### Merge sequence
 
-Use this order. It prevents downstream repositories from depending on a path or
-behavior that has not landed.
+Use this order.
+It prevents downstream repositories from depending on a path or behavior that has not landed.
 
 1. **Close the Basis proof.** Submit the branch, record its review surface, and
    require the exact merge-request pipeline to pass. Review the branch
@@ -462,8 +426,8 @@ behavior that has not landed.
 
 ### The human 1.0 gate
 
-No agent should manufacture the social guarantee implied by 1.0. After the merge
-sequence above, the maintainer must:
+No agent should manufacture the social guarantee implied by 1.0.
+After the merge sequence above, the maintainer must:
 
 1. author and approve the explicit public-API stability promise;
 2. approve the final changelog and the root `1.0.0` version/lock change;
@@ -500,8 +464,7 @@ report.
 
 ## Infrastructure limitations
 
-The work proceeded with local evidence when coordination services were
-unreliable:
+The work proceeded with local evidence when coordination services were unreliable:
 
 - Plane lookups returned the known modality/404 failure. `MEMY-754.md` remains
   the local collaboration record; no direct gated Plane push was used.
@@ -516,8 +479,7 @@ unreliable:
   recorded above.
 
 None of these limitations justifies weakening the local verification contract.
-They explain why the branch, commits, rendered artifacts, and command results are
-the durable handoff.
+They explain why the branch, commits, rendered artifacts, and command results are the durable handoff.
 
 ## Problem space
 
@@ -539,9 +501,5 @@ the durable handoff.
   - `typst-v*` tags control only the house Typst package.
   - Retain the imported source bundle until all consumers have crossed the seam.
 
-**Terminus:** MEMY-754 ends when the Basis MR is merged with literal final proof,
-the Typst package resolves from the monorepo and passes its downstream Corpus
-gate, every fleet repository has the disposition recorded above, and the
-maintainer has either cut 1.0 or explicitly deferred the human stability promise.
-Later adoption findings belong to their own repository tasks; they do not keep
-this campaign artificially open.
+**Terminus:** MEMY-754 ends when the Basis MR is merged with literal final proof, the Typst package resolves from the monorepo and passes its downstream Corpus gate, every fleet repository has the disposition recorded above, and the maintainer has either cut 1.0 or explicitly deferred the human stability promise.
+Later adoption findings belong to their own repository tasks; they do not keep this campaign artificially open.

@@ -67,7 +67,8 @@ The documentation campaign: every non-trivial public feature now carries an exec
 - `GoogleSheet.mtime` lacked the `@_import_guard` decorator, hitting a mock instead of the actionable `[google]`-extra `ImportError` its siblings raise.
 - `TypeMatch.is_map_type`/`is_struct_type` overloads subscripted `type[]` with parametrized aliases, which the typing spec disallows (and which broke autodoc signature rendering); they now narrow to the bare base classes.
 
-**Release-history correction (2026-07-23).** The change set below was prepared as `0.9.0` on 2026-07-20, but no `v0.9.0` tag or PyPI release was created; `0.8.4` remains the latest public release. These changes therefore remain part of `[Unreleased]` and will ship with the eventual 1.0.
+**Release-history correction (2026-07-23).** The change set below was prepared as `0.9.0` on 2026-07-20, but no `v0.9.0` tag or PyPI release was created; `0.8.4` remains the latest public release.
+These changes therefore remain part of `[Unreleased]` and will ship with the eventual 1.0.
 
 This release-readiness change set contains reproduced security and correctness fixes (each landed with a regression test), the `py.typed` marker, a lazy import facade that roughly halves the module count of a bare `import my`, and dependency/packaging cleanup.
 

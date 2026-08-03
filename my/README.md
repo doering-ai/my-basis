@@ -17,8 +17,8 @@ When adding new relative imports to any of the modules in this package, make sur
 
 ### Contributing
 
-I created this project over the course of 2025 for my own use, so it's definitely 'opinionated', for
-better or worse. Specifically, it is influenced by:
+I created this project over the course of 2025 for my own use, so it's definitely 'opinionated', for better or worse.
+Specifically, it is influenced by:
 
 - a weathered respect for polymorphism,
 - an addiction to "ergonomic" code\*\*, and
@@ -27,10 +27,8 @@ better or worse. Specifically, it is influenced by:
 If you're interested in contributing the project, simply get in touch, open an issue, or open a PR!
 
 ```{note}
-__\*\*:__ This buzzword implies some trite promises--namely that the code is concise,
-clear, and/or generally satisfying--but I intend it with a bit more sincerity & specificity.
+__\*\*:__ This buzzword implies some trite promises--namely that the code is concise, clear, and/or generally satisfying--but I intend it with a bit more sincerity & specificity.
 
-In my usage, it is code that conforms to the design standards set out by the physical and
-interface design academies(/industries), especially the work of Don Norman.
+In my usage, it is code that conforms to the design standards set out by the physical and interface design academies(/industries), especially the work of Don Norman.
 The most relevant are Consistency, Simplicity, Mapping, Visibility, Constraints, and Feedback.
 ```

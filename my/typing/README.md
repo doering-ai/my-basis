@@ -39,24 +39,14 @@ Strip away the line count and the subsystem is four ideas:
 
 ### Design principle: pydantic at boundaries, plain classes on hot paths
 
-Almost everything in this package is a `pydantic.BaseModel`, and that is usually correct —
-pydantic earns its keep wherever data is **validated, coerced, or serialized at a boundary**
-(`MyType`, `Command`, `Idx`, `Buffer`, `Markdown`, the caches, and the like all use
-validators/serializers and stay models).
+Almost everything in this package is a `pydantic.BaseModel`, and that is usually correct — pydantic earns its keep wherever data is **validated, coerced, or serialized at a boundary** (`MyType`, `Command`, `Idx`, `Buffer`, `Markdown`, the caches, and the like all use validators/serializers and stay models).
 
-The exception is **hot-path compute objects that hold no boundary data**. `Transform` is the
-canonical case: it is constructed on *every* `cast()` call, never crosses a serialization
-boundary, and wants none of pydantic's per-construction validation. It was in fact *fighting*
-that machinery — its fields were typed as plain `MyType` (not `MyType[T]`) purely to dodge the
-deep re-validation that recurses forever through the self-referential `POS` sentinel. So it is
-a **plain class**: fields assigned directly in `__init__`, with a `ty` property mirroring
-`_TypingBase.ty` for facade access.
+The exception is **hot-path compute objects that hold no boundary data**.
+`Transform` is the canonical case: it is constructed on *every* `cast()` call, never crosses a serialization boundary, and wants none of pydantic's per-construction validation.
+It was in fact *fighting* that machinery — its fields were typed as plain `MyType` (not `MyType[T]`) purely to dodge the deep re-validation that recurses forever through the self-referential `POS` sentinel.
+So it is a **plain class**: fields assigned directly in `__init__`, with a `ty` property mirroring `_TypingBase.ty` for facade access.
 
-The rule of thumb, then: **`BaseModel` for data at a boundary; a plain class (or
-`pydantic.dataclasses.dataclass` when you want validation without the model machinery) for
-objects that exist only to carry state through a hot loop.** Note the same principle keeps the
-*singleton* chambers as models — they are constructed once at import, so validation is a
-startup cost, not a per-operation one.
+The rule of thumb, then: **`BaseModel` for data at a boundary; a plain class (or `pydantic.dataclasses.dataclass` when you want validation without the model machinery) for objects that exist only to carry state through a hot loop.** Note the same principle keeps the *singleton* chambers as models — they are constructed once at import, so validation is a startup cost, not a per-operation one.
 
 ### Configuring casts
 
@@ -68,14 +58,9 @@ The flags live on the `Typist` instance and gate the "loose" conversions:
 - `splits` — a string splits before becoming a collection (`'a.b' -> {'a', 'b'}`).
 - `wraps` — an atom wraps into a collection (`'a' -> ['a']`).
 
-Because `cast()` reads these live (results are **not** memoized), they can be toggled at
-runtime — `typist.splits = False` takes effect on the next call. The corollary is a standing
-constraint: **if a cast-result cache is ever added, the flag state must be part of its key**,
-or a toggle will silently return a stale coercion. For preset bundles rather than individual
-flags, reach for the strict/basic/flex presets instead of flipping booleans by hand.
+Because `cast()` reads these live (results are **not** memoized), they can be toggled at runtime — `typist.splits = False` takes effect on the next call.
+The corollary is a standing constraint: **if a cast-result cache is ever added, the flag state must be part of its key**, or a toggle will silently return a stale coercion.
+For preset bundles rather than individual flags, reach for the strict/basic/flex presets instead of flipping booleans by hand.
 
-One thing this subsystem deliberately does *not* do is read its configuration from the
-environment. `Typist` stays deterministic; if an application wants env- or file-driven
-defaults, it should own that itself (e.g. via `pydantic-settings`) and hand a configured
-preset *in* — coercion semantics that change with an ambient env var are a reproducibility
-hazard, not a feature.
+One thing this subsystem deliberately does *not* do is read its configuration from the environment.
+`Typist` stays deterministic; if an application wants env- or file-driven defaults, it should own that itself (e.g. via `pydantic-settings`) and hand a configured preset *in* — coercion semantics that change with an ambient env var are a reproducibility hazard, not a feature.

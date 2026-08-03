@@ -1,8 +1,7 @@
 # Adoption proposal contract
 
-The machine-readable proposal is
-`my-basis-adoption/proposal/v2`. It references one exact intake by SHA-256 and
-contains stable change IDs.
+The machine-readable proposal is `my-basis-adoption/proposal/v2`.
+It references one exact intake by SHA-256 and contains stable change IDs.
 
 ## Intake linkage
 
@@ -18,8 +17,7 @@ payload = json.dumps(
 intake_sha256 = hashlib.sha256(payload).hexdigest()
 ```
 
-It is not `intake.source_digest`, the digest of the pretty-printed `intake.json`
-file, or a digest of its original source tree.
+It is not `intake.source_digest`, the digest of the pretty-printed `intake.json` file, or a digest of its original source tree.
 
 ## Required shape
 
@@ -95,8 +93,8 @@ regexstore:
   caveats[]
 ```
 
-`dsl_example` is always required. For `complex`, positive examples, negative
-examples, and caveats must all be non-empty.
+`dsl_example` is always required.
+For `complex`, positive examples, negative examples, and caveats must all be non-empty.
 
 ## Evidence, mode, and status invariants
 
@@ -108,12 +106,11 @@ Each `EvidenceRef` contains:
 - `signal_id`: optional. When present, it must name an intake signal whose
   `evidence` list contains the same path.
 
-A reference does not need a signal ID. Reject an unknown path, a changed full-file
-Line numbers,
-symbols, and excerpts can improve the narrative, but proposal v2 does not carry or
-validate them.
+A reference does not need a signal ID.
+Reject an unknown path, a changed full-file Line numbers, symbols, and excerpts can improve the narrative, but proposal v2 does not carry or validate them.
 
-`mode` records authorization; `status` records the result. Apply these rules:
+`mode` records authorization; `status` records the result.
+Apply these rules:
 
 - `proposed` and `implemented` changes require at least one evidence reference.
 - `implemented` is valid only in `mode: implement`.
@@ -134,13 +131,12 @@ Verification states bind honestly to `exit_code`:
 | `unavailable` | `null`             |
 | `not-run`     | `null`             |
 
-Reject stale evidence instead of quietly rendering it. Unavailable infrastructure
-is `unavailable`, never a passing result.
+Reject stale evidence instead of quietly rendering it.
+Unavailable infrastructure is `unavailable`, never a passing result.
 
 ## Handoff invariants
 
-Merge commands must be exact for the local result and must not claim a remote
-review exists when it does not.
+Merge commands must be exact for the local result and must not claim a remote review exists when it does not.
 
 - Every merge kind except `none` requires at least one non-blank `merge_commands`
   entry.
@@ -152,5 +148,4 @@ review exists when it does not.
   `merge_commands` and is invalid when any change is `implemented`.
 - `revision_prompt` must be non-blank; write it to name the stable IDs to revisit.
 
-Preserve accepted IDs across rounds and rerun affected gates plus any full
-repository gate required by policy.
+Preserve accepted IDs across rounds and rerun affected gates plus any full repository gate required by policy.

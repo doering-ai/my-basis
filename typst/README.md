@@ -17,9 +17,13 @@ Part of the fleet markdown→typst migration (`MEMY-597`, wave W0.2 / `MEMY-599`
 
 ## Repository and release boundary
 
-This package lives under `typst/` in the `my-basis` repository, but it remains an independently versioned `@dtm/basis` package. Its sources are MIT-licensed under [`LICENSE`](LICENSE); the Python project at repository root remains MPL-2.0. Python wheels and source distributions explicitly exclude this subtree.
+This package lives under `typst/` in the `my-basis` repository, but it remains an independently versioned `@dtm/basis` package.
+Its sources are MIT-licensed under [`LICENSE`](LICENSE); the Python project at repository root remains MPL-2.0.
+Python wheels and source distributions explicitly exclude this subtree.
 
-Use `typst-vX.Y.Z` tags for this package. Bare `vX.Y.Z` tags belong to the Python package and may trigger PyPI publication. The package history was imported from `/home/robbd/my/libs/typst-basis` at source head `fc46f3700af5415db0692f30bc955df361638aee`.
+Use `typst-vX.Y.Z` tags for this package.
+Bare `vX.Y.Z` tags belong to the Python package and may trigger PyPI publication.
+The package history was imported from `/home/robbd/my/libs/typst-basis` at source head `fc46f3700af5415db0692f30bc955df361638aee`.
 
 ## Use
 
@@ -88,4 +92,5 @@ Run the package's self-contained Typst 0.15 gate from this directory:
 ./test.sh
 ```
 
-It installs a temporary copy, compiles both fixtures, checks nonempty PDFs, verifies the copied release manifest, and queries the `dtm-report/1` envelope. The Corpus repository retains the downstream integration gate in `tests/test_typst_basis.py`.
+It installs a temporary copy, compiles both fixtures, checks nonempty PDFs, verifies the copied release manifest, and queries the `dtm-report/1` envelope.
+The Corpus repository retains the downstream integration gate in `tests/test_typst_basis.py`.

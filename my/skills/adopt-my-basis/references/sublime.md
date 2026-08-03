@@ -9,12 +9,11 @@ Do not infer one from the other.
 
 ## Select the host deliberately
 
-Read Sublime's current **API Environments** and **Dev Builds** pages before
-changing `.python-version`. In the current development line, Build 4205 replaced
-the Python 3.8 host with Python 3.14. A `.python-version` marker of `3.14` selects
-that host. The compatibility marker `3.8` selects 3.8 on older builds and is
-remapped to 3.14 on new builds. An unknown marker is not a request for a nearby
-version; it may fall back to the legacy host.
+Read Sublime's current **API Environments** and **Dev Builds** pages before changing `.python-version`.
+In the current development line, Build 4205 replaced the Python 3.8 host with Python 3.14.
+A `.python-version` marker of `3.14` selects that host.
+The compatibility marker `3.8` selects 3.8 on older builds and is remapped to 3.14 on new builds.
+An unknown marker is not a request for a nearby version; it may fall back to the legacy host.
 
 Therefore a campaign may intentionally use:
 
@@ -29,16 +28,14 @@ with:
 3.14
 ```
 
-in `.python-version`. This means "source supports 3.13 and newer; the live
-development host under test is 3.14." It does not claim Sublime embeds 3.13.
+in `.python-version`.
+This means "source supports 3.13 and newer; the live development host under test is 3.14."
+It does not claim Sublime embeds 3.13.
 
 ## Package-Control runtime dependency
 
-An ordinary `pyproject.toml` dependency supports tests and wheels but does not
-by itself install a library into Sublime's isolated plugin host. A live package
-also needs its Package Control library dependency declared in
-`dependencies.json`, with the library resolvable from the configured Package
-Control repository.
+An ordinary `pyproject.toml` dependency supports tests and wheels but does not by itself install a library into Sublime's isolated plugin host.
+A live package also needs its Package Control library dependency declared in `dependencies.json`, with the library resolvable from the configured Package Control repository.
 
 For my-basis adoption, verify all three surfaces:
 
@@ -47,14 +44,13 @@ For my-basis adoption, verify all three surfaces:
 - the repository/channel metadata exposes a compatible `my-basis` wheel and
   each of its runtime dependencies for the selected host.
 
-Do not vendor an untracked copy merely to make the import pass. If a temporary
-source checkout is used for live proof, label it as test scaffolding.
+Do not vendor an untracked copy merely to make the import pass.
+If a temporary source checkout is used for live proof, label it as test scaffolding.
 
 ## Structural seam
 
-Many related plugins import a shared `myBasis` Sublime package. Treat that
-package as the adapter between the editor API and canonical `my-basis`, not as a
-second general-purpose utility library.
+Many related plugins import a shared `myBasis` Sublime package.
+Treat that package as the adapter between the editor API and canonical `my-basis`, not as a second general-purpose utility library.
 
 Prefer this ownership:
 
@@ -70,9 +66,8 @@ leaf plugin
   owns only its domain behavior
 ```
 
-Replace copied generic helpers in `myBasis` first. Leaf plugins can then migrate
-from local helpers to the adapter or directly to `my` without preserving a third
-copy.
+Replace copied generic helpers in `myBasis` first.
+Leaf plugins can then migrate from local helpers to the adapter or directly to `my` without preserving a third copy.
 
 ## Verification ladder
 
@@ -83,5 +78,4 @@ copy.
 5. Record `sublime.version()`, `sys.version`, package import success, and a
    behavior probe through the real plugin host.
 
-If the live build is unavailable, steps 1–3 remain useful but the live-host
-result is `unavailable`, not passed.
+If the live build is unavailable, steps 1–3 remain useful but the live-host result is `unavailable`, not passed.

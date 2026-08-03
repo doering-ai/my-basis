@@ -5,9 +5,8 @@ description: Audit or refactor a Python repository to adopt my-basis where it im
 
 # Adopt my-basis
 
-Use the packaged scanner for facts and use agent judgment for changes. A decline,
-partial adoption, or already-complete result is successful when it preserves the
-repository's dependency, latency, compatibility, or failure-path contract.
+Use the packaged scanner for facts and use agent judgment for changes.
+A decline, partial adoption, or already-complete result is successful when it preserves the repository's dependency, latency, compatibility, or failure-path contract.
 
 ## Quick start
 
@@ -21,16 +20,14 @@ uvx --from my-basis my-basis-adopt prepare .
 uvx --from my-basis my-basis-adopt prepare . --target-python 3.13
 ```
 
-Run `skill path` to give the agent the packaged skill directly. Export only when the
-agent needs its own copy, and choose a destination in that agent's skill directory.
-The rest of this guide uses bare `my-basis-adopt` as shorthand for the installed
-console script; for one-shot use, keep the `uvx --from my-basis` prefix.
+Run `skill path` to give the agent the packaged skill directly.
+Export only when the agent needs its own copy, and choose a destination in that agent's skill directory.
+The rest of this guide uses bare `my-basis-adopt` as shorthand for the installed console script; for one-shot use, keep the `uvx --from my-basis` prefix.
 
 Then give the printed `intake.json` path to an agent and ask it to use this skill.
-The scanner may create `.basis-adoption/`; it must not edit source, dependency, or
-version-control files. Treat `intake.commands.candidate_native_gates` as candidate
-native gates until repository instructions or CI confirm them. Opportunity detection
-is regex-focused; inspect the other inventory categories manually.
+The scanner may create `.basis-adoption/`; it must not edit source, dependency, or version-control files.
+Treat `intake.commands.candidate_native_gates` as candidate native gates until repository instructions or CI confirm them.
+Opportunity detection is regex-focused; inspect the other inventory categories manually.
 
 ## Choose the mode
 
@@ -98,9 +95,8 @@ is regex-focused; inspect the other inventory categories manually.
 
 ## RegexStore gate
 
-Use RegexStore for a reusable grammar, shared named pieces, repeated transforms,
-router classification, recursive structures, or patterns whose construction needs
-to be explained. Keep a lone obvious `re.compile` call as-is.
+Use RegexStore for a reusable grammar, shared named pieces, repeated transforms, router classification, recursive structures, or patterns whose construction needs to be explained.
+Keep a lone obvious `re.compile` call as-is.
 
 Every RegexStore change must include:
 
@@ -110,16 +106,14 @@ Every RegexStore change must include:
 - fail-fast compilation for security-sensitive patterns;
 - positive and negative examples for complex grammars.
 
-Use `\g<name>` for a true backreference when reinvocation normalization is enabled;
-`(?P>name)` invokes the named subpattern. Read the full guide before composing a
-complex store or router.
+Use `\g<name>` for a true backreference when reinvocation normalization is enabled; `(?P>name)` invokes the named subpattern.
+Read the full guide before composing a complex store or router.
 
 ## Proposal and report
 
-Follow [the proposal contract](references/proposal-contract.md). Every implemented
-proposal includes at least one SHA-bound entry from `my-basis-adopt capture`; this is the
-copy-ready transformation corpus, not merely a diffstat. Keep the main
-report narrative and put file inventories and logs in appendices:
+Follow [the proposal contract](references/proposal-contract.md).
+Every implemented proposal includes at least one SHA-bound entry from `my-basis-adopt capture`; this is the copy-ready transformation corpus, not merely a diffstat.
+Keep the main report narrative and put file inventories and logs in appendices:
 
 1. the repository's present shape;
 2. the adoption thesis;
@@ -144,9 +138,8 @@ my-basis-adopt render .basis-adoption/proposal.json --format html
 my-basis-adopt render .basis-adoption/proposal.json --format typst --build
 ```
 
-Typst source rendering does not require the `typst` executable; `--build` does. If
-Typst compilation is unavailable, retain `report.typ`, report the missing executable,
-and return an available rendered route such as MyST or HTML.
+Typst source rendering does not require the `typst` executable; `--build` does.
+If Typst compilation is unavailable, retain `report.typ`, report the missing executable, and return an available rendered route such as MyST or HTML.
 
 ## Revision handoff
 
@@ -158,16 +151,14 @@ Preserve accepted change IDs. Revise basis-003 and basis-006 as follows: <reques
 Rerun affected gates, refresh stale evidence, and regenerate the report.
 ```
 
-Refresh the intake when source evidence has changed. Stable IDs survive revisions;
-accepted changes must not be silently reopened.
+Refresh the intake when source evidence has changed.
+Stable IDs survive revisions; accepted changes must not be silently reopened.
 
 ## Fleet dogfood
 
-For each repository, run the scanner before manual inspection. Pass the campaign's
-explicit `--target-python` when floor retirement is part of the mission; otherwise an
-incompatible declared floor correctly remains a constraint. Record each detector as
-confirmed, false-positive, or missed. Change deterministic rules only for repeatable
-symbolic evidence seen in two repositories (unless it is an invariant);
-change this guidance for judgment errors and the report template for communication
-errors. Re-run earlier fixtures after every rule change. Never let the scanner
-self-modify its detectors or this skill.
+For each repository, run the scanner before manual inspection.
+Pass the campaign's explicit `--target-python` when floor retirement is part of the mission; otherwise an incompatible declared floor correctly remains a constraint.
+Record each detector as confirmed, false-positive, or missed.
+Change deterministic rules only for repeatable symbolic evidence seen in two repositories (unless it is an invariant); change this guidance for judgment errors and the report template for communication errors.
+Re-run earlier fixtures after every rule change.
+Never let the scanner self-modify its detectors or this skill.

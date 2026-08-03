@@ -1,9 +1,9 @@
 # my-basis opportunity map
 
-Use this as a map, not a replacement quota. In structural mode, however, deliberately
-follow a confirmed duplicate through the whole module so one abstraction retains ownership.
-Inspect local behavior and tests before accepting any signal. Deterministic opportunity
-detection is regex- and Sublime-seam-focused; treat other rows as manual review categories.
+Use this as a map, not a replacement quota.
+In structural mode, however, deliberately follow a confirmed duplicate through the whole module so one abstraction retains ownership.
+Inspect local behavior and tests before accepting any signal.
+Deterministic opportunity detection is regex- and Sublime-seam-focused; treat other rows as manual review categories.
 
 | Local shape                                              | Candidate                                           | Adopt when                                         | Decline or defer when                                            |
 | -------------------------------------------------------- | --------------------------------------------------- | -------------------------------------------------- | ---------------------------------------------------------------- |
@@ -40,16 +40,14 @@ uv run python -c "import importlib.metadata as m; print(m.version('my-basis'))"
 rg -n -g '*.py' '^(from my|import my|import re|import regex)|re\.(compile|search|match|sub)'
 ```
 
-Do not execute these blindly when the target uses a different package manager or
-its agent instructions specify another gate.
+Do not execute these blindly when the target uses a different package manager or its agent instructions specify another gate.
 
 ## Evidence rules
 
-For machine-enforced evidence, every `proposed` or `implemented` change cites at
-least one intake-relative path and that entry's full-file SHA-256. A `signal_id` is
-optional; when present, the signal must cite the same path. Line numbers, symbols,
-and excerpts are useful narrative context but are not proposal-v2 evidence fields.
+For machine-enforced evidence, every `proposed` or `implemented` change cites at least one intake-relative path and that entry's full-file SHA-256.
+A `signal_id` is optional; when present, the signal must cite the same path.
+Line numbers, symbols, and excerpts are useful narrative context but are not proposal-v2 evidence fields.
 Always state the required behavior contract.
 
-Report explicit reasons for deliberate non-changes. Prefer a partial adoption with
-crisp boundaries over a broad mechanical rewrite.
+Report explicit reasons for deliberate non-changes.
+Prefer a partial adoption with crisp boundaries over a broad mechanical rewrite.

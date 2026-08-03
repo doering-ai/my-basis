@@ -1,8 +1,7 @@
 # RegexStore adoption and DSL
 
-RegexStore earns its dependency when patterns form a vocabulary or grammar. It
-adds named reusable definitions, compositional marks, parsed match data, router
-trees, and a deadline on public matching paths.
+RegexStore earns its dependency when patterns form a vocabulary or grammar.
+It adds named reusable definitions, compositional marks, parsed match data, router trees, and a deadline on public matching paths.
 
 ## Start explicit
 
@@ -26,8 +25,8 @@ assert COMMAND_RGXS.fullmatch('verb', 'Publishing')
 assert not COMMAND_RGXS.fullmatch('verb', 'publisher')
 ```
 
-Lists otherwise use `r' *'` as their default separator. Set `separator=''` when
-composition must be exact.
+Lists otherwise use `r' *'` as their default separator.
+Set `separator=''` when composition must be exact.
 
 ## Marks
 
@@ -39,8 +38,7 @@ A tuple is `(mark, children)` or `(mark, prefix, children, suffix)`.
 - `'<|>'` creates an optimized atomic alternation.
 - quantifiers can follow the group mark.
 
-Keep golden behavior tests around optimized alternations: condensation may alter
-branch boundaries when a grammar mixes prefixes, suffixes, and optional segments.
+Keep golden behavior tests around optimized alternations: condensation may alter branch boundaries when a grammar mixes prefixes, suffixes, and optional segments.
 
 ## Reuse and captures
 
@@ -60,16 +58,13 @@ assert match.data['digits'] == ['22', '5']
 assert match.flat == {'sign': '-', 'digits': '5', 'value': '-22.5'}
 ```
 
-`MatchData` preserves every named capture as a list through `match[name]` and
-`match.data`; `match.flat` selects the last non-empty capture for each name.
+`MatchData` preserves every named capture as a list through `match[name]` and `match.data`; `match.flat` selects the last non-empty capture for each name.
 `(?P>digits)` is a subroutine invocation: match the named pattern again.
-`\g<digits>` is a backreference: match the text captured earlier. With
-`force_reinvocations=True` (the default), `(?P=digits)` is normalized to a
-subroutine, so write true backreferences as `\g<digits>`.
+`\g<digits>` is a backreference: match the text captured earlier.
+With `force_reinvocations=True` (the default), `(?P=digits)` is normalized to a subroutine, so write true backreferences as `\g<digits>`.
 
-Reusable flags belong inside the definition, for example `(?i:...)`. Do not depend
-on flags attached only to a precompiled pattern when that pattern will be composed
-into another definition.
+Reusable flags belong inside the definition, for example `(?i:...)`.
+Do not depend on flags attached only to a precompiled pattern when that pattern will be composed into another definition.
 
 ## Router trees
 
@@ -90,13 +85,13 @@ assert TOKENS.route_match('token', 'alpha_2') == 'identifier'
 assert TOKENS.route_match('token', '+foo') == ''
 ```
 
-Protect routers with positive, negative, overlap, and near-miss examples. Order is
-part of the classification contract.
+Protect routers with positive, negative, overlap, and near-miss examples.
+Order is part of the classification contract.
 
 ## Recursive JSON candidate example
 
-Use recursion to find candidates, then validate them with the application's real
-schema. Regex finds boundaries; it does not replace JSON validation.
+Use recursion to find candidates, then validate them with the application's real schema.
+Regex finds boundaries; it does not replace JSON validation.
 
 ```python
 JSON_RGXS = RegexStore.new(
@@ -115,8 +110,7 @@ JSON_RGXS = RegexStore.new(
 )
 ```
 
-Test nested arrays and objects, escaped quotes, braces inside strings, invalid
-candidates before valid ones, empty containers, and adversarially long inputs.
+Test nested arrays and objects, escaped quotes, braces inside strings, invalid candidates before valid ones, empty containers, and adversarially long inputs.
 
 ## Review checklist
 
@@ -132,5 +126,5 @@ candidates before valid ones, empty containers, and adversarially long inputs.
   boundaries?
 - Does the report show the DSL and explain it in domain language?
 
-Use `RegexDebugger` for atom-level diagnosis. Use optimization only after the
-unoptimized grammar is correct and covered.
+Use `RegexDebugger` for atom-level diagnosis.
+Use optimization only after the unoptimized grammar is correct and covered.

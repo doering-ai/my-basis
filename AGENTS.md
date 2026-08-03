@@ -30,7 +30,8 @@ The corresponding PyTest files for each individual python file are present in ma
 
 ## Commands
 
-For details of various commands, consult `/Taskfile`. Here's a lit of the main commands; pass `-- ARGS` to forward ARGS to the underlying tool.
+For details of various commands, consult `/Taskfile`.
+Here's a lit of the main commands; pass `-- ARGS` to forward ARGS to the underlying tool.
 
 ### PyTest Commands
 

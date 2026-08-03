@@ -965,6 +965,10 @@ class Markdown(pyd.BaseModel):
         requires (each header on its own blank-line-separated block) without depending
         on mdformat to repair template-output ambiguity.
 
+        Table rows (``|``-prefixed) and fenced code blocks (`````...`````) are
+        protected so that literal ``#`` characters inside them are never mistaken
+        for headings.
+
         Args:
             text: Raw rendered markdown text with possibly run-together headers.
         Returns:
@@ -972,13 +976,28 @@ class Markdown(pyd.BaseModel):
         """
         import re
 
+        # Protect table rows and fenced code blocks from header detection.
+        # A literal ``#`` inside a table cell (e.g. ``| # | Country |``) or a
+        # code block must not be treated as a markdown heading.
+        placeholders: list[str] = []
+
+        def _stash(match: re.Match) -> str:
+            placeholders.append(match.group(0))
+            return f'\x00{len(placeholders) - 1}\x00'
+
+        text = re.sub(r'```.*?```', _stash, text, flags=re.DOTALL)
+        text = re.sub(r'(?m)^[ \t]*\|.*$', _stash, text)
+
         # Ensure every header starts on its own line. Handles both `text## header`
         # (no newline) and `text\n## header` (single newline) by inserting a blank
-        # line before any header that follows non-empty, non-newline content. The
-        # `(?m)^` anchor ensures we only split at line starts, never inside `##`.
+        # line before any header that follows non-empty, non-newline content.
         text = re.sub(r'(?m)(?<=[^\n#])(\n?)(#{1,6} )', r'\n\n\2', text)
         # Insert blank line after a header that is followed by non-empty, non-header content.
         text = re.sub(r'(#{1,6} [^\n]*)\n(?=[^#\n])', r'\1\n\n', text)
+
+        # Restore protected content.
+        for i, original in enumerate(placeholders):
+            text = text.replace(f'\x00{i}\x00', original)
         return text
 
     def to_string(self, strip_notes: bool = False, fix: bool = True) -> str:

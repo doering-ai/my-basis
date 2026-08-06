@@ -130,3 +130,17 @@ class TestPackageDiscovery:
         """A project with no pyproject module-name and no `my` package fails loudly."""
         with pyt.raises(ValueError, match='--package'):
             main(str(tmp_path))
+
+    def test_handwritten_page_is_never_rewritten(self, tmp_path: Path, capsys: pyt.CaptureFixture):
+        """A docs page without a {toctree} block is hand-written and left untouched."""
+        self._make_pkg(tmp_path, 'my')
+        guide = tmp_path / 'docs' / 'widgets.md'
+        guide.parent.mkdir(parents=True)
+        guide.write_text('# A Hand-Written Guide\n\nProse the author maintains by hand.\n')
+
+        main(str(tmp_path))
+
+        assert (
+            guide.read_text() == '# A Hand-Written Guide\n\nProse the author maintains by hand.\n'
+        )
+        assert 'SKIP' in capsys.readouterr().out

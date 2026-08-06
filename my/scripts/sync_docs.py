@@ -166,6 +166,11 @@ class Tool(pyd.BaseModel):
         body = textwrap.dedent(body.strip('\n'))
 
         doc_path = self.root / 'docs' / f'{pkg}.md'
+        if doc_path.exists() and '```{toctree}' not in doc_path.read_text():
+            # A page with no {toctree} block is hand-written (e.g. a command guide), not a
+            # generated subpackage page -- rewriting it would destroy its content.
+            print(f'\tSKIP {pkg}: docs/{pkg}.md is hand-written (no toctree)')
+            return False
         preserved = self.get_preserved_section(doc_path)
         new_content = self.render_page(pkg, head, body, preserved)
 

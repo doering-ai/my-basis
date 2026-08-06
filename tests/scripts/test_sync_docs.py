@@ -73,3 +73,74 @@ class TestSyncDocs:
         main(str(tmp_path))
 
         assert not (tmp_path / 'docs' / f'{package}.md').exists()
+
+
+class TestPackageDiscovery:
+    """The documented package comes from pyproject.toml, `--package`, or the legacy `my`."""
+
+    @staticmethod
+    def _make_pkg(root: Path, package: str, sub: str = 'widgets') -> None:
+        pkg_dir = root / package / sub
+        pkg_dir.mkdir(parents=True)
+        (root / package / '__init__.py').write_text(f'"""The {package} package."""\n')
+        (pkg_dir / '__init__.py').write_text('"""Widget utilities.\n\nSome more prose.\n"""\n')
+
+    @pyt.mark.parametrize(
+        'module_name',
+        [
+            pyt.param('"means"', id='string-form'),
+            pyt.param('["means"]', id='list-form'),
+        ],
+    )
+    def test_discovers_from_pyproject(self, tmp_path: Path, module_name: str):
+        """`[tool.uv.build-backend] module-name` names the documented package."""
+        (tmp_path / 'pyproject.toml').write_text(
+            f'[tool.uv.build-backend]\nmodule-name = {module_name}\n'
+        )
+        self._make_pkg(tmp_path, 'means')
+
+        main(str(tmp_path))
+
+        page = tmp_path / 'docs' / 'widgets.md'
+        assert page.exists()
+        assert '# `means.widgets`: Widget utilities' in page.read_text()
+
+    def test_explicit_package_overrides_pyproject(self, tmp_path: Path):
+        """An explicit `--package` always wins over pyproject discovery."""
+        (tmp_path / 'pyproject.toml').write_text('[tool.uv.build-backend]\nmodule-name = "means"\n')
+        self._make_pkg(tmp_path, 'other')
+
+        main('--package', 'other', str(tmp_path))
+
+        page = tmp_path / 'docs' / 'widgets.md'
+        assert page.exists()
+        assert '# `other.widgets`: Widget utilities' in page.read_text()
+
+    def test_legacy_my_fallback(self, tmp_path: Path):
+        """Without pyproject.toml, a top-level `my` package keeps the old default."""
+        self._make_pkg(tmp_path, 'my')
+
+        main(str(tmp_path))
+
+        page = tmp_path / 'docs' / 'widgets.md'
+        assert page.exists()
+        assert '# `my.widgets`: Widget utilities' in page.read_text()
+
+    def test_undiscoverable_package_raises(self, tmp_path: Path):
+        """A project with no pyproject module-name and no `my` package fails loudly."""
+        with pyt.raises(ValueError, match='--package'):
+            main(str(tmp_path))
+
+    def test_handwritten_page_is_never_rewritten(self, tmp_path: Path, capsys: pyt.CaptureFixture):
+        """A docs page without a {toctree} block is hand-written and left untouched."""
+        self._make_pkg(tmp_path, 'my')
+        guide = tmp_path / 'docs' / 'widgets.md'
+        guide.parent.mkdir(parents=True)
+        guide.write_text('# A Hand-Written Guide\n\nProse the author maintains by hand.\n')
+
+        main(str(tmp_path))
+
+        assert (
+            guide.read_text() == '# A Hand-Written Guide\n\nProse the author maintains by hand.\n'
+        )
+        assert 'SKIP' in capsys.readouterr().out

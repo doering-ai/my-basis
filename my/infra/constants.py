@@ -2,9 +2,11 @@
 ### HEAD ###
 ############
 ### STANDARD
-from pathlib import Path
-from typing import TYPE_CHECKING
+from collections.abc import Generator, Iterator
+from pathlib import Path, PosixPath, WindowsPath
+from typing import TYPE_CHECKING, Self
 import functools as ft
+import os
 from importlib.resources import files
 
 ### EXTERNAL
@@ -40,6 +42,147 @@ class InfraPaths(pyd.BaseModel, arbitrary_types_allowed=True):
 #: Immutable object containing important paths within the package.
 #: Use `INFRA_PATHS` to access these paths.
 INFRA_PATHS: InfraPaths = InfraPaths()
+
+
+#: Concrete platform path class used as the runtime base for `NOWHERE`.
+_NowhereBase: type[Path] = WindowsPath if os.name == 'nt' else PosixPath
+
+#: String-like path accepted by the stdlib `pathlib` APIs.
+StrPath = str | os.PathLike[str]
+
+#: String-or-bytes path accepted by the stdlib `pathlib` APIs.
+StrOrBytesPath = str | bytes | os.PathLike[str] | os.PathLike[bytes]
+
+
+#: Sentinel type returned when no usable filesystem path is available.
+class _NowhereType(_NowhereBase):
+    """A non-traversable filesystem sentinel.
+
+    `NOWHERE` is the single, canonical representation of "no path" in `my`. It is a
+    `Path` subclass so it passes `isinstance(..., Path)` checks and fits existing
+    signatures, but every operation that would touch the filesystem fails closed:
+    existence checks return ``False``, traversal yields nothing, and mutating calls
+    raise `FileNotFoundError`.
+    """
+
+    _instance: Self | None = None
+
+    def __new__(cls, *args: object, **kwargs: object) -> Self:
+        if cls._instance is None:
+            cls._instance = super().__new__(cls, '.')
+        return cls._instance
+
+    def __str__(self) -> str:
+        return '<NOWHERE>'
+
+    def __repr__(self) -> str:
+        return 'NOWHERE'
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, _NowhereType)
+
+    def __hash__(self) -> int:
+        return hash(('<NOWHERE>',))
+
+    def with_segments(self, *args: StrPath) -> Self:
+        return self
+
+    def resolve(self, strict: bool = False) -> Self:
+        return self
+
+    def absolute(self) -> Self:
+        return self
+
+    def expanduser(self) -> Self:
+        return self
+
+    def exists(self, *, follow_symlinks: bool = True) -> bool:
+        return False
+
+    def is_dir(self, *, follow_symlinks: bool = True) -> bool:
+        return False
+
+    def is_file(self, *, follow_symlinks: bool = True) -> bool:
+        return False
+
+    def is_symlink(self) -> bool:
+        return False
+
+    def is_mount(self) -> bool:
+        return False
+
+    def is_socket(self) -> bool:
+        return False
+
+    def is_fifo(self) -> bool:
+        return False
+
+    def is_block_device(self) -> bool:
+        return False
+
+    def is_char_device(self) -> bool:
+        return False
+
+    def iterdir(self) -> Generator[Self]:
+        return
+        yield  # type: ignore[unreachable]
+
+    def glob(
+        self, pattern: str, *, case_sensitive: bool | None = None, recurse_symlinks: bool = False
+    ) -> Iterator[Self]:
+        return iter(())
+
+    def rglob(
+        self, pattern: str, *, case_sensitive: bool | None = None, recurse_symlinks: bool = False
+    ) -> Iterator[Self]:
+        return iter(())
+
+    def walk(
+        self, top_down: bool = True, on_error=None, follow_symlinks: bool = False
+    ) -> Generator[tuple[Self, list[str], list[str]]]:
+        return
+        yield  # type: ignore[unreachable]
+
+    def read_text(self, *args: object, **kwargs: object) -> str:
+        raise FileNotFoundError(self)
+
+    def read_bytes(self, *args: object, **kwargs: object) -> bytes:
+        raise FileNotFoundError(self)
+
+    def write_text(self, *args: object, **kwargs: object) -> int:
+        raise FileNotFoundError(self)
+
+    def write_bytes(self, *args: object, **kwargs: object) -> int:
+        raise FileNotFoundError(self)
+
+    def touch(self, *args: object, **kwargs: object) -> None:
+        raise FileNotFoundError(self)
+
+    def mkdir(self, *args: object, **kwargs: object) -> None:
+        raise FileNotFoundError(self)
+
+    def unlink(self, *args: object, **kwargs: object) -> None:
+        raise FileNotFoundError(self)
+
+    def rmdir(self, *args: object, **kwargs: object) -> None:
+        raise FileNotFoundError(self)
+
+    def rename(self, target: StrPath) -> Self:
+        raise FileNotFoundError(self)
+
+    def replace(self, target: StrPath) -> Self:
+        raise FileNotFoundError(self)
+
+    def symlink_to(self, target: StrOrBytesPath, target_is_directory: bool = False) -> None:
+        raise FileNotFoundError(self)
+
+    def hardlink_to(self, target: StrOrBytesPath) -> None:
+        raise FileNotFoundError(self)
+
+
+#: The single canonical "no path" sentinel for the `my` package.
+NOWHERE: _NowhereType = _NowhereType()
+
 
 ############
 ### BODY ###

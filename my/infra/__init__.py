@@ -46,7 +46,7 @@ from .types import (
     Objects,
     TYPESET,
 )
-from .constants import INFRA_PATHS, InfraPaths, DELIM, get_template
+from .constants import INFRA_PATHS, InfraPaths, DELIM, NOWHERE, get_template
 
 __all__ = [
     'Stream',
@@ -86,6 +86,7 @@ __all__ = [
     'INFRA_PATHS',
     'InfraPaths',
     'DELIM',
+    'NOWHERE',
     'JINJA',
     'get_template',
 ]

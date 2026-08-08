@@ -33,6 +33,7 @@ import more_itertools as mi
 
 ### INTERNAL (NOTE: If adding new internal imports, update the comments in `__init__.py`)
 # Local imports
+from ..infra.constants import NOWHERE
 from ..infra.types import (
     Atom,
     Vec,
@@ -50,8 +51,6 @@ from .TextUtils import text_utils
 ############
 _branch = text_utils.multi_rgx
 
-#: A sentinel value that communicates a failure of some kind, or an unininitialized register.
-NOWHERE = Path()
 
 # Misc aliases
 File = pyd.FilePath
@@ -596,7 +595,9 @@ class SystemUtils(_UtilsBase):
         Args:
             raw: A path which may or may not be absolute, existent, or even valid.
         Returns:
-            Ideally a resolved version of that same path, else the same one.
+            Ideally a resolved version of that same path, else `NOWHERE`. `NOWHERE` is the
+            single, non-traversable sentinel used across `my` for "no path": it reports
+            `exists()` as ``False`` and yields nothing from traversal methods.
         Examples:
             Expand and resolve; unusable input collapses to the `NOWHERE` sentinel::
 
@@ -604,7 +605,7 @@ class SystemUtils(_UtilsBase):
                 >>> ut.path('~/notes.txt').is_absolute()
                 True
                 >>> ut.path(None)
-                PosixPath('.')
+                NOWHERE
         """
         return cls._path(str(raw or ''))
 

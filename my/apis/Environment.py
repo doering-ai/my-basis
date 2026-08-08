@@ -13,6 +13,7 @@ import pydantic as pyd
 import dotenv
 
 ### INTERNAL
+from ..infra.constants import NOWHERE
 from ..utils import ut
 from ..types import Buffer
 from ..regex import RegexStore
@@ -23,8 +24,6 @@ from ..regex import RegexStore
 ############
 dotenv.load_dotenv()
 initial_env = dict(os.environ)
-
-NOWHERE = Path('/')
 
 
 ############
@@ -211,8 +210,10 @@ class Environment(pyd.BaseModel):
             default: Default path if variable not set.
             mkdir: Whether to create directory if it doesn't exist.
         Returns:
-            Resolved absolute path, or the `Path('/')` sentinel when both the variable and
-            the default are empty.
+            Resolved absolute path, or `NOWHERE` when both the variable and the default
+            are empty. `NOWHERE` is a non-traversable sentinel: it compares equal only to
+            itself, reports `exists()` as ``False``, and yields nothing from `iterdir()` /
+            `rglob()` / `glob()` so that unset path variables cannot be walked by accident.
         Examples:
             Resolve a set variable, and fall back to the sentinel for an unset one::
 
@@ -221,7 +222,7 @@ class Environment(pyd.BaseModel):
                 >>> env.path('DEMO_LOGS')
                 PosixPath('/srv/app/logs')
                 >>> env.path('DEMO_UNSET')
-                PosixPath('/')
+                NOWHERE
         """
         return Environment._path(key, str(default), mkdir)
 

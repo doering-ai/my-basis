@@ -15,6 +15,7 @@ import pytest as pyt
 import pydantic as pyd
 
 ### INTERNAL
+from my.infra.constants import NOWHERE
 from my.utils import SystemUtils
 
 cls = SystemUtils
@@ -396,9 +397,9 @@ class TestSystemUtils:
     @pyt.mark.parametrize(
         'raw, expected',
         [
-            ('', Path()),
-            (None, Path()),
-            ('$NONEXISTENT_VAR_XYZ', Path()),
+            ('', NOWHERE),
+            (None, NOWHERE),
+            ('$NONEXISTENT_VAR_XYZ', NOWHERE),
             ('/tmp', Path('/tmp')),
         ],
     )
@@ -406,6 +407,22 @@ class TestSystemUtils:
         """Test sentinel-producing and absolute path resolution."""
         cls._path.cache_clear()
         assert cls.path(raw) == expected
+
+    def test_path__nowhere_is_non_traversable(self):
+        """NOWHERE must not silently become a readable, walkable directory."""
+        nowhere = cls.path(None)
+        assert isinstance(nowhere, Path)
+        assert nowhere is NOWHERE
+        assert not nowhere.exists()
+        assert not nowhere.is_dir()
+        assert not nowhere.is_file()
+        assert list(nowhere.iterdir()) == []
+        assert list(nowhere.glob('*')) == []
+        assert list(nowhere.rglob('*')) == []
+        with pyt.raises(FileNotFoundError):
+            nowhere.mkdir()
+        with pyt.raises(FileNotFoundError):
+            nowhere.read_text()
 
     def test_log__materializes_message(self, caplog):
         """Test that loose arguments become a real message instead of a live map."""

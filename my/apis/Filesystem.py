@@ -13,7 +13,7 @@ import pydantic as pyd
 import regex as re
 
 ### INTERNAL
-from ..infra.constants import INFRA_PATHS
+from ..infra.constants import INFRA_PATHS, NOWHERE  # noqa: F401
 from ..utils import ut
 from ..regex import RegexStore
 from ..typing import typist
@@ -115,8 +115,6 @@ RGXS = RegexStore.new(
 #: explicitly. Mirrors `RegexStore.REGEX_TIMEOUT` / `Buffer.REGEX_TIMEOUT`.
 REGEX_TIMEOUT: float = 10.0
 
-#: A sentinel value that communicates a failure of some kind, or an uninitialized register.
-NOWHERE = Path()
 
 Leaf, Branch = pyd.FilePath, pyd.DirectoryPath
 LeafField = Annotated[Path, pyd.BeforeValidator(ut.path)]  # Files

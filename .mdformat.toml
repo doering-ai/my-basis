@@ -29,6 +29,11 @@ exclude = [
     "**/myst-mdformat/README.md",
     "**/myst-mdformat/docs/**",
     "stash/skill-normalization-ideas.md",
+    # Test fixtures often contain dialect syntax that must survive formatting.
+    "tests/data/**",
+    "tests/fixtures/**",
+    "**/fixtures/**",
+    "**/*.fixture.md"
 ]
 
 #: myst-mdformat plugin options ([plugin.myst] must follow all top-level keys)

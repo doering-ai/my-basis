@@ -33,7 +33,7 @@ exclude = [
     "tests/data/**",
     "tests/fixtures/**",
     "**/fixtures/**",
-    "**/*.fixture.md"
+    "**/*.fixture.md",
 ]
 
 #: myst-mdformat plugin options ([plugin.myst] must follow all top-level keys)

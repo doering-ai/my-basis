@@ -6,6 +6,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
+import atexit
+import shutil
 import tempfile
 
 ### EXTERNAL
@@ -24,6 +26,17 @@ from my import ut, env
 # "when set" would therefore never actually be hermetic here: confirmed empirically that a test
 # run left `~/local/logs`'s mtime freshly touched. A temp dir sidesteps that ambiguity entirely.
 MY_LOGS = Path(tempfile.mkdtemp(prefix='basis-test-logs-'))
+
+# `mkdtemp` never cleans up after itself, unlike `TemporaryDirectory` -- so without
+# this every pytest session in this repo leaked one directory, permanently. 107 of
+# them were counted in /tmp on 2026-08-10, the largest single name-pattern there
+# (MEMY-1220). /tmp is tmpfs on the dev box, so those inodes are RAM.
+#
+# `atexit` rather than a session-scoped fixture: `setup_logging` below runs at
+# import time and holds handles open for the whole session, so the earliest safe
+# moment is interpreter exit. `ignore_errors` keeps a cleanup failure from turning
+# a green run red -- the sink is disposable by construction.
+atexit.register(shutil.rmtree, MY_LOGS, ignore_errors=True)
 
 ############
 ### BODY ###

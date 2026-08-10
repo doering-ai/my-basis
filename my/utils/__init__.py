@@ -91,9 +91,8 @@ class _UtilsMeta(type):
         for base in metric_cls.__mro__:
             if name in base.__dict__:
                 descriptor = base.__dict__[name]
-                if isinstance(descriptor, (classmethod, staticmethod)) or callable(descriptor):
-                    type.__setattr__(cls, name, descriptor)
-                    return getattr(cls, name)
+                if hasattr(descriptor, '__get__'):
+                    return descriptor.__get__(None, cls)
                 return getattr(metric_cls, name)
         raise AttributeError(f'type {cls.__name__!r} has no attribute {name!r}')
 
@@ -147,6 +146,11 @@ def __getattr__(name: str) -> object:
         _load_metric_utils()
         return globals()[name]
     raise AttributeError(f'module {__name__!r} has no attribute {name!r}')
+
+
+def __dir__() -> list[str]:
+    """Advertise the complete public package surface before metrics are loaded."""
+    return sorted(__all__)
 
 
 ut = Utils

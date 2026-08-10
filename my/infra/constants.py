@@ -26,7 +26,7 @@ re.DEFAULT_VERSION = re.VERSION1  # pyrefly: ignore[bad-assignment]
 ############
 ### DATA ###
 ############
-class InfraPaths(pyd.BaseModel, arbitrary_types_allowed=True):
+class InfraPaths(pyd.BaseModel, arbitrary_types_allowed=True, defer_build=True):
     """A model containing important paths within the package."""
 
     #: Root directory of the installed `my` package.
@@ -41,7 +41,7 @@ class InfraPaths(pyd.BaseModel, arbitrary_types_allowed=True):
 
 #: Immutable object containing important paths within the package.
 #: Use `INFRA_PATHS` to access these paths.
-INFRA_PATHS: InfraPaths = InfraPaths()
+INFRA_PATHS: InfraPaths = InfraPaths.model_construct()
 
 
 #: Concrete platform path class used as the runtime base for `NOWHERE`.

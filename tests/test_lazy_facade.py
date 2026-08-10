@@ -1,16 +1,16 @@
 """Smoke tests for the PEP 562 lazy facade in `my/__init__.py`.
 
-`apis` and `files` are the only *leaf* subpackages, so `my/__init__.py` defers them to
-first attribute access. These tests pin the two halves of that contract: bare `import my`
-must not pull the leaves (verified in a fresh interpreter, since the in-process
-`sys.modules` is already polluted by the rest of the suite), and the deferred names must
-still resolve with the same identity, `__all__` membership, and `AttributeError` behavior
-as the old eager imports.
+Pydantic-backed facade branches and optional leaves are deferred to first attribute
+access. These tests pin the two halves of that contract: bare `import my` must not pull
+them (verified in a fresh interpreter, since the in-process `sys.modules` is already
+polluted by the rest of the suite), and the deferred names must still resolve with the
+same identity, `__all__` membership, and `AttributeError` behavior as the old eager
+imports.
 
 The facade also keeps `MetricUtils` and its optional Pandas/Logfire/OpenTelemetry stack cold
-until a metrics method or class alias is requested. Basis constructs its own eager Pydantic
-models with plugin discovery temporarily suppressed, then restores the ambient setting so
-application models retain their installed plugin behavior.
+until a metrics method or class alias is requested. The cold facade does not mutate
+Pydantic's process-global plugin setting, so application models retain their installed
+plugin behavior.
 """
 
 ############
@@ -31,17 +31,7 @@ import my
 ### BODY ###
 ############
 #: The facade names `my/__init__.py` defers via its `__getattr__` (see `_LAZY_ATTRS`).
-LAZY_NAMES = (
-    'GoogleSheet',
-    'Environment',
-    'ENV',
-    'env',
-    'Filesystem',
-    'PATHS',
-    'FS',
-    'fs',
-    'Markdown',
-)
+LAZY_NAMES = tuple(my._LAZY_ATTRS)
 
 #: Metrics modules that the ordinary utility facade must leave cold even when installed.
 METRICS_MODULES = ('my.utils.MetricUtils', 'pandas', 'logfire', 'opentelemetry')
@@ -187,6 +177,16 @@ assert 'setup_logging' in dir(ut)
         )
         assert proc.returncode == 0, proc.stderr
 
+    def test_metrics_aliases__remain_visible_in_package_dir(self):
+        """Package introspection advertises lazy aliases before their first access."""
+        proc = _probe(
+            'import importlib, sys; package = importlib.import_module("my.utils"); '
+            'assert "my.utils.MetricUtils" not in sys.modules; '
+            'assert {"MetricUtils", "metric_utils"} <= set(dir(package)); '
+            'assert "my.utils.MetricUtils" not in sys.modules'
+        )
+        assert proc.returncode == 0, proc.stderr
+
     def test_metric_class_state__remains_live_through_facade(self):
         """Lazy constants retain the live inherited-state behavior of the old facade."""
         proc = _probe(
@@ -194,6 +194,18 @@ assert 'setup_logging' in dir(ut)
             '_ = ut.METRICS_INSTALLED; '
             'MetricUtils.METRICS_INSTALLED = not MetricUtils.METRICS_INSTALLED; '
             'assert ut.METRICS_INSTALLED is MetricUtils.METRICS_INSTALLED'
+        )
+        assert proc.returncode == 0, proc.stderr
+
+    def test_metric_method_rebind__remains_live_through_facade(self):
+        """A later MetricUtils method replacement remains visible through `ut`."""
+        proc = _probe(
+            'from my import MetricUtils, ut; '
+            '_ = ut.setup_logging; '
+            'replacement = lambda: "replacement"; '
+            'MetricUtils.setup_logging = staticmethod(replacement); '
+            'assert ut.setup_logging is replacement; '
+            'assert ut.setup_logging() == "replacement"'
         )
         assert proc.returncode == 0, proc.stderr
 
@@ -221,6 +233,37 @@ assert 'logfire.integrations.pydantic' in sys.modules
             "import os; os.environ['PYDANTIC_DISABLE_PLUGINS'] = 'caller-plugin'; "
             'import my; '
             "assert os.environ['PYDANTIC_DISABLE_PLUGINS'] == 'caller-plugin'"
+        )
+        assert proc.returncode == 0, proc.stderr
+
+    def test_pydantic_plugin_setting__never_leaks_to_child_process(self):
+        """A child spawned mid-import never inherits a plugin-suppression sentinel."""
+        proc = _probe(
+            """
+import importlib.abc
+import os
+import subprocess
+import sys
+
+os.environ.pop('PYDANTIC_DISABLE_PLUGINS', None)
+
+class ObserveSetting(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname == 'my.utils':
+            sys.meta_path.remove(self)
+            child = subprocess.run(
+                [sys.executable, '-c',
+                 "import os; assert 'PYDANTIC_DISABLE_PLUGINS' not in os.environ"],
+                capture_output=True,
+                text=True,
+            )
+            assert child.returncode == 0, child.stderr
+        return None
+
+sys.meta_path.insert(0, ObserveSetting())
+import my
+assert 'PYDANTIC_DISABLE_PLUGINS' not in os.environ
+"""
         )
         assert proc.returncode == 0, proc.stderr
 

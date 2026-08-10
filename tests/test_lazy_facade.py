@@ -17,6 +17,7 @@ plugin behavior.
 ### HEAD ###
 ############
 ### STANDARD
+import importlib
 import subprocess
 import sys
 
@@ -91,6 +92,16 @@ class TestLazyFacadeDefersLeaves:
         proc = _probe(body)
         assert proc.returncode == 0, proc.stderr
 
+    def test_infra_paths__model_construct_populates_defaults(self):
+        """Unvalidated construction retains every static path default used by consumers."""
+        proc = _probe(
+            'from my.infra import INFRA_PATHS; '
+            'assert set(INFRA_PATHS.__dict__) == {"my", "data", "templates"}; '
+            'assert INFRA_PATHS.templates == INFRA_PATHS.data / "templates"; '
+            'assert (INFRA_PATHS.data / "importas.yaml").is_file()'
+        )
+        assert proc.returncode == 0, proc.stderr
+
     def test_star_import_resolves_lazy_names(self):
         """`from my import *` still binds the lazy names (each triggers `__getattr__`)."""
         proc = _probe('from my import *; assert env is ENV; assert Markdown is not None')
@@ -149,6 +160,34 @@ assert 'my.utils.MetricUtils' not in sys.modules
         )
         assert proc.returncode == 0, proc.stderr
 
+    def test_metric_surface__resolves_to_guarded_api_without_extras(self):
+        """Advertised metric names resolve while calls fail with the documented guard."""
+        proc = _probe(
+            """
+import importlib.abc
+import sys
+
+class BlockMetrics(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname.partition(".")[0] in {"pandas", "logfire", "opentelemetry"}:
+            raise ModuleNotFoundError(fullname)
+        return None
+
+sys.meta_path.insert(0, BlockMetrics())
+from my import MetricUtils, ut
+assert "setup_logging" in dir(ut)
+assert ut.setup_logging is MetricUtils.setup_logging
+assert MetricUtils.METRICS_INSTALLED is False
+try:
+    ut.setup_logging()
+except ImportError as exc:
+    assert "optional [metrics] extra" in str(exc)
+else:
+    raise AssertionError("metrics guard accepted missing extras")
+"""
+        )
+        assert proc.returncode == 0, proc.stderr
+
     def test_metric_access__loads_and_preserves_facade_aliases(self):
         """The first real metrics attribute resolves the historical class aliases on demand."""
         proc = _probe(
@@ -163,6 +202,8 @@ from my import MetricUtils, metric_utils
 from my.utils import MetricUtils as PackageMetricUtils
 assert MetricUtils is metric_utils is PackageMetricUtils
 assert setup_logging is MetricUtils.setup_logging
+assert ut.setup_metrics.__self__ is ut
+assert ut.setup_metrics.__func__ is MetricUtils.setup_metrics.__func__
 assert 'setup_logging' in dir(ut)
 """
         )
@@ -174,6 +215,53 @@ assert 'setup_logging' in dir(ut)
             'from my.utils.MetricUtils import MetricUtils; '
             'from my.utils import MetricUtils as PackageMetricUtils; '
             'assert PackageMetricUtils is MetricUtils'
+        )
+        assert proc.returncode == 0, proc.stderr
+
+    def test_warm_metric_module_import__preserves_package_class_alias(self):
+        """A direct module import after facade activation cannot split package identity."""
+        proc = _probe(
+            """
+import importlib
+from my import ut
+_ = ut.setup_logging
+import my.utils.MetricUtils
+package = importlib.import_module("my.utils")
+module = importlib.import_module("my.utils.MetricUtils")
+assert package.MetricUtils is module.MetricUtils
+assert ut.setup_logging is module.MetricUtils.setup_logging
+"""
+        )
+        assert proc.returncode == 0, proc.stderr
+
+    def test_metric_first_access__is_thread_safe(self):
+        """Concurrent first reads converge on one imported method and class identity."""
+        proc = _probe(
+            """
+from concurrent.futures import ThreadPoolExecutor
+import sys
+from my import ut
+assert "my.utils.MetricUtils" not in sys.modules
+with ThreadPoolExecutor(max_workers=16) as pool:
+    methods = list(pool.map(lambda _: ut.setup_logging, range(64)))
+assert len({id(method) for method in methods}) == 1
+from my import MetricUtils, metric_utils
+assert methods[0] is MetricUtils.setup_logging
+assert metric_utils is MetricUtils
+"""
+        )
+        assert proc.returncode == 0, proc.stderr
+
+    def test_metric_manifest__matches_concrete_public_surface(self):
+        """A new public MetricUtils member requires an explicit lazy-facade decision."""
+        proc = _probe(
+            """
+import importlib
+package = importlib.import_module("my.utils")
+metric_cls = package.MetricUtils
+owned_public = {name for name in metric_cls.__dict__ if not name.startswith("_")}
+assert package._METRIC_FACADE_ATTRS == owned_public
+"""
         )
         assert proc.returncode == 0, proc.stderr
 
@@ -275,6 +363,12 @@ class TestLazyFacadeContract:
     def test_lazy_name_resolves(self, name: str):
         """Every deferred name is reachable via attribute access."""
         assert getattr(my, name) is not None
+
+    @pyt.mark.parametrize('name,module_name', my._LAZY_ATTRS.items())
+    def test_lazy_name_preserves_source_identity(self, name: str, module_name: str):
+        """Every deferred facade value is the exact object exported by its source module."""
+        source_module = importlib.import_module(module_name)
+        assert getattr(my, name) is getattr(source_module, name)
 
     @pyt.mark.parametrize('name', LAZY_NAMES)
     def test_lazy_name_still_in_all(self, name: str):

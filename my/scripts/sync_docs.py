@@ -43,6 +43,26 @@ def _validate_package_name(package: str) -> str:
     raise ValueError(f'Package {package!r} must be a single Python import name, not a path.')
 
 
+def _validate_package_source(root: Path, package: str) -> None:
+    """Require every package initializer to resolve within the selected source tree."""
+    project_root = root.resolve()
+    package_root = root / package
+    resolved_package_root = package_root.resolve()
+    if not resolved_package_root.is_relative_to(project_root):
+        raise ValueError(
+            f'Package {package!r} resolves outside project root {project_root}: '
+            f'{resolved_package_root}.'
+        )
+
+    for init_path in package_root.rglob('__init__.py'):
+        resolved_init = init_path.resolve()
+        if not resolved_init.is_relative_to(resolved_package_root):
+            raise ValueError(
+                f'Package source {init_path} resolves outside package root '
+                f'{resolved_package_root}: {resolved_init}.'
+            )
+
+
 def _discover_package(root: Path) -> str:
     """Resolve the docs source package from pyproject.toml, or legacy `my`."""
     pyproject = root / 'pyproject.toml'
@@ -79,15 +99,18 @@ def _discover_package(root: Path) -> str:
     raise ValueError(f'Could not discover a package under {root}; pass `--package` explicitly.')
 
 
-def _resolve_package_name(root: Path, explicit_package: str) -> str:
+def _resolve_package_name(root: Path, explicit_package: str | None) -> str:
     """Resolve and validate the package import name before constructing the worker."""
     package = (
-        _validate_package_name(explicit_package) if explicit_package else _discover_package(root)
+        _discover_package(root)
+        if explicit_package is None
+        else _validate_package_name(explicit_package)
     )
     init_path = root / package / '__init__.py'
     if init_path.is_file():
+        _validate_package_source(root, package)
         return package
-    if explicit_package:
+    if explicit_package is not None:
         raise ValueError(f'`--package {package}` has no package `__init__.py` at {init_path}.')
     raise ValueError(
         f'pyproject.toml `module-name` package {package!r} has no `__init__.py` at '
@@ -137,7 +160,7 @@ class Tool(pyd.BaseModel):
         Discovery reads `[tool.uv.build-backend] module-name` (the fleet-standard uv build
         config), falling back to the legacy `my` package when `<root>/my/__init__.py` exists.
         """
-        self.package = _resolve_package_name(self.root, self.package)
+        self.package = _resolve_package_name(self.root, self.package or None)
         return self
 
     def discover_package(self) -> str:
@@ -276,7 +299,7 @@ def _parse_args(*vargs: str) -> ap.Namespace:
     parser.add_argument(
         '-p',
         '--package',
-        default='',
+        default=None,
         help='The import package to document (default: discover from pyproject.toml).',
     )
 

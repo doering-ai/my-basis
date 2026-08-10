@@ -277,6 +277,61 @@ class TestPackageDiscovery:
         assert 'Python import name' in captured.err
         assert not (tmp_path / 'docs').exists()
 
+    def test_explicit_empty_package_exits_2(
+        self,
+        tmp_path: Path,
+        capsys: pyt.CaptureFixture,
+    ):
+        """An explicitly empty package never collapses into discovery state."""
+        self._make_pkg(tmp_path, 'my')
+
+        with pyt.raises(SystemExit) as raised:
+            main('--package', '', str(tmp_path))
+
+        captured = capsys.readouterr()
+        assert raised.value.code == 2
+        assert captured.out == ''
+        assert captured.err.count('\n') == 1
+        assert 'Traceback' not in captured.err
+        assert 'Python import name' in captured.err
+        assert not (tmp_path / 'docs').exists()
+
+    @pyt.mark.parametrize('symlink_kind', ['package', 'subpackage-init'])
+    def test_external_package_sources_exit_2(
+        self,
+        tmp_path: Path,
+        capsys: pyt.CaptureFixture,
+        symlink_kind: str,
+    ):
+        """Package source symlinks cannot escape the selected project and package roots."""
+        root = tmp_path / 'root'
+        root.mkdir()
+        outside = tmp_path / 'outside'
+
+        if symlink_kind == 'package':
+            self._make_pkg(outside, 'means')
+            (root / 'means').symlink_to(outside / 'means', target_is_directory=True)
+        else:
+            package = root / 'means'
+            subpackage = package / 'widgets'
+            subpackage.mkdir(parents=True)
+            (package / '__init__.py').write_text('"""The means package."""\n')
+            outside.mkdir()
+            external_init = outside / '__init__.py'
+            external_init.write_text('"""External widget utilities."""\n')
+            (subpackage / '__init__.py').symlink_to(external_init)
+
+        with pyt.raises(SystemExit) as raised:
+            main('--package', 'means', str(root))
+
+        captured = capsys.readouterr()
+        assert raised.value.code == 2
+        assert captured.out == ''
+        assert captured.err.count('\n') == 1
+        assert 'Traceback' not in captured.err
+        assert 'outside' in captured.err
+        assert not (root / 'docs').exists()
+
     def test_multi_package_discovery_requires_explicit_package(
         self,
         tmp_path: Path,

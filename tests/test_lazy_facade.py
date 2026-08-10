@@ -252,6 +252,60 @@ assert metric_utils is MetricUtils
         )
         assert proc.returncode == 0, proc.stderr
 
+    def test_metric_alias_cache__publishes_together_under_preemption(self):
+        """A forced pause cannot expose one public class alias without its singleton."""
+        proc = _probe(
+            """
+import importlib
+import inspect
+import sys
+import threading
+from types import ModuleType
+
+package = importlib.import_module("my.utils")
+load = package._load_metric_utils
+source, first_line = inspect.getsourcelines(load)
+publish_line = first_line + next(
+    index for index, line in enumerate(source) if "globals().update" in line
+)
+paused = threading.Event()
+resume = threading.Event()
+result = []
+errors = []
+
+def trace(frame, event, arg):
+    if frame.f_code is load.__code__ and event == "line" and frame.f_lineno == publish_line:
+        paused.set()
+        if not resume.wait(5):
+            raise TimeoutError("preemption release timed out")
+    return trace
+
+def worker():
+    sys.settrace(trace)
+    try:
+        result.append(package.MetricUtils)
+    except BaseException as exc:
+        errors.append(exc)
+    finally:
+        sys.settrace(None)
+
+thread = threading.Thread(target=worker)
+thread.start()
+assert paused.wait(5)
+assert isinstance(package.__dict__.get("MetricUtils"), ModuleType)
+assert "metric_utils" not in package.__dict__
+metric_cls = package.MetricUtils
+assert package.__dict__["MetricUtils"] is metric_cls
+assert package.__dict__["metric_utils"] is metric_cls
+resume.set()
+thread.join(5)
+assert not thread.is_alive()
+assert not errors, errors
+assert result == [metric_cls]
+"""
+        )
+        assert proc.returncode == 0, proc.stderr
+
     def test_metric_manifest__matches_concrete_public_surface(self):
         """A new public MetricUtils member requires an explicit lazy-facade decision."""
         proc = _probe(

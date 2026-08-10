@@ -75,8 +75,7 @@ def _load_metric_utils() -> type:
     """Load and cache the concrete metrics class only when its public surface is requested."""
     module = importlib.import_module(_METRIC_MODULE)
     metric_cls = module.MetricUtils
-    globals()['MetricUtils'] = metric_cls
-    globals()['metric_utils'] = module.metric_utils
+    globals().update(MetricUtils=metric_cls, metric_utils=module.metric_utils)
     return metric_cls
 
 
@@ -108,8 +107,7 @@ class _UtilsModule(ModuleType):
         if name == 'MetricUtils' and isinstance(value, ModuleType):
             metric_cls = value.MetricUtils
             namespace = ModuleType.__getattribute__(self, '__dict__')
-            namespace['MetricUtils'] = metric_cls
-            namespace['metric_utils'] = value.metric_utils
+            namespace.update(MetricUtils=metric_cls, metric_utils=value.metric_utils)
             return metric_cls
         return value
 

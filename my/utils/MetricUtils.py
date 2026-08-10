@@ -27,6 +27,7 @@ import inspect
 import pydantic as pyd
 
 ### INTERNAL (NOTE: If adding new internal imports, update the comments in `__init__.py`)
+from . import _activate_metric_utils
 from ._UtilsBase import _UtilsBase
 from .SystemUtils import SystemUtils
 
@@ -805,3 +806,5 @@ class MetricUtils(_UtilsBase):
 
 metric_utils = MetricUtils
 """An alias of `MetricUtils`, cased so as to imply static usage."""
+
+_activate_metric_utils(MetricUtils)

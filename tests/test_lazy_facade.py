@@ -209,12 +209,57 @@ assert 'setup_logging' in dir(ut)
         )
         assert proc.returncode == 0, proc.stderr
 
-    def test_direct_metric_module_import__preserves_package_class_alias(self):
-        """Direct submodule-first imports cannot replace the package facade with a module."""
+    def test_metric_static_inspection__preserves_descriptor_without_warming(self):
+        """Static inspection sees the inherited descriptor while metrics remain cold."""
         proc = _probe(
+            'import inspect, sys; from my import Utils; '
+            'descriptor = inspect.getattr_static(Utils, "setup_logging"); '
+            'assert isinstance(descriptor, staticmethod); '
+            'assert "my.utils.MetricUtils" not in sys.modules'
+        )
+        assert proc.returncode == 0, proc.stderr
+
+    def test_metric_super__activates_concrete_runtime_base(self):
+        """Subclass delegation through super restores the concrete metrics inheritance."""
+        proc = _probe(
+            """
+import inspect
+import sys
+from my import Utils
+
+class CustomUtils(Utils):
+    @classmethod
+    def metric_via_super(cls):
+        return super().setup_logging
+
+assert "my.utils.MetricUtils" not in sys.modules
+setup_logging = CustomUtils.metric_via_super()
+assert "my.utils.MetricUtils" in sys.modules
+from my import MetricUtils
+assert issubclass(Utils, MetricUtils)
+descriptor = inspect.getattr_static(Utils, "setup_logging")
+assert descriptor is inspect.getattr_static(MetricUtils, "setup_logging")
+assert isinstance(descriptor, staticmethod)
+classified = next(
+    item for item in inspect.classify_class_attrs(Utils) if item.name == "setup_logging"
+)
+assert classified.kind == "static method"
+assert classified.defining_class is MetricUtils
+assert setup_logging is MetricUtils.setup_logging
+"""
+        )
+        assert proc.returncode == 0, proc.stderr
+
+    def test_direct_metric_module_import__preserves_package_class_alias(self):
+        """Direct submodule-first imports restore inheritance without splitting aliases."""
+        proc = _probe(
+            'import inspect; '
+            'from my import Utils; '
             'from my.utils.MetricUtils import MetricUtils; '
             'from my.utils import MetricUtils as PackageMetricUtils; '
-            'assert PackageMetricUtils is MetricUtils'
+            'assert PackageMetricUtils is MetricUtils; '
+            'assert issubclass(Utils, MetricUtils); '
+            'assert isinstance(inspect.getattr_static(Utils, "setup_logging"), staticmethod)'
         )
         assert proc.returncode == 0, proc.stderr
 
@@ -263,8 +308,8 @@ import threading
 from types import ModuleType
 
 package = importlib.import_module("my.utils")
-load = package._load_metric_utils
-source, first_line = inspect.getsourcelines(load)
+activate = package._activate_metric_utils
+source, first_line = inspect.getsourcelines(activate)
 publish_line = first_line + next(
     index for index, line in enumerate(source) if "globals().update" in line
 )
@@ -274,7 +319,12 @@ result = []
 errors = []
 
 def trace(frame, event, arg):
-    if frame.f_code is load.__code__ and event == "line" and frame.f_lineno == publish_line:
+    if (
+        frame.f_code is activate.__code__
+        and event == "line"
+        and frame.f_lineno == publish_line
+        and isinstance(package.__dict__.get("MetricUtils"), ModuleType)
+    ):
         paused.set()
         if not resume.wait(5):
             raise TimeoutError("preemption release timed out")
@@ -293,7 +343,7 @@ thread = threading.Thread(target=worker)
 thread.start()
 assert paused.wait(5)
 assert isinstance(package.__dict__.get("MetricUtils"), ModuleType)
-assert "metric_utils" not in package.__dict__
+assert isinstance(package.__dict__.get("metric_utils"), type)
 metric_cls = package.MetricUtils
 assert package.__dict__["MetricUtils"] is metric_cls
 assert package.__dict__["metric_utils"] is metric_cls
@@ -311,6 +361,7 @@ assert result == [metric_cls]
         proc = _probe(
             """
 import importlib
+import inspect
 package = importlib.import_module("my.utils")
 metric_cls = package.MetricUtils
 eager_bases = (
@@ -327,6 +378,16 @@ metric_only_public = {
     name for name in dir(metric_cls) if not name.startswith("_")
 } - eager_public
 assert package._METRIC_FACADE_ATTRS == metric_only_public
+assert package._METRIC_STATIC_METHODS == {
+    name
+    for name in metric_only_public
+    if isinstance(inspect.getattr_static(metric_cls, name), staticmethod)
+}
+assert package._METRIC_CLASS_METHODS == {
+    name
+    for name in metric_only_public
+    if isinstance(inspect.getattr_static(metric_cls, name), classmethod)
+}
 """
         )
         assert proc.returncode == 0, proc.stderr

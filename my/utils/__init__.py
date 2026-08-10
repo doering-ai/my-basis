@@ -42,10 +42,6 @@ from .TextUtils import TextUtils, text_utils  # <- iter
 from .SemanticUtils import SemanticUtils, semantic_utils  # <- text, iter
 from .SystemUtils import SystemUtils, system_utils  # <- text, iter
 
-if TYPE_CHECKING:
-    from .MetricUtils import MetricUtils, metric_utils
-
-
 #: Names inherited from `MetricUtils` by the historical all-in-one facade. Keeping this
 #: lightweight manifest here lets a typo fail without warming the optional metrics stack.
 _METRIC_FACADE_ATTRS = frozenset(
@@ -68,35 +64,83 @@ _METRIC_FACADE_ATTRS = frozenset(
         'setup_warnings',
     }
 )
+_METRIC_STATIC_METHODS = frozenset({'setup_logging', 'setup_warnings'})
+_METRIC_CLASS_METHODS = frozenset(
+    {
+        'get_package_name',
+        'measure_context',
+        'monitor',
+        'setup_fire_logging',
+        'setup_metrics',
+        'setup_py_logging',
+    }
+)
 _METRIC_MODULE = f'{__name__}.MetricUtils'
 
 
 def _load_metric_utils() -> type:
-    """Load and cache the concrete metrics class only when its public surface is requested."""
+    """Load and activate the concrete metrics base when its public surface is requested."""
     module = importlib.import_module(_METRIC_MODULE)
-    metric_cls = module.MetricUtils
-    globals().update(MetricUtils=metric_cls, metric_utils=module.metric_utils)
-    return metric_cls
+    return _activate_metric_utils(module.MetricUtils)
 
 
-class _UtilsMeta(type):
-    """Bridge the historical combined class to its optional metrics base on demand."""
+def _uninitialized_metric_method(*args: Any, **kwargs: Any) -> Any:
+    """Stand in for a metric descriptor until its first binding request."""
+    raise RuntimeError('Lazy metric descriptor was invoked without binding.')
 
-    def __getattr__(cls, name: str) -> Any:
-        if name not in _METRIC_FACADE_ATTRS and _METRIC_MODULE not in sys.modules:
-            raise AttributeError(f'type {cls.__name__!r} has no attribute {name!r}')
 
-        metric_cls = _load_metric_utils()
-        for base in metric_cls.__mro__:
-            if name in base.__dict__:
-                descriptor = base.__dict__[name]
-                if hasattr(descriptor, '__get__'):
-                    return descriptor.__get__(None, cls)
-                return getattr(metric_cls, name)
-        raise AttributeError(f'type {cls.__name__!r} has no attribute {name!r}')
+class _LazyMetricAttribute:
+    """Load a concrete metric class attribute when normal MRO lookup reaches this base."""
 
-    def __dir__(cls) -> list[str]:
-        return sorted(set(type.__dir__(cls)) | _METRIC_FACADE_ATTRS)
+    def __init__(self, name: str):
+        self.name = name
+
+    def __get__(self, instance: object, owner: type | None = None) -> Any:
+        return getattr(_load_metric_utils(), self.name)
+
+
+class _LazyMetricStaticMethod(staticmethod):
+    """A statically inspectable method descriptor that loads its concrete definition on bind."""
+
+    def __init__(self, name: str):
+        super().__init__(_uninitialized_metric_method)
+        self.name = name
+
+    def __get__(self, instance: object, owner: type | None = None) -> Any:
+        descriptor = _load_metric_utils().__dict__[self.name]
+        return descriptor.__get__(instance, owner)
+
+
+class _LazyMetricClassMethod(classmethod):
+    """A statically inspectable classmethod that loads its concrete definition on bind."""
+
+    def __init__(self, name: str):
+        super().__init__(_uninitialized_metric_method)
+        self.name = name
+
+    def __get__(self, instance: object, owner: type | None = None) -> Any:
+        descriptor = _load_metric_utils().__dict__[self.name]
+        return descriptor.__get__(instance, owner)
+
+
+if TYPE_CHECKING:
+    from .MetricUtils import MetricUtils, metric_utils
+
+    _LazyMetricUtils = MetricUtils
+
+else:
+
+    def _build_lazy_metric_base() -> type:
+        """Build the lightweight runtime base without importing optional metric dependencies."""
+        namespace: dict[str, object] = {
+            name: _LazyMetricAttribute(name)
+            for name in _METRIC_FACADE_ATTRS - _METRIC_STATIC_METHODS - _METRIC_CLASS_METHODS
+        }
+        namespace.update({name: _LazyMetricStaticMethod(name) for name in _METRIC_STATIC_METHODS})
+        namespace.update({name: _LazyMetricClassMethod(name) for name in _METRIC_CLASS_METHODS})
+        return type('_LazyMetricUtils', (), namespace)
+
+    _LazyMetricUtils = _build_lazy_metric_base()
 
 
 class _UtilsModule(ModuleType):
@@ -105,37 +149,47 @@ class _UtilsModule(ModuleType):
     def __getattribute__(self, name: str) -> Any:
         value = ModuleType.__getattribute__(self, name)
         if name == 'MetricUtils' and isinstance(value, ModuleType):
-            metric_cls = value.MetricUtils
-            namespace = ModuleType.__getattribute__(self, '__dict__')
-            namespace.update(MetricUtils=metric_cls, metric_utils=value.metric_utils)
-            return metric_cls
+            return _activate_metric_utils(value.MetricUtils)
         return value
 
 
 sys.modules[__name__].__class__ = _UtilsModule
 
 
-if TYPE_CHECKING:
+class Utils(
+    IterUtils,
+    TextUtils,
+    SystemUtils,
+    SemanticUtils,
+    SyntaxUtils,
+    _LazyMetricUtils,
+):
+    """Combine eager utility bases with a metrics base activated on first demand."""
 
-    class Utils(IterUtils, TextUtils, SystemUtils, SemanticUtils, SyntaxUtils, MetricUtils):
-        """A class combining all of the utility classes into one convenient static interface."""
+    # `TextUtils` and `SystemUtils` each declare their own `RGXS` ClassVar; plain multiple
+    # inheritance would let MRO order silently shadow one with the other (whichever base is
+    # listed first "wins" for every subclass, including this one), leaving classmethods that
+    # were written against the shadowed dict (e.g. `SystemUtils.from_file`) raising `KeyError`
+    # the moment they're invoked through the combined `Utils`/`ut` facade instead of their own
+    # class directly. Re-merge both dicts explicitly so every inherited method sees its keys.
+    RGXS: ClassVar[dict[str, re.Pattern]] = TextUtils.RGXS | SystemUtils.RGXS
 
-        RGXS: ClassVar[dict[str, re.Pattern]] = TextUtils.RGXS | SystemUtils.RGXS
 
-else:
-
-    class Utils(
-        IterUtils, TextUtils, SystemUtils, SemanticUtils, SyntaxUtils, metaclass=_UtilsMeta
-    ):
-        """A class combining all utility classes while loading optional metrics on demand."""
-
-        # `TextUtils` and `SystemUtils` each declare their own `RGXS` ClassVar; plain multiple
-        # inheritance would let MRO order silently shadow one with the other (whichever base is
-        # listed first "wins" for every subclass, including this one), leaving classmethods that
-        # were written against the shadowed dict (e.g. `SystemUtils.from_file`) raising `KeyError`
-        # the moment they're invoked through the combined `Utils`/`ut` facade instead of their own
-        # class directly. Re-merge both dicts explicitly so every inherited method sees its keys.
-        RGXS: ClassVar[dict[str, re.Pattern]] = TextUtils.RGXS | SystemUtils.RGXS
+def _activate_metric_utils(metric_cls: type) -> type:
+    """Replace the lightweight base with the concrete class and publish both aliases."""
+    bases = Utils.__bases__
+    new_bases = tuple(
+        metric_cls
+        if base is _LazyMetricUtils
+        or (base.__module__ == _METRIC_MODULE and base.__name__ == 'MetricUtils')
+        else base
+        for base in bases
+    )
+    if new_bases != bases:
+        # Changing the existing class keeps already-defined downstream subclasses coherent.
+        Utils.__bases__ = new_bases
+    globals().update(MetricUtils=metric_cls, metric_utils=metric_cls)
+    return metric_cls
 
 
 def __getattr__(name: str) -> object:

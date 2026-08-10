@@ -119,8 +119,24 @@ class TestPackageDiscovery:
         assert page.exists()
         assert '# `other.widgets`: Widget utilities' in page.read_text()
 
-    def test_legacy_my_fallback(self, tmp_path: Path):
-        """Without pyproject.toml, a top-level `my` package keeps the old default."""
+    @pyt.mark.parametrize(
+        'pyproject',
+        [
+            pyt.param('', id='no-pyproject'),
+            pyt.param(
+                '[tool.uv.build-backend]\nmodule-name = ""\n',
+                id='empty-string',
+            ),
+            pyt.param(
+                '[tool.uv.build-backend]\nmodule-name = []\n',
+                id='empty-list',
+            ),
+        ],
+    )
+    def test_legacy_my_fallback(self, tmp_path: Path, pyproject: str):
+        """An absent or empty module-name keeps the legacy `my` fallback."""
+        if pyproject:
+            (tmp_path / 'pyproject.toml').write_text(pyproject)
         self._make_pkg(tmp_path, 'my')
 
         main(str(tmp_path))
@@ -173,6 +189,93 @@ class TestPackageDiscovery:
         assert captured.err.count('\n') == 1
         assert 'Traceback' not in captured.err
         assert all(fragment in captured.err for fragment in expected)
+
+    @pyt.mark.parametrize(
+        'pyproject',
+        [
+            pyt.param('tool = "not-a-table"\n', id='tool-not-table'),
+            pyt.param('[tool]\nuv = "not-a-table"\n', id='uv-not-table'),
+            pyt.param(
+                '[tool.uv]\nbuild-backend = "not-a-table"\n',
+                id='build-backend-not-table',
+            ),
+            pyt.param(
+                '[tool.uv.build-backend]\nmodule-name = 42\n',
+                id='module-name-integer',
+            ),
+            pyt.param(
+                '[tool.uv.build-backend]\nmodule-name = [42]\n',
+                id='module-name-list-item-integer',
+            ),
+            pyt.param(
+                '[tool.uv.build-backend]\nmodule-name = {name = "means"}\n',
+                id='module-name-table',
+            ),
+        ],
+    )
+    def test_malformed_discovery_types_exit_2(
+        self,
+        tmp_path: Path,
+        capsys: pyt.CaptureFixture,
+        pyproject: str,
+    ):
+        """Malformed discovery values fail closed instead of falling back or tracing back."""
+        (tmp_path / 'pyproject.toml').write_text(pyproject)
+        self._make_pkg(tmp_path, 'my')
+
+        with pyt.raises(SystemExit) as raised:
+            main(str(tmp_path))
+
+        captured = capsys.readouterr()
+        assert raised.value.code == 2
+        assert captured.out == ''
+        assert captured.err.count('\n') == 1
+        assert 'Traceback' not in captured.err
+        assert 'pyproject.toml' in captured.err
+        assert not (tmp_path / 'docs').exists()
+
+    @pyt.mark.parametrize('source', ['explicit', 'discovered'])
+    @pyt.mark.parametrize(
+        'package_kind',
+        ['absolute', 'traversal', 'separator', 'backslash', 'non-identifier', 'keyword'],
+    )
+    def test_path_shaped_package_names_exit_2(
+        self,
+        tmp_path: Path,
+        capsys: pyt.CaptureFixture,
+        source: str,
+        package_kind: str,
+    ):
+        """Package configuration accepts one import name, never a filesystem path."""
+        package = {
+            'absolute': str(tmp_path.parent / f'{tmp_path.name}-absolute'),
+            'traversal': f'../{tmp_path.name}-traversal',
+            'separator': 'nested/outside',
+            'backslash': r'nested\outside',
+            'non-identifier': 'not-a-package',
+            'keyword': 'class',
+        }[package_kind]
+        package_dir = (tmp_path / package).resolve()
+        self._make_pkg(package_dir.parent, package_dir.name)
+
+        if source == 'explicit':
+            args = ('--package', package)
+        else:
+            (tmp_path / 'pyproject.toml').write_text(
+                f"[tool.uv.build-backend]\nmodule-name = '{package}'\n"
+            )
+            args = ()
+
+        with pyt.raises(SystemExit) as raised:
+            main(*args, str(tmp_path))
+
+        captured = capsys.readouterr()
+        assert raised.value.code == 2
+        assert captured.out == ''
+        assert captured.err.count('\n') == 1
+        assert 'Traceback' not in captured.err
+        assert 'Python import name' in captured.err
+        assert not (tmp_path / 'docs').exists()
 
     def test_multi_package_discovery_requires_explicit_package(
         self,

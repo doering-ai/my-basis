@@ -4,6 +4,7 @@
 ### STANDARD
 from __future__ import annotations
 import ast
+import keyword
 import sys
 import textwrap
 import tomllib
@@ -35,26 +36,44 @@ maxdepth: 2
 ############
 ### BODY ###
 ############
+def _validate_package_name(package: str) -> str:
+    """Require one Python import name rather than a filesystem path."""
+    if package.isidentifier() and not keyword.iskeyword(package):
+        return package
+    raise ValueError(f'Package {package!r} must be a single Python import name, not a path.')
+
+
 def _discover_package(root: Path) -> str:
     """Resolve the docs source package from pyproject.toml, or legacy `my`."""
     pyproject = root / 'pyproject.toml'
     if pyproject.exists():
         meta = tomllib.loads(pyproject.read_text())
-        name = (
-            meta.get('tool', dict())
-            .get('uv', dict())
-            .get('build-backend', dict())
-            .get('module-name')
-        )
-        if isinstance(name, list):
-            if len(name) > 1:
+        tool = meta.get('tool', dict())
+        if not isinstance(tool, dict):
+            raise ValueError('pyproject.toml `[tool]` must be a table.')
+        uv = tool.get('uv', dict())
+        if not isinstance(uv, dict):
+            raise ValueError('pyproject.toml `[tool.uv]` must be a table.')
+        build_backend = uv.get('build-backend', dict())
+        if not isinstance(build_backend, dict):
+            raise ValueError('pyproject.toml `[tool.uv.build-backend]` must be a table.')
+
+        if 'module-name' in build_backend:
+            name = build_backend['module-name']
+            if isinstance(name, list):
+                if len(name) > 1:
+                    raise ValueError(
+                        'pyproject.toml declares multiple packages in '
+                        '`[tool.uv.build-backend].module-name`; pass `--package` explicitly.'
+                    )
+                name = next(iter(name), '')
+            if not isinstance(name, str):
                 raise ValueError(
-                    'pyproject.toml declares multiple packages in '
-                    '`[tool.uv.build-backend].module-name`; pass `--package` explicitly.'
+                    'pyproject.toml `[tool.uv.build-backend].module-name` must be a string '
+                    'or one-item list of strings.'
                 )
-            name = next(iter(name), '')
-        if isinstance(name, str) and name:
-            return name
+            if name:
+                return _validate_package_name(name)
     if (root / 'my' / '__init__.py').is_file():
         return 'my'
     raise ValueError(f'Could not discover a package under {root}; pass `--package` explicitly.')
@@ -62,7 +81,9 @@ def _discover_package(root: Path) -> str:
 
 def _resolve_package_name(root: Path, explicit_package: str) -> str:
     """Resolve and validate the package import name before constructing the worker."""
-    package = explicit_package or _discover_package(root)
+    package = (
+        _validate_package_name(explicit_package) if explicit_package else _discover_package(root)
+    )
     init_path = root / package / '__init__.py'
     if init_path.is_file():
         return package

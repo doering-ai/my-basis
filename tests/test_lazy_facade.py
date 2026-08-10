@@ -259,8 +259,20 @@ assert metric_utils is MetricUtils
 import importlib
 package = importlib.import_module("my.utils")
 metric_cls = package.MetricUtils
-owned_public = {name for name in metric_cls.__dict__ if not name.startswith("_")}
-assert package._METRIC_FACADE_ATTRS == owned_public
+eager_bases = (
+    package.IterUtils,
+    package.TextUtils,
+    package.SystemUtils,
+    package.SemanticUtils,
+    package.SyntaxUtils,
+)
+eager_public = {
+    name for base in eager_bases for name in dir(base) if not name.startswith("_")
+}
+metric_only_public = {
+    name for name in dir(metric_cls) if not name.startswith("_")
+} - eager_public
+assert package._METRIC_FACADE_ATTRS == metric_only_public
 """
         )
         assert proc.returncode == 0, proc.stderr

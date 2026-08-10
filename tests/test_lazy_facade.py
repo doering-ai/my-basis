@@ -8,9 +8,9 @@ same identity, `__all__` membership, and `AttributeError` behavior as the old ea
 imports.
 
 The facade also keeps `MetricUtils` and its optional Pandas/Logfire/OpenTelemetry stack cold
-until a metrics method or class alias is requested. The cold facade does not mutate
-Pydantic's process-global plugin setting, so application models retain their installed
-plugin behavior.
+through class aliases, method reads, and inspection; the implementation loads when a method is
+called or its submodule is explicitly imported. The cold facade does not mutate Pydantic's
+process-global plugin setting, so application models retain their installed plugin behavior.
 """
 
 ############
@@ -165,6 +165,7 @@ assert 'my.utils.MetricUtils' not in sys.modules
         proc = _probe(
             """
 import importlib.abc
+from pathlib import Path
 import sys
 
 class BlockMetrics(importlib.abc.MetaPathFinder):
@@ -179,7 +180,7 @@ assert "setup_logging" in dir(ut)
 assert ut.setup_logging is MetricUtils.setup_logging
 assert MetricUtils.METRICS_INSTALLED is False
 try:
-    ut.setup_logging()
+    ut.setup_logging(Path("."), False, "")
 except ImportError as exc:
     assert "optional [metrics] extra" in str(exc)
 else:
@@ -188,23 +189,25 @@ else:
         )
         assert proc.returncode == 0, proc.stderr
 
-    def test_metric_access__loads_and_preserves_facade_aliases(self):
-        """The first real metrics attribute resolves the historical class aliases on demand."""
+    def test_metric_method_read__stays_cold_and_preserves_facade_aliases(self):
+        """Reading a metrics method returns its canonical wrapper without warming dependencies."""
         proc = _probe(
             """
 import sys
-from my import ut
+from my import MetricUtils, metric_utils, ut
+from my.utils import MetricUtils as PackageMetricUtils
 assert 'my.utils.MetricUtils' not in sys.modules
 setup_logging = ut.setup_logging
-assert 'my.utils.MetricUtils' in sys.modules
-assert all(name in sys.modules for name in ('pandas', 'logfire', 'opentelemetry'))
-from my import MetricUtils, metric_utils
-from my.utils import MetricUtils as PackageMetricUtils
+assert 'my.utils.MetricUtils' not in sys.modules
+assert all(name not in sys.modules for name in ('pandas', 'logfire', 'opentelemetry'))
 assert MetricUtils is metric_utils is PackageMetricUtils
 assert setup_logging is MetricUtils.setup_logging
 assert ut.setup_metrics.__self__ is ut
 assert ut.setup_metrics.__func__ is MetricUtils.setup_metrics.__func__
 assert 'setup_logging' in dir(ut)
+assert ut.get_package_name() == 'my-basis'
+assert 'my.utils.MetricUtils' in sys.modules
+assert all(name in sys.modules for name in ('pandas', 'logfire', 'opentelemetry'))
 """
         )
         assert proc.returncode == 0, proc.stderr
@@ -215,17 +218,61 @@ assert 'setup_logging' in dir(ut)
             'import inspect, sys; from my import Utils; '
             'descriptor = inspect.getattr_static(Utils, "setup_logging"); '
             'assert isinstance(descriptor, staticmethod); '
+            'assert descriptor.__func__.__name__ == "setup_logging"; '
+            'assert tuple(inspect.signature(descriptor).parameters)[:3] '
+            '== ("logdir", "is_dev", "fire_token"); '
             'assert "my.utils.MetricUtils" not in sys.modules'
         )
         assert proc.returncode == 0, proc.stderr
 
-    def test_metric_super__activates_concrete_runtime_base(self):
-        """Subclass delegation through super restores the concrete metrics inheritance."""
+    def test_metric_first_classification__is_complete_truthful_and_cold(self):
+        """One cold class inventory reports the live base and every descriptor kind."""
+        proc = _probe(
+            """
+import importlib
+import inspect
+import sys
+from my import MetricUtils, Utils
+
+package = importlib.import_module("my.utils")
+
+assert "my.utils.MetricUtils" not in sys.modules
+assert MetricUtils in Utils.__mro__
+attrs = {item.name: item for item in inspect.classify_class_attrs(Utils)}
+assert "my.utils.MetricUtils" not in sys.modules
+assert all(name not in sys.modules for name in ("pandas", "logfire", "opentelemetry"))
+
+for name in package._METRIC_FACADE_ATTRS:
+    item = attrs[name]
+    assert item.defining_class is MetricUtils
+    if name in package._METRIC_STATIC_METHODS:
+        assert item.kind == "static method"
+        assert isinstance(item.object, staticmethod)
+        assert item.object.__func__.__name__ == name
+    elif name in package._METRIC_CLASS_METHODS:
+        assert item.kind == "class method"
+        assert isinstance(item.object, classmethod)
+        assert item.object.__func__.__name__ == name
+    else:
+        assert item.kind == "data"
+
+static_signature = inspect.signature(attrs["setup_logging"].object)
+assert tuple(static_signature.parameters)[:3] == ("logdir", "is_dev", "fire_token")
+assert static_signature.parameters["fire_kwargs"].kind is inspect.Parameter.VAR_KEYWORD
+
+class_signature = inspect.signature(attrs["setup_metrics"].object.__func__)
+assert tuple(class_signature.parameters) == ("cls", "metrics", "logger")
+"""
+        )
+        assert proc.returncode == 0, proc.stderr
+
+    def test_metric_super__uses_canonical_cold_runtime_base(self):
+        """Subclass delegation through super returns the real cold wrapper and keeps inheritance."""
         proc = _probe(
             """
 import inspect
 import sys
-from my import Utils
+from my import MetricUtils, Utils
 
 class CustomUtils(Utils):
     @classmethod
@@ -234,8 +281,7 @@ class CustomUtils(Utils):
 
 assert "my.utils.MetricUtils" not in sys.modules
 setup_logging = CustomUtils.metric_via_super()
-assert "my.utils.MetricUtils" in sys.modules
-from my import MetricUtils
+assert "my.utils.MetricUtils" not in sys.modules
 assert issubclass(Utils, MetricUtils)
 descriptor = inspect.getattr_static(Utils, "setup_logging")
 assert descriptor is inspect.getattr_static(MetricUtils, "setup_logging")
@@ -280,25 +326,58 @@ assert ut.setup_logging is module.MetricUtils.setup_logging
         assert proc.returncode == 0, proc.stderr
 
     def test_metric_first_access__is_thread_safe(self):
-        """Concurrent first reads converge on one imported method and class identity."""
+        """Concurrent cold reads and classifications converge without warming or stale metadata."""
         proc = _probe(
             """
 from concurrent.futures import ThreadPoolExecutor
+import inspect
 import sys
-from my import ut
+from my import MetricUtils, Utils, metric_utils, ut
+
+def inspect_once(index):
+    if index % 2:
+        return ut.setup_logging
+    attrs = {item.name: item for item in inspect.classify_class_attrs(Utils)}
+    item = attrs["setup_logging"]
+    assert item.defining_class is MetricUtils
+    assert item.object.__func__.__name__ == "setup_logging"
+    return item.object.__func__
+
 assert "my.utils.MetricUtils" not in sys.modules
 with ThreadPoolExecutor(max_workers=16) as pool:
-    methods = list(pool.map(lambda _: ut.setup_logging, range(64)))
+    methods = list(pool.map(inspect_once, range(128)))
 assert len({id(method) for method in methods}) == 1
-from my import MetricUtils, metric_utils
 assert methods[0] is MetricUtils.setup_logging
 assert metric_utils is MetricUtils
+assert "my.utils.MetricUtils" not in sys.modules
+assert all(name not in sys.modules for name in ("pandas", "logfire", "opentelemetry"))
+"""
+        )
+        assert proc.returncode == 0, proc.stderr
+
+    def test_metric_first_call__is_thread_safe(self):
+        """Concurrent first calls share one implementation import and stable public aliases."""
+        proc = _probe(
+            """
+from concurrent.futures import ThreadPoolExecutor
+import importlib
+import sys
+from my import MetricUtils, metric_utils, ut
+
+assert "my.utils.MetricUtils" not in sys.modules
+with ThreadPoolExecutor(max_workers=16) as pool:
+    results = list(pool.map(lambda _: ut.setup_warnings(), range(64)))
+assert results == [None] * 64
+module = importlib.import_module("my.utils.MetricUtils")
+assert module.MetricUtils is MetricUtils is metric_utils
+assert MetricUtils.WARNINGS_SETUP is True
+assert ut.setup_warnings is MetricUtils.setup_warnings
 """
         )
         assert proc.returncode == 0, proc.stderr
 
     def test_metric_alias_cache__publishes_together_under_preemption(self):
-        """A forced pause cannot expose one public class alias without its singleton."""
+        """A forced pause during implementation load cannot split the two class aliases."""
         proc = _probe(
             """
 import importlib
@@ -308,8 +387,9 @@ import threading
 from types import ModuleType
 
 package = importlib.import_module("my.utils")
-activate = package._activate_metric_utils
-source, first_line = inspect.getsourcelines(activate)
+metric_cls = package.MetricUtils
+load = package._load_metric_implementation
+source, first_line = inspect.getsourcelines(load)
 publish_line = first_line + next(
     index for index, line in enumerate(source) if "globals().update" in line
 )
@@ -319,12 +399,7 @@ result = []
 errors = []
 
 def trace(frame, event, arg):
-    if (
-        frame.f_code is activate.__code__
-        and event == "line"
-        and frame.f_lineno == publish_line
-        and isinstance(package.__dict__.get("MetricUtils"), ModuleType)
-    ):
+    if frame.f_code is load.__code__ and event == "line" and frame.f_lineno == publish_line:
         paused.set()
         if not resume.wait(5):
             raise TimeoutError("preemption release timed out")
@@ -333,7 +408,7 @@ def trace(frame, event, arg):
 def worker():
     sys.settrace(trace)
     try:
-        result.append(package.MetricUtils)
+        result.append(metric_cls.get_package_name())
     except BaseException as exc:
         errors.append(exc)
     finally:
@@ -343,15 +418,15 @@ thread = threading.Thread(target=worker)
 thread.start()
 assert paused.wait(5)
 assert isinstance(package.__dict__.get("MetricUtils"), ModuleType)
-assert isinstance(package.__dict__.get("metric_utils"), type)
-metric_cls = package.MetricUtils
+assert package.__dict__["metric_utils"] is metric_cls
+assert package.MetricUtils is metric_cls
 assert package.__dict__["MetricUtils"] is metric_cls
 assert package.__dict__["metric_utils"] is metric_cls
 resume.set()
 thread.join(5)
 assert not thread.is_alive()
 assert not errors, errors
-assert result == [metric_cls]
+assert result == ["my-basis"]
 """
         )
         assert proc.returncode == 0, proc.stderr
@@ -388,6 +463,34 @@ assert package._METRIC_CLASS_METHODS == {
     for name in metric_only_public
     if isinstance(inspect.getattr_static(metric_cls, name), classmethod)
 }
+"""
+        )
+        assert proc.returncode == 0, proc.stderr
+
+    def test_metric_wrapper_manifest__matches_implementation_signatures(self):
+        """Every cold wrapper retains the exact concrete descriptor kind and call signature."""
+        proc = _probe(
+            """
+import importlib
+import inspect
+
+package = importlib.import_module("my.utils")
+metric_cls = package.MetricUtils
+module = importlib.import_module("my.utils.MetricUtils")
+implementation = module._MetricUtilsImplementation
+implementation_private = {
+    name
+    for name in implementation.__dict__
+    if name.startswith("_") and not (name.startswith("__") and name.endswith("__"))
+}
+assert package._METRIC_PRIVATE_ATTRS == implementation_private
+
+for name in package._METRIC_STATIC_METHODS | package._METRIC_CLASS_METHODS:
+    public = inspect.getattr_static(metric_cls, name)
+    concrete = inspect.getattr_static(implementation, name)
+    assert type(public) is type(concrete)
+    assert public.__func__.__name__ == concrete.__func__.__name__ == name
+    assert inspect.signature(public.__func__) == inspect.signature(concrete.__func__)
 """
         )
         assert proc.returncode == 0, proc.stderr

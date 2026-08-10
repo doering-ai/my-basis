@@ -27,7 +27,7 @@ import inspect
 import pydantic as pyd
 
 ### INTERNAL (NOTE: If adding new internal imports, update the comments in `__init__.py`)
-from . import _activate_metric_utils
+from . import _register_metric_implementation
 from ._UtilsBase import _UtilsBase
 from .SystemUtils import SystemUtils
 
@@ -49,7 +49,7 @@ type Metrics = OpenTelemetryCounter | dict[str, float] | pd.Series
 ############
 ### BODY ###
 ############
-class MetricUtils(_UtilsBase):
+class _MetricUtilsImplementation(_UtilsBase):
     """Methods that deal with logging, telemetry, and other measurement tasks.
 
     .. important::
@@ -599,7 +599,7 @@ class MetricUtils(_UtilsBase):
                 >>> from my import ut
                 >>> logger = ut.setup_logging(Path('logs'), True, fire_token='')  # doctest: +SKIP
         """
-        cls = MetricUtils
+        cls: Any = MetricUtils
         package = cls._resolve_setup_package(package)
         cls._validate_fire_configuration(package, is_dev, fire_kwargs)
         cls._resolve_log_level(log_level, is_dev)  # fail before changing local logger state
@@ -804,7 +804,6 @@ class MetricUtils(_UtilsBase):
         return fire.instrument(*args, extract_args=False, **kwargs)
 
 
+MetricUtils = _register_metric_implementation(_MetricUtilsImplementation)
 metric_utils = MetricUtils
 """An alias of `MetricUtils`, cased so as to imply static usage."""
-
-_activate_metric_utils(MetricUtils)

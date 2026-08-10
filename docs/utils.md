@@ -17,7 +17,8 @@ Individual utility classes can still be imported for more specific use cases or 
 import footprint is desired (e.g. `from my.utils.IterUtils import IterUtils`).
 
 `MetricUtils` remains available through the same combined facade, but its optional Pandas,
-Logfire, and OpenTelemetry dependencies are imported only when a metrics attribute is first used.
+Logfire, and OpenTelemetry dependencies are imported only when a metrics method is called or the
+implementation submodule is explicitly imported.
 
 Note -- `utils` is the *class*, on purpose:
     Both `utils` and `ut` are bound to the `Utils` **class** itself (`utils = ut = Utils`), not to

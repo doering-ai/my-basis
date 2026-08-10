@@ -36,7 +36,9 @@ from typing import Any, ClassVar
 import importlib
 import importlib.util
 import logging as lg
+import re as stdlib_re
 import sys
+import threading
 
 import pydantic as pyd
 import regex as re
@@ -81,6 +83,9 @@ _METRIC_CLASS_METHODS = frozenset(
         'setup_py_logging',
     }
 )
+_METRIC_DATA_ATTRS = _METRIC_FACADE_ATTRS - _METRIC_STATIC_METHODS - _METRIC_CLASS_METHODS
+_METRIC_STATE_OVERRIDES: set[str] = set()
+_METRIC_STATE_LOCK = threading.RLock()
 _METRIC_PRIVATE_ATTRS = frozenset(
     {
         '_configure_cached_logger',
@@ -116,24 +121,32 @@ def _metrics_extra_available() -> bool:
 
 
 class _MetricUtilsMeta(type):
-    """Resolve implementation-private helpers without weakening the public cold facade."""
+    """Resolve private helpers and track public state without warming the facade."""
 
     def __getattr__(cls, name: str) -> Any:
         if name not in _METRIC_PRIVATE_ATTRS:
             raise AttributeError(f'type {cls.__name__!r} has no attribute {name!r}')
-        _load_metric_implementation()
-        try:
-            return type.__getattribute__(cls, name)
-        except AttributeError:
-            raise AttributeError(f'type {cls.__name__!r} has no attribute {name!r}') from None
+        descriptor = _load_metric_implementation().__dict__.get(name)
+        if descriptor is None:
+            raise AttributeError(f'type {cls.__name__!r} has no attribute {name!r}')
+        return descriptor.__get__(None, cls)
+
+    def __setattr__(cls, name: str, value: Any) -> None:
+        if name in _METRIC_DATA_ATTRS:
+            with _METRIC_STATE_LOCK:
+                _METRIC_STATE_OVERRIDES.add(name)
+                type.__setattr__(cls, name, value)
+            return
+        type.__setattr__(cls, name, value)
 
 
 class MetricUtils(_UtilsBase, metaclass=_MetricUtilsMeta):
-    """Methods for logging, telemetry, and measurement with cold call-time implementations.
+    """Methods that deal with logging, telemetry, and other measurement tasks.
 
-    These methods require the optional `metrics` dependency. Their descriptors, signatures,
-    class state, and inheritance remain available to the combined facade without importing
-    Pandas, Logfire, OpenTelemetry, or the implementation module.
+    .. important::
+        These methods are only usable if the **optional** `metrics` dependency is installed
+        (`pip install my-basis[metrics]`). If you try to call them without it, an `ImportError`
+        will be thrown.
     """
 
     METRICS_INSTALLED: ClassVar[bool] = _metrics_extra_available()
@@ -144,7 +157,9 @@ class MetricUtils(_UtilsBase, metaclass=_MetricUtilsMeta):
     SAFE_FIRE_KWARGS: ClassVar[frozenset[str]] = frozenset(
         {'inspect_arguments', 'scrubbing', 'send_to_logfire'}
     )
-    TELEMETRY_IDENTITY: ClassVar[re.Pattern[str]] = re.compile(r'[A-Za-z0-9][A-Za-z0-9._/-]{0,127}')
+    TELEMETRY_IDENTITY: ClassVar[stdlib_re.Pattern[str]] = stdlib_re.compile(
+        r'[A-Za-z0-9][A-Za-z0-9._/-]{0,127}'
+    )
     LOCAL_OTLP_HOSTS: ClassVar[frozenset[str]] = frozenset(
         {'127.0.0.1', '::1', 'host.containers.internal', 'localhost', 'otel-collector'}
     )
@@ -160,7 +175,26 @@ class MetricUtils(_UtilsBase, metaclass=_MetricUtilsMeta):
         maxsize: int = 2**26,
         maxcount: int = 2**10,
     ) -> lg.Logger:
-        """Load and invoke the rotating-file logging implementation."""
+        """Configure Python file-based logging with rotation.
+
+        Args:
+            logdir: Directory for log files.
+            is_dev: If True, use DEBUG level; otherwise INFO.
+            package: Package name for logger identification.
+            logger: Existing logger to configure, or None to create new.
+            app: Optional ASGI app to register logger with.
+            maxsize: Maximum log file size in bytes (default: 64 MB).
+            maxcount: Maximum number of backup files (default: 1024).
+        Returns:
+            Configured Logger instance.
+        Examples:
+            Attach a rotating file handler for a package::
+
+                >>> from pathlib import Path
+                >>> from my import ut
+                >>> logger = ut.setup_py_logging(Path('logs'), True, 'my-basis')  # doctest: +SKIP
+                >>> logger.info('ready')  # doctest: +SKIP
+        """
         return _call_metric_method(
             'setup_py_logging',
             cls,
@@ -186,7 +220,31 @@ class MetricUtils(_UtilsBase, metaclass=_MetricUtilsMeta):
         log_level: str | None = None,
         **kwargs: Any,
     ) -> None:
-        """Load and invoke the Logfire configuration implementation."""
+        """Configure Logfire observability and logging.
+
+        Args:
+            fire_token: Logfire API token; an empty value falls back to `LOGFIRE_TOKEN`
+                and permits an OTLP-only destination.
+            package: Package name for service identification.
+            logger: Logger to attach Logfire handler to.
+            is_dev: If True, use development mode with console output (default: True).
+            app: Optional ASGI app to instrument.
+            export_logs: Attach the Python logging handler for already-scrubbed event names.
+            system_metrics: Enable Logfire's per-process system metrics instrumentation.
+            log_level: Stdlib level name (e.g. `WARNING`) for the exported log handler;
+                when None, the handler floor stays DEBUG in dev and INFO otherwise.
+            **kwargs: Additional configuration options for Logfire.
+        Raises:
+            ValueError: If the service identity/destination is missing or a privacy control
+                is weakened.
+        Examples:
+            Configure Logfire against an existing logger::
+
+                >>> import logging
+                >>> from my import ut
+                >>> ut.setup_fire_logging(  # doctest: +SKIP
+                ...     fire_token='', package='my-basis', logger=logging.getLogger('my-basis'))
+        """
         return _call_metric_method(
             'setup_fire_logging',
             cls,
@@ -203,7 +261,22 @@ class MetricUtils(_UtilsBase, metaclass=_MetricUtilsMeta):
 
     @classmethod
     def get_package_name(cls) -> str:
-        """Load the implementation and resolve the current distribution name."""
+        """Retrieve this utility's distribution or source-project name.
+
+        Standard installed-package metadata is preferred. Editable installs often omit
+        the import-to-distribution map, so their ``direct_url.json`` project root is matched
+        against this module; a source checkout falls back to its nearest ``pyproject.toml``.
+        A standalone script without either kind of metadata retains the root import name.
+
+        Returns:
+            Canonical distribution/project name, or the root import name as a fallback.
+        Examples:
+            Identify the distribution even from an editable checkout::
+
+                >>> from my import ut
+                >>> ut.get_package_name()
+                'my-basis'
+        """
         return _call_metric_method('get_package_name', cls)
 
     @staticmethod
@@ -221,7 +294,32 @@ class MetricUtils(_UtilsBase, metaclass=_MetricUtilsMeta):
         log_level: str | None = None,
         **fire_kwargs: Any,
     ) -> lg.Logger:
-        """Load and invoke the combined Python and Logfire setup implementation."""
+        """Configure comprehensive logging (Python file logging + Logfire).
+
+        Args:
+            logdir: Directory for log files.
+            is_dev: If True, use development mode with DEBUG level.
+            fire_token: Logfire API token (empty string to skip Logfire).
+            package: Package name (auto-detected if empty).
+            logger: Existing logger to configure, or None to create new.
+            app: Optional ASGI app to instrument.
+            maxsize: Maximum log file size in bytes (default: 64 MB).
+            maxcount: Maximum number of backup files (default: 1024).
+            export_logs: Export already-scrubbed Python log records through Logfire.
+            system_metrics: Enable per-process system metrics instrumentation.
+            log_level: Stdlib level name (e.g. `WARNING`) for the exported log handler;
+                when None, the handler floor stays DEBUG in dev and INFO otherwise. Like the
+                other options, only a package's first configuration applies it.
+            **fire_kwargs: Additional Logfire configuration options.
+        Returns:
+            Configured Logger instance (cached per package).
+        Examples:
+            One call wires both file logging and Logfire::
+
+                >>> from pathlib import Path
+                >>> from my import ut
+                >>> logger = ut.setup_logging(Path('logs'), True, fire_token='')  # doctest: +SKIP
+        """
         return _call_metric_method(
             'setup_logging',
             MetricUtils,
@@ -241,46 +339,89 @@ class MetricUtils(_UtilsBase, metaclass=_MetricUtilsMeta):
 
     @staticmethod
     def setup_warnings():
-        """Load and invoke the warning-filter setup implementation."""
+        """Configure warning filters to suppress common deprecation warnings.
+
+        Filters out warnings for class-based config, config key changes, and
+        pkg_resources deprecation. Only runs once per session.
+        """
         return _call_metric_method('setup_warnings', MetricUtils)
 
     @classmethod
     def setup_metrics(cls, metrics: pyd.DirectoryPath, logger: lg.Logger):
-        """Load and invoke the Prometheus directory setup implementation."""
+        """Perform setup for Prometheus metrics, ensuring directory exists and is empty.
+
+        Args:
+            metrics: Directory for Prometheus multiprocess metrics.
+            logger: Logger for recording setup actions.
+        Raises:
+            AssertionError: If PROMETHEUS_MULTIPROC_DIR not set or mismatches metrics path.
+        Examples:
+            Prepare the Prometheus multiprocess directory::
+
+                >>> import logging
+                >>> from pathlib import Path
+                >>> from my import ut
+                >>> metrics_dir = Path('/tmp/prometheus')  # must match $PROMETHEUS_MULTIPROC_DIR
+                >>> ut.setup_metrics(metrics_dir, logging.getLogger())  # doctest: +SKIP
+        """
         return _call_metric_method('setup_metrics', cls, metrics, logger)
 
     @classmethod
     def measure_context(cls, name: str, counter: dict[str, float]):
-        """Load and return the metric timing context manager."""
+        """Context manager to measure execution time of a code block.
+
+        Timing is recorded even if the block raises, so a slow-then-crashing path still shows
+        up in `counter`.
+
+        Args:
+            name: Metric name for recording.
+            counter: Dictionary counter to record elapsed time.
+        Yields:
+            None (timing measured around context block).
+        Examples:
+            Accumulate elapsed milliseconds into a plain dict::
+
+                >>> from my import ut
+                >>> counter = {}
+                >>> with ut.measure_context('step', counter):
+                ...     total = sum(range(1000))
+                >>> counter['step'] > 0
+                True
+        """
         return _call_metric_method('measure_context', cls, name, counter)
 
     @classmethod
     def monitor(cls, *args: Any, **kwargs: Any) -> Callable:
-        """Load and return the Logfire instrumentation decorator."""
+        """Create a Logfire instrumentation decorator for a function.
+
+        Args:
+            *args: Positional arguments for fire.instrument().
+            **kwargs: Keyword arguments for fire.instrument().
+        Returns:
+            Decorator that instruments function with Logfire monitoring.
+        Examples:
+            Instrument a function with a Logfire span::
+
+                >>> from my import ut
+                >>> @ut.monitor('fetch-page')  # doctest: +SKIP
+                ... def fetch(url): ...
+        """
         return _call_metric_method('monitor', cls, *args, **kwargs)
 
 
-# These wrappers are the public class, including for direct submodule imports and
-# documentation. Their implementation globals remain here so calls retain the cold boundary.
-MetricUtils.__module__ = _METRIC_MODULE
-for _metric_method_name in _METRIC_STATIC_METHODS | _METRIC_CLASS_METHODS:
-    _metric_descriptor = MetricUtils.__dict__[_metric_method_name]
-    _metric_descriptor.__func__.__module__ = _METRIC_MODULE
+# Keep the historical fully qualified public name while attributing the class to the
+# package file that really defines it. Standard reflection can now resolve the cold source.
+MetricUtils.__qualname__ = 'MetricUtils.MetricUtils'
 
 _METRIC_CLASS = MetricUtils
 metric_utils = MetricUtils
 
 
 def _register_metric_implementation(metric_impl: type) -> type[MetricUtils]:
-    """Attach private helpers and synchronize availability after the implementation imports."""
-    for name, descriptor in metric_impl.__dict__.items():
-        if (
-            name.startswith('_')
-            and not (name.startswith('__') and name.endswith('__'))
-            and name not in MetricUtils.__dict__
-        ):
-            setattr(MetricUtils, name, descriptor)
-    MetricUtils.METRICS_INSTALLED = metric_impl.METRICS_INSTALLED
+    """Synchronize detected availability without publishing partial implementation state."""
+    with _METRIC_STATE_LOCK:
+        if 'METRICS_INSTALLED' not in _METRIC_STATE_OVERRIDES:
+            type.__setattr__(MetricUtils, 'METRICS_INSTALLED', metric_impl.METRICS_INSTALLED)
     return MetricUtils
 
 

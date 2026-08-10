@@ -431,6 +431,47 @@ assert result == ["my-basis"]
         )
         assert proc.returncode == 0, proc.stderr
 
+    def test_metric_first_call__recovers_after_interrupted_registration(self):
+        """A caught first-load interruption cannot retain helpers from a discarded module."""
+        proc = _probe(
+            """
+import importlib
+import inspect
+import sys
+
+package = importlib.import_module("my.utils")
+metric_cls = package.MetricUtils
+register = package._register_metric_implementation
+source, first_line = inspect.getsourcelines(register)
+interrupt_line = first_line + next(
+    index for index, line in enumerate(source) if "return MetricUtils" in line
+)
+
+def trace(frame, event, arg):
+    if frame.f_code is register.__code__ and event == "line" and frame.f_lineno == interrupt_line:
+        raise KeyboardInterrupt
+    return trace
+
+sys.settrace(trace)
+try:
+    metric_cls.get_package_name()
+except KeyboardInterrupt:
+    pass
+else:
+    raise AssertionError("registration was not interrupted")
+finally:
+    sys.settrace(None)
+
+assert "my.utils.MetricUtils" not in sys.modules
+assert metric_cls.get_package_name() == "my-basis"
+counter = {}
+with metric_cls.measure_context("step", counter):
+    pass
+assert counter["step"] > 0
+"""
+        )
+        assert proc.returncode == 0, proc.stderr
+
     def test_metric_manifest__matches_concrete_public_surface(self):
         """A new public MetricUtils member requires an explicit lazy-facade decision."""
         proc = _probe(
@@ -495,6 +536,38 @@ for name in package._METRIC_STATIC_METHODS | package._METRIC_CLASS_METHODS:
         )
         assert proc.returncode == 0, proc.stderr
 
+    def test_metric_reflection__keeps_cold_source_and_full_public_docs(self):
+        """Reflection stays truthful and documented on both sides of metrics activation."""
+        proc = _probe(
+            """
+import importlib
+import inspect
+import sys
+
+package = importlib.import_module("my.utils")
+metric_cls = package.MetricUtils
+assert "my.utils.MetricUtils" not in sys.modules
+assert inspect.getmodule(metric_cls) is package
+assert f"{metric_cls.__module__}.{metric_cls.__qualname__}" == (
+    "my.utils.MetricUtils.MetricUtils"
+)
+cold_source = inspect.getsource(metric_cls)
+assert "class MetricUtils(" in cold_source
+assert "def setup_logging(" in cold_source
+setup_doc = inspect.getdoc(metric_cls.setup_logging)
+assert setup_doc is not None and len(setup_doc) > 1_000
+assert "fire_token: Logfire API token" in setup_doc
+assert "Returns:" in setup_doc
+assert "Examples:" in setup_doc
+assert "my.utils.MetricUtils" not in sys.modules
+
+importlib.import_module("my.utils.MetricUtils")
+assert inspect.getmodule(metric_cls) is package
+assert inspect.getsource(metric_cls) == cold_source
+"""
+        )
+        assert proc.returncode == 0, proc.stderr
+
     def test_metrics_aliases__remain_visible_in_package_dir(self):
         """Package introspection advertises lazy aliases before their first access."""
         proc = _probe(
@@ -512,6 +585,39 @@ for name in package._METRIC_STATIC_METHODS | package._METRIC_CLASS_METHODS:
             '_ = ut.METRICS_INSTALLED; '
             'MetricUtils.METRICS_INSTALLED = not MetricUtils.METRICS_INSTALLED; '
             'assert ut.METRICS_INSTALLED is MetricUtils.METRICS_INSTALLED'
+        )
+        assert proc.returncode == 0, proc.stderr
+
+    def test_metric_class_state__preserves_rebinding_across_first_load(self):
+        """A caller's cold availability override remains authoritative after activation."""
+        proc = _probe(
+            """
+from my import MetricUtils
+
+MetricUtils.METRICS_INSTALLED = False
+try:
+    MetricUtils.setup_warnings()
+except ImportError as exc:
+    assert "optional [metrics] extra" in str(exc)
+else:
+    raise AssertionError("first implementation load discarded the public override")
+assert MetricUtils.METRICS_INSTALLED is False
+assert MetricUtils.WARNINGS_SETUP is False
+"""
+        )
+        assert proc.returncode == 0, proc.stderr
+
+    def test_metric_public_data__preserves_stdlib_pattern_type(self):
+        """The cold telemetry identity pattern retains its historical concrete type."""
+        proc = _probe(
+            """
+import re
+from my import MetricUtils
+
+assert isinstance(MetricUtils.TELEMETRY_IDENTITY, re.Pattern)
+MetricUtils.get_package_name()
+assert isinstance(MetricUtils.TELEMETRY_IDENTITY, re.Pattern)
+"""
         )
         assert proc.returncode == 0, proc.stderr
 

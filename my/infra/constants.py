@@ -26,7 +26,7 @@ re.DEFAULT_VERSION = re.VERSION1  # pyrefly: ignore[bad-assignment]
 ############
 ### DATA ###
 ############
-class InfraPaths(pyd.BaseModel, arbitrary_types_allowed=True):
+class InfraPaths(pyd.BaseModel, arbitrary_types_allowed=True, defer_build=True, frozen=True):
     """A model containing important paths within the package."""
 
     #: Root directory of the installed `my` package.
@@ -41,7 +41,10 @@ class InfraPaths(pyd.BaseModel, arbitrary_types_allowed=True):
 
 #: Immutable object containing important paths within the package.
 #: Use `INFRA_PATHS` to access these paths.
-INFRA_PATHS: InfraPaths = InfraPaths()
+#: Constructed without validation so that a bare `import my` never triggers Pydantic's
+#: first schema build (which would discover and import an installed Logfire plugin); the
+#: static defaults are already valid, and `frozen` keeps unvalidated data from getting in.
+INFRA_PATHS: InfraPaths = InfraPaths.model_construct()
 
 
 #: Concrete platform path class used as the runtime base for `NOWHERE`.

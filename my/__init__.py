@@ -84,62 +84,66 @@ from .utils import (
     semantic_utils,
     SyntaxUtils,
     syntax_utils,
-    MetricUtils,
-    metric_utils,
-)
-from .caches import Cache, NestedCache, PickleCache, FileCache
-from .typing import (
-    AutocastModel,
-    CastFlags,
-    MyType,
-    ty,
-    tyc,
-    tym,
-    TypeArg,
-    TypeCast,
-    TypeCheck,
-    TypeMatch,
-    Typist,
-    typist,
-    tyt,
-)
-from .types import MyEnum, UniqueId, Uid, Span, Buffer, Predicate, Command, Platform
-from .regex import (
-    RegexStore,
-    RegexDebugger,
-    GroupKind,
-    RgxAtom,
-    GroupAtom,
-    SetAtom,
-    Regex,
-    Tree,
-    Quantifier,
-    MatchData,
-    ParseData,
-    RegexParser,
-    RegexTup,
-    RegexList,
-    RegexVal,
-    RegexDef,
-    META_RGXS,
-    COMMON_RGXS,
 )
 
-# -- Lazy facade leaves (PEP 562) --------------------------------------------
-# `apis` and `files` are the only *leaf* subpackages -- nothing else under `my/`
-# imports them -- so they are deferred to first attribute access via `__getattr__`
-# below. This keeps every `import my` that never touches them from paying their
-# import cost, and from triggering `apis`'s import-time side effects (`load_dotenv`,
-# the `os.environ` snapshot, filesystem path resolution). Type checkers and
-# autocomplete still see the names through this `TYPE_CHECKING` block.
+# -- Lazy facade entries (PEP 562) -------------------------------------------
+# Pydantic-backed facade branches and optional leaves are deferred to first attribute
+# access via `__getattr__` below. `MetricUtils` is deferred independently inside the
+# otherwise-eager `utils` package. This keeps every `import my` that only needs utility
+# functions from constructing Pydantic models or initializing installed plugins.
+#
+# The `caches`/`typing`/`types`/`regex` branches are part of the same boundary, not a
+# separate optimization: each defines Pydantic models at import time, and Pydantic's
+# plugin discovery imports an installed Logfire plugin at the first model definition
+# (verified by `test_pydantic_branches__wake_installed_logfire_plugin_on_import`).
+# Making them eager again would re-import Logfire at `import my` and break LIBS-28's
+# cold-start acceptance criterion.
 #
 # Honest limits (do not "fix" by making these eager again): `from my import env`
 # still pays the full `apis` import cost at *that* import, and `from my import *`
 # or `hasattr(my, 'env')` force every lazy name to load. The win is for the many
-# consumers that import only eager names (`ut`, `ty`, `Buffer`, ...).
+# consumers that import only eager names (`ut`, `TextUtils`, the infra aliases, ...).
 if TYPE_CHECKING:
     from .apis import GoogleSheet, Environment, ENV, env, Filesystem, PATHS, FS, fs
+    from .caches import Cache, NestedCache, PickleCache, FileCache
     from .files import Markdown
+    from .regex import (
+        RegexStore,
+        RegexDebugger,
+        GroupKind,
+        RgxAtom,
+        GroupAtom,
+        SetAtom,
+        Regex,
+        Tree,
+        Quantifier,
+        MatchData,
+        ParseData,
+        RegexParser,
+        RegexTup,
+        RegexList,
+        RegexVal,
+        RegexDef,
+        META_RGXS,
+        COMMON_RGXS,
+    )
+    from .types import MyEnum, UniqueId, Uid, Span, Buffer, Predicate, Command, Platform
+    from .typing import (
+        AutocastModel,
+        CastFlags,
+        MyType,
+        ty,
+        tyc,
+        tym,
+        TypeArg,
+        TypeCast,
+        TypeCheck,
+        TypeMatch,
+        Typist,
+        typist,
+        tyt,
+    )
+    from .utils import MetricUtils, metric_utils
 
 
 __all__ = [
@@ -248,6 +252,12 @@ __all__ = [
 
 #: Facade names deferred to first access, mapped to the submodule that defines each.
 _LAZY_ATTRS: dict[str, str] = {
+    'MetricUtils': 'my.utils',
+    'metric_utils': 'my.utils',
+    'Cache': 'my.caches',
+    'FileCache': 'my.caches',
+    'NestedCache': 'my.caches',
+    'PickleCache': 'my.caches',
     'GoogleSheet': 'my.apis',
     'Environment': 'my.apis',
     'ENV': 'my.apis',
@@ -256,12 +266,51 @@ _LAZY_ATTRS: dict[str, str] = {
     'PATHS': 'my.apis',
     'FS': 'my.apis',
     'fs': 'my.apis',
+    'AutocastModel': 'my.typing',
+    'CastFlags': 'my.typing',
+    'MyType': 'my.typing',
+    'ty': 'my.typing',
+    'tyc': 'my.typing',
+    'tym': 'my.typing',
+    'TypeArg': 'my.typing',
+    'TypeCast': 'my.typing',
+    'TypeCheck': 'my.typing',
+    'TypeMatch': 'my.typing',
+    'Typist': 'my.typing',
+    'typist': 'my.typing',
+    'tyt': 'my.typing',
+    'Buffer': 'my.types',
+    'Command': 'my.types',
+    'MyEnum': 'my.types',
+    'Platform': 'my.types',
+    'Predicate': 'my.types',
+    'Span': 'my.types',
+    'Uid': 'my.types',
+    'UniqueId': 'my.types',
+    'RegexStore': 'my.regex',
+    'RegexDebugger': 'my.regex',
+    'GroupKind': 'my.regex',
+    'RgxAtom': 'my.regex',
+    'GroupAtom': 'my.regex',
+    'SetAtom': 'my.regex',
+    'Regex': 'my.regex',
+    'Tree': 'my.regex',
+    'Quantifier': 'my.regex',
+    'MatchData': 'my.regex',
+    'ParseData': 'my.regex',
+    'RegexParser': 'my.regex',
+    'RegexTup': 'my.regex',
+    'RegexList': 'my.regex',
+    'RegexVal': 'my.regex',
+    'RegexDef': 'my.regex',
+    'META_RGXS': 'my.regex',
+    'COMMON_RGXS': 'my.regex',
     'Markdown': 'my.files',
 }
 
 
 def __getattr__(name: str) -> object:
-    """Lazily resolve the `apis`/`files` facade leaves on first access (PEP 562).
+    """Lazily resolve optional facade branches on first access (PEP 562).
 
     Resolved values are cached back into the module globals, so subsequent attribute
     access skips this hook entirely.

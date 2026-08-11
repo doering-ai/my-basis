@@ -16,13 +16,16 @@ defines them, providing a clean, flat namespace for common operations.
 Individual utility classes can still be imported for more specific use cases or when a smaller
 import footprint is desired (e.g. `from my.utils.IterUtils import IterUtils`).
 
-Note -- `utils` is the *class*, on purpose:
-Both `utils` and `ut` are bound to the `Utils` **class** itself (`utils = ut = Utils`), not to
+`MetricUtils` remains available through the same combined facade, but its optional Pandas,
+Logfire, and OpenTelemetry dependencies are imported only when a metrics method is called or the
+implementation submodule is explicitly imported.
+
+```{note}
+**`utils` is the *class*, on purpose.** Both `utils` and `ut` are bound to the `Utils` **class** itself (`utils = ut = Utils`), not to
 this submodule. That is deliberate: `from my import utils as ut` hands consumers the aggregating
 facade, so `ut.clean_string(...)`, `ut.validate_dir(...)`, etc. resolve across every base
 class through one flat namespace.
 
-```
 The consequence is that the `my.utils` attribute *is* the `Utils` class, which **shadows** this
 submodule: `my.utils.iter_utils` does not resolve (the class has no such attribute) and
 `hasattr(my.utils, 'iter_utils')` is `False`. This is a design choice, not a bug -- do **not**

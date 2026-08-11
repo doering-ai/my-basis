@@ -38,7 +38,6 @@ import importlib.util
 import logging as lg
 import re as stdlib_re
 import sys
-import threading
 
 import pydantic as pyd
 import regex as re
@@ -50,62 +49,7 @@ from .TextUtils import TextUtils, text_utils  # <- iter
 from .SemanticUtils import SemanticUtils, semantic_utils  # <- text, iter
 from .SystemUtils import SystemUtils, system_utils  # <- text, iter
 
-#: Names inherited from `MetricUtils` by the historical all-in-one facade. Keeping this
-#: lightweight manifest here lets a typo fail without warming the optional metrics stack.
-_METRIC_FACADE_ATTRS = frozenset(
-    {
-        'LOCAL_OTLP_HOSTS',
-        'LOGGERS',
-        'METRICS_INSTALLED',
-        'METRICS_SETUP',
-        'SAFE_FIRE_KWARGS',
-        'TELEMETRY_IDENTITY',
-        'TELEMETRY_READY',
-        'WARNINGS_SETUP',
-        'get_package_name',
-        'measure_context',
-        'monitor',
-        'setup_fire_logging',
-        'setup_logging',
-        'setup_metrics',
-        'setup_py_logging',
-        'setup_warnings',
-    }
-)
-_METRIC_STATIC_METHODS = frozenset({'setup_logging', 'setup_warnings'})
-_METRIC_CLASS_METHODS = frozenset(
-    {
-        'get_package_name',
-        'measure_context',
-        'monitor',
-        'setup_fire_logging',
-        'setup_metrics',
-        'setup_py_logging',
-    }
-)
-_METRIC_DATA_ATTRS = _METRIC_FACADE_ATTRS - _METRIC_STATIC_METHODS - _METRIC_CLASS_METHODS
-_METRIC_STATE_OVERRIDES: set[str] = set()
-_METRIC_STATE_LOCK = threading.RLock()
-_METRIC_PRIVATE_ATTRS = frozenset(
-    {
-        '_configure_cached_logger',
-        '_configure_fire',
-        '_editable_distribution_name',
-        '_export_python_logs',
-        '_fire_settings',
-        '_guard',
-        '_instrument',
-        '_instrument_app',
-        '_instrument_system_metrics',
-        '_measure',
-        '_resolve_fire_token',
-        '_resolve_log_level',
-        '_resolve_setup_package',
-        '_source_project_name',
-        '_try_fire_logging',
-        '_validate_fire_configuration',
-    }
-)
+#: Fully qualified name of the implementation submodule, loaded on first metric use.
 _METRIC_MODULE = f'{__name__}.MetricUtils'
 
 
@@ -120,24 +64,29 @@ def _metrics_extra_available() -> bool:
     return True
 
 
+#: Availability detected cold, before any caller override. Implementation registration
+#: adopts the implementation's own detected availability only while this value is untouched.
+_METRICS_SPEC_AVAILABLE = _metrics_extra_available()
+
+
 class _MetricUtilsMeta(type):
-    """Resolve private helpers and track public state without warming the facade."""
+    """Resolve private implementation helpers once the metrics stack is warm.
+
+    Public misses raise immediately, so a facade typo never becomes a metrics import
+    request. Private helpers only exist after the implementation module has loaded, so a
+    cold private probe also raises plainly instead of warming the optional stack.
+    """
 
     def __getattr__(cls, name: str) -> Any:
-        if name not in _METRIC_PRIVATE_ATTRS:
-            raise AttributeError(f'type {cls.__name__!r} has no attribute {name!r}')
-        descriptor = _load_metric_implementation().__dict__.get(name)
+        descriptor = None
+        if name.startswith('_') and not (name.startswith('__') and name.endswith('__')):
+            module = sys.modules.get(_METRIC_MODULE)
+            implementation = getattr(module, '_MetricUtilsImplementation', None)
+            if implementation is not None:
+                descriptor = vars(implementation).get(name)
         if descriptor is None:
             raise AttributeError(f'type {cls.__name__!r} has no attribute {name!r}')
         return descriptor.__get__(None, cls)
-
-    def __setattr__(cls, name: str, value: Any) -> None:
-        if name in _METRIC_DATA_ATTRS:
-            with _METRIC_STATE_LOCK:
-                _METRIC_STATE_OVERRIDES.add(name)
-                type.__setattr__(cls, name, value)
-            return
-        type.__setattr__(cls, name, value)
 
 
 class MetricUtils(_UtilsBase, metaclass=_MetricUtilsMeta):
@@ -149,7 +98,7 @@ class MetricUtils(_UtilsBase, metaclass=_MetricUtilsMeta):
         will be thrown.
     """
 
-    METRICS_INSTALLED: ClassVar[bool] = _metrics_extra_available()
+    METRICS_INSTALLED: ClassVar[bool] = _METRICS_SPEC_AVAILABLE
     WARNINGS_SETUP: ClassVar[bool] = False
     METRICS_SETUP: ClassVar[bool] = False
     LOGGERS: ClassVar[dict[str, lg.Logger]] = {}
@@ -413,45 +362,25 @@ class MetricUtils(_UtilsBase, metaclass=_MetricUtilsMeta):
 # package file that really defines it. Standard reflection can now resolve the cold source.
 MetricUtils.__qualname__ = 'MetricUtils.MetricUtils'
 
-_METRIC_CLASS = MetricUtils
 metric_utils = MetricUtils
 
 
 def _register_metric_implementation(metric_impl: type) -> type[MetricUtils]:
-    """Synchronize detected availability without publishing partial implementation state."""
-    with _METRIC_STATE_LOCK:
-        if 'METRICS_INSTALLED' not in _METRIC_STATE_OVERRIDES:
-            type.__setattr__(MetricUtils, 'METRICS_INSTALLED', metric_impl.METRICS_INSTALLED)
+    """Adopt the implementation's detected availability unless a caller overrode it cold."""
+    if MetricUtils.METRICS_INSTALLED == _METRICS_SPEC_AVAILABLE:
+        MetricUtils.METRICS_INSTALLED = metric_impl.METRICS_INSTALLED
     return MetricUtils
 
 
 def _load_metric_implementation() -> type:
-    """Import the implementation and restore package aliases importlib temporarily shadows."""
-    module = importlib.import_module(_METRIC_MODULE)
-    implementation = module._MetricUtilsImplementation
-    globals().update(MetricUtils=_METRIC_CLASS, metric_utils=_METRIC_CLASS)
-    return implementation
+    """Import the implementation module on first metric use."""
+    return importlib.import_module(_METRIC_MODULE)._MetricUtilsImplementation
 
 
 def _call_metric_method(name: str, owner: type, *args: Any, **kwargs: Any) -> Any:
     """Bind one implementation descriptor to the public class or requesting subclass."""
     descriptor = _load_metric_implementation().__dict__[name]
     return descriptor.__get__(None, owner)(*args, **kwargs)
-
-
-class _UtilsModule(ModuleType):
-    """Keep a direct submodule import from replacing the package's class facade."""
-
-    def __getattribute__(self, name: str) -> Any:
-        value = ModuleType.__getattribute__(self, name)
-        if name == 'MetricUtils' and isinstance(value, ModuleType):
-            namespace = ModuleType.__getattribute__(self, '__dict__')
-            namespace.update(MetricUtils=_METRIC_CLASS, metric_utils=_METRIC_CLASS)
-            return _METRIC_CLASS
-        return value
-
-
-sys.modules[__name__].__class__ = _UtilsModule
 
 
 class Utils(
@@ -499,3 +428,25 @@ __all__ = [
     'MetricUtils',
     'metric_utils',
 ]
+
+
+class _UtilsModule(ModuleType):
+    """Keep `my.utils.MetricUtils` naming the class, never the implementation module.
+
+    `importlib` binds every loaded submodule onto its parent package only after the
+    submodule finishes executing, so nothing the submodule itself does can preserve the
+    class binding: a direct `import my.utils.MetricUtils` would otherwise replace the
+    public class in this namespace and break the historical
+    `from my.utils import MetricUtils` contract. Refusing that one binding keeps the name
+    pinned to the class at all times -- no read can ever observe the module in its place.
+    """
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name == 'MetricUtils' and isinstance(value, ModuleType):
+            return
+        super().__setattr__(name, value)
+
+
+#: Installed last: the import lock keeps this package invisible to other threads until the
+#: module finishes executing, so the guard is in place before any submodule import can run.
+sys.modules[__name__].__class__ = _UtilsModule

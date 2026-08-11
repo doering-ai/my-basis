@@ -102,9 +102,39 @@ class TestLazyFacadeDefersLeaves:
         )
         assert proc.returncode == 0, proc.stderr
 
+    def test_infra_paths__rejects_mutation(self):
+        """The frozen model blocks the one path unvalidated data could enter through."""
+        proc = _probe(
+            """
+from pathlib import Path
+import pydantic as pyd
+from my.infra import INFRA_PATHS
+try:
+    INFRA_PATHS.my = Path("/tmp")
+except pyd.ValidationError:
+    pass
+else:
+    raise AssertionError("INFRA_PATHS accepted mutation")
+assert INFRA_PATHS.my != Path("/tmp")
+"""
+        )
+        assert proc.returncode == 0, proc.stderr
+
     def test_star_import_resolves_lazy_names(self):
         """`from my import *` still binds the lazy names (each triggers `__getattr__`)."""
         proc = _probe('from my import *; assert env is ENV; assert Markdown is not None')
+        assert proc.returncode == 0, proc.stderr
+
+    def test_pydantic_branches__wake_installed_logfire_plugin_on_import(self):
+        """The deferred branches define Pydantic models at import, waking installed plugins.
+
+        This is why `caches`/`typing`/`types`/`regex` stay lazy alongside the metrics
+        leaves: making them eager again would re-import Logfire at `import my` and break
+        this card's cold-start acceptance criterion.
+        """
+        proc = _probe(
+            "import sys; import my.caches; assert 'logfire.integrations.pydantic' in sys.modules"
+        )
         assert proc.returncode == 0, proc.stderr
 
 
@@ -135,6 +165,80 @@ class TestLazyFacadeDefersMetrics:
         proc = _probe(
             'import sys; from my import ut; '
             "assert not hasattr(ut, 'does_not_exist'); "
+            "assert 'my.utils.MetricUtils' not in sys.modules"
+        )
+        assert proc.returncode == 0, proc.stderr
+
+    def test_missing_attribute__stays_plain_error_when_metrics_warm(self):
+        """A typo after a direct implementation import is still a plain AttributeError."""
+        proc = _probe(
+            'from my import ut; '
+            'import my.utils.MetricUtils; '
+            "assert not hasattr(ut, 'does_not_exist'); "
+            "assert not hasattr(ut, '_does_not_exist')"
+        )
+        assert proc.returncode == 0, proc.stderr
+
+    def test_metric_dir__is_identical_cold_and_warm(self):
+        """`dir(ut)` advertises the same public surface before and after metrics activation."""
+        proc = _probe(
+            'from my import ut; '
+            'cold = [name for name in dir(ut) if not name.startswith("_")]; '
+            'assert "setup_logging" in cold; '
+            'assert all(hasattr(ut, name) for name in cold); '
+            'ut.get_package_name(); '
+            'assert [name for name in dir(ut) if not name.startswith("_")] == cold'
+        )
+        assert proc.returncode == 0, proc.stderr
+
+    def test_metric_classmethod__binds_the_requesting_class(self):
+        """Cold wrappers forward the exact class they were invoked on, as inheritance did."""
+        proc = _probe(
+            """
+import importlib
+import sys
+
+from my import ut
+
+package = importlib.import_module("my.utils")
+seen = []
+def spy(name, owner, *args, **kwargs):
+    seen.append((name, owner))
+    return "ok"
+package._call_metric_method = spy
+
+class CustomUtils(ut):
+    pass
+
+assert ut.setup_metrics.__self__ is ut
+assert CustomUtils.get_package_name() == "ok"
+assert seen[-1] == ("get_package_name", CustomUtils)
+assert ut.get_package_name() == "ok"
+assert seen[-1] == ("get_package_name", ut)
+assert "my.utils.MetricUtils" not in sys.modules
+"""
+        )
+        assert proc.returncode == 0, proc.stderr
+
+    def test_metric_private_helpers__resolve_only_after_activation(self):
+        """Cold private probes fail plainly without warming; warm ones resolve via the facade."""
+        proc = _probe(
+            """
+import sys
+from my import MetricUtils
+assert not hasattr(MetricUtils, "_guard")
+assert "my.utils.MetricUtils" not in sys.modules
+MetricUtils.get_package_name()
+assert MetricUtils._guard is not None
+"""
+        )
+        assert proc.returncode == 0, proc.stderr
+
+    def test_star_import__leaves_metrics_stack_cold(self):
+        """`from my import *` binds the cold metric facade without its optional dependencies."""
+        proc = _probe(
+            'from my import *; import sys; '
+            'assert MetricUtils is metric_utils; '
             "assert 'my.utils.MetricUtils' not in sys.modules"
         )
         assert proc.returncode == 0, proc.stderr
@@ -229,12 +333,9 @@ assert all(name in sys.modules for name in ('pandas', 'logfire', 'opentelemetry'
         """One cold class inventory reports the live base and every descriptor kind."""
         proc = _probe(
             """
-import importlib
 import inspect
 import sys
 from my import MetricUtils, Utils
-
-package = importlib.import_module("my.utils")
 
 assert "my.utils.MetricUtils" not in sys.modules
 assert MetricUtils in Utils.__mro__
@@ -242,14 +343,18 @@ attrs = {item.name: item for item in inspect.classify_class_attrs(Utils)}
 assert "my.utils.MetricUtils" not in sys.modules
 assert all(name not in sys.modules for name in ("pandas", "logfire", "opentelemetry"))
 
-for name in package._METRIC_FACADE_ATTRS:
+#: The cold class explicitly defines its full public surface -- no manifest to consult.
+metric_public = {name for name in vars(MetricUtils) if not name.startswith("_")}
+assert "setup_logging" in metric_public
+for name in metric_public:
     item = attrs[name]
     assert item.defining_class is MetricUtils
-    if name in package._METRIC_STATIC_METHODS:
+    descriptor = inspect.getattr_static(MetricUtils, name)
+    if isinstance(descriptor, staticmethod):
         assert item.kind == "static method"
         assert isinstance(item.object, staticmethod)
         assert item.object.__func__.__name__ == name
-    elif name in package._METRIC_CLASS_METHODS:
+    elif isinstance(descriptor, classmethod):
         assert item.kind == "class method"
         assert isinstance(item.object, classmethod)
         assert item.object.__func__.__name__ == name
@@ -376,140 +481,97 @@ assert ut.setup_warnings is MetricUtils.setup_warnings
         )
         assert proc.returncode == 0, proc.stderr
 
-    def test_metric_alias_cache__publishes_together_under_preemption(self):
-        """A forced pause during implementation load cannot split the two class aliases."""
+    def test_metric_alias__never_exposes_module_under_concurrent_loads(self):
+        """No interleaving of direct and facade-triggered loads can expose the submodule."""
         proc = _probe(
             """
+from concurrent.futures import ThreadPoolExecutor
 import importlib
-import inspect
-import sys
 import threading
-from types import ModuleType
+import time
 
 package = importlib.import_module("my.utils")
 metric_cls = package.MetricUtils
-load = package._load_metric_implementation
-source, first_line = inspect.getsourcelines(load)
-publish_line = first_line + next(
-    index for index, line in enumerate(source) if "globals().update" in line
-)
-paused = threading.Event()
-resume = threading.Event()
-result = []
-errors = []
+stop = threading.Event()
+violations = []
 
-def trace(frame, event, arg):
-    if frame.f_code is load.__code__ and event == "line" and frame.f_lineno == publish_line:
-        paused.set()
-        if not resume.wait(5):
-            raise TimeoutError("preemption release timed out")
-    return trace
+def watch():
+    while not stop.is_set():
+        if package.__dict__["MetricUtils"] is not metric_cls:
+            violations.append(package.__dict__["MetricUtils"])
+        time.sleep(0.001)
 
-def worker():
-    sys.settrace(trace)
-    try:
-        result.append(metric_cls.get_package_name())
-    except BaseException as exc:
-        errors.append(exc)
-    finally:
-        sys.settrace(None)
+def hammer(index):
+    if index % 2:
+        importlib.import_module("my.utils.MetricUtils")
+    else:
+        metric_cls.get_package_name()
 
-thread = threading.Thread(target=worker)
-thread.start()
-assert paused.wait(5)
-assert isinstance(package.__dict__.get("MetricUtils"), ModuleType)
-assert package.__dict__["metric_utils"] is metric_cls
-assert package.MetricUtils is metric_cls
+watcher = threading.Thread(target=watch)
+watcher.start()
+try:
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(hammer, range(32)))
+finally:
+    stop.set()
+    watcher.join(5)
+
+assert not violations, violations
 assert package.__dict__["MetricUtils"] is metric_cls
 assert package.__dict__["metric_utils"] is metric_cls
-resume.set()
-thread.join(5)
-assert not thread.is_alive()
-assert not errors, errors
-assert result == ["my-basis"]
+from my.utils import MetricUtils as via_package
+assert via_package is metric_cls
 """
         )
         assert proc.returncode == 0, proc.stderr
 
-    def test_metric_first_call__recovers_after_interrupted_registration(self):
-        """A caught first-load interruption cannot retain helpers from a discarded module."""
+    def test_metric_first_call__recovers_after_interrupted_load(self):
+        """A failed first implementation import leaves no residue; the retry fully succeeds."""
         proc = _probe(
             """
-import importlib
-import inspect
+import importlib.abc
+import importlib.util
 import sys
 
-package = importlib.import_module("my.utils")
-metric_cls = package.MetricUtils
-register = package._register_metric_implementation
-source, first_line = inspect.getsourcelines(register)
-interrupt_line = first_line + next(
-    index for index, line in enumerate(source) if "return MetricUtils" in line
-)
+from my import MetricUtils
 
-def trace(frame, event, arg):
-    if frame.f_code is register.__code__ and event == "line" and frame.f_lineno == interrupt_line:
-        raise KeyboardInterrupt
-    return trace
+class KillFirstLoad(importlib.abc.MetaPathFinder):
+    done = False
 
-sys.settrace(trace)
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname != "my.utils.MetricUtils" or self.done:
+            return None
+        self.done = True
+        sys.meta_path.remove(self)
+        try:
+            spec = importlib.util.find_spec(fullname)
+        finally:
+            sys.meta_path.insert(0, self)
+        def interrupt(module):
+            raise KeyboardInterrupt("simulated mid-load interruption")
+        spec.loader.exec_module = interrupt
+        return spec
+
+sys.meta_path.insert(0, KillFirstLoad())
 try:
-    metric_cls.get_package_name()
+    MetricUtils.get_package_name()
 except KeyboardInterrupt:
     pass
 else:
-    raise AssertionError("registration was not interrupted")
-finally:
-    sys.settrace(None)
+    raise AssertionError("first load was not interrupted")
 
 assert "my.utils.MetricUtils" not in sys.modules
-assert metric_cls.get_package_name() == "my-basis"
+assert MetricUtils.get_package_name() == "my-basis"
 counter = {}
-with metric_cls.measure_context("step", counter):
+with MetricUtils.measure_context("step", counter):
     pass
 assert counter["step"] > 0
 """
         )
         assert proc.returncode == 0, proc.stderr
 
-    def test_metric_manifest__matches_concrete_public_surface(self):
-        """A new public MetricUtils member requires an explicit lazy-facade decision."""
-        proc = _probe(
-            """
-import importlib
-import inspect
-package = importlib.import_module("my.utils")
-metric_cls = package.MetricUtils
-eager_bases = (
-    package.IterUtils,
-    package.TextUtils,
-    package.SystemUtils,
-    package.SemanticUtils,
-    package.SyntaxUtils,
-)
-eager_public = {
-    name for base in eager_bases for name in dir(base) if not name.startswith("_")
-}
-metric_only_public = {
-    name for name in dir(metric_cls) if not name.startswith("_")
-} - eager_public
-assert package._METRIC_FACADE_ATTRS == metric_only_public
-assert package._METRIC_STATIC_METHODS == {
-    name
-    for name in metric_only_public
-    if isinstance(inspect.getattr_static(metric_cls, name), staticmethod)
-}
-assert package._METRIC_CLASS_METHODS == {
-    name
-    for name in metric_only_public
-    if isinstance(inspect.getattr_static(metric_cls, name), classmethod)
-}
-"""
-        )
-        assert proc.returncode == 0, proc.stderr
-
-    def test_metric_wrapper_manifest__matches_implementation_signatures(self):
-        """Every cold wrapper retains the exact concrete descriptor kind and call signature."""
+    def test_metric_cold_surface__mirrors_implementation(self):
+        """The cold class exposes the implementation's exact public names, kinds, and signatures."""
         proc = _probe(
             """
 import importlib
@@ -519,19 +581,27 @@ package = importlib.import_module("my.utils")
 metric_cls = package.MetricUtils
 module = importlib.import_module("my.utils.MetricUtils")
 implementation = module._MetricUtilsImplementation
-implementation_private = {
-    name
-    for name in implementation.__dict__
-    if name.startswith("_") and not (name.startswith("__") and name.endswith("__"))
-}
-assert package._METRIC_PRIVATE_ATTRS == implementation_private
 
-for name in package._METRIC_STATIC_METHODS | package._METRIC_CLASS_METHODS:
+cold_public = {name for name in vars(metric_cls) if not name.startswith("_")}
+impl_public = {name for name in vars(implementation) if not name.startswith("_")}
+assert cold_public == impl_public
+
+for name in cold_public:
     public = inspect.getattr_static(metric_cls, name)
     concrete = inspect.getattr_static(implementation, name)
-    assert type(public) is type(concrete)
-    assert public.__func__.__name__ == concrete.__func__.__name__ == name
-    assert inspect.signature(public.__func__) == inspect.signature(concrete.__func__)
+    assert type(public) is type(concrete), name
+    if isinstance(public, (staticmethod, classmethod)):
+        assert public.__func__.__name__ == concrete.__func__.__name__ == name
+        assert inspect.signature(public.__func__) == inspect.signature(concrete.__func__), name
+
+impl_private = {
+    name
+    for name in vars(implementation)
+    if name.startswith("_") and not (name.startswith("__") and name.endswith("__"))
+}
+assert impl_private
+for name in impl_private:
+    assert getattr(metric_cls, name) is not None, name
 """
         )
         assert proc.returncode == 0, proc.stderr

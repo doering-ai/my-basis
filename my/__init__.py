@@ -92,6 +92,13 @@ from .utils import (
 # otherwise-eager `utils` package. This keeps every `import my` that only needs utility
 # functions from constructing Pydantic models or initializing installed plugins.
 #
+# The `caches`/`typing`/`types`/`regex` branches are part of the same boundary, not a
+# separate optimization: each defines Pydantic models at import time, and Pydantic's
+# plugin discovery imports an installed Logfire plugin at the first model definition
+# (verified by `test_pydantic_branches__wake_installed_logfire_plugin_on_import`).
+# Making them eager again would re-import Logfire at `import my` and break LIBS-28's
+# cold-start acceptance criterion.
+#
 # Honest limits (do not "fix" by making these eager again): `from my import env`
 # still pays the full `apis` import cost at *that* import, and `from my import *`
 # or `hasattr(my, 'env')` force every lazy name to load. The win is for the many

@@ -4,6 +4,8 @@
 ### STANDARD
 from __future__ import annotations
 import ast
+import keyword
+import sys
 import textwrap
 import tomllib
 import argparse as ap
@@ -34,6 +36,88 @@ maxdepth: 2
 ############
 ### BODY ###
 ############
+def _validate_package_name(package: str) -> str:
+    """Require one Python import name rather than a filesystem path."""
+    if package.isidentifier() and not keyword.iskeyword(package):
+        return package
+    raise ValueError(f'Package {package!r} must be a single Python import name, not a path.')
+
+
+def _validate_package_source(root: Path, package: str) -> None:
+    """Require every package initializer to resolve within the selected source tree."""
+    project_root = root.resolve()
+    package_root = root / package
+    resolved_package_root = package_root.resolve()
+    if not resolved_package_root.is_relative_to(project_root):
+        raise ValueError(
+            f'Package {package!r} resolves outside project root {project_root}: '
+            f'{resolved_package_root}.'
+        )
+
+    for init_path in package_root.rglob('__init__.py'):
+        resolved_init = init_path.resolve()
+        if not resolved_init.is_relative_to(resolved_package_root):
+            raise ValueError(
+                f'Package source {init_path} resolves outside package root '
+                f'{resolved_package_root}: {resolved_init}.'
+            )
+
+
+def _discover_package(root: Path) -> str:
+    """Resolve the docs source package from pyproject.toml, or legacy `my`."""
+    pyproject = root / 'pyproject.toml'
+    if pyproject.exists():
+        meta = tomllib.loads(pyproject.read_text())
+        tool = meta.get('tool', dict())
+        if not isinstance(tool, dict):
+            raise ValueError('pyproject.toml `[tool]` must be a table.')
+        uv = tool.get('uv', dict())
+        if not isinstance(uv, dict):
+            raise ValueError('pyproject.toml `[tool.uv]` must be a table.')
+        build_backend = uv.get('build-backend', dict())
+        if not isinstance(build_backend, dict):
+            raise ValueError('pyproject.toml `[tool.uv.build-backend]` must be a table.')
+
+        if 'module-name' in build_backend:
+            name = build_backend['module-name']
+            if isinstance(name, list):
+                if len(name) > 1:
+                    raise ValueError(
+                        'pyproject.toml declares multiple packages in '
+                        '`[tool.uv.build-backend].module-name`; pass `--package` explicitly.'
+                    )
+                name = next(iter(name), '')
+            if not isinstance(name, str):
+                raise ValueError(
+                    'pyproject.toml `[tool.uv.build-backend].module-name` must be a string '
+                    'or one-item list of strings.'
+                )
+            if name:
+                return _validate_package_name(name)
+    if (root / 'my' / '__init__.py').is_file():
+        return 'my'
+    raise ValueError(f'Could not discover a package under {root}; pass `--package` explicitly.')
+
+
+def _resolve_package_name(root: Path, explicit_package: str | None) -> str:
+    """Resolve and validate the package import name before constructing the worker."""
+    package = (
+        _discover_package(root)
+        if explicit_package is None
+        else _validate_package_name(explicit_package)
+    )
+    init_path = root / package / '__init__.py'
+    if init_path.is_file():
+        _validate_package_source(root, package)
+        return package
+    if explicit_package is not None:
+        raise ValueError(f'`--package {package}` has no package `__init__.py` at {init_path}.')
+    raise ValueError(
+        f'pyproject.toml `module-name` package {package!r} has no `__init__.py` at '
+        f'{init_path}; fix the setting or pass `--package` explicitly.'
+    )
+
+
 class Tool(pyd.BaseModel):
     """Update docs/X.md intro sections from <package>/X/__init__.py module docstrings.
 
@@ -76,30 +160,12 @@ class Tool(pyd.BaseModel):
         Discovery reads `[tool.uv.build-backend] module-name` (the fleet-standard uv build
         config), falling back to the legacy `my` package when `<root>/my/__init__.py` exists.
         """
-        if not self.package:
-            self.package = self.discover_package()
+        self.package = _resolve_package_name(self.root, self.package or None)
         return self
 
     def discover_package(self) -> str:
         """Resolve the docs source package from pyproject.toml, or legacy `my`."""
-        pyproject = self.root / 'pyproject.toml'
-        if pyproject.exists():
-            meta = tomllib.loads(pyproject.read_text())
-            name = (
-                meta.get('tool', dict())
-                .get('uv', dict())
-                .get('build-backend', dict())
-                .get('module-name')
-            )
-            if isinstance(name, list):
-                name = next(iter(name), '')
-            if name:
-                return name
-        if (self.root / 'my' / '__init__.py').is_file():
-            return 'my'
-        raise ValueError(
-            f'Could not discover a package under {self.root}; pass `--package` explicitly.'
-        )
+        return _discover_package(self.root)
 
     def get_docstring(self, init_path: Path) -> str | None:
         """Extract the module docstring from an __init__.py without importing it."""
@@ -220,7 +286,7 @@ def _parse_args(*vargs: str) -> ap.Namespace:
         'root',
         type=Path,
         nargs='?',
-        default=PATHS.seek_project(),
+        default=None,
         help='The directory containing a local python project.',
     )
     parser.add_argument(
@@ -233,7 +299,7 @@ def _parse_args(*vargs: str) -> ap.Namespace:
     parser.add_argument(
         '-p',
         '--package',
-        default='',
+        default=None,
         help='The import package to document (default: discover from pyproject.toml).',
     )
 
@@ -244,7 +310,16 @@ def main(*vargs: str) -> None:
     """Sync docs/X.md intro sections from <package>/X/__init__.py module docstrings."""
     args = _parse_args(*vargs)
 
-    tool = Tool(**vars(args))
+    try:
+        root = args.root if args.root is not None else PATHS.seek_project()
+        if root is None:
+            raise ValueError('Could not discover a project root; pass ROOT explicitly.')
+        package = _resolve_package_name(root, args.package)
+    except (OSError, ValueError, tomllib.TOMLDecodeError) as error:
+        print(f'sync-docs: error: {error}', file=sys.stderr)
+        raise SystemExit(2) from None
+
+    tool = Tool(root=root, dry=args.dry, package=package)
 
     changed = 0
     for file in tool.find_source_files():

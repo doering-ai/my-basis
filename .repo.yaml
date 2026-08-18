@@ -7,6 +7,7 @@ caption: An extensive utility library for python, focusing especially on iterabl
 cicd: true
 current: private
 deps: []
+has_logo: true
 host: gitlab.com
 host_group: doering-ai
 host_path: libs/basis

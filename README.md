@@ -1,6 +1,6 @@
-![logo](assets/logo_512.png)
-
 # myBasis: _Ergonomic Python Utilities_
+
+![logo](assets/logo_512.png)
 
 ![Pipeline Status](https://img.shields.io/gitlab/pipeline-status/doering-ai/libs/basis?branch=main) ![Test Coverage](https://img.shields.io/gitlab/pipeline-coverage/doering-ai/libs/basis?branch=main) [![License](https://img.shields.io/gitlab/license/doering-ai/libs/basis)](/LICENSE)
 

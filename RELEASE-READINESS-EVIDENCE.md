@@ -18,7 +18,7 @@ ______________________________________________________________________
 
 ## A. Measured tables (the irreplaceable empirical artifacts)
 
-### A.1 IMPORT COST & CLOSURE SIZE
+### A.1 Import cost & closure size
 
 | Bookend                                       | Distributions | site-packages | `import my` wall (perf_counter ×3) | `-X importtime` cumulative |
 | --------------------------------------------- | ------------- | ------------- | ---------------------------------- | -------------------------- |
@@ -32,7 +32,7 @@ ______________________________________________________________________
 - **README "32 dependencies / ~250 MB" — refuted at both ends** (25/83 core, 91/295 all-extras).
   `[V]`
 
-### A.2 PER-CORE-DEPENDENCY NECESSITY (14 DECLARED)
+### A.2 Per-core-dependency necessity (14 declared)
 
 | Dep             | Sites in `my/`                    | Verdict               | Note                                                                                                |
 | --------------- | --------------------------------- | --------------------- | --------------------------------------------------------------------------------------------------- |
@@ -67,7 +67,7 @@ ______________________________________________________________________
 
 Category totals: **extra 212.3 MB · dev 84.6 MB · core 83.0 MB.**
 
-### A.4 REGEXSTORE TIMEOUT-COVERAGE (CHANGELOG 0.8.3 CLAIM: "ENFORCE TIMEOUTS ACROSS REGEXSTORE MATCHERS")
+### A.4 RegexStore timeout-coverage (CHANGELOG 0.8.3 claim: "enforce timeouts across RegexStore matchers")
 
 **True for the store's own public matchers; bypassed by its own public raw-pattern accessors.** `[S]`
 
@@ -84,7 +84,7 @@ Category totals: **extra 212.3 MB · dev 84.6 MB · core 83.0 MB.**
 
 Outside `RegexStore`/`Buffer` there is **no `REGEX_TIMEOUT` concept at all** — it's a store-only mechanism, not package-wide.
 
-### A.5 FACADE USAGE ACROSS 11 ECOSYSTEM CONSUMERS (BLAST-RADIUS SURVEY)
+### A.5 Facade usage across 11 ecosystem consumers (blast-radius survey)
 
 - **Only 27 of the facade's 90 `__all__` names are imported anywhere; 63 are dead facade weight.** `[S]`
 - Top symbols: `ut` (140), `Uid` (106), `typist` (78), `env` (52), `RegexStore` (48), `Buffer` (41), `UniqueId` (24), `Span` (22), `MyEnum`/`MatchData` (18), `FileCache` (17).
@@ -93,7 +93,7 @@ Outside `RegexStore`/`Buffer` there is **no `REGEX_TIMEOUT` concept at all** —
 - **Latent bug surfaced:** `corpus` and `arch` call `GoogleSheet()` **without** the `google` extra — silently running against `MagicMock` (sync path is a no-op today).
   Hardening the extras error would surface this loudly.
 
-### A.6 EXTRAS INSTALL SIZES (FRESH VENV PER EXTRA, MEASURED PRE-IMPORT)
+### A.6 Extras install sizes (fresh venv per extra, measured pre-import)
 
 | Install      | site-packages | Δ vs bare | Effect                                                                        |
 | ------------ | ------------- | --------- | ----------------------------------------------------------------------------- |
@@ -220,7 +220,7 @@ raise ImportError(f'`utils.{name}()` requires the optional `[metrics]` dependenc
 
 Wrong extra (`[google]`), nonsensical `utils.` prefix; no source of truth anywhere names `[google]`.
 
-### D8 — MDFORMAT/MYST SPLIT CORRUPTS FRONTMATTER `[V]`
+### D8 — mdformat/myst split corrupts frontmatter `[V]`
 
 ```text
 mdformat.text(src)                                   -> frontmatter mangled into a heading/rule
@@ -230,7 +230,7 @@ mdformat.text(src, extensions={'front_matters','myst'}) -> round-trips intact
 `Markdown.py:689` calls `mdformat.text(body)` with no `extensions=`; the plugin lives in the `[myst]` extra, not core.
 Core-only `Markdown.render(fix=True)` (the default) silently corrupts.
 
-### B6/B7 — README CONTRADICTS REALITY `[V]`
+### B6/B7 — README contradicts reality `[V]`
 
 PyPI JSON API: `my-basis` 0.8.1/0.8.2/0.8.3 all live — README says "not yet published".
 Quickstart `ty.cast('a,b,c', list[str])` → `['a,b,c']` (not `['a','b','c']`; deliberate MEMY-325 change).

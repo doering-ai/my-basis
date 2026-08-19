@@ -1,6 +1,6 @@
 # Typing
 
-### TYPING HIERARCHY
+### Typing hierarchy
 
 ```yaml
 Atom: [Scalar, String, Time, Enum]
@@ -16,7 +16,7 @@ Struct: [Vec, Map, Iterable, AsyncIterable, Model]
 Func: [FunctionType, BuiltinFunctionType, Callable]
 ```
 
-### ARCHITECTURE
+### Architecture
 
 Strip away the line count and the subsystem is four ideas:
 
@@ -37,7 +37,7 @@ Strip away the line count and the subsystem is four ideas:
 - **`Transform`** (`cast.py`) — an ephemeral object holding `(data, t0, t1)` that the
   registered functions act on. One is built per `cast()` call.
 
-### DESIGN PRINCIPLE: PYDANTIC AT BOUNDARIES, PLAIN CLASSES ON HOT PATHS
+### Design principle: pydantic at boundaries, plain classes on hot paths
 
 Almost everything in this package is a `pydantic.BaseModel`, and that is usually correct — pydantic earns its keep wherever data is **validated, coerced, or serialized at a boundary** (`MyType`, `Command`, `Idx`, `Buffer`, `Markdown`, the caches, and the like all use validators/serializers and stay models).
 
@@ -48,7 +48,7 @@ So it is a **plain class**: fields assigned directly in `__init__`, with a `ty` 
 
 The rule of thumb, then: **`BaseModel` for data at a boundary; a plain class (or `pydantic.dataclasses.dataclass` when you want validation without the model machinery) for objects that exist only to carry state through a hot loop.** Note the same principle keeps the *singleton* chambers as models — they are constructed once at import, so validation is a startup cost, not a per-operation one.
 
-### CONFIGURING CASTS
+### Configuring casts
 
 Coercion is the only chamber with behavioral knobs today (`check` and `match` have none).
 The flags live on the `Typist` instance and gate the "loose" conversions:

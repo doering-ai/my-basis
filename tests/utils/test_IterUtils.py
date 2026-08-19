@@ -21,7 +21,7 @@ cls = IterUtils
 ############
 class TestIterUtils:
     # ----------------
-    # `0` CONSTRUCTION
+    # `0` Construction
     # ----------------
     @pyt.mark.parametrize(
         'initial, funcs, expected',
@@ -93,7 +93,7 @@ class TestIterUtils:
         assert dict(result) == expected
 
     # -------------
-    # `1` SELECTION
+    # `1` Selection
     # -------------
     @pyt.mark.parametrize(
         'container, predicate, expected',
@@ -210,7 +210,7 @@ class TestIterUtils:
             cls.get_first({'a': 1, 'b': 2}, 'a', 'b', unique=True)
 
     # ---------------
-    # `2` APPLICATION
+    # `2` Application
     # ---------------
     @pyt.mark.parametrize(
         'func, data, expected',
@@ -261,7 +261,7 @@ class TestIterUtils:
         assert list(cls.apply(funcs, item)) == expected
 
     # -------------
-    # `3` EXECUTION
+    # `3` Execution
     # -------------
     def test_repeat_until_complete(self):
         # Create a simple function that removes one 'x' per call
@@ -282,7 +282,7 @@ class TestIterUtils:
         assert result == 'hello'
 
     # ------------
-    # `4` PRESENCE
+    # `4` Presence
     # ------------
     @pyt.mark.parametrize(
         'expected, data, target',
@@ -333,7 +333,7 @@ class TestIterUtils:
         assert cls.has_none(data, target) == bool(expected)
 
     # --------------
-    # `5` COMPARISON
+    # `5` Comparison
     # --------------
     @pyt.mark.parametrize(
         'data, expected',
@@ -381,7 +381,7 @@ class TestIterUtils:
             assert sorted(result) == sorted(expected)
 
     # ----------------
-    # `6` MODIFICATION
+    # `6` Modification
     # ----------------
     @pyt.mark.parametrize(
         'data, mask, expected',

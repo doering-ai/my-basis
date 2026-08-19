@@ -50,13 +50,13 @@ def union_fn(x: object) -> int | str:
 #: The core `check` matrix -- the de-facto spec, exercised through both check surfaces.
 CHECK_CASES = boolmap(
     false=[
-        # ---- Type mismatches ----
+        # ---- Type Mismatches ----
         (1, str),
         ('abc', int),
         (1.5, bool),
         ([1, 2], dict),
         ({'a': 1}, list),
-        # ---- Container element mismatches ----
+        # ---- Container Element Mismatches ----
         ([1, 2, 3], list[str]),
         (['a', 'b', 1], list[str]),
         ({'a': 1}, dict[str, str]),
@@ -64,30 +64,30 @@ CHECK_CASES = boolmap(
         ({1: 'a'}, dict[str, str]),
         (Counter(b=2), Mapping[str, str]),
         ({1, 2, 3}, set[str]),
-        # ---- Nested mismatches ----
+        # ---- Nested Mismatches ----
         ([[1, 2], ['a', 'b']], list[list[int]]),
         ([{'a': 1}, {'b': 'c'}], list[dict[str, int]]),
-        # ---- Literal mismatches ----
+        # ---- Literal Mismatches ----
         ('three', Literal['one', 'two']),
         (3, Literal[1, 2]),
-        # ---- Tuple literal mismatches ----
+        # ---- Tuple Literal Mismatches ----
         ((1, 'a', 3.0), tuple[int, str]),
         ((1, 2), tuple[int, str]),
         ((1,), tuple[int, int]),
-        # ---- None checks ----
+        # ---- None Checks ----
         (None, str),
         (None, list),
         (None, list[str]),
         (5, NoneType),
     ],
     true=[
-        # ---- Basic types ----
+        # ---- Basic Types ----
         ('abc', str),
         (123, int),
         (3.14, float),
         (b'bytes', bytes),
         (True, bool),
-        # ---- Any and object (always-true wildcards) ----
+        # ---- Any And Object (Always-True Wildcards) ----
         ('anything', Any),
         ('anything', object),
         (123, Any),
@@ -117,17 +117,17 @@ CHECK_CASES = boolmap(
         ([1, 2], Container[int]),
         ({'a': 1}, Container[str]),
         ({1, 2, 3}, Container[int]),
-        # ---- Nested structures ----
+        # ---- Nested Structures ----
         ([[1, 2], [3, 4]], list[list[int]]),
         ([{'a': 1}, {'b': 2}], list[dict[str, int]]),
         ({'x': [1, 2], 'y': [3, 4]}, dict[str, list[int]]),
-        # ---- Literal matches ----
+        # ---- Literal Matches ----
         ('one', Literal['one', 'two']),
         (2, Literal[1, 2]),
         # ---- Deque ----
         (deque([1, 2, 3]), deque),
         (deque([1, 2, 3]), deque[int]),
-        # ---- Special-form sentinels ----
+        # ---- Special-Form Sentinels ----
         (Ellipsis, EllipsisType),
         (None, NoneType),
     ],
@@ -140,9 +140,9 @@ CHECK_CASES = boolmap(
 class TestCheck:
     """Test suite for the `check` chamber: the `TypeCheck` (`tyc`) qualify layer."""
 
-    # ------------------
+    # -------------------
     # `*` Primary Methods
-    # ------------------
+    # -------------------
     @pyt.mark.parametrize('data, tvar, expected', CHECK_CASES, ids=type_ids(CHECK_CASES))
     def test_check(self, data, tvar: type, expected: bool):
         """Test `tyc.check` directly against the data/type matrix."""
@@ -346,9 +346,9 @@ class TestCheck:
         assert set(params) == {'x'}
         assert len(returns) == 2
 
-    # -----------------
+    # ------------------
     # `*` Facade Methods
-    # -----------------
+    # ------------------
     @pyt.mark.parametrize(
         'data, tvar, expected',
         boolmap(

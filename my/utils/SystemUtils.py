@@ -31,7 +31,7 @@ import tomli_w
 import pydantic as pyd
 import more_itertools as mi
 
-### INTERNAL (NOTE: If adding new internal imports, update the comments in `__init__.py`)
+### INTERNAL (NOTE: IF ADDING NEW INTERNAL IMPORTS, UPDATE THE COMMENTS IN `__INIT__.PY`)
 # Local imports
 from ..infra.constants import NOWHERE
 from ..infra.types import (
@@ -75,9 +75,9 @@ class SystemUtils(_UtilsBase):
     YAML_CONFIG: ClassVar[CustomYaml] = CustomYaml()
     LOGGER: ClassVar[logging.Logger] = logger
 
-    ### Regular Expressions (can't use RegexStore because it depends on this class)
+    ### REGULAR EXPRESSIONS (CAN'T USE REGEXSTORE BECAUSE IT DEPENDS ON THIS CLASS)
     RGXS: ClassVar[dict[str, re.Pattern]] = text_utils.regex_dict(
-        ### Filetypes
+        ### FILETYPES
         filetype=_branch(
             r'(?P<json>jso?n[\dc]|(?:geo|topo|nd)?json)',
             r'(?P<yaml>ya?ml)',
@@ -98,7 +98,7 @@ class SystemUtils(_UtilsBase):
     )
 
     # ---------------
-    # `0` DATE & TIME
+    # `0` Date & Time
     # ---------------
     @classmethod
     def posix(cls, val: int | float | datetime | None = None) -> datetime:
@@ -148,7 +148,7 @@ class SystemUtils(_UtilsBase):
             return cls.posix() - cls.posix(val)
 
     # --------------
-    # `1` FILESYSTEM
+    # `1` Filesystem
     # --------------
     @classmethod
     def validate_dir(cls, *paths: pyd.DirectoryPath) -> bool:
@@ -223,7 +223,7 @@ class SystemUtils(_UtilsBase):
             return path
 
     # ------------
-    # `2` TERMINAL
+    # `2` Terminal
     # ------------
     @classmethod
     def get_terminal_width(cls) -> int:
@@ -645,7 +645,7 @@ class SystemUtils(_UtilsBase):
         cls.log(args, _level=logging.WARN, **kwargs)
 
     # ------------
-    # `3` FILE I/O
+    # `3` File I/O
     # ------------
     @overload
     @classmethod

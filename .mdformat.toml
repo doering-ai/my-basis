@@ -22,7 +22,7 @@ validate = true # false|true
 #     "json",
 # ]
 
-# ---- Python 3.13+ only ----
+# ---- Python 3.13+ Only ----
 #: options: a list of file path pattern strings
 exclude = [
     "**/syntax_test_*",

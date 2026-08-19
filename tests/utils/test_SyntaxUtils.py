@@ -66,7 +66,7 @@ class CachedPropsClass:
 ############
 class TestSyntaxUtils:
     # -----------------
-    # `0` NORMALIZATION
+    # `0` Normalization
     # -----------------
     def test_regex_default_version(self):
         """Test that package initialization selects regex version 1 exactly once."""
@@ -115,7 +115,7 @@ class TestSyntaxUtils:
         assert cls.tree_size(tree) == expected
 
     # --------------
-    # `1` ANNOTATION
+    # `1` Annotation
     # --------------
     def test_pyd_schemify(self):
         # Test with regex Pattern
@@ -153,7 +153,7 @@ class TestSyntaxUtils:
         assert m.match == match
 
     # --------------
-    # `2` REFLECTION
+    # `2` Reflection
     # --------------
     @pyt.mark.parametrize(
         'model_cls, expected',
@@ -239,7 +239,7 @@ class TestSyntaxUtils:
         assert module.__name__ == expected_module
 
     # -----------
-    # `3` CACHING
+    # `3` Caching
     # -----------
     @pyt.mark.parametrize(
         'props_to_clear, expected_cleared',

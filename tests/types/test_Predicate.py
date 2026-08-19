@@ -381,9 +381,9 @@ class TestPredicate:
         assert data.keys() == keys
         assert data.values() == values
 
-    # -------------
+    # ------------------
     # `*3` Serialization
-    # -------------
+    # ------------------
 
     @pyt.mark.parametrize(
         'value, expected',

@@ -77,9 +77,9 @@ suppress_warnings = [
     'ref.python',
 ]
 
-# ------------
+# -----------
 # Intersphinx
-# ------------
+# -----------
 # Resolve cross-references to stdlib/third-party types in autodoc signatures (pathlib.Path,
 # datetime, collections.abc, pydantic, numpy, ...). Without these the nitpicky (`-n -W`) build
 # fails: every external type in a docstring signature becomes an unresolved "target not found".
@@ -227,7 +227,7 @@ myst_enable_extensions = [
 ]
 
 # ----
-# HTML
+# Html
 # ----
 # html_theme = 'sphinx_rtd_theme' # The standard ReadTheDocs theme.
 html_theme = 'furo'  # copied from https://more-itertools.readthedocs.io/en/stable/

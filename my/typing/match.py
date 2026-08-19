@@ -233,7 +233,7 @@ class TypeMatch(_TypingBase):
         TypeMatch.MATCH_CACHE[cache_key] = ret
         return ret
 
-    # ---- STREAM ----
+    # ---- Stream ----
     @overload
     @classmethod
     def is_stream_type(cls, tvar: MyType) -> TypeIs[MyType[Stream]]: ...
@@ -245,7 +245,7 @@ class TypeMatch(_TypingBase):
         """Determine if the given type is a Stream type."""
         return bool(main := MyType.new(tvar).main) and issubclass(main, Stream)
 
-    # ---- STRING ----
+    # ---- String ----
     @overload
     @classmethod
     def is_string_type(cls, tvar: MyType) -> TypeIs[MyType[String]]: ...
@@ -257,7 +257,7 @@ class TypeMatch(_TypingBase):
         """Determine if the given type is a String type."""
         return bool(main := MyType.new(tvar).main) and issubclass(main, String)
 
-    # ---- SCALAR ----
+    # ---- Scalar ----
     @overload
     @classmethod
     def is_scalar_type(cls, tvar: MyType) -> TypeIs[MyType[Scalar]]: ...
@@ -269,7 +269,7 @@ class TypeMatch(_TypingBase):
         """Determine if the given type is a Scalar type."""
         return bool(main := MyType.new(tvar).main) and issubclass(main, Scalar)
 
-    # ---- TIME ----
+    # ---- Time ----
     @overload
     @classmethod
     def is_time_type(cls, tvar: MyType) -> TypeIs[MyType[Time]]: ...
@@ -281,7 +281,7 @@ class TypeMatch(_TypingBase):
         """Determine if the given type is a Time type."""
         return bool(main := MyType.new(tvar).main) and issubclass(main, Time)
 
-    # ---- ATOM ----
+    # ---- Atom ----
     @overload
     @classmethod
     def is_atom_type(cls, tvar: MyType) -> TypeIs[MyType[Atom]]: ...
@@ -299,7 +299,7 @@ class TypeMatch(_TypingBase):
             or issubclass(tvar.main, Enum)
         )
 
-    # ---- VEC ----
+    # ---- Vec ----
     @overload
     @classmethod
     def is_vec_type(cls, tvar: MyType) -> TypeIs[MyType[Vec]]: ...
@@ -311,7 +311,7 @@ class TypeMatch(_TypingBase):
         """Determine if the given type is a Vec type."""
         return bool(main := MyType.new(tvar).main) and issubclass(main, Vec)
 
-    # ---- MAP ----
+    # ---- Map ----
     @overload
     @classmethod
     def is_map_type(cls, tvar: MyType) -> TypeIs[MyType[Mapping | ItemsView]]: ...
@@ -341,7 +341,7 @@ class TypeMatch(_TypingBase):
                 return True
         return False
 
-    # ---- ITER ----
+    # ---- Iter ----
     @overload
     @classmethod
     def is_iter_type(cls, tvar: MyType) -> TypeIs[MyType[Iter]]: ...
@@ -357,7 +357,7 @@ class TypeMatch(_TypingBase):
             and not (cls.is_string_type(main) or cls.is_vec_type(main) or cls.is_map_type(main))
         )
 
-    # ---- STRUCT ----
+    # ---- Struct ----
     @overload
     @classmethod
     def is_struct_type(cls, tvar: MyType) -> TypeIs[MyType[Vec | Mapping | ItemsView | Model]]: ...
@@ -372,7 +372,7 @@ class TypeMatch(_TypingBase):
             issubclass(main, Iterable) or cls.is_model_type(tvar)
         )
 
-    # ---- FUNC ----
+    # ---- Func ----
     @overload
     @classmethod
     def is_func_type(cls, tvar: MyType) -> TypeIs[MyType[Func]]: ...
@@ -384,7 +384,7 @@ class TypeMatch(_TypingBase):
         """Determine if the given type is a Func type."""
         return bool(main := MyType.new(tvar).main) and issubclass(main, Funcs)
 
-    # ---- MODEL ----
+    # ---- Model ----
     @overload
     @classmethod
     def is_model_type[M: Model](cls, tvar: MyType) -> TypeIs[MyType[M]]: ...

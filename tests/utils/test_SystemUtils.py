@@ -38,7 +38,7 @@ class TestSystemUtils:
     """Test suite for SystemUtils."""
 
     # ---------------
-    # `0` DATE & TIME
+    # `0` Date & Time
     # ---------------
     def test_posix_none(self):
         result = cls.posix(None)
@@ -104,7 +104,7 @@ class TestSystemUtils:
         assert cls.posix_since(value) == expected
 
     # --------------
-    # `1` FILESYSTEM
+    # `1` Filesystem
     # --------------
     def test_validate_dir(self, tmp_path):
         # Valid directory
@@ -144,7 +144,7 @@ class TestSystemUtils:
         assert cls.path_sub(path, old, new) == expected
 
     # ------------
-    # `2` TERMINAL
+    # `2` Terminal
     # ------------
     def test_get_terminal_width(self):
         width = cls.get_terminal_width()
@@ -229,9 +229,9 @@ class TestSystemUtils:
 
         assert capsys.readouterr().out == '\x1b[31mHello\x1b[39m\n'
 
-    # -------------------
+    # --------------------
     # `.` Confirm & Module
-    # -------------------
+    # --------------------
     def test_confirm__auto_confirm(self):
         """Test that confirm returns True when AUTO_CONFIRM is enabled."""
         original = cls.AUTO_CONFIRM
@@ -290,9 +290,9 @@ class TestSystemUtils:
         finally:
             sys.modules.pop(target, None)
 
-    # -------------------
+    # ----------------------
     # `+` Multiprint & Debug
-    # -------------------
+    # ----------------------
     @pyt.mark.parametrize(
         'data, expected',
         [
@@ -391,9 +391,9 @@ class TestSystemUtils:
             pass
         assert capsys.readouterr().out == expected
 
-    # ---------------
+    # ------------------
     # `*` Path & Logging
-    # ---------------
+    # ------------------
     @pyt.mark.parametrize(
         'raw, expected',
         [
@@ -445,9 +445,9 @@ class TestSystemUtils:
         assert caplog.records[-1].levelno == level
         assert caplog.records[-1].getMessage() == 'message'
 
-    # --------------
+    # -------------
     # `*2` File I/O
-    # --------------
+    # -------------
     @pyt.mark.parametrize(
         'file, message',
         [
@@ -517,9 +517,9 @@ class TestSystemUtils:
             cls.to_file({'key': 'value'}, file)
         assert any('Unsupported' in r.getMessage() for r in caplog.records)
 
-    # ---------------
-    # `*2` from_json
-    # ---------------
+    # --------------
+    # `*2` From_Json
+    # --------------
     @pyt.mark.parametrize(
         'content, as_file, tvar, cast, expected',
         [
@@ -565,9 +565,9 @@ class TestSystemUtils:
         with pyt.raises(error, match=message):
             cls.from_json(content, tvar, cast=cast)  # pyrefly: ignore[bad-argument-type]
 
-    # ---------------
-    # `*2` is_pathy
-    # ---------------
+    # -------------
+    # `*2` Is_Pathy
+    # -------------
     @pyt.mark.parametrize(
         'text, expected',
         [
@@ -584,9 +584,9 @@ class TestSystemUtils:
         """Test is_pathy heuristic for path-like strings."""
         assert cls.is_pathy(text) is expected
 
-    # ---------------
-    # `*2` from_yaml
-    # ---------------
+    # --------------
+    # `*2` From_Yaml
+    # --------------
     @pyt.mark.parametrize(
         'content, as_file, expected',
         [
@@ -644,9 +644,9 @@ class TestSystemUtils:
         with pyt.raises(error, match=message):
             cls.from_yaml(content, tvar, cast=cast)
 
-    # ---------------
-    # `*2` from_toml
-    # ---------------
+    # --------------
+    # `*2` From_Toml
+    # --------------
     @pyt.mark.parametrize(
         'content, tvar, expected',
         [
@@ -666,9 +666,9 @@ class TestSystemUtils:
         with pyt.raises(TypeError, match='Expected'):
             cls.from_toml('key = "value"', list, cast=False)
 
-    # ---------------
-    # `*2` from_pickle
-    # ---------------
+    # ----------------
+    # `*2` From_Pickle
+    # ----------------
     @pyt.mark.parametrize(
         'data, tvar, expected',
         [
@@ -696,9 +696,9 @@ class TestSystemUtils:
         with pyt.raises(TypeError, match='Expected'):
             cls.from_pickle(pickle.dumps({'a': 1}), list, cast=False)
 
-    # ---------------
+    # ------------------
     # `*2` Serialization
-    # ---------------
+    # ------------------
     @pyt.mark.parametrize(
         'method, language',
         [

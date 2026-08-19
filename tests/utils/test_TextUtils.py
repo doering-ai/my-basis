@@ -18,7 +18,7 @@ cls = TextUtils
 ############
 class TestTextUtils:
     # ------------------------
-    # `0` MANIPULATION & REGEX
+    # `0` Manipulation & Regex
     # ------------------------
     def test_replace(self):
         """Test sequential regex replacements."""
@@ -80,7 +80,7 @@ class TestTextUtils:
         assert result.startswith('(?:')
 
     # --------------
-    # `1` FORMATTING
+    # `1` Formatting
     # --------------
     def test_wrap(self):
         """Test wrapping text with decorative borders."""

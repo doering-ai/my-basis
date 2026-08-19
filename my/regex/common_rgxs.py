@@ -29,7 +29,7 @@ COMMON_RGXS = RegexStore.new(
         lazy_load=True,
     ),
     # ----------------
-    # General patterns
+    # General Patterns
     # ----------------
     _nw=r'[\W_]',
     _delim=r'^|$|[[\W_]--[-.\s]]',
@@ -38,7 +38,7 @@ COMMON_RGXS = RegexStore.new(
     _period=('[]:', [('|<=', [r'[^[:alpha:]]', r'[[:alpha:]]{3}']), r'\.(?P>_we)']),
     _dot=('[]:', [('|<!', [r'[^[:alpha:]]', r'[[:alpha:]]{3}']), r'\.(?P>_we)']),
     # ------------
-    # Web patterns
+    # Web Patterns
     # ------------
     _http=r'\b(?i:https?:\/\/|www\w*\.){1,2}',
     tld=r'(?<=[[:lower:]])\.[a-z]{2,4}(?![[:lower:]])',
@@ -65,7 +65,7 @@ COMMON_RGXS = RegexStore.new(
         r'(?![[:alnum:]])',
     ],
     # -----------------
-    # ISO Date Patterns
+    # Iso Date Patterns
     # -----------------
     y=r'[01]?\d{3}|20\d\d|\d\d',
     m=r'0?[1-9]|1[0-2]',
@@ -80,7 +80,7 @@ COMMON_RGXS = RegexStore.new(
         ],
     ),
     # --------------------
-    # Atomic date patterns
+    # Atomic Date Patterns
     # --------------------
     day=(
         r'(?i)\b(?P>d)(?:st|nd|rd|th)?\b',
@@ -117,7 +117,7 @@ COMMON_RGXS = RegexStore.new(
     ),
     epoch=r',? ?(?:(?:B\.?)?C\.?\.?E|A\.?D\.?)',
     # -----------------------
-    # Molecular date patterns
+    # Molecular Date Patterns
     # -----------------------
     _sep=r' ?[-[:alpha:]]* ?',
     _years=[
@@ -170,13 +170,13 @@ COMMON_RGXS = RegexStore.new(
         r'(?:\/.+)?',
     ),
     # -----------------
-    # Detritus patterns
+    # Detritus Patterns
     # -----------------
     #: Re-exported from `META_RGXS` (single source of truth) so downstream consumers can reach
     #: it via the public `COMMON_RGXS` surface, not just the internal meta parser.
     url_detritus=META_RGXS['url_detritus'],
     # --------------
-    # Prose patterns
+    # Prose Patterns
     # --------------
     _preposition=(
         '<|>i',

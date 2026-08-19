@@ -15,7 +15,7 @@ from pydantic_core import core_schema as pyd_schema
 import pydantic as pyd
 import regex as re
 
-### INTERNAL (NOTE: If adding new internal imports, update the comments in `__init__.py`)
+### INTERNAL (NOTE: IF ADDING NEW INTERNAL IMPORTS, UPDATE THE COMMENTS IN `__INIT__.PY`)
 from ..infra.types import Vecs, Maps
 from ._UtilsBase import _UtilsBase
 from .IterUtils import iter_utils
@@ -28,7 +28,7 @@ class SyntaxUtils(_UtilsBase):
     """Methods for syntax-y tasks (i.e. related to data's form rather than its content)."""
 
     # -----------------
-    # `0` NORMALIZATION
+    # `0` Normalization
     # -----------------
     @classmethod
     def fill_tree[T, C](cls, tree: dict[T, C]) -> None:
@@ -71,7 +71,7 @@ class SyntaxUtils(_UtilsBase):
         return sum(map(cls.tree_size, tree.values())) if isinstance(tree, dict) else 1
 
     # --------------
-    # `1` ANNOTATION
+    # `1` Annotation
     # --------------
     @staticmethod
     def pyd_schemify(tvar: type) -> pyd.GetPydanticSchema:
@@ -101,7 +101,7 @@ class SyntaxUtils(_UtilsBase):
     MatchField = Annotated[re.Match, pyd_schemify(re.Match)]
 
     # --------------
-    # `2` REFLECTION
+    # `2` Reflection
     # --------------
     @staticmethod
     def instance_fields(cls: type) -> dict[str, Any]:  # type: ignore
@@ -282,7 +282,7 @@ class SyntaxUtils(_UtilsBase):
         return imp.import_module(pathstr)
 
     # -----------
-    # `3` CACHING
+    # `3` Caching
     # -----------
     @staticmethod
     def clear_cached_properties(inst: object, *properties: str) -> None:

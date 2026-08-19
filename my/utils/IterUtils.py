@@ -29,7 +29,7 @@ import asyncio as aio
 from typing_extensions import TypeAliasType, TypeVar  # noqa: UP035
 import more_itertools as mi
 
-### INTERNAL (NOTE: If adding new internal imports, update the comments in `__init__.py`)
+### INTERNAL (NOTE: IF ADDING NEW INTERNAL IMPORTS, UPDATE THE COMMENTS IN `__INIT__.PY`)
 from ..infra.types import (
     Vec,
     Map,
@@ -71,7 +71,7 @@ class IterUtils(_UtilsBase):
     """
 
     # ----------------
-    # `0` CONSTRUCTION
+    # `0` Construction
     # ----------------
     @classmethod
     def build[V](cls, val: V, *functions: Callable[[V], V]) -> V:
@@ -224,7 +224,7 @@ class IterUtils(_UtilsBase):
     # def ()
 
     # -------------
-    # `1` SELECTION
+    # `1` Selection
     # -------------
     @classmethod
     def find[V](cls, container: Sequence[V], predicate: Callable[[V], bool] | V = bool) -> int:
@@ -669,7 +669,7 @@ class IterUtils(_UtilsBase):
         return cur  # type: ignore
 
     # ---------------
-    # `2` APPLICATION
+    # `2` Application
     # ---------------
     @overload
     @classmethod
@@ -831,7 +831,7 @@ class IterUtils(_UtilsBase):
         return mi.first(mi.locate(iterable, uni_pred), default=-1)
 
     # -------------
-    # `3` EXECUTION
+    # `3` Execution
     # -------------
     @classmethod
     def repeat_until_complete[C, V](cls, func: Callable[[C, V], tuple[int, V]]) -> Callable:
@@ -864,7 +864,7 @@ class IterUtils(_UtilsBase):
         return wrapper
 
     # ------------
-    # `4` PRESENCE
+    # `4` Presence
     # ------------
     @classmethod
     def _has(cls, container: Container, *args: Any, mode: Literal['any', 'all'] = 'any') -> bool:
@@ -1030,7 +1030,7 @@ class IterUtils(_UtilsBase):
         return any(cls.has_any(cont, *args) for cont in containers) if containers else False
 
     # --------------
-    # `5` COMPARISON
+    # `5` Comparison
     # --------------
     @classmethod
     def shared_prefix(cls, *strings: str) -> str:
@@ -1133,7 +1133,7 @@ class IterUtils(_UtilsBase):
         return tvar(ret)  # type: ignore
 
     # ----------------
-    # `6` MODIFICATION
+    # `6` Modification
     # ----------------
     @classmethod
     def drop_at[V](cls, data: Sequence[V], mask: Iterable[int]) -> list[V]:

@@ -15,7 +15,7 @@ The test suite emphasizes:
 
 ## File Structure
 
-### Standard Layout
+### STANDARD LAYOUT
 
 Test files follow the same HEAD/DATA/BODY structure as source files:
 
@@ -55,7 +55,7 @@ class TestClassName:
 - Import `pytest as pyt` for consistency
 - Import shared utilities like `boolmap` from `conftest.py`
 
-### Test Class Organization
+### TEST CLASS ORGANIZATION
 
 Test classes are organized into hierarchical sections using comment headers, any of which may be missing for a particular class:
 
@@ -103,7 +103,7 @@ This structure mirrors how classes are organized in the source code, making it e
 
 ## Parametrization
 
-### Basic Parametrization
+### BASIC PARAMETRIZATION
 
 Use `@pyt.mark.parametrize` extensively to test multiple scenarios:
 
@@ -130,7 +130,7 @@ def test_to_uppercase(self, input_value: str, expected_output: str):
 - Type hint the parameters in the test function signature
 - Add a clear docstring
 
-### The `boolmap` Helper
+### THE `BOOLMAP` HELPER
 
 For boolean tests, use the `boolmap` helper from `conftest.py`:
 
@@ -169,7 +169,7 @@ This automatically adds the boolean expected value as the last parameter.
 
 ## Fixtures
 
-### Basic Fixtures
+### BASIC FIXTURES
 
 Define fixtures for common setup:
 
@@ -185,7 +185,7 @@ def temp_file(self, tmp_path: Path) -> Path:
     return tmp_path / 'test_file.txt'
 ```
 
-### Fixture Usage with Parametrization
+### FIXTURE USAGE WITH PARAMETRIZATION
 
 Combine fixtures with parametrized tests:
 
@@ -209,7 +209,7 @@ def test_cache_storage(self, cache_instance: Cache, key: any, value: any):
     assert cache_instance[key] == value
 ```
 
-### Cleanup Fixtures
+### CLEANUP FIXTURES
 
 For tests that modify global state (like environment variables), use fixtures with cleanup:
 
@@ -225,7 +225,7 @@ def temp_env_var(self, patch: Patch):
 
 ## Test Naming
 
-### Test Method Names
+### TEST METHOD NAMES
 
 Test names should be descriptive and follow this pattern:
 
@@ -240,7 +240,7 @@ test_<method_name>__<scenario>
 - `test_get__missing_key` - Testing `get` when key doesn't exist
 - `test_path__mkdir` - Testing path creation with mkdir option
 
-### Multiple Underscores
+### MULTIPLE UNDERSCORES
 
 Use double underscores (`__`) to separate the method name from the scenario:
 
@@ -274,7 +274,7 @@ def test_set__validates_name(self, instance: Environment, invalid_key: str):
 
 ## Assertions
 
-### Basic Assertions
+### BASIC ASSERTIONS
 
 Use clear, simple assertions:
 
@@ -284,7 +284,7 @@ assert value in collection
 assert instance.property == 'expected_value'
 ```
 
-### Exception Testing
+### EXCEPTION TESTING
 
 Use `pyt.raises` for exception tests:
 
@@ -301,7 +301,7 @@ def test_error_message(self):
         cls.parse('bad_format')
 ```
 
-### Type Assertions
+### TYPE ASSERTIONS
 
 Verify types when relevant:
 
@@ -327,7 +327,7 @@ async def test_async_read(self, cache_instance: Cache):
 
 ## Common Patterns
 
-### Testing Dunder Methods
+### TESTING DUNDER METHODS
 
 ```python
 def test_len(self, instance: ClassName):

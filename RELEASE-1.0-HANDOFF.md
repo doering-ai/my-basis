@@ -39,7 +39,7 @@ That restraint is part of the 1.0 result.
 
 ## What changed
 
-### Tests: house style became an enforceable contract
+### TESTS: HOUSE STYLE BECAME AN ENFORCEABLE CONTRACT
 
 The test pass preserves behavior while moving scenario variation into parameter tables.
 Long names were not mechanically shortened at the expense of meaning; repeated arrangements became rows with readable IDs, and the remaining two-level names identify a genuinely different subtype or failure mode.
@@ -58,7 +58,7 @@ The audit also reports suite-wide shape: files, functions, parameterized functio
 It is a guardrail, not a demand that every test be parameterized.
 A single focused behavior remains a single focused test.
 
-### The library: tests exposed contract defects worth fixing before 1.0
+### THE LIBRARY: TESTS EXPOSED CONTRACT DEFECTS WORTH FIXING BEFORE 1.0
 
 The review was not merely editorial.
 Consolidating the tests made several public contracts legible enough to repair:
@@ -83,7 +83,7 @@ Consolidating the tests made several public contracts legible enough to repair:
 These are stability fixes, not a redesign of the public surface.
 Their common theme is that provenance, boundaries, flags, and persistence should survive a round trip or fail loudly.
 
-### Adoption tooling: a beginner can produce evidence before asking for judgment
+### ADOPTION TOOLING: A BEGINNER CAN PRODUCE EVIDENCE BEFORE ASKING FOR JUDGMENT
 
 The package now carries an `adopt-my-basis` skill and exposes the `my-basis-adopt` command.
 A beginner can discover or export the skill and build an intake without installing a permanent development environment:
@@ -116,7 +116,7 @@ The report leads with the repository story, adoption thesis, deliberate non-chan
 File inventories and logs belong in appendices.
 The tool can render evidence; it cannot decide that a dependency belongs on a latency-sensitive hook or zero-dependency core.
 
-### Typst: one repository, two deliberately separate products
+### TYPST: ONE REPOSITORY, TWO DELIBERATELY SEPARATE PRODUCTS
 
 Folding `typst-basis` into this repository is the lower-maintenance topology.
 The prepared history import preserves its four source commits, relocates it to top-level `typst/`, and adds the boundary material needed for life inside a monorepo:
@@ -170,7 +170,7 @@ One obvious `re.compile` should stay one obvious `re.compile`.
 The examples below are executable against this candidate.
 Each uses `lazy_load=False` so a malformed production grammar fails at construction rather than on its first user input.
 
-### Exact composition and repeated captures
+### EXACT COMPOSITION AND REPEATED CAPTURES
 
 Lists normally use an optional-space separator.
 Set `separator=''` when every character is part of the grammar:
@@ -198,7 +198,7 @@ assert match.flat == {
 `MatchData` keeps all repeated named captures as lists.
 Its `flat` view selects the last non-empty capture, which is convenient but should not replace `match.data` when repetition matters.
 
-### Named subroutine is not a backreference
+### NAMED SUBROUTINE IS NOT A BACKREFERENCE
 
 These two constructs answer different questions:
 
@@ -223,7 +223,7 @@ This distinction is especially important because the default `force_reinvocation
 Use `\g<word>` when equality with the earlier capture is the actual contract.
 The Corpus fence fix is the practical version of this lesson: the closing fence must repeat the opening delimiter, not merely match the delimiter grammar again.
 
-### Flags must travel with reusable definitions
+### FLAGS MUST TRAVEL WITH REUSABLE DEFINITIONS
 
 A compiled pattern's flags are preserved while that pattern stands alone, including through store import and union.
 Those compile-time flags cannot be embedded into a larger pattern's source, so RegexStore now refuses a composed dependency that would silently lose them.
@@ -247,7 +247,7 @@ For a standalone imported `regex.Pattern`, external flags are fine.
 For a definition referenced by `(?P>name)`, use scoped inline flags such as `(?i:...)`.
 Supplying both a compiled pattern and another `flags=` value is ambiguous and fails loudly.
 
-### Substitution inherits the unattended-processing timeout
+### SUBSTITUTION INHERITS THE UNATTENDED-PROCESSING TIMEOUT
 
 `sub` and `subn` route replacement through the same store-wide regex deadline as the other public matching operations.
 The caller does not add a separate `timeout=` argument:
@@ -276,7 +276,7 @@ assert CLEANUP.subn(
 The timeout is a containment boundary, not a proof that a hostile pattern is safe.
 Security-sensitive patterns should still be eagerly compiled, exercised against adversarially long inputs, and kept as simple as the behavior permits.
 
-### Router order is public behavior
+### ROUTER ORDER IS PUBLIC BEHAVIOR
 
 Router mappings are ordered.
 When categories overlap, the first matching branch wins:
@@ -302,7 +302,7 @@ Reversing those two mapping entries classifies `'42'` as `wordish`.
 Router tests therefore need an overlap example, not only disjoint happy paths.
 Routers deliberately use ordinary ordered alternation: optimized atomic condensation can change the meaning of lazy or overlapping branches.
 
-### The compact DSL vocabulary
+### THE COMPACT DSL VOCABULARY
 
 - `(':', children)` makes a non-capturing group, keeping a composed sequence together.
 - `('|:', children)` makes an ordered non-capturing alternation for classifications where branch priority matters.
@@ -375,7 +375,7 @@ The submitted review and its exact-source pipeline are explicit pre-merge gates,
 
 ## Merge or request another round
 
-### Merge sequence
+### MERGE SEQUENCE
 
 Use this order.
 It prevents downstream repositories from depending on a path or behavior that has not landed.
@@ -424,7 +424,7 @@ It prevents downstream repositories from depending on a path or behavior that ha
    Delete or archive `/home/robbd/my/libs/typst-basis` only after the installed
    package target and Corpus consumer proof both point at Basis.
 
-### The human 1.0 gate
+### THE HUMAN 1.0 GATE
 
 No agent should manufacture the social guarantee implied by 1.0.
 After the merge sequence above, the maintainer must:
@@ -438,7 +438,7 @@ After the merge sequence above, the maintainer must:
 The manual job uploads; it is not permission for an agent to publish early.
 A future `typst-v0.1.0` tag is independent and must not activate the PyPI path.
 
-### Request another round
+### REQUEST ANOTHER ROUND
 
 Use the following prompt and name only the areas being reopened:
 

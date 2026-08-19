@@ -32,7 +32,7 @@ class TestSemanticUtils:
         return [(category, item[0], item[1]) for category, items in data.items() for item in items]
 
     # ------------------
-    # `0` ROMAN NUMERALS
+    # `0` Roman Numerals
     # ------------------
     @pyt.mark.parametrize(
         'roman, decimal',
@@ -86,7 +86,7 @@ class TestSemanticUtils:
         assert cls.decimal_to_roman(decimal) == roman
 
     # -----------
-    # `1` AMOUNTS
+    # `1` Amounts
     # -----------
     @pyt.mark.parametrize(
         'amount, unit, width, expected',
@@ -119,7 +119,7 @@ class TestSemanticUtils:
         assert cls.format_amount(amount, unit, width) == expected
 
     # -----------------
-    # `2` PLURALIZATION
+    # `2` Pluralization
     # -----------------
     @pyt.mark.parametrize('category, plural, expected', plural_test_data())
     def test_to_singular(self, category: str, plural: str, expected: str):
@@ -154,7 +154,7 @@ class TestSemanticUtils:
         assert cls.to_ordinal(num) == expected
 
     # ---------------
-    # `3` IDENTIFIERS
+    # `3` Identifiers
     # ---------------
     @pyt.mark.parametrize(
         'symbols, should_pass',

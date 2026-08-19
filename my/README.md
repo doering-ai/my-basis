@@ -3,7 +3,7 @@
 This document is a high-level overview of the engineering decisions behind the my Python package.
 For general project information, see [the root directory](/README.md).
 
-### Subpackage Dependency Tree
+### SUBPACKAGE DEPENDENCY TREE
 
 When adding new relative imports to any of the modules in this package, make sure to either respect or update this structure (in order to prevent circular dependencies).
 
@@ -15,7 +15,7 @@ When adding new relative imports to any of the modules in this package, make sur
         - `regex` imports `utils` and `types`
           - `files` imports `utils`, `typing`, `types`, and `regex`
 
-### Contributing
+### CONTRIBUTING
 
 I created this project over the course of 2025 for my own use, so it's definitely 'opinionated', for better or worse.
 Specifically, it is influenced by:

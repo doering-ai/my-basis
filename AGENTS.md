@@ -33,7 +33,7 @@ The corresponding PyTest files for each individual python file are present in ma
 For details of various commands, consult `/Taskfile`.
 Here's a lit of the main commands; pass `-- ARGS` to forward ARGS to the underlying tool.
 
-### PyTest Commands
+### PYTEST COMMANDS
 
 ```zsh
 # Run All Tests
@@ -53,7 +53,7 @@ task test:pdb  # Drops into debugger on failure
 task test:dev  # For debugging one test at a time
 ```
 
-### Sphinx Documentation Commmands
+### SPHINX DOCUMENTATION COMMMANDS
 
 ```zsh
 task docs # Build the Sphinx documentation via `sphinx-build`.
@@ -63,7 +63,7 @@ task docs # Build the Sphinx documentation via `sphinx-build`.
 
 For a full list of dependencies, see `pyproject.toml`
 
-### Development
+### DEVELOPMENT
 
 - `python 3.13`: The project is written in modern Python 3.13 syntax -- no need to support older versions!
 
@@ -77,7 +77,7 @@ For a full list of dependencies, see `pyproject.toml`
 
 - `pytest`: unit testing
 
-### Runtime
+### RUNTIME
 
 - `pydantic`: data validation and settings management using Python type annotations
 
@@ -87,11 +87,11 @@ For a full list of dependencies, see `pyproject.toml`
 
 ## Specifics
 
-### Testing Guide
+### TESTING GUIDE
 
 Whenevery you're making siginifant changes to test files, be sure to read and apply `tests/README.md`.
 
-### File Structure
+### FILE STRUCTURE
 
 Almost all Python files in the project contain one or more of the following sections, each delineated by a large, wrapped comment:
 
@@ -121,7 +121,7 @@ The entrypoint code for executing this file on the commandline as a script, ofte
 """
 ```
 
-### Class Sections
+### CLASS SECTIONS
 
 In general, the project makes extensive use of classes, both in typical object-oriented situations and for general code organization using static classes and/or singletons.
 
@@ -155,12 +155,12 @@ class MyClass:
     # [The primary public interface methods of this class, including overloads, properties, etc.]
 ```
 
-### Types
+### TYPES
 
 All code should be fully typed using Python type annotations if at all possible.
 For exceptions, add `# type: ignore` to the end of the line.
 
-### Docstrings
+### DOCSTRINGS
 
 Each public class and function should have a docstring describing its purpose, parameters, and return value(s).
 Docstrings follow the Google format for python docstrings.

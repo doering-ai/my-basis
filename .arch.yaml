@@ -1,0 +1,26 @@
+default_spec: decimal
+insertion: observed
+
+specs:
+  decimal:
+    styles: [number]
+    separator: '.'
+    marker: ''
+
+ignore:
+  - '.git/**'
+  - '.venv/**'
+  - 'node_modules/**'
+  - '__pycache__/**'
+  - 'dist/**'
+  - 'docs/_build/**'
+  - '*.egg-info/**'
+  - '.ruff_cache/**'
+  - '.pytest_cache/**'
+  - '.hypothesis/**'
+  - '.coverage'
+  - '*.lock'
+  - '.task/**'
+  - '.claude/**'
+  - '.factory/**'
+  - 'RELEASE-READINESS.md'

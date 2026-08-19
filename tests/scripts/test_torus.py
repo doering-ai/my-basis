@@ -249,9 +249,9 @@ class TestTorusApp:
         second = clock_app.snapshot()
         assert first == second
 
-    # ----------------
+    # ---------------
     # Draw-Path Tests
-    # ----------------
+    # ---------------
     def test_draw_canvas__renders_widgets(self, app: TorusApp, patch: pyt.MonkeyPatch):
         """Test that `_draw_canvas` drives the PyRatatui frame render path."""
         pyt.importorskip('pyratatui')

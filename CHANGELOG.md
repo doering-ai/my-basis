@@ -16,7 +16,7 @@ Where a change is a behavior break rather than an internal fix, it's called out 
 - Folded the independent `@dtm/basis` Typst package into top-level `typst/` with its complete history, MIT boundary, POSIX installer, hermetic compile/envelope test, and `typst-v*` release namespace. Python wheel/sdist gates prove that `typst/` is excluded while the adoption skill is included.
 - Release CI now consumes exact-SHA test images, exercises the real Python 3.12 dependency floor and supported-version matrix, verifies the lock and built artifacts, keeps PyPI publishing protected/manual, and gives Typst its own pinned official-image gate.
 
-### Python floor lowered to 3.12, with a real version matrix
+### PYTHON FLOOR LOWERED TO 3.12, WITH A REAL VERSION MATRIX
 
 `requires-python` is now `>= 3.12` (was `>= 3.13`), and the suite runs against **3.12, 3.13, and 3.14** on every pipeline.
 
@@ -27,7 +27,7 @@ Where a change is a behavior break rather than an internal fix, it's called out 
 - **No dependency floor moved.** `uv sync --resolution lowest-direct` on 3.12 resolves and passes.
 - New `task test:matrix`, `task test:floor`, and `task eval:typecheck:matrix`; `pyrefly`'s `python-version` is now the *floor*, where version-gated diagnostics actually surface.
 
-### Fixed
+### FIXED
 
 - **`typist.cast` dispatched transforms in an undefined order.** Candidate specificity is a *partial* order, and it was being sorted with a `cmp_to_key` comparator that returns `0` for *incomparable* (not merely equal) entries — an intransitive comparator, for which `list.sort` guarantees nothing.
   The order therefore depended on Timsort's internal merge sequence: the identical registry and comparator ranked `(list -> str)` differently on 3.12 and 3.13, demoting `_vec_to_string` from first to ninth so `cast([], str)` returned `'{}'` instead of `'[]'`.
@@ -37,7 +37,7 @@ Where a change is a behavior break rather than an internal fix, it's called out 
   `_string_to_scalar` declined, and the result depended on `_object_to_model` reaching `bool(text)` — which only works where `inspect.signature(bool)` succeeds, i.e. 3.13+ (CPython gave `bool` a text signature).
   The truthiness fallback is now explicit in `_string_to_scalar`.
 
-### Infrastructure
+### INFRASTRUCTURE
 
 - The CI image no longer pins `UV_NO_MANAGED_PYTHON=1` / `UV_PYTHON_DOWNLOADS=never`.
   `never` blocks even an *explicit* `uv python install`, so a single image could not serve a matrix; it is now `manual` plus `python-preference=system`, which keeps the baked-in interpreter as the default and still refuses *silent* downloads.
@@ -47,14 +47,14 @@ Where a change is a behavior break rather than an internal fix, it's called out 
 
 The documentation campaign: every non-trivial public feature now carries an executed, doctest-locked example (roughly 330 `Examples:` blocks across ~700 rendered signatures), the README is rewritten around a full export map, and the campaign's verification pass surfaced a batch of small correctness fixes, each landed with a regression test.
 
-### Documentation
+### DOCUMENTATION
 
 - Docstrings normalized package-wide to the house Google style, with a single canonical reST-literal example shape; the handful of pre-existing examples (some rendering broken through `eval-rst`) were folded into it.
 - Every docs leaf page now lists its methods explicitly in source order with section groups mirroring the source banners; the `cast`/`check`/`match` chambers and `Metatype` gained their own pages instead of hiding behind `Typist`.
 - A new `tests/test_examples.py` sweeps every module's doctests as part of the ordinary suite, so an example that stops matching reality fails CI rather than rotting silently; connection-gated examples opt out inline via `# doctest: +SKIP`.
 - README rewritten for the released library: a grouped more-itertools-style table of the full public surface (linked into the rendered docs), a seven-stop subpackage tour with executed snippets, and corrected caveats (`requires-python >= 3.13`, live `py.typed` badge).
 
-### Fixed
+### FIXED
 
 - `SystemUtils.confirm(default_no=True)` returned the *inverse* of the user's answer; answering `y` now confirms, and empty input falls to the default.
 - `IterUtils.exclusive_elements` dropped every value present in `rhs` instead of subtracting per-occurrence; it is now the ordered multiset difference its docs always described.
@@ -72,7 +72,7 @@ These changes therefore remain part of `[Unreleased]` and will ship with the eve
 
 This release-readiness change set contains reproduced security and correctness fixes (each landed with a regression test), the `py.typed` marker, a lazy import facade that roughly halves the module count of a bare `import my`, and dependency/packaging cleanup.
 
-### Security
+### SECURITY
 
 - Removed a shell-injection RCE from `SystemUtils.print_in_color()` and `Command.execute()`/`execute_async()`: caller text was interpolated into a `shell=True` command string, so `$(...)`/backtick payloads executed.
   Both now run via an explicit argv with no shell (`create_subprocess_exec` on the async path).
@@ -81,7 +81,7 @@ This release-readiness change set contains reproduced security and correctness f
 - Cache pruning (`Cache`/`NestedCache`) is concurrency-safe -- it snapshots keys and `pop(..., None)`s instead of deleting while iterating.
 - Telemetry defaults deny content capture, and the shared Logfire/OpenTelemetry setup no longer leaks a privacy boundary.
 
-### Changed
+### CHANGED
 
 - The `apis` and `files` facade leaves now load lazily (PEP 562 `__getattr__`): a bare `import my` no longer imports them or runs `apis`'s import-time side effects, cutting `import my` from ~1690 to ~1440 modules (~18% faster).
   One consequence: `Environment` snapshots `os.environ` on first `env` access rather than at `import my`.
@@ -94,7 +94,7 @@ This release-readiness change set contains reproduced security and correctness f
   Resources are still reached through `INFRA_PATHS.data`; only code that imported the top-level `data` package directly is affected.
 - `mdformat-front-matters` moved from the `[myst]` extra to core `dependencies`: `Markdown.render()`'s default template emits YAML frontmatter, so the plugin is required for correct core rendering (see Fixed).
 
-### Fixed
+### FIXED
 
 - `Markdown.render(fix=True)` no longer breaks on a core-only install: the default template emits a `---...---` frontmatter block and `mdformat` raises on the then-unavailable `front_matters` extension; the plugin is now a core dependency.
 - The optional-dependency `ImportError`s name the correct extra with an install hint: `GoogleSheet` reports `[google]` (was a copy-pasted `[metrics]`), `MetricUtils` reports `[metrics]`, both without the bogus `utils.` prefix.
@@ -110,17 +110,17 @@ This release-readiness change set contains reproduced security and correctness f
 - The `year` regex and the ISO-date `y` block are open through the 21st century (dates from 2027/2030 onward match again); `md_url` captures targets with balanced inner parens.
 - The `regex-storefront` console script no longer crashes on construction (mutable-default `RegexStore`).
 
-### Added
+### ADDED
 
 - `my/py.typed` marker: the `Typing :: Typed` classifier is now true, so consumers' type checkers read basis's types instead of `Any`.
 - `FileCache.delete()` for single-item removal.
 
-### Removed
+### REMOVED
 
 - Unused core dependencies `identify`, `toolz`, `tqdm`; `dotenv` repinned to `python-dotenv`.
 - Dead `Idx`/`IdxSpec` modules and the `my.text`/`my.type` deprecation shims.
 
-### Docs / CI
+### DOCS / CI
 
 - README corrected: PyPI publication status, dependency scale, the flagship `cast` example, and the restored PyPI badges.
 - `task docs` builds again (added `sphinx.ext.intersphinx` and its mapping).
@@ -130,7 +130,7 @@ This release-readiness change set contains reproduced security and correctness f
 - Added the missing `apis.Filesystem` and `types.Platform` reference pages; the `Typist` page now renders its inherited `cast`/`check`/`match` methods.
 - Corrected the subpackage dependency-tree docstring (added the `infra` root and the `apis`→`regex` / `regex`→`typing` edges).
 
-### Tests
+### TESTS
 
 - Hardened the 0.8.3 performance/security claims with real coverage: `Buffer`'s `REGEX_TIMEOUT` firing, `md_url` ReDoS resistance, `pair_list()` cache invalidation, and console-script smoke tests.
 - Made the suite hermetic (`conftest` no longer writes under `~/local/logs`) and stopped the `Environment` tests leaking classvar state across the run.
@@ -139,14 +139,14 @@ This release-readiness change set contains reproduced security and correctness f
 
 Performance and security release for MEMY-175 wikiparse polish wave 2.
 
-### Performance
+### PERFORMANCE
 
 - `Span._fast(a, b)` trusted constructor bypassing all type coercion and validation for hot iterators (Buffer, MatchData). +45% throughput in wikiparse.
 - `Buffer._version` counter + `_pair_cache` dict + `pair_list()` cached method for read-only pair iteration.
 - `raw_pair_iterator` gained `strict: bool = True` parameter for cached/non-strict modes.
 - `_shift_pair_cache` method for incremental cache updates (infrastructure, not yet enabled).
 
-### Security
+### SECURITY
 
 - `REGEX_TIMEOUT = 10.0` guard on Buffer's 3 hot iterator `rgx.search()` calls (ReDoS protection).
 - Fixed `md_url` ReDoS vulnerability (cubic backtracking on spaces) via possessive `*+` quantifiers in `common_rgxs.py`.
@@ -161,11 +161,11 @@ Release-machinery and README polish; no library behavior changes.
 - Decoupled Publish from Evaluate, capped job timeouts, and skipped lint on tag pipelines.
 - Normalized `.gitlab-ci.yml` to the house yamlfmt (4-space indent).
 
-### Fixed
+### FIXED
 
 - `Predicate`: removed the `serialize` advertisement and its dead xfail tests.
 
-### Docs
+### DOCS
 
 - README: dropped stray backticks, fixed the badges, removed the `{align}` directive, and added the logo.
 
@@ -173,18 +173,18 @@ Release-machinery and README polish; no library behavior changes.
 
 First PyPI release (`pip install my-basis`).
 
-### Fixed
+### FIXED
 
 - `Markdown.walk()` now honors its documented `-1` unlimited-depth sentinel: the recursion guard excluded `-1`, silently capping every default `walk()`/`tree`/`prose_tree` traversal at two levels.
   Consumers that walked deep documents (e.g. wikiparse's nested `###` subsections) saw nodes below level 2 skipped.
 
-### Packaging
+### PACKAGING
 
 - Declared `license = "MPL-2.0"` (SPDX) and `license-files` in `pyproject.toml` so the published wheel carries the license metadata that was previously only in the `LICENSE` file.
 
 ## [0.2.0] - 2026-07-02
 
-### Subpackage & module renames
+### SUBPACKAGE & MODULE RENAMES
 
 `my.text` split three ways: regex symbols (`RegexStore`, `RegexParser`, etc.) moved to `my.regex`; `Buffer`/`Span` moved to `my.types`; `Markdown` moved to `my.files`.
 `my.type` was renamed wholesale to `my.typing`.
@@ -194,40 +194,40 @@ Not every old symbol has a shim: `my.text`'s `atom`/`debug_regex` free functions
 Within `my.typing`, three files were also renamed to a shorter, chamber-oriented convention: `typecast.py` -> `cast.py`, `typecheck.py` -> `check.py`, `typematch.py` -> `match.py`.
 The old names survive **only** as the unchanged `TypeCast`/`TypeCheck`/`TypeMatch` class exports from `my.typing` -- there are no `my.typing.typecast` (etc.) modules to import from anymore.
 
-### Chamber decomposition: `Typist` -> `MyType` + cast/check/match
+### CHAMBER DECOMPOSITION: `Typist` -> `MyType` + CAST/CHECK/MATCH
 
 The monolithic `Typist` class is now a thin composition of three chambers -- `TypeCast`, `TypeCheck`, `TypeMatch` -- plus a separate `MyType` model representing a parsed type expression as an introspectable node (`.main`, `.args`, `.root`).
 The public singleton `ty = typist = Typist.inst()` and its `ty.cast(...)` / `ty.check(...)` / `ty.match(...)` surface are unchanged; what changed is internal structure -- each chamber gets its own test module (`tests/typing/test_cast.py`, `test_check.py`, `test_match.py`) in place of one shared `test_Typist.py`.
 
-### `Decline` exception protocol replaces `suppress(Exception)` dispatch
+### `Decline` EXCEPTION PROTOCOL REPLACES `suppress(Exception)` DISPATCH
 
 The cast dispatch loop used to wrap every candidate transform in `suppress(Exception)`, so a transform that genuinely crashed on its input was indistinguishable from one that deliberately declined to handle it -- both silently advanced to the next candidate.
 A new `Decline` exception (`my/typing/_common.py`) splits the two apart: a transform that cannot handle a `(source, target)` pair raises `Decline` (or returns `None`, still honored), and only `Decline` is caught before moving on.
 This drove 608 previously-swallowed latent crashes per green test run down to 0, and the suite got roughly 30% faster as a side effect.
 
-### TypeVar and union cast semantics changed (behavior break)
+### TYPEVAR AND UNION CAST SEMANTICS CHANGED (BEHAVIOR BREAK)
 
 Constrained `TypeVar`s (e.g. `TypeVar('T', int, str)`) now resolve to the **union of all constraints**, not an arbitrary single member.
 `TypeVar`s with a union bound (`TypeVar('T', bound=int | str)`) resolve to that union directly.
 Union cast members are now ranked by **fitness** instead of reverse declaration order, fixing a latent bug where a truthy `bool` could get mis-cast ahead of a better-fitting member, and a `TypeError` in `sort_options`.
 If any call site relied on "first union member wins" ordering or on a constrained/bound TypeVar resolving to a single type, re-check it. (`d8c8d3a`, `834c91c`)
 
-### PEP 695 generic parsing
+### PEP 695 GENERIC PARSING
 
 Bare `TypeVar`s and `TypeVarTuple`/`ParamSpec` parameters now resolve and classify correctly instead of raising or misclassifying by dead attribute names, so PEP 695 generic classes (`class Foo[T]: ...`) parse cleanly through `MyType`.
 
-### `pyrefly` typecheck gate
+### `pyrefly` TYPECHECK GATE
 
 Static type checking is now enforced via `pyrefly check`, baselined under `[tool.pyrefly]` / `[tool.pyrefly.errors]` in `pyproject.toml` and wired into CI (`.gitlab-ci.yml`'s `Evaluate Python` job) and `AGENTS.md`.
 The baseline is 0 errors with 77 findings downgraded to `warn` (not silenced) across documented categories -- see the comment block above `[tool.pyrefly]` for the full breakdown.
 `my/types/Idx.py` and `my/types/IdxSpec.py` are excluded from the gate entirely (unfinished, imports a pre-rename package name); their fate is a separate, later decision.
 
-### Removed
+### REMOVED
 
 - The `sql` optional-dependency extra and its `sqlalchemy` dependency.
 - `my.types.MyEnumRow`, an unused `sqlmodel`-era row-mapping helper.
 
-### Fixed
+### FIXED
 
 - `[tool.pytest]` in `pyproject.toml` isn't a section pytest reads -- only `[tool.pytest.ini_options]` is, so `testpaths` was silently ignored.
   Fixing the header also activated a new `timeout = 15` (via `pytest-timeout`): any test exceeding 15s now fails fast with a stack trace instead of hanging until an infinite loop/recursion gets OOM-killed.

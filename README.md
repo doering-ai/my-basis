@@ -71,7 +71,7 @@ my-basis = { git = "https://gitlab.com/doering-ai/libs/basis.git", tag = "stable
 
 Run `uv sync` to install.
 
-### Refactor an existing repository
+### REFACTOR AN EXISTING REPOSITORY
 
 The 1.0 line also packages a read-only intake tool and the `adopt-my-basis` agent skill.
 From a Python repository you want to assess:
@@ -91,7 +91,7 @@ The one-shot commands above require no persistent installation.
 `skill path` exposes the packaged source directly; `skill export` is only needed when the receiving agent needs its own catalog copy.
 See [`my/skills/adopt-my-basis/SKILL.md`](my/skills/adopt-my-basis/SKILL.md) for the full workflow and the runnable [`RegexStore` adoption guide](my/skills/adopt-my-basis/references/regexstore.md) for complex grammars.
 
-### Optional extras
+### OPTIONAL EXTRAS
 
 Core stays as small as this library knows how to be; everything heavier hangs off an extra you opt into with `pip install my-basis[<extra>]` (or `uv add my-basis --extra <extra>`):
 
@@ -246,11 +246,11 @@ A hosted copy on ReadTheDocs is provisioned-but-pending; until it lands, the doc
 
 ## Caveats
 
-### Pydantic-first
+### PYDANTIC-FIRST
 
 You can absolutely use this package without using Pydantic yourself, but you'd be missing out on a lot of the ergonomic benefits: basically every class is a Pydantic model, and the logging functionality in [`MetricUtils`](docs/utils.MetricUtils.md) exclusively supports Pydantic's Logfire.
 
-### Python 3.12+
+### PYTHON 3.12+
 
 The project is written in modern Python syntax (`requires-python >= 3.12`) and the typing subpackage leans hard on recent typing semantics — PEP 695 generics throughout, and `typing_extensions` as the one compatibility shim, for the handful of constructs that only reached the stdlib in 3.13 (`TypeIs`, PEP 696 type-parameter defaults).
 Every release is tested against **3.12, 3.13, and 3.14** (`task test:matrix`), and the declared dependency floors are exercised too (`task test:floor`).

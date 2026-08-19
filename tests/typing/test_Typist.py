@@ -105,7 +105,7 @@ class TestTypist:
             assert ret == exp
 
     # ----------------
-    # `*4` PERSISTENCE
+    # `*4` Persistence
     # ----------------
     @pyt.mark.parametrize(
         'data, expected',
@@ -266,7 +266,7 @@ class TestTypist:
         assert unpickled == data
 
     # ---------------
-    # `*5` INVOCATION
+    # `*5` Invocation
     # ---------------
     def test_get_method(self):
         # Test getting existing methods
@@ -390,25 +390,25 @@ class TestTypist:
     @pyt.mark.parametrize(
         'func, args, kwargs, expected_success',
         [
-            # ---- No params ----
+            # ---- No Params ----
             (_func_no_params, (), {}, True),
             (_func_no_params, (1,), {}, False),  # Extra arg
-            # ---- One positional ----
+            # ---- One Positional ----
             (_func_one_pos, (5,), {}, True),
             (_func_one_pos, (), {}, False),  # Missing required
             (_func_one_pos, (), {'x': 5}, True),  # As kwarg
             (_func_one_pos, (5, 6), {}, False),  # Too many args
-            # ---- One positional with default ----
+            # ---- One Positional With Default ----
             (_func_one_pos_default, (), {}, True),
             (_func_one_pos_default, (10,), {}, True),
             (_func_one_pos_default, (), {'x': 10}, True),
-            # ---- Two positional ----
+            # ---- Two Positional ----
             (_func_two_pos, (1, 'hi'), {}, True),
             (_func_two_pos, (1,), {'y': 'hi'}, True),
             (_func_two_pos, (), {'x': 1, 'y': 'hi'}, True),
             (_func_two_pos, (1,), {}, False),  # Missing y
             (_func_two_pos, (1, 2), {}, False),  # Wrong type for y
-            # ---- Positional and keyword-only ----
+            # ---- Positional And Keyword-Only ----
             (_func_pos_and_kwonly, (1,), {'y': 'hi'}, True),
             (_func_pos_and_kwonly, (1, 'hi'), {}, False),  # y must be kwarg
             (_func_pos_and_kwonly, (), {'x': 1, 'y': 'hi'}, True),
@@ -424,7 +424,7 @@ class TestTypist:
             (_func_mixed, (5, 'custom'), {}, True),
             (_func_mixed, (5, 'custom', 1, 2), {'z': 3}, True),
             (_func_mixed, (), {}, False),  # Missing required 'a'
-            # ---- Positional-only ----
+            # ---- Positional-Only ----
             (_func_pos_only, (5,), {}, True),
             (_func_pos_only, (), {'x': 5}, False),  # x is positional-only
         ],
@@ -460,15 +460,15 @@ class TestTypist:
     @pyt.mark.parametrize(
         'func, args, kwargs, expected_result',
         [
-            # ---- No params ----
+            # ---- No Params ----
             (_func_no_params, (), {}, 'no params'),
-            # ---- One positional ----
+            # ---- One Positional ----
             (_func_one_pos, (5,), {}, 10),
             (_func_one_pos, (), dict(x=5), 10),
-            # ---- One positional with default ----
+            # ---- One Positional With Default ----
             (_func_one_pos_default, (), {}, 10),
             (_func_one_pos_default, (7,), {}, 14),
-            # ---- Two positional ----
+            # ---- Two Positional ----
             (_func_two_pos, (42, 'answer'), {}, '42: answer'),
             (_func_two_pos, (42,), dict(y='answer'), '42: answer'),
             (_func_two_pos, (), dict(x=42, y='answer'), '42: answer'),
@@ -476,7 +476,7 @@ class TestTypist:
             (_func_two_pos, (), dict(), None),
             (_func_two_pos, (), dict(x=1, y=2, z=3), None),
             (_func_two_pos, (1, 2), dict(x=1), None),
-            # ---- Positional and keyword-only ----
+            # ---- Positional And Keyword-Only ----
             (_func_pos_and_kwonly, (1,), dict(y='test'), '1: test'),
             # ---- Varargs ----
             (_func_with_varargs, (1, 2, 3, 4), {}, 10),
@@ -494,7 +494,7 @@ class TestTypist:
                 dict(z=3),
                 (5, 'custom', (1, 2), dict(z=3)),
             ),
-            # ---- Positional-only ----
+            # ---- Positional-Only ----
             (_func_pos_only, (5,), {}, 10),
         ],
     )

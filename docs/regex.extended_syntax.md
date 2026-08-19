@@ -29,7 +29,7 @@ class: hint
 See Python's standard-library `re` documentation for the basic, global flag syntax; the sections below cover the scoped and extended flags added by the `regex` module.
 ```
 
-### Scoped Flags
+### SCOPED FLAGS
 
 Scoped flags can apply to only part of a pattern and can be turned on or off.
 
@@ -101,7 +101,7 @@ It also affects line separators (and, in turn, `(?s)` and `(?m)`):
 - *Without* this flag, the only line separator is `\n` (`\x0A`),
 - *With* this flag, `\x0D\x0A`, `\x0A`, `\x0B`, `\x0C` and `\x0D` are valid line separators, plus `\x85`, `\u2028` and `\u2029` when working with Unicode.
 
-### Global Flags
+### GLOBAL FLAGS
 
 Global flags apply to the entire pattern and can only be turned on -- if these patterns are present anywhere in a given expression, they apply to the whole thing.
 **They cannot be disabled.**
@@ -160,7 +160,7 @@ Enables [fuzzy matching](#fuzzy-matching) to attempt to improve the fit of the n
 
 ## Sets
 
-### Simple vs. Expanded Sets
+### SIMPLE VS. EXPANDED SETS
 
 In Version 0, only simple sets are supported.
 For example, the pattern `[[a-z]--[aeiou]]` is mangled and interpreted as:
@@ -172,7 +172,7 @@ For example, the pattern `[[a-z]--[aeiou]]` is mangled and interpreted as:
 
 In version 1, the same pattern (`[[a-z]--[aeiou]]`) is a single set that uses a **set operator** to match all the lowercase letters from `a` to `z` *except* for the vowels (`a`, `e`, `i`, `o`, `u`).
 
-### Set operators
+### SET OPERATORS
 
 _([regular-expressions.info lesson 1](https://www.regular-expressions.info/charclasssubtract.html), [lesson 2](https://www.regular-expressions.info/charclassintersect.html))_
 
@@ -207,7 +207,7 @@ r'[\p{ASCII}&&\p{Letter}]' # Set containing all characters which are ASCII and l
 
 _([regular-expressions.info lesson](https://www.regular-expressions.info/brackets.html))_
 
-### Subroutines
+### SUBROUTINES
 
 _([regular-expressions.info lesson](https://www.regular-expressions.info/subroutine.html))_
 
@@ -275,7 +275,7 @@ If you define a subroutine that shares the name `DEFINE`, this section will brea
 regex.search(r'(?(DEFINE)(?P<quant>\d+)(?P<item>\w+))(?&quant) (?&item)', '5 elephants') # -> 5 elephants
 ```
 
-### Conditional Groups (`(?(1)then|else)`)
+### CONDITIONAL GROUPS (`(?(1)then|else)`)
 
 _([regular-expressions.info lesson](https://www.regular-expressions.info/conditional.html))_
 
@@ -297,7 +297,7 @@ regex.match(r'(?(?=\d)\d+\b|\w+)', '123abc') # -> None
 
 In the first example, the lookaround matched, but the remainder of the first branch failed to match, and so the second branch was attempted, whereas in the second example, the lookaround matched, and the first branch failed to match, but the second branch was **not** attempted.
 
-### Branch Reset Groups (`(?|...)`)
+### BRANCH RESET GROUPS (`(?|...)`)
 
 _([regular-expressions.info lesson](https://www.regular-expressions.info/branchreset.html))_
 
@@ -319,7 +319,7 @@ regex.match(r"(?|(first)|(second))", "first").groups() # -> ('first',)
 regex.match(r"(?|(first)|(second))", "second").groups() # -> ('second',)
 ```
 
-### Variable-length lookbehind (`(?<=^.*)`)
+### VARIABLE-LENGTH LOOKBEHIND (`(?<=^.*)`)
 
 _([regular-expressions.info lesson](https://www.regular-expressions.info/lookbehind.html))_
 
@@ -329,7 +329,7 @@ A lookbehind can match a variable-length string.
 
 (unicode)=
 
-### Unicode Properties (`\p{property}`)
+### UNICODE PROPERTIES (`\p{property}`)
 
 _([regular-expressions.info lesson](https://www.regular-expressions.info/unicode.html))_
 
@@ -359,7 +359,7 @@ In addition to the usual properties, you can also use:
 
 (posix)=
 
-### POSIX Character Classes (`[[:class:]]`)
+### POSIX CHARACTER CLASSES (`[[:class:]]`)
 
 _([regular-expressions.info lesson](https://www.regular-expressions.info/posixbrackets.html))_
 
@@ -374,7 +374,7 @@ These are normally treated as an alternative form of `\p{...}`, except for `alnu
 |  `[[:punct:]]` | `\p{posix_punct}`           |
 | `[[:xdigit:]]` | `\p{posix_xdigit}`          |
 
-### Search Anchors (`\G`)
+### SEARCH ANCHORS (`\G`)
 
 _([regular-expressions.info lesson](https://www.regular-expressions.info/continue.html))_
 
@@ -390,7 +390,7 @@ regex.findall(r"(?<!X.*)\w+", "aXa bXb") # -> ['aXa']
 regex.findall(r"(?<!\G.*X.*)\w+", "aXa bXb") # -> ['aXa', 'bXb']
 ```
 
-### Word boundaries (`\m\M\b\B`)
+### WORD BOUNDARIES (`\m\M\b\B`)
 
 _([regular-expressions.info lesson](https://www.regular-expressions.info/wordboundaries.html))_
 
@@ -398,12 +398,12 @@ _([regular-expressions.info lesson](https://www.regular-expressions.info/wordbou
 
 The definition of a 'word' character (`\w`) has also been expanded to conform to the Unicode specification at http://www.unicode.org/reports/tr29 -- see [regular-expressions.info](https://www.regular-expressions.info/unicodeboundaries.html)'s discussion for details.
 
-### Named characters (`\N{name}`)
+### NAMED CHARACTERS (`\N{name}`)
 
 Named characters are supported.
 Note that only those known by Python's Unicode database will be recognised.
 
-### A single grapheme (`\X`)
+### A SINGLE GRAPHEME (`\X`)
 
 _([regular-expressions.info lesson](https://www.regular-expressions.info/unicodechars.html))_
 
@@ -412,13 +412,13 @@ It conforms to the Unicode specification at `http://www.unicode.org/reports/tr29
 
 ## Optimization
 
-### Atomic grouping `(?>...)`
+### ATOMIC GROUPING `(?>...)`
 
 _([regular-expressions.info lesson](https://www.regular-expressions.info/atomic.html))_
 
 If the following pattern subsequently fails, then the subpattern as a whole will fail.
 
-### Possessive quantifiers (`.*+`)
+### POSSESSIVE QUANTIFIERS (`.*+`)
 
 _([regular-expressions.info lesson](https://www.regular-expressions.info/possessive.html))_
 
@@ -428,7 +428,7 @@ The subpattern is matched up to 'max' times.
 If the following pattern subsequently fails, then all the repeated subpatterns will fail as a whole.
 For example, `(?:...)++` is equivalent to `(?>(?:...)+)`.
 
-### Backtracking Control Verbs (`(*VERB)`)
+### BACKTRACKING CONTROL VERBS (`(*VERB)`)
 
 _([regular-expressions.info lesson](https://www.regular-expressions.info/verb.html))_
 
@@ -442,7 +442,7 @@ We support 3 of [the 7 control verbs](https://www.regular-expressions.info/refve
 
 3. `(*FAIL)`/`(*F)` causes immediate backtracking.
 
-### Keep (`\K`)
+### KEEP (`\K`)
 
 _([regular-expressions.info lesson](https://www.regular-expressions.info/keep.html))_
 
@@ -459,7 +459,7 @@ m[0] # -> bc
 m[1] # -> bcdef
 ```
 
-### Named Lists (`\L<name>`)
+### NAMED LISTS (`\L<name>`)
 
 There are occasions where you may want to include a list (actually, a set) of options in a regex.
 
@@ -497,14 +497,14 @@ p = regex.compile(r"\L<options>", options=option_set, other_options=[])
 
 ## Python API
 
-### Environment
+### ENVIRONMENT
 
 - Python 2 is not supported.
 - This module is targeted at CPython.
 - Threading is supported **IF** strings don't change during matching.
 - This module supports Unicode 17.0.0 and full Unicode case-folding.
 
-### Repeated Matches
+### REPEATED MATCHES
 
 #### Captures & Spans
 
@@ -556,7 +556,7 @@ Group names can be duplicated:
 
 ```python
 # ---------------
-# OPTIONAL GROUPS
+# Optional Groups
 # ---------------
 # Both groups capture, the second capture 'overwriting' the first.
 m = regex.match(r"(?P<item>\w+)? or (?P<item>\w+)?", "first or second")
@@ -574,7 +574,7 @@ m.group("item") # -> 'first'
 m.captures("item") # -> ['first']
 
 # ----------------
-# MANDATORY GROUPS
+# Mandatory Groups
 # ----------------
 # Both groups capture, the second capture 'overwriting' the first.
 m = regex.match(r"(?P<item>\w\*) or (?P<item>\w\*)?", "first or second")
@@ -618,7 +618,7 @@ m.expandf('{letter[0]} {letter[1]} {letter[2]}') # -> a b c
 m.expandf('{letter[-1]} {letter[-2]} {letter[-3]}') # -> c b a
 ```
 
-### New Functions
+### NEW FUNCTIONS
 
 #### `splititer()`
 
@@ -679,7 +679,7 @@ print(m.group()) # -> Hello
 print(m.string) # -> None
 ```
 
-### New Arguments
+### NEW ARGUMENTS
 
 #### Partial Matches
 
@@ -776,7 +776,7 @@ regex.sub(r'[a-z]', slow_replace, 'abcde', timeout=2) # -> TimeoutError: regex t
 
 Regex usually attempts an exact match, but sometimes an approximate, or "fuzzy", match is needed, for those cases where the text being searched may contain errors in the form of inserted, deleted or substituted characters.
 
-### Basics
+### BASICS
 
 A fuzzy regex specifies A) which types of errors are permitted, and, optionally, B) either the minimum and maximum or only the maximum permitted number of each type.
 The 3 types of error are: Insertion (`i`), Deletion (`d`), Substitution (`s`), or any (`e`).
@@ -799,14 +799,14 @@ If a certain type of error is specified, then any type not specified will **not*
 - `(...){1<=e<=3}` permit at least 1 and at most 3 errors
 - `(...){i<3,d<=2,e<4}` permit at most 2 insertions, at most 2 deletions, at most 3 errors in total, but no substitutions
 
-### Costs & Budgets
+### COSTS & BUDGETS
 
 It's also possible to state the costs of each type of error and the maximum permitted total cost:
 
 - `(...){2i+2d+1s<=4}` each insertion costs 2, each deletion costs 2, each substitution costs 1, the total cost must not exceed 4
 - `(...){i<=1,d<=1,s<=1,2i+2d+1s<=4}` at most 1 insertion, at most 1 deletion, at most 1 substitution; each insertion costs 2, each deletion costs 2, each substitution costs 1, the total cost must not exceed 4
 
-### Tests
+### TESTS
 
 You can add a test to perform on a character that's substituted or inserted.
 
@@ -815,7 +815,7 @@ You can add a test to perform on a character that's substituted or inserted.
 - `(...){s<=2:[a-z]}` at most 2 substitutions, which must be in the character set `[a-z]`.
 - `(...){s<=2,i<=3:\d}` at most 2 substitutions, at most 3 insertions, which must be digits.
 
-### Flags
+### FLAGS
 
 By default, fuzzy matching searches for the first match that meets the given constraints.
 The `ENHANCEMATCH` flag will cause it to attempt to improve the fit (i.e. reduce the number of errors) of the match that it has found.
@@ -879,7 +879,7 @@ So the actual string was:
 
 ## Known Issues / Complexities
 
-### `*` operator not working correctly with sub()
+### `*` OPERATOR NOT WORKING CORRECTLY WITH SUB()
 
 Sometimes it's not clear how zero-width matches should be handled.
 For example, should `.*` match 0 characters directly after matching >0 characters?

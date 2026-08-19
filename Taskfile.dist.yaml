@@ -28,9 +28,9 @@ vars:
     IMG: '{{.IMG_URL}}:latest'
 
 tasks:
-    # -------------
+    # -----------
     # Moving Tags
-    # -------------
+    # -----------
     # Core parameterizable task — moves an annotated tag to HEAD and force-pushes.
     # Usage:
     #   task tag:move -- TAG=stable
@@ -85,9 +85,9 @@ tasks:
             - task: tag:move
               vars: { TAG: edge }
 
-    # -----------------
+    # --------------
     # Permanent Tags
-    # -----------------
+    # --------------
     # Semver version tags — created once, never moved.
     # Usage:
     #   task tag:version VERSION=v1.0.0
@@ -160,9 +160,9 @@ tasks:
             - cmd: git -C {{._0}} tag -a '{{.VERSION}}' HEAD -m '{{._MSG}}'
             - cmd: git -C {{._0}} push '{{.GIT_REMOTE}}' '{{.VERSION}}'
 
-    # -------------
+    # ---------
     # Utilities
-    # -------------
+    # ---------
     tag:list:
         desc: List all git tags, sorted by version (newest first).
         cmd: git -C {{._0}} tag -l --sort=-v:refname
@@ -491,7 +491,7 @@ tasks:
             fi
 
     # ----------
-    # Pre-commit
+    # Pre-Commit
     # ----------
     # The fast, high-frequency per-commit gate: format then lint STAGED FILES ONLY, fail-fast.
     # `eval` is the whole-tree CI/manual analogue; pyrefly and pytest stay out of the per-commit
@@ -634,9 +634,9 @@ tasks:
                   SETENV: '{{._FLOOR_ENV}}'
                   CMD: "{{.UV}} run --python '{{.PYMIN}}' pytest -q {{.CLI_ARGS}}"
 
-    # -------------------------
-    # Project-specific tasks
-    # -------------------------
+    # ----------------------
+    # Project-Specific Tasks
+    # ----------------------
     # These are hand-added to this generated file and are NOT part of the corpus template.
     # The `tests/test_ci_taskfile.py` regression test guards them against copier sync drops
     # (commit 4b6167f once silently removed them, breaking the `Test Artifacts` CI job).

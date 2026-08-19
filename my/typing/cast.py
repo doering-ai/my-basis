@@ -144,7 +144,7 @@ class TypeCast(_TypingBase):
     """
 
     RGXS: ClassVar[dict[str, re.Pattern]] = ut.regex_dict(
-        ### Atomic Types
+        ### ATOMIC TYPES
         int=r'-?\d+',
         float=r'-?\d+(?:\.\d+)?',
         complex=r'-?\d+(?:\.\d+)?[jJ](?:\s*[+-]\s*\d+(?:\.\d+)?[jJ])?',
@@ -1530,7 +1530,7 @@ class Transform[T0, T1]:
             return self.proxy(self.data())
 
     # ----------------------------------
-    # `-2` Non-registered helper methods
+    # `-2` Non-Registered Helper Methods
     # ----------------------------------
     @classmethod
     def _derive_container(cls, old: MyType, new_origin: type) -> MyType:

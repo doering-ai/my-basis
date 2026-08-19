@@ -83,33 +83,33 @@ MATCH_INTERSECT = boolmap(
 #: `match` nested-generic cases: element types are recursed into.
 MATCH_NESTED = boolmap(
     false=[
-        # ---- Nested type mismatches ----
+        # ---- Nested Type Mismatches ----
         (list[int], list[str]),
         (dict[str, int], dict[str, str]),
         (dict[str, int], dict[int, int]),
         (list[list[int]], list[list[str]]),
         (dict[str, list[int]], dict[str, list[str]]),
-        # ---- Tuple literal type mismatches ----
+        # ---- Tuple Literal Type Mismatches ----
         (tuple[int, str], tuple[str, int]),
         (tuple[int, str, float], tuple[int, str]),
-        # ---- Literal mismatches ----
+        # ---- Literal Mismatches ----
         (Literal[1, 2], Literal[3, 4]),
         (Literal['a'], Literal['b']),
     ],
     true=[
-        # ---- Nested types ----
+        # ---- Nested Types ----
         (list[int], list[int]),
         (dict[str, int], dict[str, int]),
         (list[list[int]], list[list[int]]),
         (dict[str, list[int]], dict[str, list[int]]),
-        # ---- Nested generics with subtyping ----
+        # ---- Nested Generics With Subtyping ----
         (list[int], Sequence[int]),
         (dict[str, int], Mapping[str, int]),
         (Counter[str], Mapping[str, int]),
-        # ---- Complex nested ----
+        # ---- Complex Nested ----
         (dict[str, list[int]], Mapping[str, Sequence[int]]),
         (list[dict[str, int]], Sequence[Mapping[str, int]]),
-        # ---- Tuple literals ----
+        # ---- Tuple Literals ----
         (tuple[int, str], tuple[int, str]),
         (tuple[int, ...], tuple[int, ...]),
         # ---- Literals ----
@@ -143,9 +143,9 @@ MATCH_EDGE = boolmap(
 class TestMatch:
     """Test suite for the `match` chamber: the `TypeMatch` (`tym`) subset/intersection layer."""
 
-    # ------------------
+    # -------------------
     # `*` Primary Methods
-    # ------------------
+    # -------------------
     @pyt.mark.parametrize('t0, t1, expected', MATCH_SUBSET)
     def test_match(self, t0, t1, expected: bool):
         """Test `tym.match` subset coverage: is `t0` a subset of `t1`?"""
@@ -264,9 +264,9 @@ class TestMatch:
         """Test `is_iter_type`: a non-string, non-vec, non-map Iterable type."""
         assert cls.is_iter_type(tvar) == expected
 
-    # -----------------
+    # ------------------
     # `*` Facade Methods
-    # -----------------
+    # ------------------
     @pyt.mark.parametrize(
         'lhs, rhs, expected',
         boolmap(

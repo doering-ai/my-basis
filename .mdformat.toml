@@ -38,4 +38,6 @@ exclude = [
 
 #: myst-mdformat plugin options ([plugin.myst] must follow all top-level keys)
 [plugin.myst]
-sembr = true # reflow prose to one sentence per line (semantic line breaks)
+sembr = false # off by default (MEMY-1589): the splitter mis-breaks on non-sentence
+# periods (e.g., i.e., pp., ch., initials). Opt in manually per invocation with
+# `mdformat --sembr <file>`; `--no-sembr` overrides an enabled TOML key.

@@ -74,13 +74,13 @@ typst eval 'query(<dtm-report>).first().value' --in report.typ --format json
 
 ## Modules
 
-| Module              | Exposes                                                                                                       |
+| Module | Exposes |
 | ------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `theme.typ`         | `colors`, `fonts`, `accent-of`, `apply-base`, `title-block`, `genre-chip`                                     |
-| `callouts.typ`      | `callout` + `note`/`tip`/`important`/`warning`/`caution`/`hint`/`attention`/`danger`/`error`; `callout-kinds` |
-| `report.typ`        | `report`, `report-genres`, `envelope-schema`                                                                  |
-| `problem-space.typ` | `problem-space`                                                                                               |
-| `packages.typ`      | OPTIONAL blessed `@preview` re-exports (live-fetch; import explicitly)                                        |
+| `theme.typ` | `colors`, `fonts`, `accent-of`, `apply-base`, `title-block`, `genre-chip` |
+| `callouts.typ` | `callout` + `note`/`tip`/`important`/`warning`/`caution`/`hint`/`attention`/`danger`/`error`; `callout-kinds` |
+| `report.typ` | `report`, `report-genres`, `envelope-schema` |
+| `problem-space.typ` | `problem-space` |
+| `packages.typ` | OPTIONAL blessed `@preview` re-exports (live-fetch; import explicitly) |
 
 `lib.typ` re-exports everything except `packages.typ`, so the core compiles offline.
 

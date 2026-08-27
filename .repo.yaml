@@ -1,5 +1,5 @@
 # Changes here will be overwritten by Copier
-_commit: stable-198-g8d8d0864
+_commit: stable-200-ge45d62c8
 _src_path: /home/robbd/my/corpus
 build_system: uv
 caption: An extensive utility library for python, focusing especially on iterables and a Regex

@@ -632,7 +632,7 @@ tasks:
             - task: _workrun
               vars:
                   SETENV: '{{._FLOOR_ENV}}'
-                  CMD: "{{.UV}} run --python '{{.PYMIN}}' pytest -q {{.CLI_ARGS}}"
+                  CMD: "{{.UV}} run --no-sync --python '{{.PYMIN}}' pytest -q {{.CLI_ARGS}}"
 
     # ----------------------
     # Project-Specific Tasks

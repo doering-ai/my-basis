@@ -619,20 +619,49 @@ tasks:
         aliases: [floor, floor-test, test-floor]
         vars:
             PYMIN: '3.{{get .REPO "pyver"}}'
-            _FLOOR_ENV: 'UV_PROJECT_ENVIRONMENT={{._0}}/.venvs/floor'
+            _FLOOR_DIR: '{{._0}}/.venvs/floor'
+            _FLOOR_ENV: 'UV_PROJECT_ENVIRONMENT={{._FLOOR_DIR}}'
+            _FLOOR_PYTHON: '{{._FLOOR_DIR}}/bin/python'
+            _FLOOR_REQUIREMENTS: '{{._FLOOR_DIR}}/requirements.txt'
         cmds:
-            # MEMY-1123: the sync leg is itself sustained I/O (dependency resolution + network +
-            # disk writes) -- route it through the jail too, not just the pytest invocation that
-            # follows it. Task's cmds list stops at the first failing entry, same as the `set -e`
-            # this replaces, so a failed sync never reaches the pytest leg.
+            # MEMY-1626: a project-level `uv sync --resolution lowest-direct` rewrites the
+            # canonical uv.lock. Resolve through uv's pip interface instead: the alternate
+            # requirements and all dependency state live under the disposable floor venv,
+            # so success, failure, and interruption cannot alter project lock state. Rebuild
+            # the venv first, then compile every project extra plus the template's dev group.
+            # Install only the local project with a frozen, inexact sync: package=false becomes
+            # a no-op, while buildable projects retain editable-install behavior without letting
+            # the canonical highest-resolution lock replace the already-installed floor.
+            # MEMY-1123: each sustained resolver/installer/test leg routes through workrun.
             - task: _workrun
               vars:
                   SETENV: '{{._FLOOR_ENV}}'
-                  CMD: "{{.UV}} sync --python '{{.PYMIN}}' --all-extras --resolution lowest-direct"
+                  CMD: "{{.UV}} venv --clear --python '{{.PYMIN}}' '{{._FLOOR_DIR}}'"
             - task: _workrun
               vars:
                   SETENV: '{{._FLOOR_ENV}}'
-                  CMD: "{{.UV}} run --no-sync --python '{{.PYMIN}}' pytest -q {{.CLI_ARGS}}"
+                  CMD: >-
+                      {{.UV}} pip compile '{{._0}}/pyproject.toml' --all-extras --group dev
+                      --resolution lowest-direct --python '{{.PYMIN}}' --upgrade
+                      --output-file '{{._FLOOR_REQUIREMENTS}}'
+            - task: _workrun
+              vars:
+                  SETENV: '{{._FLOOR_ENV}}'
+                  CMD: >-
+                      {{.UV}} pip sync --python '{{._FLOOR_PYTHON}}'
+                      '{{._FLOOR_REQUIREMENTS}}'
+            - task: _workrun
+              vars:
+                  SETENV: '{{._FLOOR_ENV}}'
+                  CMD: >-
+                      {{.UV}} sync --frozen --inexact --only-install-project
+                      --python '{{._FLOOR_PYTHON}}'
+            - task: _workrun
+              vars:
+                  SETENV: '{{._FLOOR_ENV}}'
+                  CMD: >-
+                      {{.UV}} run --no-sync --python '{{._FLOOR_PYTHON}}'
+                      pytest -q {{.CLI_ARGS}}
 
     # ----------------------
     # Project-Specific Tasks

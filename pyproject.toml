@@ -140,17 +140,30 @@ testpaths = ["tests"]
 # exceeding it means an infinite loop/recursion, not slow I/O -- fail fast instead of hanging.
 timeout = 15
 
+[tool.coverage.run]
+source = ["my"]
+# Jinja2 compiles templates with `co_filename` set to the real template path (nice
+# tracebacks), so coverage's tracer sees them as "executed Python" and the JSON
+# reporter's AST-based code_regions() then chokes parsing Jinja syntax as Python
+# (MEMY-1381). Templates carry no branch logic of their own to measure anyway.
+omit = ["my/data/templates/*"]
+
 [tool.coverage.report]
-# Regexes for lines to exclude from consideration
+# Canonical exemption fragment (settings/config/coverage-pyproject.toml, MEMY-1380).
 exclude_also = [
+    # EX-01: typing-only imports never execute
+    'if TYPE_CHECKING:',
+    # EX-02: cosmetic repr bodies (reprs with parse/round-trip contracts still need tests)
     'def __repr__',
-    'if[- \w.]+\b(?i:debug):',
-    'assert ',
-    'raise (Assertion|NotImplemented)Error',
-    'if 0:',
-    'if __name__ == .__main__.:',
+    # EX-03: interface declarations with no behavior
+    'raise NotImplementedError',
     '@(abc\.)?abstractmethod',
-    '^([a-z]\w+?\.)?[A-Z][_A-Z]+(:[^=\n]+)? *=[^\n]+(?=\n\S)',
+    '^\s*\.\.\.$',
+    # EX-04: script entry glue
+    "if __name__ == .__main__.:",
+    # EX-05: unreachable-by-construction defensive branches
+    'raise AssertionError',
+    'assert_never\(',
 ]
 ignore_errors = true
 

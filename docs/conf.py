@@ -218,7 +218,7 @@ myst_enable_extensions = [
     'fieldlist',  # Enable field lists
     'html_admonition',  # Convert <div class="admonition"> elements to sphinx admonition nodes
     'html_image',  # Convert HTML <img> elements to sphinx image nodes
-    'linkify',  # Automatically identify “bare” web URLs and add hyperlinks
+    'linkify',  # Automatically identify "bare" web URLs and add hyperlinks
     'replacements',  # Automatically convert some common typographic texts
     # 'smartquotes', ## Automatically convert standard quotations to their opening/closing variants
     'strikethrough',  # Enable strikethrough using ~~del~~ syntax

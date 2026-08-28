@@ -5,7 +5,7 @@
 // keystone, and an explicit terminus when the frontier genuinely ends.
 //
 // Node model (arbitrarily nested):
-//   (label: "…", note: "…"?, keystone: true?, children: (…)?)
+//   (label: "...", note: "..."?, keystone: true?, children: (...)?)
 //
 // Usage:
 //   #problem-space(

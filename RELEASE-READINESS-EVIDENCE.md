@@ -20,11 +20,11 @@ ______________________________________________________________________
 
 ### A.1 Import cost & closure size
 
-| Bookend | Distributions | site-packages | `import my` wall (perf_counter ×3) | `-X importtime` cumulative |
+| Bookend                                       | Distributions | site-packages | `import my` wall (perf_counter ×3) | `-X importtime` cumulative |
 | --------------------------------------------- | ------------- | ------------- | ---------------------------------- | -------------------------- |
-| Core-only (`pip install my-basis`, no extras) | 25 | 83.0 MB | 176 / 179 / 202 ms | 178 ms |
-| All-extras runtime (`--no-dev --all-extras`) | 91 | 295.3 MB | — | — |
-| As-shipped dev venv (all extras + dev groups) | 142 | 381.3 MB | 411 / 454 / 440 ms | 672 ms |
+| Core-only (`pip install my-basis`, no extras) | 25            | 83.0 MB       | 176 / 179 / 202 ms                 | 178 ms                     |
+| All-extras runtime (`--no-dev --all-extras`)  | 91            | 295.3 MB      | —                                  | —                          |
+| As-shipped dev venv (all extras + dev groups) | 142           | 381.3 MB      | 411 / 454 / 440 ms                 | 672 ms                     |
 
 - **Import-time attribution (dev venv):** `logfire`→OpenTelemetry cascade via pydantic's plugin loader ≈ **34%** (~228 ms), triggered the instant basis defines its first `BaseModel` (`my/infra/constants.py:23` `class InfraPaths`).
   `MetricUtils` (pandas) subtree = 137,599 µs vs 784 µs absent (~176×); `GoogleSheet` (googleapiclient) subtree = 112,436 µs vs 650 µs absent (~173×) — together ≈ **37%**.
@@ -34,35 +34,35 @@ ______________________________________________________________________
 
 ### A.2 Per-core-dependency necessity (14 declared)
 
-| Dep | Sites in `my/` | Verdict | Note |
+| Dep             | Sites in `my/`                    | Verdict               | Note                                                                                                |
 | --------------- | --------------------------------- | --------------------- | --------------------------------------------------------------------------------------------------- |
-| pydantic | ~40 files | KEEP-CORE | foundational |
-| regex | ~29 files | KEEP-CORE | VERSION1 / `(?R)` / `timeout=`; stdlib `re` can't |
-| more-itertools | 60 sites / 22 files | KEEP-CORE | woven throughout |
-| srsly | 11 sites | KEEP-CORE | json+yaml+pickle bundle; 5.7 MB (heavyish) |
-| tomli-w | 1 | KEEP-CORE | tiny, real stdlib gap (write half of `tomllib`) |
-| numpy | 9 sites, **1 file** (`Buffer.py`) | KEEP or ⚠REPLACE | 60 MB; genuine array math (**cleared** — not decorative); can't be lazy (pydantic field annotation) |
-| jinja2 | 1 call + eager `Environment()` | MAKE-LAZY | real `extends`/`super()`/recursive-loop use |
-| mdformat | 1 (`Markdown.py:689`) | KEEP-CORE + fix split | broken without its plugin (see C-D8) |
-| dotenv | 1 (`Environment.py:13`) | REPIN → python-dotenv | 1.9 KB trampoline; `uv.lock:542-550` shows it only requires `python-dotenv` |
-| python-dateutil | 1 (`cast.py:698`) | MAKE-LAZY | last-resort fallback after stdlib `fromisoformat` |
-| unidecode | 1 (`TextUtils.py:267`) | MAKE-LAZY | powers `clean_string`, called only by its own test |
-| **identify** | **0** | **DROP** | unused since the initial commit `[V]` |
-| **toolz** | **0** | **DROP** | superseded by more-itertools `[V]` |
-| **tqdm** | **0** | **DROP** | zero occurrences anywhere `[V]` |
+| pydantic        | ~40 files                         | KEEP-CORE             | foundational                                                                                        |
+| regex           | ~29 files                         | KEEP-CORE             | VERSION1 / `(?R)` / `timeout=`; stdlib `re` can't                                                   |
+| more-itertools  | 60 sites / 22 files               | KEEP-CORE             | woven throughout                                                                                    |
+| srsly           | 11 sites                          | KEEP-CORE             | json+yaml+pickle bundle; 5.7 MB (heavyish)                                                          |
+| tomli-w         | 1                                 | KEEP-CORE             | tiny, real stdlib gap (write half of `tomllib`)                                                     |
+| numpy           | 9 sites, **1 file** (`Buffer.py`) | KEEP or ⚠REPLACE      | 60 MB; genuine array math (**cleared** — not decorative); can't be lazy (pydantic field annotation) |
+| jinja2          | 1 call + eager `Environment()`    | MAKE-LAZY             | real `extends`/`super()`/recursive-loop use                                                         |
+| mdformat        | 1 (`Markdown.py:689`)             | KEEP-CORE + fix split | broken without its plugin (see C-D8)                                                                |
+| dotenv          | 1 (`Environment.py:13`)           | REPIN → python-dotenv | 1.9 KB trampoline; `uv.lock:542-550` shows it only requires `python-dotenv`                         |
+| python-dateutil | 1 (`cast.py:698`)                 | MAKE-LAZY             | last-resort fallback after stdlib `fromisoformat`                                                   |
+| unidecode       | 1 (`TextUtils.py:267`)            | MAKE-LAZY             | powers `clean_string`, called only by its own test                                                  |
+| **identify**    | **0**                             | **DROP**              | unused since the initial commit `[V]`                                                               |
+| **toolz**       | **0**                             | **DROP**              | superseded by more-itertools `[V]`                                                                  |
+| **tqdm**        | **0**                             | **DROP**              | zero occurrences anywhere `[V]`                                                                     |
 
 ### A.3 SITE-PACKAGES WEIGHT (TOP ENTRIES, `du` OVER DEV VENV, 381 MB TOTAL)
 
-| Entry | Size | Class |
+| Entry                     | Size     | Class                       |
 | ------------------------- | -------- | --------------------------- |
-| googleapiclient | 96.6 MB | extra (google) |
-| pandas | 49.2 MB | extra (metrics+google) |
-| numpy + numpy.libs | 58.4 MB | **core** |
-| cryptography | 14.6 MB | extra (google-auth) |
-| srsly | 5.7 MB | **core** |
-| pydantic_core + pydantic | 8.1 MB | **core** |
-| regex | 3.1 MB | **core** |
-| opentelemetry (11 dists) | 3.8 MB | extra (metrics) |
+| googleapiclient           | 96.6 MB  | extra (google)              |
+| pandas                    | 49.2 MB  | extra (metrics+google)      |
+| numpy + numpy.libs        | 58.4 MB  | **core**                    |
+| cryptography              | 14.6 MB  | extra (google-auth)         |
+| srsly                     | 5.7 MB   | **core**                    |
+| pydantic_core + pydantic  | 8.1 MB   | **core**                    |
+| regex                     | 3.1 MB   | **core**                    |
+| opentelemetry (11 dists)  | 3.8 MB   | extra (metrics)             |
 | logfire / rich / pygments | ~11.6 MB | extra (metrics, transitive) |
 
 Category totals: **extra 212.3 MB · dev 84.6 MB · core 83.0 MB.**
@@ -71,16 +71,16 @@ Category totals: **extra 212.3 MB · dev 84.6 MB · core 83.0 MB.**
 
 **True for the store's own public matchers; bypassed by its own public raw-pattern accessors.** `[S]`
 
-| Call site | `timeout=`? |
+| Call site                                                                                        | `timeout=`?                                                                       |
 | ------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
-| `RegexStore._autoparse` → `.match/.fullmatch/.search` (`RegexStore.py:511`) | **YES** (verified raises `TimeoutError`) |
-| `RegexStore.finditer` str-path (`RegexStore.py:988`) | **YES** |
-| Buffer hot iterators (`Buffer.py:467,825,948`) | **YES** (`REGEX_TIMEOUT=10.0`) |
-| `Environment.RGXS.*` (`Environment.py:205,245,268`) | **YES** (via store) |
-| **`Filesystem._check_for_project_root`** (`Filesystem.py:166,168`) | **NO** — raw `.search()` on `RGXS['leaf']`, hangs on evil pattern (killed at 5 s) |
-| `ParseData.apply_dict_parser` (`ParseData.py:93`) | NO — inside the store's own pipeline |
-| `TextUtils.replace/split_into` (`TextUtils.py:50,71`) | NO — caller-supplied pattern **and** text |
-| `SystemUtils` yaml/pathy (`SystemUtils.py:607,645`), `FileCache.search` (`FileCache.py:469,481`) | NO — over full file contents / caller patterns |
+| `RegexStore._autoparse` → `.match/.fullmatch/.search` (`RegexStore.py:511`)                      | **YES** (verified raises `TimeoutError`)                                          |
+| `RegexStore.finditer` str-path (`RegexStore.py:988`)                                             | **YES**                                                                           |
+| Buffer hot iterators (`Buffer.py:467,825,948`)                                                   | **YES** (`REGEX_TIMEOUT=10.0`)                                                    |
+| `Environment.RGXS.*` (`Environment.py:205,245,268`)                                              | **YES** (via store)                                                               |
+| **`Filesystem._check_for_project_root`** (`Filesystem.py:166,168`)                               | **NO** — raw `.search()` on `RGXS['leaf']`, hangs on evil pattern (killed at 5 s) |
+| `ParseData.apply_dict_parser` (`ParseData.py:93`)                                                | NO — inside the store's own pipeline                                              |
+| `TextUtils.replace/split_into` (`TextUtils.py:50,71`)                                            | NO — caller-supplied pattern **and** text                                         |
+| `SystemUtils` yaml/pathy (`SystemUtils.py:607,645`), `FileCache.search` (`FileCache.py:469,481`) | NO — over full file contents / caller patterns                                    |
 
 Outside `RegexStore`/`Buffer` there is **no `REGEX_TIMEOUT` concept at all** — it's a store-only mechanism, not package-wide.
 
@@ -95,14 +95,14 @@ Outside `RegexStore`/`Buffer` there is **no `REGEX_TIMEOUT` concept at all** —
 
 ### A.6 Extras install sizes (fresh venv per extra, measured pre-import)
 
-| Install | site-packages | Δ vs bare | Effect |
+| Install      | site-packages | Δ vs bare | Effect                                                                        |
 | ------------ | ------------- | --------- | ----------------------------------------------------------------------------- |
-| bare | 79 MB | — | imports clean, all 7 subpackages OK |
-| `[google]` | 244 MB | +165 MB | `GoogleSheet.INSTALLED` → True |
-| `[metrics]` | 137 MB | +58 MB | `METRICS_INSTALLED` → True |
-| `[terminal]` | 92 MB | +13 MB | pyratatui (correctly lazy) |
-| `[myst]` | 82 MB | +3 MB | **no-op** — plugins register but `mdformat.text()` never passes `extensions=` |
-| `[aiohttp]` | 88 MB | +9 MB | **gates nothing** in `my` |
+| bare         | 79 MB         | —         | imports clean, all 7 subpackages OK                                           |
+| `[google]`   | 244 MB        | +165 MB   | `GoogleSheet.INSTALLED` → True                                                |
+| `[metrics]`  | 137 MB        | +58 MB    | `METRICS_INSTALLED` → True                                                    |
+| `[terminal]` | 92 MB         | +13 MB    | pyratatui (correctly lazy)                                                    |
+| `[myst]`     | 82 MB         | +3 MB     | **no-op** — plugins register but `mdformat.text()` never passes `extensions=` |
+| `[aiohttp]`  | 88 MB         | +9 MB     | **gates nothing** in `my`                                                     |
 
 ______________________________________________________________________
 
@@ -233,7 +233,7 @@ Core-only `Markdown.render(fix=True)` (the default) silently corrupts.
 ### B6/B7 — README contradicts reality `[V]`
 
 PyPI JSON API: `my-basis` 0.8.1/0.8.2/0.8.3 all live — README says "not yet published".
-Quickstart `ty.cast('a,b,c', list[str])` → `['a,b,c']` (not `['a','b','c']`; deliberate MEMY-325 change).
+Quickstart `ty.cast('a,b,c', list[str])` → `['a,b,c']` (not `['a','b','c']`; deliberate no-split change).
 Also: "Built for Python 3.12+" vs `requires-python >=3.13`; dead link `my/base/utils.py` (no `my/base/`); ~25 empty "Modules" headers.
 
 ______________________________________________________________________

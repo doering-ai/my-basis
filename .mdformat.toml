@@ -11,13 +11,13 @@ end_of_line = "lf" # lf|crlf|keep
 validate = true # false|true
 
 #: Enabled extensions (default: all installed)
-# extensions = [      
+# extensions = [
 #     "gfm",
 #     "toc",
 # ]
 
 #: Enabled code formatter languages (default: all installed)
-# codeformatters = [  
+# codeformatters = [
 #     "python",
 #     "json",
 # ]
@@ -38,6 +38,6 @@ exclude = [
 
 #: myst-mdformat plugin options ([plugin.myst] must follow all top-level keys)
 [plugin.myst]
-sembr = false # off by default (MEMY-1589): the splitter mis-breaks on non-sentence
+sembr = false # off by default: the splitter mis-breaks on non-sentence
 # periods (e.g., i.e., pp., ch., initials). Opt in manually per invocation with
 # `mdformat --sembr <file>`; `--no-sembr` overrides an enabled TOML key.

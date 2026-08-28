@@ -27,11 +27,11 @@ The current work therefore remains an unreleased candidate, not a retroactive re
 
 The three requested outcomes have the following disposition:
 
-| Area | Disposition | What the maintainer is approving |
+| Area                              | Disposition                                                                  | What the maintainer is approving                                                                                                                                                                                                |
 | --------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Test authorship and style | Ready; integrated local proof is green | A deterministic audit plus a broad normalization toward parameter tables, ordinary-sized names, and no test-name depth beyond `test_name__scenario`. |
+| Test authorship and style         | Ready; integrated local proof is green                                       | A deterministic audit plus a broad normalization toward parameter tables, ordinary-sized names, and no test-name depth beyond `test_name__scenario`.                                                                            |
 | Fleet adoption and reusable skill | Complete as a decision pass; two downstream drafts remain intentionally open | Every canonical public Python repository received an evidence-backed disposition. The resulting scanner, proposal contract, report renderer, and packaged skill turn that judgment process into a repeatable beginner workflow. |
-| `typst-basis` fold | Folded on the candidate at `c63d6eed` | Its complete Git history now lives under top-level `typst/`, while its license, version, tags, installation, tests, and release lifecycle remain independent from the Python distribution. |
+| `typst-basis` fold                | Folded on the candidate at `c63d6eed`                                        | Its complete Git history now lives under top-level `typst/`, while its license, version, tags, installation, tests, and release lifecycle remain independent from the Python distribution.                                      |
 
 The campaign deliberately did not maximize use of Basis.
 Five of the nine repositories were declined, deferred, or left as already-adopted because their Python floor, zero-dependency promise, failure-path constraints, or lack of a coherent replacement outweighed any code reduction.
@@ -139,19 +139,19 @@ History preservation is the safety net; a hurried directory copy followed by del
 ## Fleet dispositions
 
 The canonical pass covered these nine public Python repositories.
-“No change” is a result when it protects a deliberate compatibility or dependency boundary.
+"No change" is a result when it protects a deliberate compatibility or dependency boundary.
 
-| Repository | Disposition | Result and rationale | Review surface |
+| Repository        | Disposition            | Result and rationale                                                                                                                                                                                        | Review surface                                                                                                       |
 | ----------------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `tact` | Decline | Its runtime core deliberately has zero dependencies. The apparent complex-regex sites were an isolated hunk-header parser and a test-only secret matcher, not a shared production grammar. | No MR; repository remained clean. |
-| `irix` | Already adopted | Basis is already present. The only complex-looking regex was a local environment-placeholder lookbehind, so no RegexStore expansion earned its cost. Refresh the stale lock only after 1.0 exists. | No MR; repository remained clean. |
-| `means` | Implemented and merged | Centralized `MEANS_DIR` and replaced the repeated fenced-YAML extraction with a tested RegexStore grammar. Native evaluation and all 401 tests passed. | [MR !5](https://gitlab.com/doering-ai/apps/means/-/merge_requests/5), commits `ad4ba61` and `aadec529`. |
-| `piq` | Decline for this round | Its Python 3.11 floor is below Basis's deliberate 3.12 floor. Adding Basis would silently change a product contract; its isolated regex calls do not justify that decision. | No MR; rendered decline proposal produced. |
-| `myform` | Implemented and merged | Removed local regex helper duplication by adopting the existing Basis utility aliases. Ruff, Pyrefly, and all 4,353 tests passed. | [MR !5](https://gitlab.com/doering-ai/libs/myform/-/merge_requests/5), commit `557ff2a7`. |
-| `wikiparse` | Implemented as a draft | Exercised its large existing RegexStore grammar against the candidate Buffer behavior. The controlled run reached 1,996 passing and 9 expected failures; 3 unrelated failures remain outside this refactor. | [Draft MR !2](https://gitlab.com/doering-ai/apps/wikiparse/-/merge_requests/2), commit `13287b1`; merge after Basis. |
-| `superheavy-gate` | Decline | It supports Python 3.11 and its failure hook is deliberately standard-library-only. A dependency in the path that decides whether heavy model use is allowed would invert that reliability contract. | No MR; repository remained clean. |
-| `arch` | Implemented as a draft | Reused Basis where document and assay grammars already meet RegexStore. The focused 41-test slice passed; the broader run passed 966 tests after separating 3 known stale defects. | [Draft MR !2](https://gitlab.com/doering-ai/libs/arch/-/merge_requests/2), commit `7252d68`; merge after Basis. |
-| `model` | Reference adopter | It already demonstrates the intended Basis and RegexStore relationship. Five unrelated regex calls did not form another grammar worth consolidating. Refresh its `0.8.1` lock only after 1.0. | No MR; repository remained clean. |
+| `tact`            | Decline                | Its runtime core deliberately has zero dependencies. The apparent complex-regex sites were an isolated hunk-header parser and a test-only secret matcher, not a shared production grammar.                  | No MR; repository remained clean.                                                                                    |
+| `irix`            | Already adopted        | Basis is already present. The only complex-looking regex was a local environment-placeholder lookbehind, so no RegexStore expansion earned its cost. Refresh the stale lock only after 1.0 exists.          | No MR; repository remained clean.                                                                                    |
+| `means`           | Implemented and merged | Centralized `MEANS_DIR` and replaced the repeated fenced-YAML extraction with a tested RegexStore grammar. Native evaluation and all 401 tests passed.                                                      | [MR !5](https://gitlab.com/doering-ai/apps/means/-/merge_requests/5), commits `ad4ba61` and `aadec529`.              |
+| `piq`             | Decline for this round | Its Python 3.11 floor is below Basis's deliberate 3.12 floor. Adding Basis would silently change a product contract; its isolated regex calls do not justify that decision.                                 | No MR; rendered decline proposal produced.                                                                           |
+| `myform`          | Implemented and merged | Removed local regex helper duplication by adopting the existing Basis utility aliases. Ruff, Pyrefly, and all 4,353 tests passed.                                                                           | [MR !5](https://gitlab.com/doering-ai/libs/myform/-/merge_requests/5), commit `557ff2a7`.                            |
+| `wikiparse`       | Implemented as a draft | Exercised its large existing RegexStore grammar against the candidate Buffer behavior. The controlled run reached 1,996 passing and 9 expected failures; 3 unrelated failures remain outside this refactor. | [Draft MR !2](https://gitlab.com/doering-ai/apps/wikiparse/-/merge_requests/2), commit `13287b1`; merge after Basis. |
+| `superheavy-gate` | Decline                | It supports Python 3.11 and its failure hook is deliberately standard-library-only. A dependency in the path that decides whether heavy model use is allowed would invert that reliability contract.        | No MR; repository remained clean.                                                                                    |
+| `arch`            | Implemented as a draft | Reused Basis where document and assay grammars already meet RegexStore. The focused 41-test slice passed; the broader run passed 966 tests after separating 3 known stale defects.                          | [Draft MR !2](https://gitlab.com/doering-ai/libs/arch/-/merge_requests/2), commit `7252d68`; merge after Basis.      |
+| `model`           | Reference adopter      | It already demonstrates the intended Basis and RegexStore relationship. Five unrelated regex calls did not form another grammar worth consolidating. Refresh its `0.8.1` lock only after 1.0.               | No MR; repository remained clean.                                                                                    |
 
 Two supporting Corpus changes sit outside the nine-repository disposition matrix:
 
@@ -327,16 +327,16 @@ Before accepting a complex RegexStore change, ask:
 
 The monorepo removes a repository without pretending the two packages are one artifact.
 
-| Concern | Python `my-basis` | Typst `@dtm/basis` |
+| Concern        | Python `my-basis`                                      | Typst `@dtm/basis`                                                            |
 | -------------- | ------------------------------------------------------ | ----------------------------------------------------------------------------- |
-| Source root | `my/` and Python project files at repository root | `typst/` |
-| License | MPL-2.0 | Nested MIT `typst/LICENSE` |
-| Version source | Root `pyproject.toml` | `typst/typst.toml` |
-| Tag namespace | Bare `vX.Y.Z` | `typst-vX.Y.Z` |
-| Distribution | PyPI wheel and source distribution | Local Typst package tree under `dtm/basis/<version>` |
-| Installation | `pip`, `uv`, or `uvx` | `typst/install.sh` symlink for development or `--copy` for a release snapshot |
-| Verification | Python eval, test matrix, docs, wheel/sdist inspection | `typst/test.sh`, fixture compilation, and envelope query |
-| Release gate | Protected, manual PyPI job after a signed matching tag | Independent tag and package installation; never triggers PyPI |
+| Source root    | `my/` and Python project files at repository root      | `typst/`                                                                      |
+| License        | MPL-2.0                                                | Nested MIT `typst/LICENSE`                                                    |
+| Version source | Root `pyproject.toml`                                  | `typst/typst.toml`                                                            |
+| Tag namespace  | Bare `vX.Y.Z`                                          | `typst-vX.Y.Z`                                                                |
+| Distribution   | PyPI wheel and source distribution                     | Local Typst package tree under `dtm/basis/<version>`                          |
+| Installation   | `pip`, `uv`, or `uvx`                                  | `typst/install.sh` symlink for development or `--copy` for a release snapshot |
+| Verification   | Python eval, test matrix, docs, wheel/sdist inspection | `typst/test.sh`, fixture compilation, and envelope query                      |
+| Release gate   | Protected, manual PyPI job after a signed matching tag | Independent tag and package installation; never triggers PyPI                 |
 
 The Python build checker must prove both halves of the packaging promise:
 
@@ -351,27 +351,27 @@ That keeps a Typst checkout from inflating the Python package while ensuring the
 Local proof is literal below.
 The submitted review and its exact-source pipeline are explicit pre-merge gates, not soft passes.
 
-| Surface | Command or evidence | Status |
-| ------------------------------ | --------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Lock integrity | `uv lock --check` | Passed; 137 packages resolved from the existing lock. |
-| Lint, format, and typing | `task eval` | Passed; Pyrefly and both Ruff gates were clean, with 133 files already formatted. |
-| Test-style contract | `task test:audit` | Passed; 49 files, 966 functions, 441 parameterized functions, at least 2,782 cases, maximum depth 2, 0 diagnostics, and 0 violations. |
-| Full Python suite | `task test -- -q` | Passed; 4,165 tests, 21 subtests, and 2 snapshots in 9.59 seconds, with no warnings. |
-| Python 3.12 dependency floor | `task test:floor` | Passed; the same 4,165 tests, 21 subtests, and 2 snapshots on CPython 3.12.13, Pydantic 2.12.2, and PyTest 9.0.0 in 8.91 seconds. |
-| Documentation | `task docs` | Passed warning-free; all eight packages were current and the Sphinx build was up to date. |
-| Packaged skill structure | skill-creator `quick_validate.py my/skills/adopt-my-basis` | Passed: `Skill is valid!`; README/skill/reference mdformat checks and packaged CLI help/path also passed. |
-| Adoption CLI | prepare, refresh, validate, and all render modes from a clean external output directory | Passed through 96 adoption tests and live prepare/validate/render smokes; the hardening smoke built a 33,500-byte PDF, and the final fleet pass rendered both PDF and HTML. |
-| Final fleet scanner regression | all nine canonical public Python repositories | Passed; 9 prepares plus 9 live-freshness validations, identical before/after fingerprints, no surviving scanner defect. Ledger: `/home/robbd/ai/artifacts/memy-754-adoption-dogfood-final/findings.md` (`ee68a044…e4b21`). |
-| Python artifact boundary | `uv build --no-sources`, then `scripts/check_release_artifacts.py` over wheel and sdist | Passed; wheel 122 members, sdist 119 members, all 7 skill files in both, and no `typst/` leakage. |
-| Integrated Typst package | `typst/test.sh` from the merged Basis tree | Passed compile and envelope gates locally and in the pinned official Typst 0.15.1 container; only documented fallback-font warnings appeared. |
-| GitLab Basis pipeline | [pipeline 2701834857](https://gitlab.com/doering-ai/libs/basis/-/pipelines/2701834857), exact source `a0399ad` | Running at handoff; merge is prohibited until the exact submitted source is green. |
-| Basis review surface | [Basis MR !6](https://gitlab.com/doering-ai/libs/basis/-/merge_requests/6) | Open and reviewable; the maintainer-owned dirty primary checkout remains intentionally untouched. |
-| Initial scanner dogfood | nine repositories, four artifacts each, zero parse errors, untouched proposal freshness valid, all target trees clean | Passed before hardening and superseded by the final clean-fingerprint pass above. |
-| Prepared Typst import | `test.sh` under Typst 0.15.1, `typstyle 0.15 --check`, and the pinned official Typst container | Passed in the isolated import checkout and again from the merged Basis tree. |
-| Myform adoption | Ruff, Pyrefly, and 4,353 tests | Passed and merged in MR !5. |
-| Means adoption | native evaluation and 401 tests | Passed and merged in MR !5. |
-| WikiParse draft | controlled candidate run | 1,996 passed, 9 xfailed, 3 unrelated failures; remains draft. |
-| Arch draft | focused and separated broader runs | 41 focused passed; 966 broader tests passed with 3 known stale defects separated; remains draft. |
+| Surface                        | Command or evidence                                                                                                   | Status                                                                                                                                                                                                                       |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Lock integrity                 | `uv lock --check`                                                                                                     | Passed; 137 packages resolved from the existing lock.                                                                                                                                                                        |
+| Lint, format, and typing       | `task eval`                                                                                                           | Passed; Pyrefly and both Ruff gates were clean, with 133 files already formatted.                                                                                                                                            |
+| Test-style contract            | `task test:audit`                                                                                                     | Passed; 49 files, 966 functions, 441 parameterized functions, at least 2,782 cases, maximum depth 2, 0 diagnostics, and 0 violations.                                                                                        |
+| Full Python suite              | `task test -- -q`                                                                                                     | Passed; 4,165 tests, 21 subtests, and 2 snapshots in 9.59 seconds, with no warnings.                                                                                                                                         |
+| Python 3.12 dependency floor   | `task test:floor`                                                                                                     | Passed; the same 4,165 tests, 21 subtests, and 2 snapshots on CPython 3.12.13, Pydantic 2.12.2, and PyTest 9.0.0 in 8.91 seconds.                                                                                            |
+| Documentation                  | `task docs`                                                                                                           | Passed warning-free; all eight packages were current and the Sphinx build was up to date.                                                                                                                                    |
+| Packaged skill structure       | skill-creator `quick_validate.py my/skills/adopt-my-basis`                                                            | Passed: `Skill is valid!`; README/skill/reference mdformat checks and packaged CLI help/path also passed.                                                                                                                    |
+| Adoption CLI                   | prepare, refresh, validate, and all render modes from a clean external output directory                               | Passed through 96 adoption tests and live prepare/validate/render smokes; the hardening smoke built a 33,500-byte PDF, and the final fleet pass rendered both PDF and HTML.                                                  |
+| Final fleet scanner regression | all nine canonical public Python repositories                                                                         | Passed; 9 prepares plus 9 live-freshness validations, identical before/after fingerprints, no surviving scanner defect. Ledger: `/home/robbd/ai/artifacts/memy-754-adoption-dogfood-final/findings.md` (`ee68a044...e4b21`). |
+| Python artifact boundary       | `uv build --no-sources`, then `scripts/check_release_artifacts.py` over wheel and sdist                               | Passed; wheel 122 members, sdist 119 members, all 7 skill files in both, and no `typst/` leakage.                                                                                                                            |
+| Integrated Typst package       | `typst/test.sh` from the merged Basis tree                                                                            | Passed compile and envelope gates locally and in the pinned official Typst 0.15.1 container; only documented fallback-font warnings appeared.                                                                                |
+| GitLab Basis pipeline          | [pipeline 2701834857](https://gitlab.com/doering-ai/libs/basis/-/pipelines/2701834857), exact source `a0399ad`        | Running at handoff; merge is prohibited until the exact submitted source is green.                                                                                                                                           |
+| Basis review surface           | [Basis MR !6](https://gitlab.com/doering-ai/libs/basis/-/merge_requests/6)                                            | Open and reviewable; the maintainer-owned dirty primary checkout remains intentionally untouched.                                                                                                                            |
+| Initial scanner dogfood        | nine repositories, four artifacts each, zero parse errors, untouched proposal freshness valid, all target trees clean | Passed before hardening and superseded by the final clean-fingerprint pass above.                                                                                                                                            |
+| Prepared Typst import          | `test.sh` under Typst 0.15.1, `typstyle 0.15 --check`, and the pinned official Typst container                        | Passed in the isolated import checkout and again from the merged Basis tree.                                                                                                                                                 |
+| Myform adoption                | Ruff, Pyrefly, and 4,353 tests                                                                                        | Passed and merged in MR !5.                                                                                                                                                                                                  |
+| Means adoption                 | native evaluation and 401 tests                                                                                       | Passed and merged in MR !5.                                                                                                                                                                                                  |
+| WikiParse draft                | controlled candidate run                                                                                              | 1,996 passed, 9 xfailed, 3 unrelated failures; remains draft.                                                                                                                                                                |
+| Arch draft                     | focused and separated broader runs                                                                                    | 41 focused passed; 966 broader tests passed with 3 known stale defects separated; remains draft.                                                                                                                             |
 
 ## Merge or request another round
 
@@ -443,7 +443,7 @@ A future `typst-v0.1.0` tag is independent and must not activate the PyPI path.
 Use the following prompt and name only the areas being reopened:
 
 ```text
-Resume MEMY-754 from RELEASE-1.0-HANDOFF.md.
+Resume the Basis campaign from RELEASE-1.0-HANDOFF.md.
 Preserve the accepted results in tests, core-library, adoption-skill,
 fleet-dispositions, and typst-boundary.
 Revise these areas only: <area names and requested changes>.
@@ -466,8 +466,8 @@ report.
 
 The work proceeded with local evidence when coordination services were unreliable:
 
-- Plane lookups returned the known modality/404 failure. `MEMY-754.md` remains
-  the local collaboration record; no direct gated Plane push was used.
+- Plane lookups returned the known modality/404 failure. The local task file
+  remains the collaboration record; no direct gated Plane push was used.
 - The merge advisor returned provider errors for bounded downstream changes.
   Myform, Means, and the Corpus regex fix were manually reviewed with explicit,
   recorded operator-authorized bypass reasons. A provider error was never
@@ -501,5 +501,5 @@ They explain why the branch, commits, rendered artifacts, and command results ar
   - `typst-v*` tags control only the house Typst package.
   - Retain the imported source bundle until all consumers have crossed the seam.
 
-**Terminus:** MEMY-754 ends when the Basis MR is merged with literal final proof, the Typst package resolves from the monorepo and passes its downstream Corpus gate, every fleet repository has the disposition recorded above, and the maintainer has either cut 1.0 or explicitly deferred the human stability promise.
+**Terminus:** The campaign ends when the Basis MR is merged with literal final proof, the Typst package resolves from the monorepo and passes its downstream Corpus gate, every fleet repository has the disposition recorded above, and the maintainer has either cut 1.0 or explicitly deferred the human stability promise.
 Later adoption findings belong to their own repository tasks; they do not keep this campaign artificially open.

@@ -86,7 +86,7 @@ eval = [
 # Testing dependencies for unit tests, coverage, and test utilities
 test = [
     "coverage>=7.10.5",
-    "fastapi>=0.118.0",      # regression test exercises a real FastAPI() ASGI app (LIBS-12)
+    "fastapi>=0.118.0",      # regression test exercises a real FastAPI() ASGI app
     "pytest-asyncio>=1.1.0",
     "pytest-cov>=6.2.1",
     "pytest-timeout>=2.4.0",
@@ -145,11 +145,11 @@ source = ["my"]
 # Jinja2 compiles templates with `co_filename` set to the real template path (nice
 # tracebacks), so coverage's tracer sees them as "executed Python" and the JSON
 # reporter's AST-based code_regions() then chokes parsing Jinja syntax as Python
-# (MEMY-1381). Templates carry no branch logic of their own to measure anyway.
+# Templates carry no branch logic of their own to measure anyway.
 omit = ["my/data/templates/*"]
 
 [tool.coverage.report]
-# Canonical exemption fragment (settings/config/coverage-pyproject.toml, MEMY-1380).
+# Canonical exemption fragment (settings/config/coverage-pyproject.toml).
 exclude_also = [
     # EX-01: typing-only imports never execute
     'if TYPE_CHECKING:',

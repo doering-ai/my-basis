@@ -983,7 +983,7 @@ class TestMarkdown:
 
     @pyt.mark.parametrize('fix', [False, True])
     def test_to_string__blank_line_before_section_headers(self, fix: bool):
-        """Regression (LIBS-7): blank lines must separate prose from section headers.
+        """Regression: blank lines must separate prose from section headers.
 
         The Jinja template emits only single newlines between blocks (trim_blocks=True
         collapses blank lines), and mdformat alone cannot fix prose that ends with YAML
@@ -1011,7 +1011,7 @@ class TestMarkdown:
                 )
 
     def test_to_string__roundtrip_with_multiline_yaml_prose(self):
-        """Regression (LIBS-7): Frame markdown serialization round-trips without data loss.
+        """Regression: Frame markdown serialization round-trips without data loss.
 
         ``to_markdown`` -> ``to_string`` -> ``parse_one`` must round-trip a frame with
         prose + slots + notes where the slots and notes carry multiline YAML content.

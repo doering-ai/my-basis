@@ -26,7 +26,7 @@
 // The Diátaxis genre vocabulary the journal store recognizes, SINGULAR — the exact
 // values a Markdown report carries in its `genre:` frontmatter (journal/README.md), so
 // a `.typ` envelope and a `.md` frontmatter are indistinguishable to search and ingest.
-// (The `journal/reports/` *directories* are the plural forms: references/, explanations/…)
+// (The `journal/reports/` *directories* are the plural forms: references/, explanations/...)
 #let report-genres = ("reference", "explanation", "lesson", "instruction")
 
 // The envelope schema tag — bump when the envelope's shape changes.

@@ -12,7 +12,7 @@ scope: libs/basis @ v0.8.3 (+16 unreleased commits on main)
 > What blocks sign-off is a cluster of *sharp, individually-cheap* defects: a handful of reproduced correctness/security bugs, several release-machinery gaps, a false `Typing :: Typed` claim, a README that misdescribes reality, and the dependency-bloat problem the maintainer already flagged.
 > Every finding below was reproduced live or read from source — nothing is speculative.
 
-This document is the response to that review: a **tree of tasks** (tentative `basis-NN` SIDs, continuing the existing campaign — `basis-06`…`09` are already referenced in `pyproject.toml`; these map to future `MEMY-N` Plane cards) to systematically close every criticism worth fixing.
+This document is the response to that review: a **tree of tasks** (tentative `basis-NN` SIDs, continuing the existing campaign — `basis-06`–`09` are already referenced in `pyproject.toml`; these map to future `MEMY-N` Plane cards) to systematically close every criticism worth fixing.
 The **import / dependency-bloat cluster is developed in full as the worked first slice** (§4), as the template for how the remaining slices execute.
 
 ______________________________________________________________________
@@ -48,7 +48,7 @@ Everything below **landed and passed the full gate** (`pytest` 3636 passed + 21 
   Benchmark gate dropped.
 - `basis-A` (aliases) → **KEEP the shorthand.** The operator's `from my import ut, ty` ergonomics *are* the product; for an opinionated personal-utility lib the "external cognitive load" argument is weak.
   The surviving fixes: aliases must not get their own alphabetical doc entries (they become referenced values in the canonical object's docstring — folds into the `basis-X` docs aesthetic), and `basis-A1`'s `my.utils` **shadow is still a real bug** (it silently overwrites the submodule, distinct from a harmless alias).
-- `basis-A2` → export only the canonical spellings with intent (`Typist`, `Utils`, …); keep the aliases, treat-as-aliases in docs.
+- `basis-A2` → export only the canonical spellings with intent (`Typist`, `Utils`, ...); keep the aliases, treat-as-aliases in docs.
 - `basis-A3` → rename the generic type variants `_Func/_Map/_Vec/_Struct` (they're meant to be *used* — the parametrizable forms) to **`FuncG/MapG/VecG/StructG`** (`G` = generic; no leading-underscore collision).
   Staged: 29 internal sites.
 - `basis-M` (machinery) → **CI/CD-only releases**; the "over-diagnosed" security framing and the local-publish path are retired from the plan (see reworked slice below).
@@ -86,7 +86,7 @@ Final gate: **3681 passed** (baseline 3639 + 42 new regression tests) · `pyrefl
   Regression tests encode the actual `$(touch marker)` exploit.
 - `basis-C8` — SystemUtils logging: module logger (not root), `**kwargs`, materialized `map` messages.
 - `basis-C9` / `C10` / `C12` — `ty.cast`: element coercion in the scalar-wrap fallback (`['3']` → `[3]`), `Annotated[...]` unwrap, cyclic-data → `Decline` (not `RecursionError`).
-  MEMY-325 no-split preserved.
+  The no-split behavior is preserved.
 - `basis-C6` — `Markdown` notes/frontmatter now render (were discarded outside the Jinja block under `{% extends %}`).
 - `basis-C13` / `C15` — `NestedCache` child-config propagation; atomic `PickleCache.write()` + documented pickle trust boundary.
 - `basis-C11` / `C14` / `C16` — `MyEnum.write()` empty-string; truthful `nested_replace()` tuple return; `MetricUtils.setup_metrics()` rm-crash + sub-ms drop.
@@ -144,7 +144,7 @@ Sequenced after the fifth pass so it rebased onto the finished tree; combined ga
 - `basis-D4` / `basis-D5` ⭐ — **the lazy facade landed.** `apis` and `files` are the only *leaf* subpackages (nothing else under `my/` imports them — verified), so `my/__init__.py` now defers them to first attribute access via a PEP 562 `__getattr__`, with a `TYPE_CHECKING` block so checkers and autocomplete still see the names.
   Measured on the all-extras venv, bare `import my` drops from **1688 → 1437 modules** (~415ms → ~341ms, ~18%) and no longer pulls `googleapiclient`/`mdformat`/`dotenv`/`my.apis`/`my.files` or runs `apis`'s import-time side effects (`load_dotenv`, the `os.environ` snapshot, Filesystem path resolution — now on first access to `env`/`fs`).
   A 25-case subprocess smoke test (`tests/test_lazy_facade.py`) pins the deferral and the resolution contract (identity `env is ENV` / `fs is FS is PATHS`, `from my import *`, `AttributeError` on a missing name).
-  A grep of all 11 consumers found none using `hasattr(my, …)` / `vars(my)` / reflection that laziness would defeat; every consumer uses `from my import <name>`, which the `__getattr__` resolves.
+  A grep of all 11 consumers found none using `hasattr(my, ...)` / `vars(my)` / reflection that laziness would defeat; every consumer uses `from my import <name>`, which the `__getattr__` resolves.
   **Behavior note:** the `os.environ` snapshot now fires when `env` is first touched rather than at `import my` — intrinsic to removing the side effect (D5), and it reaches consumers only at `stable`-tag adoption.
 
 **Still open after the sixth pass:** `basis-D6` is *partially* delivered — the `google`/`googleapiclient` tax is deferred for free (it lives in the now-lazy `apis`) — but two eager heavy imports remain as clean, separate follow-ups: (1) the `logfire`/`pandas` block in `MetricUtils` (eager `utils`; the `import logfire` is the ~34% pydantic-plugin cascade — an invasive hot-module refactor with a `[metrics]`-users-only payoff), and (2) the module-level Jinja env in `my/infra/constants.py` (pulls `jinja2` and stats the templates dir at import; deferring it needs a decision on the public `JINJA` re-export).
@@ -157,7 +157,7 @@ Full gate: **3755 passed** · `ruff` clean · `pyrefly` 0 errors · docs build c
 - `basis-D6` (jinja2 half) — **the infra Jinja env is now lazy too.** `my/infra/constants.py` built `JINJA = jn.Environment(PackageLoader(...))` at module scope, and `infra` is eager, so every `import my` imported `jinja2` and statted the templates directory.
   It is now built on first `get_template()` / `JINJA` access, with a PEP 562 `__getattr__` in both `constants` and the `infra` package keeping `my.infra.JINJA` working.
   Bare `import my` no longer imports `jinja2`.
-- **`basis-D` is closed.** The single remaining sub-item — deferring the `logfire`/`pandas` block in `MetricUtils` — is *theoretically tractable* (swap the module-level `try: import …` for an `importlib.util.find_spec` availability check plus function-local imports at the `fire.*` / `OpenTelemetryCounter` use-sites), but it is an invasive refactor of a hot module for a `[metrics]`-users-only payoff, so it is intentionally left as a standalone future task rather than gating the release.
+- **`basis-D` is closed.** The single remaining sub-item — deferring the `logfire`/`pandas` block in `MetricUtils` — is *theoretically tractable* (swap the module-level `try: import ...` for an `importlib.util.find_spec` availability check plus function-local imports at the `fire.*` / `OpenTelemetryCounter` use-sites), but it is an invasive refactor of a hot module for a `[metrics]`-users-only payoff, so it is intentionally left as a standalone future task rather than gating the release.
 - Polish sweep — removed the dead `my/data/snapshots/test_RegexStore.ambr` orphan (the live syrupy snapshot lives under `tests/regex/__snapshots__/`) and the dead `.pre-commit-config.yaml` (superseded by `prek.toml`).
   `basis-M6` is partial: the `.yamlfmt`/`.taplo`/`.plumber` configs were left in place, since global edit-hooks may consume them.
   `basis-M3` is moot — `dist/` is git-ignored, nothing tracked to purge.
@@ -184,17 +184,17 @@ ______________________________________________________________________
 
 ### 2.1 Blockers — must clear before a confident public 1.0
 
-| # | Finding | Evidence (verified) | Slice |
+| #   | Finding                                                                                                                                                                                                                                                                            | Evidence (verified)                                                                                                    | Slice      |
 | --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ---------- |
-| B1 | **Shell injection (RCE) in `SystemUtils.print_in_color()`** — `sbp.run(f'zsh -c \'print -P "{text}"\'', shell=True)` with unsanitized `text` | marker-file RCE reproduced | `basis-C1` |
-| B2 | **`Command.execute()` shell injection** — hand-rolled `_shell_quote` (double-quote only) + `shell=True`; `$(...)` substitution runs | `touch`-marker RCE reproduced | `basis-C2` |
-| B3 | **Unsynchronized global type caches — structural data race** — `MyType.PARSE_CACHE`/`MATCH_CACHE` are process-wide `ClassVar` singletons over plain dicts; `Cache.prune()` does `del self.data[key]` while iterating `keys()`, no lock anywhere; behind *every* `cast/check/match` | source-confirmed (zero locking in `my/caches/`); subagent hit an 8-thread `KeyError`, intermittent (narrow GIL window) | `basis-C3` |
-| B4 | **`Markdown.parse()` corrupts docs with `#`-comment code fences** — fabricates a node titled from the comment, misnests following sections | 2-node/`'a comment'` title reproduced | `basis-C4` |
-| B5 | **`py.typed` absent while classifier claims `Typing :: Typed`** — every consumer's type checker sees `Any` | `find` empty in source + wheel | `basis-D3` |
-| B6 | **README says "not yet published to PyPI"; it has been since 0.8.1** | PyPI JSON API: 0.8.1/0.8.2/0.8.3 live | `basis-X1` |
-| B7 | **README flagship quickstart is wrong** — `ty.cast('a,b,c', list[str])` returns `['a,b,c']`, not `['a','b','c']` (deliberate MEMY-325 change) | reproduced | `basis-X1` |
-| B8 | **Local publish path bypasses all CI/OIDC guardrails** — `Taskfile.dist.yaml pkg:publish` uses long-lived `PYPI_TOKEN`; "trusted-publishing only" is false if any classic token still exists | operator must verify/revoke on PyPI | `basis-M1` |
-| B9 | **`year` regex hardcodes an upper bound of 2026** — every natural-language date from 2027 silently drops its year (< 6 months out) | `C.search('year','2027') == {}` reproduced | `basis-C5` |
+| B1  | **Shell injection (RCE) in `SystemUtils.print_in_color()`** — `sbp.run(f'zsh -c \'print -P "{text}"\'', shell=True)` with unsanitized `text`                                                                                                                                       | marker-file RCE reproduced                                                                                             | `basis-C1` |
+| B2  | **`Command.execute()` shell injection** — hand-rolled `_shell_quote` (double-quote only) + `shell=True`; `$(...)` substitution runs                                                                                                                                                | `touch`-marker RCE reproduced                                                                                          | `basis-C2` |
+| B3  | **Unsynchronized global type caches — structural data race** — `MyType.PARSE_CACHE`/`MATCH_CACHE` are process-wide `ClassVar` singletons over plain dicts; `Cache.prune()` does `del self.data[key]` while iterating `keys()`, no lock anywhere; behind *every* `cast/check/match` | source-confirmed (zero locking in `my/caches/`); subagent hit an 8-thread `KeyError`, intermittent (narrow GIL window) | `basis-C3` |
+| B4  | **`Markdown.parse()` corrupts docs with `#`-comment code fences** — fabricates a node titled from the comment, misnests following sections                                                                                                                                         | 2-node/`'a comment'` title reproduced                                                                                  | `basis-C4` |
+| B5  | **`py.typed` absent while classifier claims `Typing :: Typed`** — every consumer's type checker sees `Any`                                                                                                                                                                         | `find` empty in source + wheel                                                                                         | `basis-D3` |
+| B6  | **README says "not yet published to PyPI"; it has been since 0.8.1**                                                                                                                                                                                                               | PyPI JSON API: 0.8.1/0.8.2/0.8.3 live                                                                                  | `basis-X1` |
+| B7  | **README flagship quickstart is wrong** — `ty.cast('a,b,c', list[str])` returns `['a,b,c']`, not `['a','b','c']` (deliberate no-split change)                                                                                                                                      | reproduced                                                                                                             | `basis-X1` |
+| B8  | **Local publish path bypasses all CI/OIDC guardrails** — `Taskfile.dist.yaml pkg:publish` uses long-lived `PYPI_TOKEN`; "trusted-publishing only" is false if any classic token still exists                                                                                       | operator must verify/revoke on PyPI                                                                                    | `basis-M1` |
+| B9  | **`year` regex hardcodes an upper bound of 2026** — every natural-language date from 2027 silently drops its year (< 6 months out)                                                                                                                                                 | `C.search('year','2027') == {}` reproduced                                                                             | `basis-C5` |
 
 ### 2.2 High — strongly should fix
 
@@ -204,7 +204,7 @@ ______________________________________________________________________
 - **`import my` has unconditional import-time side effects** for all 11 consumers: `load_dotenv()` walks ancestor dirs; `os.environ` is snapshotted once (vars set after import are invisible to `my.env` — reproduced); a YAML is read; ~11 paths resolved. (`basis-D5`, `basis-C7`)
 - **Eager-but-guarded `metrics`/`google` imports tax every `import my`** — when installed they front-load ~37% of import cost; `logfire`'s pydantic entry-point plugin adds another ~34% (~228ms) the instant basis defines its first `BaseModel`. (`basis-D6`)
 - **`GoogleSheet` missing-dep error names the wrong extra** — raises `` requires the optional `[metrics]` dependency `` (should be `[google]`), with a copy-pasted `utils.` prefix; no source of truth anywhere names `[google]`. (`basis-D7`) — confirmed in source.
-- **`SystemUtils` logging cluster** — `getLogger()` grabs the *root* logger (library anti-pattern); `info/warn/error` signatures use `kwargs` not `**kwargs` (raise `TypeError` on the documented call); `log()` passes a live `map` object as the message (`<map object …>`). (`basis-C8`)
+- **`SystemUtils` logging cluster** — `getLogger()` grabs the *root* logger (library anti-pattern); `info/warn/error` signatures use `kwargs` not `**kwargs` (raise `TypeError` on the documented call); `log()` passes a live `map` object as the message (`<map object ...>`). (`basis-C8`)
 - **`ty.cast('3', list[int])` → `['3']`** — the "wraps" fallback skips element coercion; a `list[int]` silently contains a `str`. (`basis-C9`) — reproduced.
 - **Publish has no test gate** — tag pipelines skip Evaluate/Test, `Publish PyPI` has `needs: []`, secret-detection never runs on tag pipelines, `pypi` approval is self-approval.
   Convention, not enforcement. (`basis-M2`)
@@ -309,11 +309,11 @@ The maintainer's stated problem: *"how to offer useful code with minimal bloat f
 
 ### 4.1 The measured problem
 
-| Bookend | Distributions | site-packages | `import my` wall | Notes |
+| Bookend                                     | Distributions | site-packages | `import my` wall | Notes           |
 | ------------------------------------------- | ------------- | ------------- | ---------------- | --------------- |
-| **Core-only** (bare `pip install my-basis`) | 25 | 83 MB | ~186 ms | the floor |
-| **All-extras runtime** | 91 | 295 MB | — | non-dev closure |
-| **As-shipped dev venv** | 142 | 381 MB | ~435 ms | the ceiling |
+| **Core-only** (bare `pip install my-basis`) | 25            | 83 MB         | ~186 ms          | the floor       |
+| **All-extras runtime**                      | 91            | 295 MB        | —                | non-dev closure |
+| **As-shipped dev venv**                     | 142           | 381 MB        | ~435 ms          | the ceiling     |
 
 README claims "32 dependencies / ~250 MB" — **refuted at both ends** (25/83 core, 91/295 all-extras).
 Where the import time actually goes (dev venv, `-X importtime`): **~34%** to a `logfire`→OpenTelemetry cascade triggered by pydantic's plugin loader the instant basis defines its first `BaseModel`, and **~37%** to the eager-but-guarded `MetricUtils` (pandas) and `GoogleSheet` (googleapiclient) subtrees — **two-thirds of import cost is optional features nobody requested.**

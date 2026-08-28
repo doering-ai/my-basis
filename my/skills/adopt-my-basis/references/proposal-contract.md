@@ -124,12 +124,12 @@ Apply these rules:
 
 Verification states bind honestly to `exit_code`:
 
-| State         | Required exit code |
+| State | Required exit code |
 | ------------- | ------------------ |
-| `passed`      | `0`                |
-| `failed`      | non-zero integer   |
-| `unavailable` | `null`             |
-| `not-run`     | `null`             |
+| `passed` | `0` |
+| `failed` | non-zero integer |
+| `unavailable` | `null` |
+| `not-run` | `null` |
 
 Reject stale evidence instead of quietly rendering it.
 Unavailable infrastructure is `unavailable`, never a passing result.

@@ -5,20 +5,20 @@ In structural mode, however, deliberately follow a confirmed duplicate through t
 Inspect local behavior and tests before accepting any signal.
 Deterministic opportunity detection is regex- and Sublime-seam-focused; treat other rows as manual review categories.
 
-| Local shape                                              | Candidate                                           | Adopt when                                         | Decline or defer when                                            |
+| Local shape | Candidate | Adopt when | Decline or defer when |
 | -------------------------------------------------------- | --------------------------------------------------- | -------------------------------------------------- | ---------------------------------------------------------------- |
-| repeated partitions, searches, deduplication, mapping    | `ut` / `IterUtils`                                  | semantics match and remove a local helper          | the helper is domain-specific or the dependency cost dominates   |
-| sequential text cleanup and parsing                      | `ut` / `TextUtils`                                  | operations already match the documented order      | Unicode, transliteration, or whitespace behavior differs         |
-| runtime coercion and validation                          | `ty`, `MyType`, `AutocastModel`                     | untyped boundaries need explicit coercion          | static types or Pydantic validation already express the contract |
-| enum, span, predicate, buffer, or identifier scaffolding | `MyEnum`, `Span`, `Predicate`, `Buffer`, `UniqueId` | local type duplicates the same public behavior     | serialization, ordering, or identity semantics differ            |
-| repeated filesystem serialization                        | `ut.from_file`, `ut.to_file`, `fs`                  | formats and error behavior match                   | atomicity, permissions, or transaction semantics are specialized |
-| shell string construction                                | `Command`                                           | argv can remain structured and observable          | the wrapper's exact I/O or failure semantics do not fit          |
-| environment configuration                                | `env`                                               | values are startup configuration                   | values are injected or mutated after import                      |
-| bounded caches                                           | `Cache`, `FileCache`, `PickleCache`                 | lifecycle and pruning behavior match               | encryption, atomicity, TTL, or durability requirements differ    |
-| Markdown structure                                       | `Markdown`                                          | headings must be fence-aware and round-trip        | only a tiny, well-bounded transform is needed                    |
-| observability plumbing                                   | `MetricUtils`                                       | the repository already accepts the optional extra  | failure-path or core tools require near-zero dependencies        |
-| related or generated regex patterns                      | `RegexStore`, `MatchData`                           | they form a grammar, router, or repeated transform | the pattern is isolated and obvious                              |
-| copied general utilities inside an adapter               | canonical `my` API plus a thin adapter              | one shared owner removes parallel structures       | behavior is editor- or framework-specific                        |
+| repeated partitions, searches, deduplication, mapping | `ut` / `IterUtils` | semantics match and remove a local helper | the helper is domain-specific or the dependency cost dominates |
+| sequential text cleanup and parsing | `ut` / `TextUtils` | operations already match the documented order | Unicode, transliteration, or whitespace behavior differs |
+| runtime coercion and validation | `ty`, `MyType`, `AutocastModel` | untyped boundaries need explicit coercion | static types or Pydantic validation already express the contract |
+| enum, span, predicate, buffer, or identifier scaffolding | `MyEnum`, `Span`, `Predicate`, `Buffer`, `UniqueId` | local type duplicates the same public behavior | serialization, ordering, or identity semantics differ |
+| repeated filesystem serialization | `ut.from_file`, `ut.to_file`, `fs` | formats and error behavior match | atomicity, permissions, or transaction semantics are specialized |
+| shell string construction | `Command` | argv can remain structured and observable | the wrapper's exact I/O or failure semantics do not fit |
+| environment configuration | `env` | values are startup configuration | values are injected or mutated after import |
+| bounded caches | `Cache`, `FileCache`, `PickleCache` | lifecycle and pruning behavior match | encryption, atomicity, TTL, or durability requirements differ |
+| Markdown structure | `Markdown` | headings must be fence-aware and round-trip | only a tiny, well-bounded transform is needed |
+| observability plumbing | `MetricUtils` | the repository already accepts the optional extra | failure-path or core tools require near-zero dependencies |
+| related or generated regex patterns | `RegexStore`, `MatchData` | they form a grammar, router, or repeated transform | the pattern is isolated and obvious |
+| copied general utilities inside an adapter | canonical `my` API plus a thin adapter | one shared owner removes parallel structures | behavior is editor- or framework-specific |
 
 ## Required preflight
 

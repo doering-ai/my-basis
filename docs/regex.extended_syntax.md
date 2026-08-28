@@ -179,12 +179,12 @@ _([regular-expressions.info lesson 1](https://www.regular-expressions.info/charc
 Version 1's set operators allow a set (`[...]`) to be composed of smaller sets.
 The operators, in order of increasing precedence, are:
 
-| Syntax | Name                 | Boolean | Example                                                        |
+| Syntax | Name | Boolean | Example |
 | ------ | -------------------- | ------- | -------------------------------------------------------------- |
-| `\|\|` | Union                | OR      | `[\w\|\|[:punct:]]` matches word and punctuation characters.   |
-| `~~`   | Symmetric Difference | XOR     | `[\w~~[:punct:]]` matches words or punctuation, but *not* `_`. |
-| `&&`   | Intersection         | AND     | `[\w&&[:punct:]]` matches *only* `_`.                          |
-| `--`   | Difference           | SUB     | `[\w--[:punct:]]` matches all word characters *except* `_`.    |
+| `\|\|` | Union | OR | `[\w\|\|[:punct:]]` matches word and punctuation characters. |
+| `~~` | Symmetric Difference | XOR | `[\w~~[:punct:]]` matches words or punctuation, but *not* `_`. |
+| `&&` | Intersection | AND | `[\w&&[:punct:]]` matches *only* `_`. |
+| `--` | Difference | SUB | `[\w--[:punct:]]` matches all word characters *except* `_`. |
 
 ```{note}
 Implicit union, ie, simple juxtaposition like in `[ab]`, has the highest precedence.
@@ -230,14 +230,14 @@ Subroutines are useful for two things:
 Although the former is supported by `re`, the latter requires the full `regex` package.
 Many different syntaxes are used across different languages, so for convenience, here is a table clarifying exactly which syntaxes are supported by `regex` for each of these functions:
 
-| Group Type | Action Type  | Supported                            | Unsupported                                                              |
+| Group Type | Action Type | Supported | Unsupported |
 | ---------- | ------------ | ------------------------------------ | ------------------------------------------------------------------------ |
-| Numbered   | Definition   | `(...)`                              |                                                                          |
-| Numbered   | Substitution | `\1`, `\g<1>`, `(?P=1)`              |                                                                          |
-| Numbered   | Invocation   | `(?1)`, `(?R)`                       | `(?-1)`, `(?+1)`                                                         |
-| Named      | Definition   | `(?P<name>...)`                      | `(?<name>...)`, `(?P'name'...)`, `(?P"name"...)`                         |
-| Named      | Substitution | `(?P=name)`, `\g<name>`              | `\k<name>`, `\k'name'`, `\k{name}`, `\g{name}`, `(?<name>)`, `(?'name')` |
-| Named      | Invocation   | `(?&name)`, `(?P>name)`, `(?P&name)` |                                                                          |
+| Numbered | Definition | `(...)` | |
+| Numbered | Substitution | `\1`, `\g<1>`, `(?P=1)` | |
+| Numbered | Invocation | `(?1)`, `(?R)` | `(?-1)`, `(?+1)` |
+| Named | Definition | `(?P<name>...)` | `(?<name>...)`, `(?P'name'...)`, `(?P"name"...)` |
+| Named | Substitution | `(?P=name)`, `\g<name>` | `\k<name>`, `\k'name'`, `\k{name}`, `\g{name}`, `(?<name>)`, `(?'name')` |
+| Named | Invocation | `(?&name)`, `(?P>name)`, `(?P&name)` | |
 
 When substituting, the result of the *most recent* invocation is used; sadly, [relative backreferences](https://www.regular-expressions.info/backrefrel.html) are not (yet?) supported.
 To get around this, wrap your subroutine with a new name (e.g. `(?P<important_quote>(?P>quote))`) for the calls whose results you want to substitute later on.
@@ -367,12 +367,12 @@ _([regular-expressions.info lesson](https://www.regular-expressions.info/posixbr
 
 These are normally treated as an alternative form of `\p{...}`, except for `alnum`, `digit`, `punct` and `xdigit`, whose definitions are different from those of Unicode:
 
-|    POSIX Class | Equivalent Unicode Property |
+| POSIX Class | Equivalent Unicode Property |
 | -------------: | --------------------------- |
-|  `[[:alnum:]]` | `\p{posix_alnum}`           |
-|  `[[:digit:]]` | `\p{posix_digit}`           |
-|  `[[:punct:]]` | `\p{posix_punct}`           |
-| `[[:xdigit:]]` | `\p{posix_xdigit}`          |
+| `[[:alnum:]]` | `\p{posix_alnum}` |
+| `[[:digit:]]` | `\p{posix_digit}` |
+| `[[:punct:]]` | `\p{posix_punct}` |
+| `[[:xdigit:]]` | `\p{posix_xdigit}` |
 
 ### Search Anchors (`\G`)
 
@@ -511,14 +511,14 @@ p = regex.compile(r"\L<options>", options=option_set, other_options=[])
 A match object has additional methods which return information on all the successful matches of a repeated group.
 These methods are:
 
-| Method                     | Description                                                         | Singular Counterpart    |
+| Method | Description | Singular Counterpart |
 | -------------------------- | ------------------------------------------------------------------- | ----------------------- |
 | `.captures([group1, ...])` | The strings matched for one group, or a list of lists for multiple. | `.group([group1, ...])` |
-| `.starts([group])`         | The start positions for this group.                                 | `.start([group])`       |
-| `.ends([group])`           | The end positions for this group.                                   | `.end([group])`         |
-| `.spans([group])`          | The spans for this group.                                           | `.span([group])`        |
-| `.allcaptures`             | All the captures of all the groups.                                 | N/A                     |
-| `.allspans`                | All the spans of the all captures of all the groups.                | N/A                     |
+| `.starts([group])` | The start positions for this group. | `.start([group])` |
+| `.ends([group])` | The end positions for this group. | `.end([group])` |
+| `.spans([group])` | The spans for this group. | `.span([group])` |
+| `.allcaptures` | All the captures of all the groups. | N/A |
+| `.allspans` | All the spans of the all captures of all the groups. | N/A |
 
 ```python
 m = regex.search(r"(\w{3})+", "123456789")

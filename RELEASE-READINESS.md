@@ -184,17 +184,17 @@ ______________________________________________________________________
 
 ### 2.1 Blockers — must clear before a confident public 1.0
 
-| #   | Finding                                                                                                                                                                                                                                                                            | Evidence (verified)                                                                                                    | Slice      |
+| # | Finding | Evidence (verified) | Slice |
 | --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ---------- |
-| B1  | **Shell injection (RCE) in `SystemUtils.print_in_color()`** — `sbp.run(f'zsh -c \'print -P "{text}"\'', shell=True)` with unsanitized `text`                                                                                                                                       | marker-file RCE reproduced                                                                                             | `basis-C1` |
-| B2  | **`Command.execute()` shell injection** — hand-rolled `_shell_quote` (double-quote only) + `shell=True`; `$(...)` substitution runs                                                                                                                                                | `touch`-marker RCE reproduced                                                                                          | `basis-C2` |
-| B3  | **Unsynchronized global type caches — structural data race** — `MyType.PARSE_CACHE`/`MATCH_CACHE` are process-wide `ClassVar` singletons over plain dicts; `Cache.prune()` does `del self.data[key]` while iterating `keys()`, no lock anywhere; behind *every* `cast/check/match` | source-confirmed (zero locking in `my/caches/`); subagent hit an 8-thread `KeyError`, intermittent (narrow GIL window) | `basis-C3` |
-| B4  | **`Markdown.parse()` corrupts docs with `#`-comment code fences** — fabricates a node titled from the comment, misnests following sections                                                                                                                                         | 2-node/`'a comment'` title reproduced                                                                                  | `basis-C4` |
-| B5  | **`py.typed` absent while classifier claims `Typing :: Typed`** — every consumer's type checker sees `Any`                                                                                                                                                                         | `find` empty in source + wheel                                                                                         | `basis-D3` |
-| B6  | **README says "not yet published to PyPI"; it has been since 0.8.1**                                                                                                                                                                                                               | PyPI JSON API: 0.8.1/0.8.2/0.8.3 live                                                                                  | `basis-X1` |
-| B7  | **README flagship quickstart is wrong** — `ty.cast('a,b,c', list[str])` returns `['a,b,c']`, not `['a','b','c']` (deliberate MEMY-325 change)                                                                                                                                      | reproduced                                                                                                             | `basis-X1` |
-| B8  | **Local publish path bypasses all CI/OIDC guardrails** — `Taskfile.dist.yaml pkg:publish` uses long-lived `PYPI_TOKEN`; "trusted-publishing only" is false if any classic token still exists                                                                                       | operator must verify/revoke on PyPI                                                                                    | `basis-M1` |
-| B9  | **`year` regex hardcodes an upper bound of 2026** — every natural-language date from 2027 silently drops its year (< 6 months out)                                                                                                                                                 | `C.search('year','2027') == {}` reproduced                                                                             | `basis-C5` |
+| B1 | **Shell injection (RCE) in `SystemUtils.print_in_color()`** — `sbp.run(f'zsh -c \'print -P "{text}"\'', shell=True)` with unsanitized `text` | marker-file RCE reproduced | `basis-C1` |
+| B2 | **`Command.execute()` shell injection** — hand-rolled `_shell_quote` (double-quote only) + `shell=True`; `$(...)` substitution runs | `touch`-marker RCE reproduced | `basis-C2` |
+| B3 | **Unsynchronized global type caches — structural data race** — `MyType.PARSE_CACHE`/`MATCH_CACHE` are process-wide `ClassVar` singletons over plain dicts; `Cache.prune()` does `del self.data[key]` while iterating `keys()`, no lock anywhere; behind *every* `cast/check/match` | source-confirmed (zero locking in `my/caches/`); subagent hit an 8-thread `KeyError`, intermittent (narrow GIL window) | `basis-C3` |
+| B4 | **`Markdown.parse()` corrupts docs with `#`-comment code fences** — fabricates a node titled from the comment, misnests following sections | 2-node/`'a comment'` title reproduced | `basis-C4` |
+| B5 | **`py.typed` absent while classifier claims `Typing :: Typed`** — every consumer's type checker sees `Any` | `find` empty in source + wheel | `basis-D3` |
+| B6 | **README says "not yet published to PyPI"; it has been since 0.8.1** | PyPI JSON API: 0.8.1/0.8.2/0.8.3 live | `basis-X1` |
+| B7 | **README flagship quickstart is wrong** — `ty.cast('a,b,c', list[str])` returns `['a,b,c']`, not `['a','b','c']` (deliberate MEMY-325 change) | reproduced | `basis-X1` |
+| B8 | **Local publish path bypasses all CI/OIDC guardrails** — `Taskfile.dist.yaml pkg:publish` uses long-lived `PYPI_TOKEN`; "trusted-publishing only" is false if any classic token still exists | operator must verify/revoke on PyPI | `basis-M1` |
+| B9 | **`year` regex hardcodes an upper bound of 2026** — every natural-language date from 2027 silently drops its year (< 6 months out) | `C.search('year','2027') == {}` reproduced | `basis-C5` |
 
 ### 2.2 High — strongly should fix
 
@@ -309,11 +309,11 @@ The maintainer's stated problem: *"how to offer useful code with minimal bloat f
 
 ### 4.1 The measured problem
 
-| Bookend                                     | Distributions | site-packages | `import my` wall | Notes           |
+| Bookend | Distributions | site-packages | `import my` wall | Notes |
 | ------------------------------------------- | ------------- | ------------- | ---------------- | --------------- |
-| **Core-only** (bare `pip install my-basis`) | 25            | 83 MB         | ~186 ms          | the floor       |
-| **All-extras runtime**                      | 91            | 295 MB        | —                | non-dev closure |
-| **As-shipped dev venv**                     | 142           | 381 MB        | ~435 ms          | the ceiling     |
+| **Core-only** (bare `pip install my-basis`) | 25 | 83 MB | ~186 ms | the floor |
+| **All-extras runtime** | 91 | 295 MB | — | non-dev closure |
+| **As-shipped dev venv** | 142 | 381 MB | ~435 ms | the ceiling |
 
 README claims "32 dependencies / ~250 MB" — **refuted at both ends** (25/83 core, 91/295 all-extras).
 Where the import time actually goes (dev venv, `-X importtime`): **~34%** to a `logfire`→OpenTelemetry cascade triggered by pydantic's plugin loader the instant basis defines its first `BaseModel`, and **~37%** to the eager-but-guarded `MetricUtils` (pandas) and `GoogleSheet` (googleapiclient) subtrees — **two-thirds of import cost is optional features nobody requested.**

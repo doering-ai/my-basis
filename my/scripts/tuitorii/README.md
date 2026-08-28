@@ -29,13 +29,13 @@ uv run --extra terminal python -m my.scripts.tuitorii
 
 Controls:
 
-| Key         | Effect                      |
+| Key | Effect |
 | ----------- | --------------------------- |
-| `q` / `Esc` | quit                        |
-| `Space`     | pause/resume                |
-| `+` / `=`   | increase rotation speed     |
-| `-` / `_`   | decrease rotation speed     |
-| `r`         | reset speed and pause state |
+| `q` / `Esc` | quit |
+| `Space` | pause/resume |
+| `+` / `=` | increase rotation speed |
+| `-` / `_` | decrease rotation speed |
+| `r` | reset speed and pause state |
 
 For a non-interactive geometry smoke test, render one ASCII snapshot:
 

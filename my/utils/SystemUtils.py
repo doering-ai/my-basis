@@ -255,6 +255,89 @@ class SystemUtils(_UtilsBase):
         )
 
     @staticmethod
+    def osc11_sequence(hex_color: str) -> str:
+        r"""Build the OSC 11 (set terminal background color) escape sequence.
+
+        Args:
+            hex_color: The hex color value (e.g. ``'#1A2B3C'``).
+        Returns:
+            The raw escape sequence, unemitted.
+        Examples:
+            The sequence is `\x1b]11;` + color + BEL::
+
+                >>> from my import ut
+                >>> ut.osc11_sequence('#212225')
+                '\x1b]11;#212225\x07'
+        """
+        return f'\033]11;{hex_color}\007'
+
+    @classmethod
+    def _emit_osc(cls, seq: str, stdout_fallback: bool) -> bool:
+        """Write a raw OSC escape sequence to the terminal device. See `emit_osc11()`."""
+        if sys.platform == 'win32':
+            with ctx.suppress(Exception):
+                import ctypes
+
+                kernel32 = ctypes.windll.kernel32
+                kernel32.SetConsoleMode(kernel32.GetStdHandle(-10), 7)
+        else:
+            with ctx.suppress(OSError), Path('/dev/tty').open('w') as tty:
+                tty.write(seq)
+                return True
+        if not stdout_fallback:
+            return False
+        sys.stdout.write(seq)
+        sys.stdout.flush()
+        return False
+
+    @classmethod
+    def emit_osc11(cls, hex_color: str, stdout_fallback: bool = True) -> bool:
+        r"""Set the terminal's background color via an OSC 11 escape sequence.
+
+        Writes to ``/dev/tty`` on POSIX -- robust against stdout redirection, so a caller
+        whose stdout is captured (e.g. a harness hook) still tints -- after attempting to
+        enable VT processing on Windows.
+
+        Args:
+            hex_color: The hex color value (e.g. ``'#1A2B3C'``).
+            stdout_fallback: When True (default), write the sequence to ``sys.stdout`` when
+                ``/dev/tty`` is unavailable -- right for CLIs and shell prompts, where stdout
+                *is* the terminal. Pass False from callers whose stdout is captured (hooks,
+                pipelines), where a leaked escape would surface as transcript garbage.
+        Returns:
+            True if the sequence went to ``/dev/tty``, False if it fell back to stdout or
+            was suppressed.
+        Examples:
+            Tint the current terminal's background::
+
+                >>> from my import ut
+                >>> ut.emit_osc11('#212225')  # doctest: +SKIP
+                True
+        """
+        return cls._emit_osc(cls.osc11_sequence(hex_color), stdout_fallback)
+
+    @classmethod
+    def set_tab_title(cls, title: str, stdout_fallback: bool = True) -> bool:
+        r"""Set the terminal tab/window title via an OSC 0 escape sequence.
+
+        Same ``/dev/tty`` discipline and `stdout_fallback` contract as `emit_osc11()`.
+
+        Args:
+            title: The new icon name + window title.
+            stdout_fallback: See `emit_osc11()`.
+        Returns:
+            True if the sequence went to ``/dev/tty``, False if it fell back to stdout or
+            was suppressed.
+        Examples:
+            Title the current tab::
+
+                >>> from my import ut
+                >>> ut.set_tab_title('corpus:main')  # doctest: +SKIP
+                True
+        """
+        return cls._emit_osc(f'\033]0;{title}\007', stdout_fallback)
+
+    @staticmethod
     def auto_confirm() -> None:
         """Enable auto-confirmation mode for all confirmation prompts.
 

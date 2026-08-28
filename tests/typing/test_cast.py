@@ -914,7 +914,8 @@ class TestCast:
             ('3', tuple[int, ...], (3,)),
             ('3', set[int], {3}),
             ('3', deque[int], deque([3])),
-            # MEMY-325 must still hold: a string-element target wraps (never splits) the scalar,
+            # The no-split invariant must still hold: a string-element target wraps
+            # (never splits) the scalar,
             # and coercing the element to `str` is a NOOP so the whole string survives intact.
             ('a,b,c', list[str], ['a,b,c']),
         ],

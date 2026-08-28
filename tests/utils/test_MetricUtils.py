@@ -844,12 +844,12 @@ class TestMetricUtils:
 
 
 ############
-### FASTAPI REGRESSION (LIBS-12)
+### FASTAPI REGRESSION
 ############
 class TestFastApiAppShape:
     """`setup_py_logging` and `_instrument_app` duck-type Flask vs. FastAPI app shapes.
 
-    LIBS-12: `MetricUtils.setup_py_logging(app=...)` assumed a Flask-shaped ASGI app
+    `MetricUtils.setup_py_logging(app=...)` assumed a Flask-shaped ASGI app
     (`app.logger`, `app.config`), and `_instrument_app` assumed `app.asgi_app`. A real
     `FastAPI()` instance has neither `.logger` nor `.asgi_app` -- passing one raised
     `AttributeError: 'FastAPI' object has no attribute 'logger'`. These tests exercise a

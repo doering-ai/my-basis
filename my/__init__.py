@@ -96,7 +96,7 @@ from .utils import (
 # separate optimization: each defines Pydantic models at import time, and Pydantic's
 # plugin discovery imports an installed Logfire plugin at the first model definition
 # (verified by `test_pydantic_branches__wake_installed_logfire_plugin_on_import`).
-# Making them eager again would re-import Logfire at `import my` and break LIBS-28's
+# Making them eager again would re-import Logfire at `import my` and break the
 # cold-start acceptance criterion.
 #
 # Honest limits (do not "fix" by making these eager again): `from my import env`

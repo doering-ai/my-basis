@@ -8,7 +8,7 @@
 `Typist`'s cast flags (`firsts` / `atomics` / `splits` / `wraps`, `Typist.py` "Cast configuration flags" block) are instance fields on the global singleton, and the transforms read them **live** mid-cast through `Transform.ty` (`cast.py:591, 610, 824, 889, 982`).
 Two consequences:
 
-1. **Action at a distance.** Any caller mutating `ty.splits = …` changes every other
+1. **Action at a distance.** Any caller mutating `ty.splits = ...` changes every other
    caller's cast results process-wide. The suite already needs a save/restore fixture
    (`flex_typist` in `tests/typing/test_cast.py`) just to survive its own flag tests.
 2. **No memoization, ever.** A cast's output depends on ambient mutable state, so results
@@ -24,7 +24,7 @@ A tiny frozen (hashable) pydantic model holding the four booleans, with a `CastF
 ### 2. Resolve once, at the public entry points
 
 `TypeCast.cast()` (and the `Typist.cast` / `upper_cast` / `multicast` facades) grow an optional `flags: CastFlags | str | None = None` parameter, resolved exactly once at entry: an explicit argument wins; otherwise snapshot the global singleton's current field values.
-This is the compatibility story: direct `ty.splits = …` mutation keeps working as the process-wide default — it just stops being readable *mid-flight*, so a cast sees one consistent flag set from start to finish.
+This is the compatibility story: direct `ty.splits = ...` mutation keeps working as the process-wide default — it just stops being readable *mid-flight*, so a cast sees one consistent flag set from start to finish.
 
 ### 3. Thread through `Transform`
 

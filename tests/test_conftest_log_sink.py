@@ -1,4 +1,4 @@
-"""The test-log sink must not outlive the interpreter that made it (MEMY-1220)."""
+"""The test-log sink must not outlive the interpreter that made it."""
 
 ############
 ### HEAD ###

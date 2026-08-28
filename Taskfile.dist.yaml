@@ -50,8 +50,8 @@ tasks:
         prompt: 'Move `{{.TAG}}` tag to HEAD and force-push to `{{.GIT_REMOTE}}`?'
         cmds:
             - cmd: >-
-                  git -C {{._0}} tag -f -a '{{.TAG}}' HEAD
-                  -m '{{._MSG}}'
+                git -C {{._0}} tag -f -a '{{.TAG}}' HEAD
+                -m '{{._MSG}}'
             - cmd: git -C {{._0}} push '{{.GIT_REMOTE}}' '{{.TAG}}' --force
 
     # Convenience aliases for industry-standard moving tags.
@@ -59,31 +59,31 @@ tasks:
         desc: Move the `stable` annotated tag to HEAD and force-push.
         cmds:
             - task: tag:move
-              vars: { TAG: stable }
+              vars: {TAG: stable}
 
     tag:dev:
         desc: Move the `dev` annotated tag to HEAD and force-push.
         cmds:
             - task: tag:move
-              vars: { TAG: dev }
+              vars: {TAG: dev}
 
     tag:latest:
         desc: Move the `latest` annotated tag to HEAD and force-push.
         cmds:
             - task: tag:move
-              vars: { TAG: latest }
+              vars: {TAG: latest}
 
     tag:nightly:
         desc: Move the `nightly` annotated tag to HEAD and force-push.
         cmds:
             - task: tag:move
-              vars: { TAG: nightly }
+              vars: {TAG: nightly}
 
     tag:edge:
         desc: Move the `edge` annotated tag to HEAD and force-push.
         cmds:
             - task: tag:move
-              vars: { TAG: edge }
+              vars: {TAG: edge}
 
     # --------------
     # Permanent Tags
@@ -110,32 +110,32 @@ tasks:
         prompt: 'Create version tag `{{.VERSION}}` at HEAD and push to `{{.GIT_REMOTE}}`?'
         cmds:
             - cmd: |
-                  set -eu
-                  root='{{._0}}'
-                  version='{{.VERSION}}'
-                  version="${version#v}"
+                set -eu
+                root='{{._0}}'
+                version='{{.VERSION}}'
+                version="${version#v}"
 
-                  if [ -f "$root/pyproject.toml" ]; then
-                      command -v uv >/dev/null 2>&1 || {
-                          echo "pyproject.toml is present but uv is not installed." >&2
-                          exit 1
-                      }
-                      (cd "$root" && uv version "$version")
-                  fi
+                if [ -f "$root/pyproject.toml" ]; then
+                    command -v uv >/dev/null 2>&1 || {
+                        echo "pyproject.toml is present but uv is not installed." >&2
+                        exit 1
+                    }
+                    (cd "$root" && uv version "$version")
+                fi
 
-                  if [ -f "$root/package.json" ]; then
-                      command -v bun >/dev/null 2>&1 || {
-                          echo "package.json is present but bun is not installed." >&2
-                          exit 1
-                      }
-                      (cd "$root" && bun pm pkg set "version=$version")
-                      (cd "$root" && bun install --lockfile-only)
-                  fi
+                if [ -f "$root/package.json" ]; then
+                    command -v bun >/dev/null 2>&1 || {
+                        echo "package.json is present but bun is not installed." >&2
+                        exit 1
+                    }
+                    (cd "$root" && bun pm pkg set "version=$version")
+                    (cd "$root" && bun install --lockfile-only)
+                fi
 
-                  if ! git -C "$root" diff --quiet || ! git -C "$root" diff --cached --quiet; then
-                      echo "Version metadata was synchronized. Commit it, then rerun tag:version." >&2
-                      exit 1
-                  fi
+                if ! git -C "$root" diff --quiet || ! git -C "$root" diff --cached --quiet; then
+                    echo "Version metadata was synchronized. Commit it, then rerun tag:version." >&2
+                    exit 1
+                fi
             - cmd: git -C {{._0}} tag -a '{{.VERSION}}' HEAD -m '{{._MSG}}'
             - cmd: git -C {{._0}} push '{{.GIT_REMOTE}}' '{{.VERSION}}'
 
@@ -180,27 +180,27 @@ tasks:
     agent:new:
         cmd: '{{.AWT}} new {{.CLI_ARGS}}'
         desc: 'Provision an isolated worktree+branch: `task agent:new -- MEMY-88 "short desc"`.'
-        aliases: [wt:new]
+        aliases: ['wt:new']
 
     agent:list:
         cmd: '{{.AWT}} list'
         desc: List the live agent/* worktrees with ahead/dirty status.
-        aliases: [wt:list, wt:ls]
+        aliases: ['wt:list', 'wt:ls']
 
     agent:merge:
         cmd: '{{.AWT}} merge {{.CLI_ARGS}}'
         desc: 'Land a reviewed branch into main and push by default: `task agent:merge -- agent/<branch>`.'
-        aliases: [wt:merge, wt:land]
+        aliases: ['wt:merge', 'wt:land']
 
     agent:abandon:
         cmd: '{{.AWT}} abandon {{.CLI_ARGS}}'
         desc: 'Discard a rejected branch + its worktree: `task agent:abandon -- agent/<branch>`.'
-        aliases: [wt:abandon]
+        aliases: ['wt:abandon']
 
     agent:gc:
         cmd: '{{.AWT}} gc'
         desc: Prune merged agent/* branches past the grace window.
-        aliases: [wt:gc]
+        aliases: ['wt:gc']
 
     sync:
         cmd: '{{.UV}} sync --all-extras {{.CLI_ARGS}}'
@@ -208,14 +208,14 @@ tasks:
         desc: Install & verify dependencies through `uv sync`, including all optional and dev
             dependencies.
 
-    # MEMY-1135: shared helper folding the `if [ -x WORKRUN ]` fallback that used to be
+    # Shared helper folding the `if [ -x WORKRUN ]` fallback that used to be
     # duplicated at every heavy-task call site. A workrun that EXISTS but is not executable
     # used to fall through to running bare with no warning at all -- silently unjailed,
     # indistinguishable from a host where corpus isn't checked out. This warns once, then
     # falls back either way: a jail that cannot be entered must never be the reason the task
     # doesn't run (workrun's own --auto invariant). Callers pass the target command as CMD
     # and, optionally, a progress LABEL and one `NAME=VALUE` pair as SETENV -- shell-quoted
-    # here (MEMY-1136) rather than spliced unquoted into an interpolated command line at each
+    # here rather than spliced unquoted into an interpolated command line at each
     # site: Taskfile's own `{{ }}` template interpolation happens before the shell ever sees
     # the resulting line, so a literal `"..."` in the source is not enough on its own to make
     # an interpolated value safe -- the same family of gap as Jinja-vs-Taskfile in copier
@@ -258,7 +258,7 @@ tasks:
         cmds:
             - task: _workrun
               vars:
-                  CMD: '{{.UV}} run pyrefly check {{.CLI_ARGS}}'
+                CMD: '{{.UV}} run pyrefly check {{.CLI_ARGS}}'
 
     eval:typecheck:matrix:
         desc: Typecheck against every supported interpreter (`3.pyver .. 3.pymax`). `pyrefly`'s
@@ -275,17 +275,17 @@ tasks:
                     fi
                     seq "$pyver" "$pymax" | sed 's/^/3./'
         cmds:
-            - for: { var: PYVERS, split: "\n", as: V }
+            - for: {var: PYVERS, split: "\n", as: V}
               task: _workrun
               vars:
-                  LABEL: 'pyrefly @ py{{.V}}'
-                  CMD: '{{.UV}} run pyrefly check --python-version {{.V}} {{.CLI_ARGS}}'
+                LABEL: 'pyrefly @ py{{.V}}'
+                CMD: '{{.UV}} run pyrefly check --python-version {{.V}} {{.CLI_ARGS}}'
 
     # Format verification — `eval:check` is the read-only umbrella that `eval` depends on.
     # Every leaf runs its formatter's check/lint mode and never writes. With no arguments the
     # umbrella runs every leaf against the whole tree; with arguments it dispatches each path to
     # the leaf matching its extension and rejects anything no leaf handles — fanning one path
-    # out to every formatter is the MEMY-1111 footgun. Directories and unmatched file types
+    # out to every formatter is the classic footgun. Directories and unmatched file types
     # belong to the scoped leaves: each still accepts `{{.CLI_ARGS}}` directly and checks the
     # whole tree when called bare, honoring the same per-project config files the in-place
     # formatters use.
@@ -381,7 +381,7 @@ tasks:
               # records, including verbatim receipts pinned by hash -- and reformatting one
               # is not a style change, it destroys the thing the receipt is evidence of. That
               # is not hypothetical: a bulk journal commit once moved a pinned document off
-              # its blob hash and broke 11 of 28 manifest entries (MEMY-1410). Without this,
+              # its blob hash and broke 11 of 28 manifest entries. Without this,
               # every journal commit also re-reds `main` for a tree no gate should rewrite.
               find . -type f -name '*.typ' -not -path './.venv/*' -not -path './.git/*' \
                 -not -path './journal/*' \
@@ -392,15 +392,15 @@ tasks:
     # With no arguments it runs every leaf against the whole tree, leaf by leaf; with
     # arguments it dispatches each path to the formatter for its extension and rejects
     # anything no leaf handles. Fanning one path out to every formatter let yamlfmt destroy
-    # Python sources (MEMY-1111), so the umbrella never passes a leaf a path the leaf does
+    # Python sources, so the umbrella never passes a leaf a path the leaf does
     # not own. Directories and unmatched file types belong to the scoped leaves, which
     # retain their standalone no-argument whole-tree behavior. `eval` never formats — it
     # verifies via the read-only `eval:check` umbrella above. Config lives in the
     # per-project `.mdformat.toml` / `.taplo.toml` / `.yamlfmt.yaml` (these tools do not
     # read pyproject.toml).
     eval:format:
-        desc: Format the whole tree (no arguments) or explicitly named paths in place,
-            dispatching each to its extension's formatter; unmatched paths are rejected.
+        desc: Format the whole tree (no arguments) or explicitly named paths in place, dispatching
+            each to its extension's formatter; unmatched paths are rejected.
         aliases: [fm, fmt, format]
         cmd: |
             set -e
@@ -539,7 +539,7 @@ tasks:
     # -------
     # Testing
     # -------
-    # MEMY-1123: the four below route through workrun (see py-base.taskfile's WORKRUN var) —
+    # The four below route through workrun (see py-base.taskfile's WORKRUN var) —
     # full/coverage/matrix/floor sweeps are exactly the sustained-RSS, sustained-core workloads
     # host_load.md's WR-mandatory names. test:pdb and test:tty stay bare: an interactive debugger
     # and a PTY-behavior test suite are each already juggling one pty layer, and systemd-run
@@ -550,7 +550,7 @@ tasks:
         cmds:
             - task: _workrun
               vars:
-                  CMD: '{{.UV}} run pytest {{.CLI_ARGS}}'
+                CMD: '{{.UV}} run pytest {{.CLI_ARGS}}'
 
     test:dev:
         aliases: [dev-test]
@@ -559,7 +559,7 @@ tasks:
         cmds:
             - task: _workrun
               vars:
-                  CMD: '{{.UV}} run pytest --sw -vv {{.CLI_ARGS}}'
+                CMD: '{{.UV}} run pytest --sw -vv {{.CLI_ARGS}}'
 
     test:pdb:
         cmd: '{{.UV}} run pytest -s --pdb --sw -vv {{.CLI_ARGS}}'
@@ -573,7 +573,7 @@ tasks:
         cmds:
             - task: _workrun
               vars:
-                  CMD: '{{.UV}} run pytest --snapshot-update {{.CLI_ARGS}}'
+                CMD: '{{.UV}} run pytest --snapshot-update {{.CLI_ARGS}}'
 
     test:tty:
         cmd: '{{.UV}} run pytest --run-tty -m tty {{.CLI_ARGS}}'
@@ -586,10 +586,10 @@ tasks:
         cmds:
             - task: _workrun
               vars:
-                  CMD: >-
-                      {{.UV}} run pytest --cov "{{._PACKAGE | default ._PACKAGE_DEFAULT}}"
-                      --cov-branch --no-cov-on-fail {{.CLI_ARGS}}
-                      --cov-report term-missing --cov-report markdown:tests/coverage.md
+                CMD: >-
+                    {{.UV}} run pytest --cov "{{._PACKAGE | default ._PACKAGE_DEFAULT}}"
+                    --cov-branch --no-cov-on-fail {{.CLI_ARGS}}
+                    --cov-report term-missing --cov-report markdown:tests/coverage.md
 
     test:matrix:
         desc: Run the suite on every supported interpreter (`3.pyver .. 3.pymax`).
@@ -606,12 +606,12 @@ tasks:
                     fi
                     seq "$pyver" "$pymax" | sed 's/^/3./'
         cmds:
-            - for: { var: PYVERS, split: "\n", as: V }
+            - for: {var: PYVERS, split: "\n", as: V}
               task: _workrun
               vars:
-                  LABEL: 'py{{.V}}'
-                  SETENV: 'UV_PROJECT_ENVIRONMENT={{._0}}/.venvs/py{{.V}}'
-                  CMD: '{{.UV}} run --python {{.V}} --all-extras pytest -q {{.CLI_ARGS}}'
+                LABEL: 'py{{.V}}'
+                SETENV: 'UV_PROJECT_ENVIRONMENT={{._0}}/.venvs/py{{.V}}'
+                CMD: '{{.UV}} run --python {{.V}} --all-extras pytest -q {{.CLI_ARGS}}'
 
     test:floor:
         desc: Verify the declared dependency floors actually resolve and pass on the oldest
@@ -624,7 +624,7 @@ tasks:
             _FLOOR_PYTHON: '{{._FLOOR_DIR}}/bin/python'
             _FLOOR_REQUIREMENTS: '{{._FLOOR_DIR}}/requirements.txt'
         cmds:
-            # MEMY-1626: a project-level `uv sync --resolution lowest-direct` rewrites the
+            # A project-level `uv sync --resolution lowest-direct` rewrites the
             # canonical uv.lock. Resolve through uv's pip interface instead: the alternate
             # requirements and all dependency state live under the disposable floor venv,
             # so success, failure, and interruption cannot alter project lock state. Rebuild
@@ -632,36 +632,36 @@ tasks:
             # Install only the local project with a frozen, inexact sync: package=false becomes
             # a no-op, while buildable projects retain editable-install behavior without letting
             # the canonical highest-resolution lock replace the already-installed floor.
-            # MEMY-1123: each sustained resolver/installer/test leg routes through workrun.
+            # Each sustained resolver/installer/test leg routes through workrun.
             - task: _workrun
               vars:
-                  SETENV: '{{._FLOOR_ENV}}'
-                  CMD: "{{.UV}} venv --clear --python '{{.PYMIN}}' '{{._FLOOR_DIR}}'"
+                SETENV: '{{._FLOOR_ENV}}'
+                CMD: "{{.UV}} venv --clear --python '{{.PYMIN}}' '{{._FLOOR_DIR}}'"
             - task: _workrun
               vars:
-                  SETENV: '{{._FLOOR_ENV}}'
-                  CMD: >-
-                      {{.UV}} pip compile '{{._0}}/pyproject.toml' --all-extras --group dev
-                      --resolution lowest-direct --python '{{.PYMIN}}' --upgrade
-                      --output-file '{{._FLOOR_REQUIREMENTS}}'
+                SETENV: '{{._FLOOR_ENV}}'
+                CMD: >-
+                    {{.UV}} pip compile '{{._0}}/pyproject.toml' --all-extras --group dev
+                    --resolution lowest-direct --python '{{.PYMIN}}' --upgrade
+                    --output-file '{{._FLOOR_REQUIREMENTS}}'
             - task: _workrun
               vars:
-                  SETENV: '{{._FLOOR_ENV}}'
-                  CMD: >-
-                      {{.UV}} pip sync --python '{{._FLOOR_PYTHON}}'
-                      '{{._FLOOR_REQUIREMENTS}}'
+                SETENV: '{{._FLOOR_ENV}}'
+                CMD: >-
+                    {{.UV}} pip sync --python '{{._FLOOR_PYTHON}}'
+                    '{{._FLOOR_REQUIREMENTS}}'
             - task: _workrun
               vars:
-                  SETENV: '{{._FLOOR_ENV}}'
-                  CMD: >-
-                      {{.UV}} sync --frozen --inexact --only-install-project
-                      --python '{{._FLOOR_PYTHON}}'
+                SETENV: '{{._FLOOR_ENV}}'
+                CMD: >-
+                    {{.UV}} sync --frozen --inexact --only-install-project
+                    --python '{{._FLOOR_PYTHON}}'
             - task: _workrun
               vars:
-                  SETENV: '{{._FLOOR_ENV}}'
-                  CMD: >-
-                      {{.UV}} run --no-sync --python '{{._FLOOR_PYTHON}}'
-                      pytest -q {{.CLI_ARGS}}
+                SETENV: '{{._FLOOR_ENV}}'
+                CMD: >-
+                    {{.UV}} run --no-sync --python '{{._FLOOR_PYTHON}}'
+                    pytest -q {{.CLI_ARGS}}
 
     # ----------------------
     # Project-Specific Tasks

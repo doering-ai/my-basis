@@ -910,7 +910,7 @@ class Transform[T0, T1]:
         if self.flags.wraps:
             # Coerce the wrapped scalar to the target's element type (`'3' -> [3]` for
             # `list[int]`), rather than leaving the raw string sitting inside a typed container.
-            # NOTE(MEMY-325): a string-element target (e.g. `list[str]`) round-trips through
+            # NOTE: a string-element target (e.g. `list[str]`) round-trips through
             # `self.to(str)` as a NOOP, so the "don't split a scalar string" guarantee above is
             # untouched -- this only fixes up *non*-string element types. A total coercion
             # failure (e.g. `'hello' -> list[int]`) falls through to the more general

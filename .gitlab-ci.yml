@@ -155,7 +155,7 @@ Publish PyPI:
           ')
         # NOTE: uploads only. `uv publish` uploads PEP 740 attestations if present
         # in dist/ but does NOT generate them; provenance needs a separate signing
-        # step (deferred -- see MEMY-247's trailing work item).
+        # step (deferred).
         - uv publish
 Evaluate Python:
     stage: eval

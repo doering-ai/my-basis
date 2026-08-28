@@ -5,6 +5,7 @@
 from datetime import datetime, timedelta, timezone, UTC
 from pathlib import Path
 from typing import Any
+import importlib
 import logging
 import time
 import pickle
@@ -19,6 +20,10 @@ from my.infra.constants import NOWHERE
 from my.utils import SystemUtils
 
 cls = SystemUtils
+
+#: The SystemUtils *module* (not the class) -- `my.utils` is the Utils facade class by design
+#: (see that package's docstring), so dotted-string patching can't reach module globals.
+_sysutils_mod = importlib.import_module('my.utils.SystemUtils')
 
 
 ############
@@ -191,6 +196,55 @@ class TestSystemUtils:
         result = cls.terminal_linewrap(text, indent=indent)
         assert isinstance(result, str)
         assert len(result) > 0
+
+    def test_osc11_sequence(self):
+        """Build the exact OSC 11 escape sequence: `\\x1b]11;` + color + BEL."""
+        assert cls.osc11_sequence('#212225') == '\x1b]11;#212225\x07'
+
+    @pyt.mark.parametrize(
+        'method,args,seq',
+        [
+            ('emit_osc11', ('#212225',), '\x1b]11;#212225\x07'),
+            ('set_tab_title', ('corpus:main',), '\x1b]0;corpus:main\x07'),
+        ],
+    )
+    def test_emit_osc__tty(self, patch, method: str, args: tuple, seq: str):
+        """A writable /dev/tty receives the sequence and reports True."""
+        fake_path = MagicMock()
+        patch.setattr(_sysutils_mod, 'Path', fake_path)
+
+        assert getattr(cls, method)(*args) is True
+
+        fake_path.assert_called_once_with('/dev/tty')
+        tty = fake_path.return_value.open.return_value.__enter__.return_value
+        tty.write.assert_called_once_with(seq)
+
+    @pyt.mark.parametrize(
+        'stdout_fallback,expected_out',
+        [
+            (True, '\x1b]11;#212225\x07'),
+            (False, ''),
+        ],
+    )
+    def test_emit_osc11__no_tty(self, patch, capsys, stdout_fallback: bool, expected_out: str):
+        """An unopenable /dev/tty falls back to stdout only when permitted, reporting False."""
+        fake_path = MagicMock()
+        fake_path.return_value.open.side_effect = OSError('no tty')
+        patch.setattr(_sysutils_mod, 'Path', fake_path)
+
+        assert cls.emit_osc11('#212225', stdout_fallback=stdout_fallback) is False
+        assert capsys.readouterr().out == expected_out
+
+    @pyt.mark.parametrize('stdout_fallback', [True, False])
+    def test_set_tab_title__no_tty(self, patch, capsys, stdout_fallback: bool):
+        """set_tab_title honors the same stdout-fallback contract as emit_osc11."""
+        fake_path = MagicMock()
+        fake_path.return_value.open.side_effect = OSError('no tty')
+        patch.setattr(_sysutils_mod, 'Path', fake_path)
+
+        assert cls.set_tab_title('corpus:main', stdout_fallback=stdout_fallback) is False
+        expected = '\x1b]0;corpus:main\x07' if stdout_fallback else ''
+        assert capsys.readouterr().out == expected
 
     def test_print_in_color(self, patch, capsys):
         """Test print_in_color with a mocked subprocess."""

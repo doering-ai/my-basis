@@ -7,11 +7,11 @@
 # myBasis: _Ergonomic Python Utilities_
 
 <p align="center">
-  <a href="https://gitlab.com/doering-ai/libs/basis/-/pipelines"><img src="https://img.shields.io/gitlab/pipeline-status/doering-ai%2Flibs/basis" alt="pipeline status"></a> <a href="https://gitlab.com/doering-ai/libs/basis/-/blob/main/LICENSE"><img src="https://img.shields.io/gitlab/license/doering-ai%2Flibs/basis" alt="license"></a> <a href="https://pypi.org/project/my/"><img src="https://img.shields.io/pypi/v/my" alt="PyPI version"></a>
+  <a href="https://gitlab.com/doering-ai/libs/basis/-/pipelines"><img src="https://img.shields.io/gitlab/pipeline-status/doering-ai%2Flibs/basis" alt="pipeline status"></a> <a href="https://gitlab.com/doering-ai/libs/basis/-/blob/main/LICENSE"><img src="https://img.shields.io/gitlab/license/doering-ai%2Flibs/basis" alt="license"></a> <a href="https://pypi.org/project/my-basis/"><img src="https://img.shields.io/pypi/v/my-basis" alt="PyPI version"></a>
 </p>
 
 <p align="center">
-  <a href="https://pypi.org/project/my/"><img src="https://img.shields.io/pypi/pyversions/my" alt="PyPI - Python Version"></a> <a href="https://pypi.org/project/my/"><img src="https://img.shields.io/pypi/wheel/my" alt="PyPI - Wheel"></a> <a href="https://pypi.org/project/my/"><img src="https://img.shields.io/pypi/types/my" alt="PyPI - Types"></a> <img src="https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=precommit" alt="pre-commit"> <a href="https://github.com/facebook/pyrefly"><img src="https://img.shields.io/endpoint?url=https://pyrefly.org/badge.json" alt="pyrefly"></a> <a href="https://github.com/astral-sh/ruff"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json" alt="ruff"></a>
+  <a href="https://pypi.org/project/my-basis/"><img src="https://img.shields.io/pypi/pyversions/my-basis" alt="PyPI - Python Version"></a> <a href="https://pypi.org/project/my-basis/"><img src="https://img.shields.io/pypi/wheel/my-basis" alt="PyPI - Wheel"></a> <a href="https://pypi.org/project/my-basis/"><img src="https://img.shields.io/pypi/types/my-basis" alt="PyPI - Types"></a> <img src="https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=precommit" alt="pre-commit"> <a href="https://github.com/facebook/pyrefly"><img src="https://img.shields.io/endpoint?url=https://pyrefly.org/badge.json" alt="pyrefly"></a> <a href="https://github.com/astral-sh/ruff"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json" alt="ruff"></a>
 </p>
 
 </div>

@@ -107,15 +107,17 @@ Each `EvidenceRef` contains:
   `evidence` list contains the same path.
 
 A reference does not need a signal ID.
-Reject an unknown path, a changed full-file Line numbers, symbols, and excerpts can improve the narrative, but proposal v2 does not carry or validate them.
+Reject an unknown path or a changed full-file SHA-256.
+Line numbers, symbols, and excerpts can improve the narrative, but proposal v2 does not carry or validate them.
 
-`mode` records authorization; `status` records the result.
+`mode` records authorization.
+`status` records the result.
 Apply these rules:
 
 - `proposed` and `implemented` changes require at least one evidence reference.
 - `implemented` is valid only in `mode: implement`.
-- Any implemented result requires at least one proposal-level verification with
-  state `passed`, `failed`, or `unavailable`; `not-run` does not satisfy that rule.
+- Any implemented result requires at least one proposal-level verification with state `passed`, `failed`, or `unavailable`.
+  The `not-run` state does not satisfy that rule.
 - Any implemented result requires at least one `vcs.diffs` entry. Its patch path is
   relative, its two full commit IDs differ, and its SHA-256 binds the complete patch.
 - `declined`, `deferred`, and `already-present` may omit evidence, although cited
@@ -124,12 +126,12 @@ Apply these rules:
 
 Verification states bind honestly to `exit_code`:
 
-| State | Required exit code |
+| State         | Required exit code |
 | ------------- | ------------------ |
-| `passed` | `0` |
-| `failed` | non-zero integer |
-| `unavailable` | `null` |
-| `not-run` | `null` |
+| `passed`      | `0`                |
+| `failed`      | non-zero integer   |
+| `unavailable` | `null`             |
+| `not-run`     | `null`             |
 
 Reject stale evidence instead of quietly rendering it.
 Unavailable infrastructure is `unavailable`, never a passing result.
@@ -141,11 +143,12 @@ Merge commands must be exact for the local result and must not claim a remote re
 - Every merge kind except `none` requires at least one non-blank `merge_commands`
   entry.
 - `branch` and `merge-request` require `vcs.work_branch`.
-- `merge-request` requires `review_url`; a review URL is invalid for every other
-  merge kind.
+- `merge-request` requires `review_url`.
+  A review URL is invalid for every other merge kind.
 - `patch` supports a patch-only or no-Git result without requiring a work branch.
 - `none` is suitable for a decline or other no-change result. It forbids non-blank
   `merge_commands` and is invalid when any change is `implemented`.
-- `revision_prompt` must be non-blank; write it to name the stable IDs to revisit.
+- `revision_prompt` must be non-blank.
+  Write it to name the stable IDs to revisit.
 
 Preserve accepted IDs across rounds and rerun affected gates plus any full repository gate required by policy.

@@ -13,7 +13,8 @@ Read Sublime's current **API Environments** and **Dev Builds** pages before chan
 In the current development line, Build 4205 replaced the Python 3.8 host with Python 3.14.
 A `.python-version` marker of `3.14` selects that host.
 The compatibility marker `3.8` selects 3.8 on older builds and is remapped to 3.14 on new builds.
-An unknown marker is not a request for a nearby version; it may fall back to the legacy host.
+An unknown marker is not a request for a nearby version.
+It may fall back to the legacy host.
 
 Therefore a campaign may intentionally use:
 

@@ -21,77 +21,87 @@ uvx --from my-basis my-basis-adopt prepare . --target-python 3.13
 ```
 
 Run `skill path` to give the agent the packaged skill directly.
-Export only when the agent needs its own copy, and choose a destination in that agent's skill directory.
-The rest of this guide uses bare `my-basis-adopt` as shorthand for the installed console script; for one-shot use, keep the `uvx --from my-basis` prefix.
+Export only when the agent needs its own copy.
+Choose a destination in that agent's skill directory.
+This guide uses bare `my-basis-adopt` as shorthand for the installed console script.
+For one-shot use, keep the `uvx --from my-basis` prefix.
 
-Then give the printed `intake.json` path to an agent and ask it to use this skill.
-The scanner may create `.basis-adoption/`; it must not edit source, dependency, or version-control files.
-Treat `intake.commands.candidate_native_gates` as candidate native gates until repository instructions or CI confirm them.
-Opportunity detection is regex-focused; inspect the other inventory categories manually.
+Give the printed `intake.json` path to an agent and ask it to use this skill.
+The scanner may create `.basis-adoption/`.
+It must not edit source, dependency, or version-control files.
+Treat `intake.commands.candidate_native_gates` as candidates until repository instructions or CI confirm them.
+Opportunity detection focuses on regex.
+Inspect the other inventory categories manually.
 
 ## Choose the mode
 
 - Use `propose` when the user asked for an audit, report, or options.
 - Use `implement` only when the user authorized repository changes.
-- Within `implement`, use **bounded mode** for one local substitution and **structural mode**
-  when the user wants canonical my-basis idioms to replace copied helpers, parallel data
-  structures, or a module-wide grammar. Structural mode may deliberately pursue adoption
-  farther than the usual minimum, but the resulting whole module must be simpler and each
-  replacement must remain behavior-tested.
+  - Within `implement`, use **bounded mode** for one local substitution.
+  - Use **structural mode** to replace copied helpers, parallel data structures, or a module-wide grammar with canonical my-basis idioms.
+  - Structural mode may pursue adoption beyond the usual minimum.
+    The resulting whole module must be simpler, and behavior tests must cover every replacement.
 - If the tree is dirty, isolate implementation in a worktree or stay in `propose`.
-- Do not require Plane, an advisor, a merge request, or any other remote service.
-  Local evidence, a branch or patch, and the rendered report are the durable path.
+- Do not require Plane, an advisor, a merge request, or another remote service.
+  Local evidence, a branch or patch, and the rendered report form the durable path.
 
 ## Workflow
 
 01. Read the nearest agent instructions and repository documentation.
-02. Run `my-basis-adopt prepare <repo>` and read the resulting `intake.json`. If the
-    user explicitly authorized raising the repository floor, pass `--target-python X.Y`;
-    this records the mission and turns the old floor into a reviewable modernization lead.
-03. Inspect every cited source site. Detector signals and candidate native gates are
-    leads, not conclusions.
-04. Read [the opportunity map](references/opportunity-map.md). If any regex signal
-    exists, also read [the RegexStore guide](references/regexstore.md). For Sublime repos,
-    read [the modern plugin-host guide](references/sublime.md). In structural mode, also
-    read [the atomic diff corpus guide](references/diff-corpus.md).
-05. Establish the repository's Python floor, dependency budget, import-latency
-    constraints, startup/failure paths, package manager, and native verification
-    commands before proposing a dependency.
-06. Classify each finding as `implemented`, `proposed`, `declined`, `deferred`, or
-    `already-present`. Give every finding a stable ID such as `basis-003`.
-07. For implementation, write focused behavior tests first. Favor parameter tables
-    over scenario-test proliferation and keep names at `test_name__scenario`.
-08. Add or pin `my-basis` using the repository's existing package manager and source
-    convention. Refresh a moving Git/tag source explicitly and print the installed
-    version; lock files do not refresh themselves.
-09. In bounded mode, make the smallest coherent refactor. In structural mode, replace
-    the complete obsolete structure when doing so produces one clearer canonical model;
-    do not leave old and new abstractions competing for ownership.
-10. Run repository-native tests, lint, typing, build, and docs gates as applicable.
+02. Run `my-basis-adopt prepare <repo>`.
+    Read the resulting `intake.json`.
+    If the user explicitly authorized raising the repository floor, pass `--target-python X.Y`.
+    This records the mission and turns the old floor into a reviewable modernization lead.
+03. Inspect every cited source site.
+    Detector signals and candidate native gates are leads, not conclusions.
+04. Read [the opportunity map](references/opportunity-map.md).
+    If any regex signal exists, also read [the RegexStore guide](references/regexstore.md).
+    For Sublime repositories, read [the modern plugin-host guide](references/sublime.md).
+    In structural mode, also read [the atomic diff corpus guide](references/diff-corpus.md).
+05. Before proposing a dependency, establish:
+    - the repository's Python floor
+    - the dependency budget
+    - import-latency constraints
+    - startup and failure paths
+    - the package manager
+    - native verification commands
+06. Classify each finding as `implemented`, `proposed`, `declined`, `deferred`, or `already-present`.
+    Give every finding a stable ID such as `basis-003`.
+07. For implementation, write focused behavior tests first.
+    Favor parameter tables over scenario-test proliferation.
+    Keep names at `test_name__scenario`.
+08. Add or pin `my-basis` through the repository's existing package manager and source convention.
+    Refresh a moving Git or tag source explicitly.
+    Print the installed version because lock files do not refresh themselves.
+09. In bounded mode, make the smallest coherent refactor.
+    In structural mode, replace the complete obsolete structure when that produces one clearer canonical model.
+    Do not leave old and new abstractions competing for ownership.
+10. Run applicable repository-native tests, lint, typing, build, and docs gates.
     Record exact commands, working directories, exit codes, and concise output.
-11. Commit each behavior-preserving transformation atomically. Capture it with
-    `my-basis-adopt capture <repo> --base <base> --head <head> --output-dir <dir> \ --summary <story>`. Keep small patches directly copy-ready and summarize large ones.
-12. Write `proposal.json` against proposal v2, include every captured manifest under
-    `vcs.diffs`, run `my-basis-adopt validate`, and render MyST or Typst.
-13. Return the rendered artifact, source proposal, branch/commit or patch, exact
-    merge instructions, and a stable-ID prompt for requesting another round.
+11. Commit each behavior-preserving transformation atomically.
+    Capture it with `my-basis-adopt capture <repo> --base <base> --head <head> --output-dir <dir> \ --summary <story>`.
+    Keep small patches directly copy-ready and summarize large ones.
+12. Write `proposal.json` against proposal v2.
+    Include every captured manifest under `vcs.diffs`.
+    Run `my-basis-adopt validate`, then render MyST or Typst.
+13. Return the rendered artifact, source proposal, branch, commit or patch, exact merge instructions, and a stable-ID revision prompt.
 
 ## Safety and correctness gates
 
 - Never import or execute the target package during discovery.
 - Do not read secret-like files, virtual environments, generated/vendor trees,
   oversized files, or symlinks that escape the repository.
-- Treat environment access as either startup configuration or runtime-injected
-  state. `my.env` is cached; do not use it where tests, secret handoffs, or plugins
-  deliberately mutate `os.environ` after import.
-- Do not raise a repository's Python floor without an explicit product decision. A
-  fleet campaign that explicitly retires an old host is such a decision; record both the
-  declared source floor and the actual embedded runtime instead of pretending they match.
-- Measure import/cold-start cost for prompt-critical, hook, and failure-path tools.
-- A direct import requires a direct dependency even when my-basis is already
-  present transitively.
-- Do not merge, publish, delete an old implementation, or perform the final release
-  gate. Hand the human a reviewable result.
+- Treat environment access as either startup configuration or runtime-injected state.
+  `my.env` is cached.
+  Do not use it where tests, secret handoffs, or plugins deliberately mutate `os.environ` after import.
+- Do not raise a repository's Python floor without an explicit product decision.
+  A fleet campaign that explicitly retires an old host is such a decision.
+  Record both the declared source floor and the actual embedded runtime.
+  Do not imply that they match.
+- Measure import and cold-start cost for prompt-critical, hook, and failure-path tools.
+- A direct import requires a direct dependency even when my-basis is already present transitively.
+- Do not merge, publish, delete an old implementation, or perform the final release gate.
+  Hand the human a reviewable result.
 
 ## RegexStore gate
 
@@ -106,13 +116,15 @@ Every RegexStore change must include:
 - fail-fast compilation for security-sensitive patterns;
 - positive and negative examples for complex grammars.
 
-Use `\g<name>` for a true backreference when reinvocation normalization is enabled; `(?P>name)` invokes the named subpattern.
+Use `\g<name>` for a true backreference when reinvocation normalization is enabled.
+`(?P>name)` invokes the named subpattern.
 Read the full guide before composing a complex store or router.
 
 ## Proposal and report
 
 Follow [the proposal contract](references/proposal-contract.md).
-Every implemented proposal includes at least one SHA-bound entry from `my-basis-adopt capture`; this is the copy-ready transformation corpus, not merely a diffstat.
+Every implemented proposal includes at least one SHA-bound entry from `my-basis-adopt capture`.
+This entry is the copy-ready transformation corpus, not merely a diffstat.
 Keep the main report narrative and put file inventories and logs in appendices:
 
 1. the repository's present shape;
@@ -138,8 +150,10 @@ my-basis-adopt render .basis-adoption/proposal.json --format html
 my-basis-adopt render .basis-adoption/proposal.json --format typst --build
 ```
 
-Typst source rendering does not require the `typst` executable; `--build` does.
-If Typst compilation is unavailable, retain `report.typ`, report the missing executable, and return an available rendered route such as MyST or HTML.
+Typst source rendering does not require the `typst` executable.
+The `--build` option does.
+If Typst compilation is unavailable, retain `report.typ` and report the missing executable.
+Return an available rendered route such as MyST or HTML.
 
 ## Revision handoff
 
@@ -152,13 +166,19 @@ Rerun affected gates, refresh stale evidence, and regenerate the report.
 ```
 
 Refresh the intake when source evidence has changed.
-Stable IDs survive revisions; accepted changes must not be silently reopened.
+Stable IDs survive revisions.
+Do not silently reopen accepted changes.
 
 ## Fleet dogfood
 
 For each repository, run the scanner before manual inspection.
-Pass the campaign's explicit `--target-python` when floor retirement is part of the mission; otherwise an incompatible declared floor correctly remains a constraint.
+Pass the campaign's explicit `--target-python` when floor retirement is part of the mission.
+Otherwise, an incompatible declared floor remains a constraint.
 Record each detector as confirmed, false-positive, or missed.
-Change deterministic rules only for repeatable symbolic evidence seen in two repositories (unless it is an invariant); change this guidance for judgment errors and the report template for communication errors.
+
+Change deterministic rules only for invariants or repeatable symbolic evidence seen in two repositories.
+For judgment errors, change this guidance.
+For communication errors, change the report template.
+
 Re-run earlier fixtures after every rule change.
 Never let the scanner self-modify its detectors or this skill.

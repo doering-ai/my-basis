@@ -2,7 +2,8 @@
 
 ## Pattern Management
 
-The `RegexStore` class is the centerpiece of this subpackage, providing a powerful DSL (domain-specific language) for defining, composing, and managing complex regex patterns.
+The `RegexStore` class is the centerpiece of this subpackage.
+It provides a compositional DSL (domain-specific language) for defining and managing complex regex patterns.
 Rather than working with raw regex strings, you define patterns using a hierarchical structure of strings, lists, tuples, and custom mark syntax.
 Patterns can reference other patterns as subroutines using the `(?P>name)` syntax, and the store automatically resolves dependencies and compiles them into execution-ready objects.
 
@@ -10,8 +11,8 @@ The DSL supports several composition primitives: strings are composed directly, 
 The mark syntax provides a concise way to specify group types (capturing, non-capturing, atomic, etc.), separators, inline flags, and quantifiers.
 For example, `('|:', [pattern1, pattern2])` creates a non-capturing alternation group.
 
-Pattern optimization is handled through router trees, which efficiently match long patterns against long texts by factoring out common prefixes and suffixes.
-The `compose_tree()` method recursively expands and condenses branching patterns, producing optimized expressions that can be significantly faster than naive alternations.
+Pattern optimization uses router trees to factor common prefixes and suffixes from long alternations.
+The `compose_tree()` method recursively expands and condenses branching patterns to reduce repeated pattern structure.
 
 ## Match Processing
 

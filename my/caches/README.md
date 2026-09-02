@@ -5,18 +5,18 @@
 The `Cache` class implements a simple LRU (Least Recently Used) cache with automatic eviction.
 When the cache reaches its `maxsize`, it prunes entries in buckets from the front, removing the oldest items first.
 Items are moved to the end of the dictionary on access to maintain proper LRU ordering.
-The cache supports configurable bucket sizing for efficient bulk pruning operations.
+The cache supports configurable bucket sizes for bulk pruning operations.
 
 ## PickleCache
 
 `PickleCache` provides persistent caching with a three-tier fallback hierarchy: in-memory data, pickle files on disk, and an optional async callback function.
 Data freshness is determined by a configurable TTL (time-to-live), defaulting to one day.
 When accessing data, the cache first checks if in-memory data is fresh, then loads from the pickle file if it exists and is within the TTL window, and finally invokes the async callback to refresh stale data.
-The class automatically writes refreshed data to disk and manages timestamps for efficient TTL checking.
+The class writes refreshed data to disk and manages timestamps for TTL checks.
 
 ## FileCache
 
-The `FileCache` class implements a sophisticated two-level caching system that combines in-memory LRU with on-disk file storage.
+The `FileCache` class implements a two-level cache that combines an in-memory LRU with on-disk file storage.
 Items are organized into a hierarchical directory structure using `group/prefix/filename`, where the prefix is automatically derived from the filename.
 The cache maintains separate indices for hot (in-memory) and cold (on-disk) data, with automatic promotion when cold items are accessed.
 When memory limits are exceeded, items are proportionally pruned from each group and written to disk.

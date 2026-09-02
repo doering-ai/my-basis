@@ -47,7 +47,7 @@ task test
 task test -- -v tests/apis/test_Environment.py
 
 # Run Specific Test
-task test -- -v tests/apis/test_Environment.py::TestEnvironment::test_get__basic
+task test -- -v tests/apis/test_Environment.py::TestEnvironment::test_get
 
 # Calculate Coverage
 task test:cov
@@ -189,8 +189,8 @@ Use the user's preferences plus `priority` and `state_group` (`backlog` → `sta
 Campaign indexes such as `basis-00-index.md` sequence their own subtasks.
 Read the index before entering its series.
 
-The `~/my/corpus/policies/task-sync.md` policy and the `plane-ops` skill define read and write mechanics.
-They also define the gated `plane_push` rule, conflict resolution, and the legacy bare-number filename exception.
+Read and write mechanics include the gated `plane_push` rule, conflict resolution, and the legacy bare-number filename exception.
+The `~/my/corpus/policies/task-sync.md` policy and the `plane-ops` skill define them.
 This section only points to that specification.
 
 ______________________________________________________________________

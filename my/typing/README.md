@@ -51,7 +51,7 @@ The rule of thumb, then: **`BaseModel` for data at a boundary; a plain class (or
 ### Configuring casts
 
 Coercion is the only chamber with behavioral knobs today (`check` and `match` have none).
-The flags remain on the `Typist` instance as process-wide defaults for the "loose" conversions:
+The flags remain on the global `Typist` singleton as process-wide defaults for the "loose" conversions:
 
 - `firsts` — a multi-element series collapses to its first element (`[1, 2] -> 1`).
 - `atomics` — a single-element series unwraps (`[1] -> 1`).

@@ -37,5 +37,5 @@ These utilities help with parsing, analyzing, and manipulating Python code at th
 
 ## Semantic Utilities
 
-`SemanticUtils` offers higher-level text analysis focused on meaning rather than structure.
-These utilities extract semantic information from text, supporting natural language processing and document understanding tasks.
+`SemanticUtils` handles content-level conversions rather than structural parsing.
+It converts Roman numerals, formats numeric amounts, singularizes English nouns, creates ordinals, and validates identifiers.

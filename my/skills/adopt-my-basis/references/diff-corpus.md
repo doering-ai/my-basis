@@ -38,7 +38,8 @@ For a larger coherent change, split the implementation into atomic commits rathe
 
 Copy each manifest object into `proposal.json` under `vcs.diffs`.
 Keep the patch beside the report at the manifest's relative `patch_path`.
-The rendered report links to the full patch and tells the high-level story; readers can inspect or apply the exact transformation without reconstructing it from prose.
+The rendered report links to the full patch and tells the high-level story.
+Readers can inspect or apply the exact transformation without reconstructing it from prose.
 
 Summaries should use this form:
 
@@ -48,9 +49,9 @@ Summaries should use this form:
 
 For a fleet campaign, create one index row per atomic commit:
 
-| Repository | Transformation | APIs | Tests | Patch SHA-256 |
+| Repository | Transformation                    | APIs    | Tests           | Patch SHA-256  |
 | ---------- | --------------------------------- | ------- | --------------- | -------------- |
-| plugin | copied helper to canonical facade | `my.ut` | contract matrix | manifest value |
+| plugin     | copied helper to canonical facade | `my.ut` | contract matrix | manifest value |
 
 Do not combine unrelated repositories into one patch.
 A fleet report may group the narratives, but each repository retains its own branch, commits, gates, and merge handoff.

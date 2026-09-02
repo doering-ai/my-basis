@@ -1,10 +1,12 @@
 # Agent Development Guidelines
 
-The myBasis Python package (imported as `my`) contains a variety of utilities generally centered around the topics of text processing, functional programming, and runtime type coercion.
+The myBasis Python package, imported as `my`, provides utilities for text processing, functional programming, and runtime type coercion.
 
-It is developed with usage as a library in mind, and given its broad scope, is organized into a mostly-flat structure.
-The source code is found in `my/`, broken up further into ~7 subpackages.
-The corresponding PyTest files for each individual python file are present in matching subdirectories of `tests/`, and the Sphinx w/ MyST documents for the project are found in `docs/`.
+It is designed for use as a library.
+Its broad scope uses a mostly flat structure.
+The source lives under `my/` and is divided into seven public subpackages.
+Tests for individual modules live in matching subdirectories under `tests/`.
+Sphinx and MyST documentation lives under `docs/`.
 
 ## Ethos
 
@@ -30,10 +32,12 @@ The corresponding PyTest files for each individual python file are present in ma
 
 ## Commands
 
-For details of various commands, consult `/Taskfile`.
-Here's a lit of the main commands; pass `-- ARGS` to forward ARGS to the underlying tool.
+The legacy `/Taskfile` pointer is stale.
+Run `task --list` to see every available command.
+The examples below show common tasks.
+Pass `-- ARGS` to forward arguments to the underlying tool.
 
-### PyTest Commands
+### Pytest commands
 
 ```zsh
 # Run All Tests
@@ -43,7 +47,7 @@ task test
 task test -- -v tests/apis/test_Environment.py
 
 # Run Specific Test
-task test -- -v tests/apis/test_Environment.py::TestEnvironment::test_get__basic
+task test -- -v tests/apis/test_Environment.py::TestEnvironment::test_get
 
 # Calculate Coverage
 task test:cov
@@ -53,7 +57,7 @@ task test:pdb  # Drops into debugger on failure
 task test:dev  # For debugging one test at a time
 ```
 
-### Sphinx Documentation Commmands
+### Sphinx documentation commands
 
 ```zsh
 task docs # Build the Sphinx documentation via `sphinx-build`.
@@ -65,35 +69,29 @@ For a full list of dependencies, see `pyproject.toml`
 
 ### Development
 
-- `python 3.13`: The project is written in modern Python 3.13 syntax -- no need to support older versions!
-
+- `python 3.13`: minimum supported interpreter and syntax version
 - `uv`: dependency management
-
 - `ruff`: linting and code formatting
-
-- `pyrefly`: static type checking (`task eval:typecheck`, or `uv run pyrefly check`)
-
-- `uv build` & `uv publish`: package building & publishing
-
+- `pyrefly`: static type checking through `task eval:typecheck` or `uv run pyrefly check`
+- `uv build` and `uv publish`: package building and publishing
 - `pytest`: unit testing
 
 ### Runtime
 
-- `pydantic`: data validation and settings management using Python type annotations
-
-- `regex`: advanced regular expressions -- especially critical for the `my.regex` subpackage.
-
-- `more-itertools`: additional iteration utilities beyond the standard library
+- `pydantic`: data validation and settings management through Python type annotations
+- `regex`: advanced regular expressions used by the `my.regex` subpackage
+- `more-itertools`: iteration utilities beyond the standard library
 
 ## Specifics
 
 ### Testing Guide
 
-Whenevery you're making siginifant changes to test files, be sure to read and apply `tests/README.md`.
+When making significant changes to tests, read and apply `tests/README.md`.
 
 ### File Structure
 
-Almost all Python files in the project contain one or more of the following sections, each delineated by a large, wrapped comment:
+Most Python files use one or more of the following sections.
+A large wrapped comment marks each section:
 
 ```python
 ############
@@ -123,9 +121,10 @@ The entrypoint code for executing this file on the commandline as a script, ofte
 
 ### Class Sections
 
-In general, the project makes extensive use of classes, both in typical object-oriented situations and for general code organization using static classes and/or singletons.
+The project uses classes for object-oriented behavior, static organization, and singletons.
 
-Large classes are almost always broken down into four subsections, each delimited by a wrapped commment like so:
+Large classes usually contain four subsections.
+A wrapped comment marks each subsection:
 
 ```python
 class MyClass:
@@ -157,49 +156,70 @@ class MyClass:
 
 ### Types
 
-All code should be fully typed using Python type annotations if at all possible.
-For exceptions, add `# type: ignore` to the end of the line.
+Code should use Python type annotations wherever possible.
+When an exception is necessary, add `# type: ignore` to the end of the line.
 
 ### Docstrings
 
-Each public class and function should have a docstring describing its purpose, parameters, and return value(s).
-Docstrings follow the Google format for python docstrings.
-Do not include type annotations in the docstring.
+Each public class and function should have a docstring that describes its purpose, parameters, and return values.
+Use Google-style Python docstrings.
+Do not repeat type annotations in the docstring.
 
 ______________________________________________________________________
 
-## Task Backlog — `~/local/tasks` (read this first)
+## Task backlog: `~/local/tasks`
 
 > **Priority: high.** This is the canonical backlog.
 > Treat it as the default source of work for any session that is not explicitly personal/one-off.
 
-**What it is.** `~/local/tasks/` is a directory of plain Markdown files — one per task — that mirror the Plane.so backlog (workspace `dtm`, project `MEMY`).
-Each file (`MEMY-<N>.md`, or a campaign-prefixed spec like `basis-07-*.md`) carries YAML frontmatter (`title`, `state`, `state_group`, `priority`, `tags`, `step`, `repo`) and a Markdown body that is the full spec of record: problem, plan, steps, acceptance criteria, verification snippet.
-It is the *collaboration surface*; Plane is a remote mirror a background sync keeps in step.
+**Contents.** `~/local/tasks/` contains one plain Markdown file per task.
+These files mirror the Plane.so backlog for workspace `dtm` and project `MEMY`.
+Each `MEMY-<N>.md` file, or campaign spec such as `basis-07-*.md`, contains YAML frontmatter and a Markdown body.
+The frontmatter defines `title`, `state`, `state_group`, `priority`, `tags`, `step`, and `repo`.
+The body is the full specification of record: problem, plan, steps, acceptance criteria, and verification snippet.
 
-**How central.** Before starting non-personal work, look here.
-The standing posture is: *pick a task file, execute its spec, report against its acceptance criteria* — not "wait for an inline prompt."
-When the user gives open-ended direction ("keep going", "what's next", "make progress on the backlog"), the answer is almost always a file in this directory, chosen by `priority`/`state_group` (`backlog` → `started` → `done`) and the user's stated preferences.
-Campaign indexes (e.g. `basis-00-index.md`) sequence their own subtasks — read the index first when one exists for a series you're entering.
+This directory is the *collaboration surface*.
+A background sync keeps the remote Plane mirror aligned.
 
-Read/write mechanics, the gated `plane_push` rule, conflict resolution, and the bare-number legacy-file caveat are documented in `~/my/corpus/policies/task-sync.md` and the `plane-ops` skill — this section is the centrality pointer, not the spec.
+**Use.** Check this directory before starting non-personal work.
+The standing posture is: *pick a task file, execute its spec, report against its acceptance criteria*.
+Do not "wait for an inline prompt."
+For open-ended direction such as "keep going", "what's next", or "make progress on the backlog", the answer is usually a file from this directory.
+Use the user's preferences plus `priority` and `state_group` (`backlog` → `started` → `done`) to choose it.
+Campaign indexes such as `basis-00-index.md` sequence their own subtasks.
+Read the index before entering its series.
+
+Read and write mechanics include the gated `plane_push` rule, conflict resolution, and the legacy bare-number filename exception.
+The `~/my/corpus/policies/task-sync.md` policy and the `plane-ops` skill define them.
+This section only points to that specification.
 
 ______________________________________________________________________
 
-## Agent Coordination Hygiene — four soft rules (read this too)
+## Agent coordination hygiene
 
 > **Priority: high.** Four soft rules ("do unless you have a strong reason") keep parallel agents from stepping on each other and the user.
 > Full text in `~/my/corpus/policies/agent_coordination.md`.
 
-1. **Task file for every non-trivial unit of work** — even a compilation task.
-   Check for an existing task before creating one; prefer reopening an incomplete or problem-causing task to a follow-up.
-   The SID goes in commit messages (`Refs: MEMY-N`) and branch names.
-2. **Work in your own worktree; verify state on exit** — never exit without confirming your worktree is in the expected state.
-   Provision one proactively for non-trivial work — isolation is the default, not something the operator should have to ask for.
+1. **Create a task file for every non-trivial unit of work.**
+   This includes compilation tasks.
+   Check for an existing task before creating one.
+   Prefer reopening an incomplete or problem-causing task to creating a follow-up.
+   Put the SID in branch names and commit messages such as `Refs: MEMY-N`.
+2. **Work in your own worktree and verify its state on exit.**
+   Confirm the expected worktree state before exit.
+   Provision one proactively for non-trivial work.
+   Isolation is the default.
    Flag anomalies to the user and move them to a `wip/` branch if necessary.
-   Delete your bulletin entry as part of this check.
-   See `~/my/corpus/policies/worktrees.md` for the worktree lifecycle.
-3. **Coordinate via `~/.ai/bulletin.md`** — register a ~3-line note (what / where / changes?) at the start of non-trivial work; delete it when done.
-   A systemd timer (`corpus-bulletin-poll`) snapshots the file every 5 min into `~/.ai/bulletin-history/` with symbolic overlap checks + optional DSPy conflict assessment.
-4. **Use MyST Minisites for massive outputs** — never dump thousands of tokens of deep research, architectural analysis, or multi-stage synthesis into the chat context.
-   Instead, run `uv run myst-report new <topic>` to initialize a minimal Sphinx+MyST project in a scratch directory, write your findings hierarchically in `index.md`, build the HTML with `uv run myst-report build <dir>`, and hand the user a local `file:///` link to the output.
+   Delete your bulletin entry during the exit check.
+   See `~/my/corpus/policies/worktrees.md` for the lifecycle.
+3. **Coordinate through `~/.ai/bulletin.md`.**
+   At the start of non-trivial work, register a note of about three lines: what, where, and changes.
+   Delete the note when the work ends.
+   The `corpus-bulletin-poll` systemd timer snapshots the file every five minutes into `~/.ai/bulletin-history/`.
+   It applies symbolic overlap checks and can apply an optional DSPy conflict assessment.
+4. **Use MyST minisites.**
+   Never put thousands of tokens of deep research, architectural analysis, or multi-stage synthesis into chat.
+   1. Run `uv run myst-report new <topic>` to initialize a minimal Sphinx and MyST project in a scratch directory.
+   2. Write the findings hierarchically in `index.md`.
+   3. Run `uv run myst-report build <dir>` to build the HTML.
+   4. Give the user a local `file:///` link to the output.

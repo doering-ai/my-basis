@@ -51,16 +51,19 @@ The rule of thumb, then: **`BaseModel` for data at a boundary; a plain class (or
 ### Configuring casts
 
 Coercion is the only chamber with behavioral knobs today (`check` and `match` have none).
-The flags live on the `Typist` instance and gate the "loose" conversions:
+The flags remain on the global `Typist` singleton as process-wide defaults for the "loose" conversions:
 
 - `firsts` — a multi-element series collapses to its first element (`[1, 2] -> 1`).
 - `atomics` — a single-element series unwraps (`[1] -> 1`).
 - `splits` — a string splits before becoming a collection (`'a.b' -> {'a', 'b'}`).
 - `wraps` — an atom wraps into a collection (`'a' -> ['a']`).
 
-Because `cast()` reads these live (results are **not** memoized), they can be toggled at runtime — `typist.splits = False` takes effect on the next call.
-The corollary is a standing constraint: **if a cast-result cache is ever added, the flag state must be part of its key**, or a toggle will silently return a stale coercion.
-For preset bundles rather than individual flags, reach for the strict/basic/flex presets instead of flipping booleans by hand.
+Each `cast()` call snapshots these defaults once.
+They can still be toggled at runtime.
+For example, `typist.splits = False` takes effect on the next call but cannot change a cast already in flight.
+A caller can instead supply an explicit frozen snapshot or strict/basic/flex preset for one call.
+Dispatch candidate lists are memoized with the resolved flag state in the key.
+Complete cast results are not memoized.
 
 One thing this subsystem deliberately does *not* do is read its configuration from the environment.
 `Typist` stays deterministic; if an application wants env- or file-driven defaults, it should own that itself (e.g. via `pydantic-settings`) and hand a configured preset *in* — coercion semantics that change with an ambient env var are a reproducibility hazard, not a feature.

@@ -58,7 +58,8 @@ assert match.data['digits'] == ['22', '5']
 assert match.flat == {'sign': '-', 'digits': '5', 'value': '-22.5'}
 ```
 
-`MatchData` preserves every named capture as a list through `match[name]` and `match.data`; `match.flat` selects the last non-empty capture for each name.
+`MatchData` preserves every named capture as a list through `match[name]` and `match.data`.
+`match.flat` selects the last non-empty capture for each name.
 `(?P>digits)` is a subroutine invocation: match the named pattern again.
 `\g<digits>` is a backreference: match the text captured earlier.
 With `force_reinvocations=True` (the default), `(?P=digits)` is normalized to a subroutine, so write true backreferences as `\g<digits>`.
@@ -91,7 +92,8 @@ Order is part of the classification contract.
 ## Recursive JSON candidate example
 
 Use recursion to find candidates, then validate them with the application's real schema.
-Regex finds boundaries; it does not replace JSON validation.
+Regex finds boundaries.
+It does not replace JSON validation.
 
 ```python
 JSON_RGXS = RegexStore.new(

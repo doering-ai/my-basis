@@ -1,8 +1,10 @@
 # APIs
 
-This subpackage provides convenient interfaces for external services and system resources.
-Currently it focuses on two primary concerns: environment variable management and Google Sheets integration.
+This subpackage provides interfaces for external services and system resources.
+It covers environment variables, filesystem paths, and Google Sheets.
 
-## Environment Variables
+## Environment variables
+
+## Filesystem paths
 
 ## Google Sheets

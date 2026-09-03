@@ -34,7 +34,7 @@ class TextUtils(_UtilsBase):
     RGXS: ClassVar[dict[str, Pattern]] = {}  # written at bottom of file
 
     # ------------------------
-    # `0` Manipulation & Regex
+    # `0` MANIPULATION & REGEX
     # ------------------------
     @staticmethod
     def replace(string: str, *args: tuple[str | Pattern, str | Callable[[Match[str]], str]]) -> str:
@@ -194,7 +194,7 @@ class TextUtils(_UtilsBase):
         return rf'{pre}(?{"|" if branching else ":"}{contents}){suf}'
 
     # --------------
-    # `1` Formatting
+    # `1` FORMATTING
     # --------------
     @staticmethod
     def wrap(line: str, prefix: str = '', char: str = '-', width: int = 2) -> str:

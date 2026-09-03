@@ -26,7 +26,7 @@ This is the main prose.
 
 Section 1 prose.
 
-### SUBSECTION 1.1
+### Subsection 1.1
 
 Subsection prose.
 
@@ -43,7 +43,7 @@ Document prose.
 
 First section prose.
 
-### `0A` FIRST SUBSECTION
+### `0A` First Subsection
 
 Subsection prose.
 
@@ -1169,11 +1169,11 @@ Main prose.
 
 Section A prose.
 
-### SUBSECTION A.1
+### Subsection A.1
 
 Subsection prose.
 
-### SUBSECTION A.2
+### Subsection A.2
 
 More prose.
 
@@ -1288,12 +1288,12 @@ list:
         node = cls.new(title='Test', prose='content', buffer_factory=custom_factory)
         assert 'CONTENT' in str(node.prose)
 
-    # --------------------
+    # ---------------------
     # `*` Coverage Lifters
-    # --------------------
-    # ------------------
-    # `new()` Edge Cases
-    # ------------------
+    # ---------------------
+    # ------------
+    # `new()` edge cases
+    # ------------
     def test_new__from_bytes(self):
         """`new()` must accept a `bytes` source (exercises the isinstance path)."""
         node = cls.new(b'multi-line content', title='FromBytes')
@@ -1322,9 +1322,9 @@ list:
         node = cls.new(Path('/nonexistent/file.md'), title='FromPath')
         assert str(node.prose) == ''
 
-    # ------------------------
-    # `_build_tree` Edge Cases
-    # ------------------------
+    # ------------
+    # `_build_tree` edge cases
+    # ------------
     def test_build_tree__with_markdown_nodes(self):
         """_build_tree must accept pre-constructed Markdown instances."""
         child = cls.new(title='Prebuilt')
@@ -1350,9 +1350,9 @@ list:
         nodes = cls._build_tree({'title': 'Singleton'}, level=1, idx='', buffer_factory=Buffer.new)
         assert len(nodes) == 1
 
-    # ----------------------------------
-    # `_num_to_digit` Multi-Digit String
-    # ----------------------------------
+    # ------------
+    # `_num_to_digit` multi-digit string
+    # ------------
     def test_num_to_digit__multi_char_string(self):
         """_num_to_digit must convert a multi-character digit string to an int first."""
         assert cls._num_to_digit('36') == 'a'
@@ -1363,9 +1363,9 @@ list:
         with pyt.raises(AssertionError, match='Invalid index digit'):
             cls._num_to_digit('XY')
 
-    # ------------------------
-    # `_trace_path` Edge Cases
-    # ------------------------
+    # ------------
+    # `_trace_path` edge cases
+    # ------------
     def test_trace_path__origin_equals_target(self):
         """_trace_path must return [] when ancestor's idx matches target."""
         node = cls.new(title='Root', idx='A')
@@ -1377,18 +1377,18 @@ list:
         path = cls._trace_path(node, '05')
         assert path == []
 
-    # ----------------------------
-    # `refresh_indices` Edge Cases
-    # ----------------------------
+    # ------------
+    # `refresh_indices` edge cases
+    # ------------
     def test_refresh_indices__start_beyond_end(self):
         """refresh_indices must no-op when start >= n."""
         node = cls.new(title='Root', nodes=[{'title': 'Child'}])
         node.refresh_indices(start=5)  # Should not raise
         assert node.nodes[0].title == 'Child'
 
-    # ------------------------------------
-    # `walk` Dynamic Modification Tracking
-    # ------------------------------------
+    # ------------
+    # `walk` dynamic modification tracking
+    # ------------
     def test_walk__add_during_traversal(self):
         """walk must handle nodes added during iteration."""
         node = cls.new(
@@ -1441,9 +1441,9 @@ list:
         node = cls.new(title='Leaf')
         assert list(node.walk(skip_self=True)) == []
 
-    # ----------------------
-    # `add_node` Left Branch
-    # ----------------------
+    # ------------
+    # `add_node` left branch
+    # ------------
     def test_add_node__prepend(self):
         """add_node must prepend when left=True."""
         node = cls.new(
@@ -1464,9 +1464,9 @@ list:
         node.add_node([])
         assert len(node.nodes) == 1
 
-    # ---------------------
-    # `get_path` Edge Cases
-    # ---------------------
+    # ------------
+    # `get_path` edge cases
+    # ------------
     def test_get_path__empty_path(self):
         """get_path with empty path must return self when node has children."""
         node = cls.new(title='Root', nodes=[{'title': 'Child'}])
@@ -1505,9 +1505,9 @@ list:
         assert found is not None
         assert found.title == 'Grandchild'
 
-    # ----------------------
-    # `frontmatter` Property
-    # ----------------------
+    # ------------
+    # `frontmatter` property
+    # ------------
     def test_frontmatter(self):
         """frontmatter property must return the notes dict."""
         node = cls.new(title='Test', notes={'k': 'v'})
@@ -1538,9 +1538,9 @@ list:
         # __bool__ returns bool(self.title or self.prose)
         assert not bool(node)
 
-    # -------------------------
-    # `_mask_fences` Edge Cases
-    # -------------------------
+    # ------------
+    # `_mask_fences` edge cases
+    # ------------
     def test_mask_fences__sentinel_in_text(self):
         """_mask_fences must return text unchanged when sentinel present."""
         text = f'{chr(0)}already has sentinel'
@@ -1576,9 +1576,9 @@ list:
         result = node.from_yaml()
         assert result == {}
 
-    # --------------------
-    # `replace` With Regex
-    # --------------------
+    # ------------
+    # `replace` with regex
+    # ------------
     def test_replace__regex(self):
         """replace must accept a regex pattern."""
         node = cls.new(title='Root', prose='foo bar baz')
@@ -1598,17 +1598,17 @@ list:
         assert str(node.prose) == 'hi world'
         assert str(node.nodes[0].prose) == 'hi there'
 
-    # --------------------------
-    # `__len__` With Empty Nodes
-    # --------------------------
+    # ------------
+    # `__len__` with empty nodes
+    # ------------
     def test_len__empty(self):
         """__len__ must return 0 for node with no children."""
         node = cls.new(title='Leaf')
         assert len(node) == 0
 
-    # ----------------------------------
-    # `__isub__` With Non-Existent Title
-    # ----------------------------------
+    # ------------
+    # `__isub__` with non-existent title
+    # ------------
     def test_isub__not_found(self):
         """__isub__ must still succeed for non-existent titles."""
         node = cls.new(title='Root', nodes=[{'title': 'Keep'}])
@@ -1616,9 +1616,9 @@ list:
         assert len(node.nodes) == 1
         assert node.nodes[0].title == 'Keep'
 
-    # --------------------------
-    # `to_string` With Fix=False
-    # --------------------------
+    # ------------
+    # `to_string` with fix=False
+    # ------------
     def test_to_string__fix_false(self):
         """to_string with fix=False must render without mdformat."""
         node = cls.new(title='Raw', level=1, prose='Some text')
@@ -1626,9 +1626,9 @@ list:
         assert '# Raw' in output
         assert 'Some text' in output
 
-    # ----------------------------------------
-    # `get_idx` Self Return, Max_D=0, No-Match
-    # ----------------------------------------
+    # ------------
+    # `get_idx` self return, max_d=0, no-match
+    # ------------
     def test_get_idx__self_return(self):
         """get_idx must return self when idx matches own idx."""
         node = cls.new(title='Root', idx='A')
@@ -1649,9 +1649,9 @@ list:
         node = cls.new(title='Root', idx='A')
         assert node.get_idx(idx='A0') is None
 
-    # ----------------------
-    # `get_child` Edge Cases
-    # ----------------------
+    # ------------
+    # `get_child` edge cases
+    # ------------
     def test_get_child__negative(self):
         """get_child with negative index must return None."""
         node = cls.new(title='Root', nodes=[{'title': 'Child'}])
@@ -1667,9 +1667,9 @@ list:
         node = cls.new(title='Leaf')
         assert node.get_child(child=0) is None
 
-    # ----------------------
-    # `get_title` Edge Cases
-    # ----------------------
+    # ------------
+    # `get_title` edge cases
+    # ------------
     def test_get_title__not_found(self):
         """get_title must return None for absent title."""
         node = cls.new(title='Root')
@@ -1680,9 +1680,9 @@ list:
         node = cls.new(title='Root', nodes=[{'title': 'Child'}])
         assert node.get_title(title='') is None
 
-        # ----------------------
-        # `pop` With Child Index
-        # ----------------------
+        # ------------
+        # `pop` with child index
+        # ------------
         node = cls.new(
             title='Root',
             nodes=[
@@ -1696,9 +1696,9 @@ list:
         assert len(node.nodes) == 1
         assert node.nodes[0].title == 'B'
 
-    # ---------------------------------------------
-    # Advanced Parsing: Notes With Non-Yaml Content
-    # ---------------------------------------------
+    # ------------
+    # Advanced parsing: notes with non-YAML content
+    # ------------
     def test_parse__notes_yaml_error_handling(self):
         """parse must handle Notes sections with non-YAML content gracefully."""
         text = """# Document
@@ -1718,9 +1718,9 @@ More content.
         # Notes should still be extracted as children since YAML parsing fails
         assert len(nodes[0].nodes) >= 1
 
-    # --------------------
-    # `get_path` Not Found
-    # --------------------
+    # ------------
+    # `get_path` not found
+    # ------------
     def test_get_path__not_found(self):
         """get_path must return None when path leads nowhere."""
         node = cls.new(title='Root', nodes=[{'title': 'Child'}])

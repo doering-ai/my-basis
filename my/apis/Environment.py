@@ -89,7 +89,7 @@ class Environment(pyd.BaseModel):
         return 'Environment(...)'
 
     # -------
-    # Getters
+    # GETTERS
     # -------
     def __getattr__(self, key: str) -> str:
         return Environment._get(key)
@@ -131,7 +131,7 @@ class Environment(pyd.BaseModel):
         return Environment._get(key, default)
 
     # -------
-    # Setters
+    # SETTERS
     # -------
     def __setattr__(self, key: str, value: str) -> None:
         self.set(key, value)
@@ -167,7 +167,7 @@ class Environment(pyd.BaseModel):
         Environment._ENVIRON[key] = value
 
     # -----
-    # Paths
+    # PATHS
     # -----
     class _PathEnv:
         def __getattr__(self, key: str) -> Path:
@@ -227,7 +227,7 @@ class Environment(pyd.BaseModel):
         return Environment._path(key, str(default), mkdir)
 
     # -----
-    # Flags
+    # FLAGS
     # -----
     class _FlagEnv:
         def __getattr__(self, key: str) -> int:
@@ -296,7 +296,7 @@ class Environment(pyd.BaseModel):
         return Environment._flag(key, default)
 
     # ---------
-    # Utilities
+    # UTILITIES
     # ---------
     @ft.cached_property
     def is_dev(self) -> bool:

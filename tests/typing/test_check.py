@@ -50,13 +50,13 @@ def union_fn(x: object) -> int | str:
 #: The core `check` matrix -- the de-facto spec, exercised through both check surfaces.
 CHECK_CASES = boolmap(
     false=[
-        # ---- Type Mismatches ----
+        # ---- Type mismatches ----
         (1, str),
         ('abc', int),
         (1.5, bool),
         ([1, 2], dict),
         ({'a': 1}, list),
-        # ---- Container Element Mismatches ----
+        # ---- Container element mismatches ----
         ([1, 2, 3], list[str]),
         (['a', 'b', 1], list[str]),
         ({'a': 1}, dict[str, str]),
@@ -64,30 +64,30 @@ CHECK_CASES = boolmap(
         ({1: 'a'}, dict[str, str]),
         (Counter(b=2), Mapping[str, str]),
         ({1, 2, 3}, set[str]),
-        # ---- Nested Mismatches ----
+        # ---- Nested mismatches ----
         ([[1, 2], ['a', 'b']], list[list[int]]),
         ([{'a': 1}, {'b': 'c'}], list[dict[str, int]]),
-        # ---- Literal Mismatches ----
+        # ---- Literal mismatches ----
         ('three', Literal['one', 'two']),
         (3, Literal[1, 2]),
-        # ---- Tuple Literal Mismatches ----
+        # ---- Tuple literal mismatches ----
         ((1, 'a', 3.0), tuple[int, str]),
         ((1, 2), tuple[int, str]),
         ((1,), tuple[int, int]),
-        # ---- None Checks ----
+        # ---- None checks ----
         (None, str),
         (None, list),
         (None, list[str]),
         (5, NoneType),
     ],
     true=[
-        # ---- Basic Types ----
+        # ---- Basic types ----
         ('abc', str),
         (123, int),
         (3.14, float),
         (b'bytes', bytes),
         (True, bool),
-        # ---- Any And Object (Always-True Wildcards) ----
+        # ---- Any and object (always-true wildcards) ----
         ('anything', Any),
         ('anything', object),
         (123, Any),
@@ -117,17 +117,17 @@ CHECK_CASES = boolmap(
         ([1, 2], Container[int]),
         ({'a': 1}, Container[str]),
         ({1, 2, 3}, Container[int]),
-        # ---- Nested Structures ----
+        # ---- Nested structures ----
         ([[1, 2], [3, 4]], list[list[int]]),
         ([{'a': 1}, {'b': 2}], list[dict[str, int]]),
         ({'x': [1, 2], 'y': [3, 4]}, dict[str, list[int]]),
-        # ---- Literal Matches ----
+        # ---- Literal matches ----
         ('one', Literal['one', 'two']),
         (2, Literal[1, 2]),
         # ---- Deque ----
         (deque([1, 2, 3]), deque),
         (deque([1, 2, 3]), deque[int]),
-        # ---- Special-Form Sentinels ----
+        # ---- Special-form sentinels ----
         (Ellipsis, EllipsisType),
         (None, NoneType),
     ],

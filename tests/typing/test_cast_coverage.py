@@ -144,7 +144,7 @@ class TestCastEnumConversions:
         """An enum member cast to its own enum returns itself."""
         assert cls.cast(Color.RED, Color) is Color.RED
 
-    # ---- Enum -> Vec/Map/Iter/Model (Decline) ----
+    # ---- Enum -> Vec/Map/Iter/Model (decline) ----
     @pyt.mark.parametrize(
         'target',
         [list, dict],

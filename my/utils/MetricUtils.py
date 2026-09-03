@@ -26,7 +26,7 @@ import inspect
 ### EXTERNAL
 import pydantic as pyd
 
-### INTERNAL (NOTE: IF ADDING NEW INTERNAL IMPORTS, UPDATE THE COMMENTS IN `__INIT__.PY`)
+### INTERNAL (NOTE: If adding new internal imports, update the comments in `__init__.py`)
 from . import _register_metric_implementation
 from ._UtilsBase import _UtilsBase
 from .SystemUtils import SystemUtils
@@ -85,7 +85,7 @@ class _MetricUtilsImplementation(_UtilsBase):
         return _wfn  # type: ignore
 
     # -----------
-    # `1` Logging
+    # `1` LOGGING
     # -----------
     @classmethod
     def _validate_fire_configuration(
@@ -658,7 +658,7 @@ class _MetricUtilsImplementation(_UtilsBase):
         MetricUtils.WARNINGS_SETUP = True
 
     # -----------
-    # `4` Metrics
+    # `4` METRICS
     # -----------
     @classmethod
     @_guard

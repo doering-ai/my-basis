@@ -227,7 +227,7 @@ myst_enable_extensions = [
 ]
 
 # ----
-# Html
+# HTML
 # ----
 # html_theme = 'sphinx_rtd_theme' # The standard ReadTheDocs theme.
 html_theme = 'furo'  # copied from https://more-itertools.readthedocs.io/en/stable/

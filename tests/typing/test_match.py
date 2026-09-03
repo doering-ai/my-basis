@@ -83,33 +83,33 @@ MATCH_INTERSECT = boolmap(
 #: `match` nested-generic cases: element types are recursed into.
 MATCH_NESTED = boolmap(
     false=[
-        # ---- Nested Type Mismatches ----
+        # ---- Nested type mismatches ----
         (list[int], list[str]),
         (dict[str, int], dict[str, str]),
         (dict[str, int], dict[int, int]),
         (list[list[int]], list[list[str]]),
         (dict[str, list[int]], dict[str, list[str]]),
-        # ---- Tuple Literal Type Mismatches ----
+        # ---- Tuple literal type mismatches ----
         (tuple[int, str], tuple[str, int]),
         (tuple[int, str, float], tuple[int, str]),
-        # ---- Literal Mismatches ----
+        # ---- Literal mismatches ----
         (Literal[1, 2], Literal[3, 4]),
         (Literal['a'], Literal['b']),
     ],
     true=[
-        # ---- Nested Types ----
+        # ---- Nested types ----
         (list[int], list[int]),
         (dict[str, int], dict[str, int]),
         (list[list[int]], list[list[int]]),
         (dict[str, list[int]], dict[str, list[int]]),
-        # ---- Nested Generics With Subtyping ----
+        # ---- Nested generics with subtyping ----
         (list[int], Sequence[int]),
         (dict[str, int], Mapping[str, int]),
         (Counter[str], Mapping[str, int]),
-        # ---- Complex Nested ----
+        # ---- Complex nested ----
         (dict[str, list[int]], Mapping[str, Sequence[int]]),
         (list[dict[str, int]], Sequence[Mapping[str, int]]),
-        # ---- Tuple Literals ----
+        # ---- Tuple literals ----
         (tuple[int, str], tuple[int, str]),
         (tuple[int, ...], tuple[int, ...]),
         # ---- Literals ----

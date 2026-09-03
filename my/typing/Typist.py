@@ -168,12 +168,12 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
 
     # Static Global Members
 
-    ### REGULAR EXPRESSIONS (CAN'T USE REGEXSTORE BECAUSE IT DEPENDS ON THIS CLASS). MERGE THE
-    ### INHERITED SCALAR PATTERNS (INT/FLOAT/BOOL/...) WITH THESE SO METHODS LIKE `FLEX_DESERIALIZE`
-    ### SEE BOTH; DEFINING `RGXS` HERE WOULD OTHERWISE SHADOW `TYPECAST.RGXS` ENTIRELY.
+    ### Regular Expressions (can't use RegexStore because it depends on this class). Merge the
+    ### inherited scalar patterns (int/float/bool/...) with these so methods like `flex_deserialize`
+    ### see both; defining `RGXS` here would otherwise shadow `TypeCast.RGXS` entirely.
     RGXS: ClassVar[dict[str, Pattern]] = TypeCast.RGXS | ut.regex_dict(
         dict(
-            ### MISC
+            ### Misc
             splitter=r' *(?:[,]|\/\/) *',
             no_space_splitter=r'(?<=\w)[.:](?=\w)',
             yaml=r'(?sm)^```yaml *\n(?P<content>.+?)\n``` *$',
@@ -194,7 +194,7 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
         )
     )
 
-    ### METATYPES
+    ### Metatypes
     SCALAR_TYPES: ClassVar[dict[str, type]] = dict(
         str=str,
         int=int,
@@ -215,7 +215,7 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
     #: type-checked.
     model_config = pyd.ConfigDict(validate_assignment=True)
 
-    # ---- Cast Configuration Flags ----
+    # ---- Cast configuration flags ----
     # These gate the "loose" coercions in the cast chamber. They remain the process-wide default
     # source: `TypeCast.cast()` (and the `upper_cast`/`multicast`/`flexcast` facades) snapshot
     # them into a frozen `CastFlags` exactly once per call -- an explicit `flags=` argument wins,
@@ -443,7 +443,7 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
     # `*` Public Methods
     # ------------------
     # ------------
-    # `*1` Parsing
+    # `*1` PARSING
     # ------------
     @staticmethod
     def parse(tvar: Any) -> MyType:
@@ -459,7 +459,7 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
         return MyType.parse(tvar)
 
     # ---------------
-    # `*2` Comparison
+    # `*2` COMPARISON
     # ---------------
     @classmethod
     def all_are[T](cls, iterable: Iterable, tvar: type[T]) -> TypeGuard[Iterable[T]]:
@@ -565,7 +565,7 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
         return False
 
     # -------------
-    # `*3` Coercion
+    # `*3` COERCION
     # -------------
     def flex_deserialize(self, values: Sequence[str] | str) -> list[Atom]:
         """Convert a list of strings to their most appropriate Atomic types.
@@ -690,7 +690,7 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
         raise TypeError(f'Cannot cast file data of type `{type(data)}` to `{tvar}`.')
 
     # -------------------
-    # `*4` Transformation
+    # `*4` TRANSFORMATION
     # -------------------
     @overload
     def serialize(  # noqa: D418
@@ -927,7 +927,7 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
         return distillate
 
     # ----------------
-    # `*5` Persistence
+    # `*5` PERSISTENCE
     # ----------------
     # NOTE: The actual file I/O lives in `SystemUtils` (import-order constraints); these are thin
     # convenience wrappers so callers can reach it through the `typist` interface.
@@ -1012,7 +1012,7 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
         return ut.to_pickle(data, **kwargs)
 
     # ---------------
-    # `*6` Invocation
+    # `*6` INVOCATION
     # ---------------
     def get_str_method(self, obj: object, *extra_methods: str) -> Callable[..., str] | None:
         """Get a string conversion method from an object.

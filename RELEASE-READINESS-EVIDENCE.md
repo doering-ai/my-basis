@@ -16,9 +16,9 @@ Blockers carry at least `[V]` or `[src]`.
 
 ______________________________________________________________________
 
-## A. Measured tables (the irreplaceable empirical artifacts)
+## `1.` A. Measured tables (the irreplaceable empirical artifacts)
 
-### A.1 Import cost & closure size
+### `1.1.` A.1 Import cost & closure size
 
 | Bookend                                       | Distributions | site-packages | `import my` wall (perf_counter ×3) | `-X importtime` cumulative |
 | --------------------------------------------- | ------------- | ------------- | ---------------------------------- | -------------------------- |
@@ -32,7 +32,7 @@ ______________________________________________________________________
 - **README "32 dependencies / ~250 MB" — refuted at both ends** (25/83 core, 91/295 all-extras).
   `[V]`
 
-### A.2 Per-core-dependency necessity (14 declared)
+### `1.2.` A.2 Per-core-dependency necessity (14 declared)
 
 | Dep             | Sites in `my/`                    | Verdict               | Note                                                                                                |
 | --------------- | --------------------------------- | --------------------- | --------------------------------------------------------------------------------------------------- |
@@ -51,7 +51,7 @@ ______________________________________________________________________
 | **toolz**       | **0**                             | **DROP**              | superseded by more-itertools `[V]`                                                                  |
 | **tqdm**        | **0**                             | **DROP**              | zero occurrences anywhere `[V]`                                                                     |
 
-### A.3 SITE-PACKAGES WEIGHT (TOP ENTRIES, `du` OVER DEV VENV, 381 MB TOTAL)
+### `1.3.` A.3 site-packages weight (top entries, `du` over dev venv, 381 MB total)
 
 | Entry                     | Size     | Class                       |
 | ------------------------- | -------- | --------------------------- |
@@ -67,7 +67,7 @@ ______________________________________________________________________
 
 Category totals: **extra 212.3 MB · dev 84.6 MB · core 83.0 MB.**
 
-### A.4 RegexStore timeout-coverage (CHANGELOG 0.8.3 claim: "enforce timeouts across RegexStore matchers")
+### `1.4.` A.4 RegexStore timeout-coverage (CHANGELOG 0.8.3 claim: "enforce timeouts across RegexStore matchers")
 
 **True for the store's own public matchers; bypassed by its own public raw-pattern accessors.** `[S]`
 
@@ -84,7 +84,7 @@ Category totals: **extra 212.3 MB · dev 84.6 MB · core 83.0 MB.**
 
 Outside `RegexStore`/`Buffer` there is **no `REGEX_TIMEOUT` concept at all** — it's a store-only mechanism, not package-wide.
 
-### A.5 Facade usage across 11 ecosystem consumers (blast-radius survey)
+### `1.5.` A.5 Facade usage across 11 ecosystem consumers (blast-radius survey)
 
 - **Only 27 of the facade's 90 `__all__` names are imported anywhere; 63 are dead facade weight.** `[S]`
 - Top symbols: `ut` (140), `Uid` (106), `typist` (78), `env` (52), `RegexStore` (48), `Buffer` (41), `UniqueId` (24), `Span` (22), `MyEnum`/`MatchData` (18), `FileCache` (17).
@@ -93,7 +93,7 @@ Outside `RegexStore`/`Buffer` there is **no `REGEX_TIMEOUT` concept at all** —
 - **Latent bug surfaced:** `corpus` and `arch` call `GoogleSheet()` **without** the `google` extra — silently running against `MagicMock` (sync path is a no-op today).
   Hardening the extras error would surface this loudly.
 
-### A.6 Extras install sizes (fresh venv per extra, measured pre-import)
+### `1.6.` A.6 Extras install sizes (fresh venv per extra, measured pre-import)
 
 | Install      | site-packages | Δ vs bare | Effect                                                                        |
 | ------------ | ------------- | --------- | ----------------------------------------------------------------------------- |
@@ -106,9 +106,9 @@ Outside `RegexStore`/`Buffer` there is **no `REGEX_TIMEOUT` concept at all** —
 
 ______________________________________________________________________
 
-## B. Blocker & high-severity repros (verbatim)
+## `2.` B. Blocker & high-severity repros (verbatim)
 
-### C1 — `SystemUtils.print_in_color()` SHELL INJECTION (RCE) `[S]`
+### `2.1.` C1 — `SystemUtils.print_in_color()` shell injection (RCE) `[S]`
 
 `my/utils/SystemUtils.py:260`:
 
@@ -121,7 +121,7 @@ evil = "x'; touch /tmp/.../INJECTED_MARKER; echo 'y"
 SystemUtils.print_in_color(evil)     # -> marker file created: True
 ```
 
-### C2 — `Command.execute()` SHELL INJECTION (RCE) `[V]`
+### `2.2.` C2 — `Command.execute()` shell injection (RCE) `[V]`
 
 `my/types/Command.py`: `_shell_quote` (line 24, double-quote-only) + `shell=True` (lines 198, 216).
 
@@ -130,7 +130,7 @@ assembled: echo --foo "$(touch .../C2_MARKER && echo INJECTED)"
 marker created: True          # $(...) command substitution executed
 ```
 
-### C3 — GLOBAL TYPE CACHES, STRUCTURAL DATA RACE `[src]` + `[S]`
+### `2.3.` C3 — global type caches, structural data race `[src]` + `[S]`
 
 `my/typing/MyType.py:182` `PARSE_CACHE: ClassVar[Cache] = Cache()`; write at `:344`.
 `my/caches/Cache.py`:
@@ -150,7 +150,7 @@ Subagent 8-thread run raised `KeyError: -8292946722296174967` in `Cache.prune`.
 Orchestrator reruns didn't hit the window (narrow under the GIL; race is structural regardless).
 Fix: lock the cache mutators, or document not-thread-safe.
 
-### C4 — `Markdown.parse()` CORRUPTS DOCS WITH `#`-COMMENT CODE FENCES `[V]`
+### `2.4.` C4 — `Markdown.parse()` corrupts docs with `#`-comment code fences `[V]`
 
 `my/files/Markdown.py:44,56` (`marks=r'(?m)^#{1,6} +'`, no fence tracking).
 
@@ -161,7 +161,7 @@ parse:  top-level nodes: 2
         title: 'a comment'      # fabricated from the code comment; ## Section Two misnested under it
 ````
 
-### C5 — `common_rgxs.year` HARDCODES 2026 UPPER BOUND `[V]`
+### `2.5.` C5 — `common_rgxs.year` hardcodes 2026 upper bound `[V]`
 
 `my/regex/common_rgxs.py:95-98` (`...|202[0-6]|...`).
 
@@ -172,7 +172,7 @@ C.search('year','2027') -> {}          # < 6 months from 2026-07-18
 
 Also (`[S]`): apostrophe-year `"'99"` → `'2099'` (no century pivot); `md_url` truncates targets with inner `)` (`[link](.../(parens)/path)` → target `.../(parens`).
 
-### C6 — `Markdown` `notes`/FRONTMATTER IS DEAD JINJA `[S]`
+### `2.6.` C6 — `Markdown` `notes`/frontmatter is dead Jinja `[S]`
 
 `data/templates/Markdown.md.jinja` emits frontmatter **outside** any `{% block %}` under `{% extends 'document.md.jinja' %}` → discarded by Jinja.
 
@@ -181,7 +181,7 @@ Markdown.new(title='D', notes={'title':'D','tags':['a','b']}, prose='c').render(
 # -> '# D\nc'      (notes vanish, in every environment, regardless of mdformat plugins)
 ```
 
-### C7 — `Environment` IMPORT-TIME SNAPSHOT + `set()` CACHE BUG `[V]`+`[S]`
+### `2.7.` C7 — `Environment` import-time snapshot + `set()` cache bug `[V]`+`[S]`
 
 `my/apis/Environment.py:24-25` (`load_dotenv()`; `initial_env = dict(os.environ)` once at import).
 
@@ -192,11 +192,11 @@ import my; os.environ['ZZTOP']='x'; my.env.get('ZZTOP')  -> ''   # snapshot is s
 `set()` skips cache-clear for previously-unset keys (`if cur := self.get(key)` — `''` is falsy), so a key read once while unset stays `''` forever after `set()`.
 `[S]`
 
-### C8 — `SystemUtils` LOGGING CLUSTER `[S]`
+### `2.8.` C8 — `SystemUtils` logging cluster `[S]`
 
 `my/utils/SystemUtils.py`: `logger = logging.getLogger()` (line 67 → **root** logger); `def warn(cls, *args, kwargs)` (missing `**`, line ~483) → `TypeError` on `warn("msg")`; `log()` passes a live `map` object as msg → emits `<map object at 0x...>`.
 
-### C9 — `ty.cast('3', list[int])` SKIPS ELEMENT COERCION `[V]`
+### `2.9.` C9 — `ty.cast('3', list[int])` skips element coercion `[V]`
 
 `my/typing/cast.py:760-761` "wraps" fallback returns the raw string.
 
@@ -204,13 +204,13 @@ import my; os.environ['ZZTOP']='x'; my.env.get('ZZTOP')  -> ''   # snapshot is s
 ty.cast('3', list[int]) -> ['3']   (elem type: str)   # list[int] silently holds a str
 ```
 
-### D3 — `py.typed` ABSENT, CLASSIFIER CLAIMS `Typing :: Typed` `[V]`
+### `2.10.` D3 — `py.typed` absent, classifier claims `Typing :: Typed` `[V]`
 
 `find my -name py.typed` → empty; also absent from the built wheel.
 `pyproject.toml:20` lists the classifier.
 Every consumer's mypy/pyright sees `Any`.
 
-### D7 — `GoogleSheet` GUARD NAMES THE WRONG EXTRA `[V]`
+### `2.11.` D7 — `GoogleSheet` guard names the wrong extra `[V]`
 
 `my/apis/GoogleSheet.py:108`:
 
@@ -220,7 +220,7 @@ raise ImportError(f'`utils.{name}()` requires the optional `[metrics]` dependenc
 
 Wrong extra (`[google]`), nonsensical `utils.` prefix; no source of truth anywhere names `[google]`.
 
-### D8 — mdformat/myst split corrupts frontmatter `[V]`
+### `2.12.` D8 — mdformat/myst split corrupts frontmatter `[V]`
 
 ```text
 mdformat.text(src)                                   -> frontmatter mangled into a heading/rule
@@ -230,7 +230,7 @@ mdformat.text(src, extensions={'front_matters','myst'}) -> round-trips intact
 `Markdown.py:689` calls `mdformat.text(body)` with no `extensions=`; the plugin lives in the `[myst]` extra, not core.
 Core-only `Markdown.render(fix=True)` (the default) silently corrupts.
 
-### B6/B7 — README contradicts reality `[V]`
+### `2.13.` B6/B7 — README contradicts reality `[V]`
 
 PyPI JSON API: `my-basis` 0.8.1/0.8.2/0.8.3 all live — README says "not yet published".
 Quickstart `ty.cast('a,b,c', list[str])` → `['a,b,c']` (not `['a','b','c']`; deliberate no-split change).
@@ -238,7 +238,7 @@ Also: "Built for Python 3.12+" vs `requires-python >=3.13`; dead link `my/base/u
 
 ______________________________________________________________________
 
-## C. Medium/low findings — anchors (one line each; repros in the transcripts)
+## `3.` C. Medium/low findings — anchors (one line each; repros in the transcripts)
 
 - **C10** `ty.cast('5', Annotated[int,...])` → `None` (`cast.py:500-519` read `.root` not `.main`).
   `[S]`
@@ -289,6 +289,6 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## D. Confirmed-fine (attacked and survived)
+## `4.` D. Confirmed-fine (attacked and survived)
 
 So the maintainer knows what was tested and held: `md_url` possessive-quantifier ReDoS fix (cubic→flat, timed); `Markdown.walk()` `-1` unlimited-depth fix (all boundary depths correct); `RegexStore` public matcher timeout enforcement (real `TimeoutError` at the deadline); nested-generic casts on well-formed input (`dict[str, list[int]]`, 5-deep nesting); union declaration-order tie-break; cache eviction/LRU/TTL round-trips (well tested); `MyType` `Annotated`/`Optional`/`Union` parsing; self-referential *type aliases* (only cyclic *data* crashes); no bare `except:` in the typing/types/infra layers; `AutocastModel` uses current pydantic-v2 APIs; numpy usage genuine; `project.scripts` entry points import clean; `uv.lock` in sync, no git/URL deps; protected tags/branches/environment configured correctly (verified live).

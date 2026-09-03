@@ -105,7 +105,7 @@ class TestTypist:
             assert ret == exp
 
     # ----------------
-    # `*4` Persistence
+    # `*4` PERSISTENCE
     # ----------------
     @pyt.mark.parametrize(
         'data, expected',
@@ -266,7 +266,7 @@ class TestTypist:
         assert unpickled == data
 
     # ---------------
-    # `*5` Invocation
+    # `*5` INVOCATION
     # ---------------
     def test_get_method(self):
         # Test getting existing methods

@@ -194,12 +194,12 @@ Not every old symbol has a shim: `my.text`'s `atom`/`debug_regex` free functions
 Within `my.typing`, three files were also renamed to a shorter, chamber-oriented convention: `typecast.py` -> `cast.py`, `typecheck.py` -> `check.py`, `typematch.py` -> `match.py`.
 The old names survive **only** as the unchanged `TypeCast`/`TypeCheck`/`TypeMatch` class exports from `my.typing` -- there are no `my.typing.typecast` (etc.) modules to import from anymore.
 
-### CHAMBER DECOMPOSITION: `Typist` -> `MyType` + CAST/CHECK/MATCH
+### Chamber decomposition: `Typist` -> `MyType` + cast/check/match
 
 The monolithic `Typist` class is now a thin composition of three chambers -- `TypeCast`, `TypeCheck`, `TypeMatch` -- plus a separate `MyType` model representing a parsed type expression as an introspectable node (`.main`, `.args`, `.root`).
 The public singleton `ty = typist = Typist.inst()` and its `ty.cast(...)` / `ty.check(...)` / `ty.match(...)` surface are unchanged; what changed is internal structure -- each chamber gets its own test module (`tests/typing/test_cast.py`, `test_check.py`, `test_match.py`) in place of one shared `test_Typist.py`.
 
-### `Decline` EXCEPTION PROTOCOL REPLACES `suppress(Exception)` DISPATCH
+### `Decline` exception protocol replaces `suppress(Exception)` dispatch
 
 The cast dispatch loop used to wrap every candidate transform in `suppress(Exception)`, so a transform that genuinely crashed on its input was indistinguishable from one that deliberately declined to handle it -- both silently advanced to the next candidate.
 A new `Decline` exception (`my/typing/_common.py`) splits the two apart: a transform that cannot handle a `(source, target)` pair raises `Decline` (or returns `None`, still honored), and only `Decline` is caught before moving on.
@@ -216,7 +216,7 @@ If any call site relied on "first union member wins" ordering or on a constraine
 
 Bare `TypeVar`s and `TypeVarTuple`/`ParamSpec` parameters now resolve and classify correctly instead of raising or misclassifying by dead attribute names, so PEP 695 generic classes (`class Foo[T]: ...`) parse cleanly through `MyType`.
 
-### `pyrefly` TYPECHECK GATE
+### `pyrefly` typecheck gate
 
 Static type checking is now enforced via `pyrefly check`, baselined under `[tool.pyrefly]` / `[tool.pyrefly.errors]` in `pyproject.toml` and wired into CI (`.gitlab-ci.yml`'s `Evaluate Python` job) and `AGENTS.md`.
 The baseline is 0 errors with 77 findings downgraded to `warn` (not silenced) across documented categories -- see the comment block above `[tool.pyrefly]` for the full breakdown.

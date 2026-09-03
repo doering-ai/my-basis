@@ -1,6 +1,6 @@
 r"""Technical Overview of the `my-basis` python package.
 
-### SUBPACKAGE DEPENDENCY TREE
+### Subpackage Dependency Tree
 
 When adding new relative imports to any of the modules in this package, make sure to either respect
 or update this structure (in order to prevent circular dependencies).
@@ -20,7 +20,7 @@ relative import. `scripts` are entry points that consume the finished public API
 `from my import ...` statements rather than the relative imports tracked above, so nothing in the
 tree depends on them.
 
-### CONTRIBUTING
+### Contributing
 
 I created this project over the course of 2025 for my own use, so it's definitely 'opinionated', for
 better or worse. Specifically, it is influenced by:

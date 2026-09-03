@@ -43,7 +43,7 @@ class TestSystemUtils:
     """Test suite for SystemUtils."""
 
     # ---------------
-    # `0` Date & Time
+    # `0` DATE & TIME
     # ---------------
     def test_posix_none(self):
         result = cls.posix(None)
@@ -109,7 +109,7 @@ class TestSystemUtils:
         assert cls.posix_since(value) == expected
 
     # --------------
-    # `1` Filesystem
+    # `1` FILESYSTEM
     # --------------
     def test_validate_dir(self, tmp_path):
         # Valid directory
@@ -149,7 +149,7 @@ class TestSystemUtils:
         assert cls.path_sub(path, old, new) == expected
 
     # ------------
-    # `2` Terminal
+    # `2` TERMINAL
     # ------------
     def test_get_terminal_width(self):
         width = cls.get_terminal_width()
@@ -571,9 +571,9 @@ class TestSystemUtils:
             cls.to_file({'key': 'value'}, file)
         assert any('Unsupported' in r.getMessage() for r in caplog.records)
 
-    # --------------
-    # `*2` From_Json
-    # --------------
+    # ---------------
+    # `*2` from_json
+    # ---------------
     @pyt.mark.parametrize(
         'content, as_file, tvar, cast, expected',
         [
@@ -619,9 +619,9 @@ class TestSystemUtils:
         with pyt.raises(error, match=message):
             cls.from_json(content, tvar, cast=cast)  # pyrefly: ignore[bad-argument-type]
 
-    # -------------
-    # `*2` Is_Pathy
-    # -------------
+    # ---------------
+    # `*2` is_pathy
+    # ---------------
     @pyt.mark.parametrize(
         'text, expected',
         [
@@ -638,9 +638,9 @@ class TestSystemUtils:
         """Test is_pathy heuristic for path-like strings."""
         assert cls.is_pathy(text) is expected
 
-    # --------------
-    # `*2` From_Yaml
-    # --------------
+    # ---------------
+    # `*2` from_yaml
+    # ---------------
     @pyt.mark.parametrize(
         'content, as_file, expected',
         [
@@ -698,9 +698,9 @@ class TestSystemUtils:
         with pyt.raises(error, match=message):
             cls.from_yaml(content, tvar, cast=cast)
 
-    # --------------
-    # `*2` From_Toml
-    # --------------
+    # ---------------
+    # `*2` from_toml
+    # ---------------
     @pyt.mark.parametrize(
         'content, tvar, expected',
         [
@@ -720,9 +720,9 @@ class TestSystemUtils:
         with pyt.raises(TypeError, match='Expected'):
             cls.from_toml('key = "value"', list, cast=False)
 
-    # ----------------
-    # `*2` From_Pickle
-    # ----------------
+    # ---------------
+    # `*2` from_pickle
+    # ---------------
     @pyt.mark.parametrize(
         'data, tvar, expected',
         [

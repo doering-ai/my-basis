@@ -284,9 +284,9 @@ class TestFileCache:
         results = list(cache.search('group', file_rgx, name_rgx, mode='files'))
         assert results == []
 
-    # -----------
-    # `*2` Delete
-    # -----------
+    # ------------------
+    # `*2` delete
+    # ------------------
     def test_delete__removes_item_from_memory(self, cache: FileCache[str]):
         """delete removes the specified entry from the in-memory cache."""
         cache['group', 'abcfile_item'] = 'value'

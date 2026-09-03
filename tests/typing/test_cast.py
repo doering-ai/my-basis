@@ -90,7 +90,7 @@ CAST_ATOMICS_CASES = [
     # ---- Failures ----
     ('abc', int, None),
     ('12.34.56', float, None),
-    # ---- NOOPs (String->String Preserves Whitespace Verbatim) ----
+    # ---- NOOPs (string->string preserves whitespace verbatim) ----
     ('   ', str, '   '),
     ('hello', str, 'hello'),
     (5, int, 5),
@@ -126,7 +126,7 @@ CAST_SERIES_CASES = [
 ]
 
 CAST_MAPS_CASES = [
-    # ---- Dict ----
+    # ---- dict ----
     (dict(x=20.0), dict[str, int], dict(x=20)),
     ({'1': '2', '3': '4'}, dict[int, int], {1: 2, 3: 4}),
     ({'a': 1.5, 'b': 2.7}, dict[str, int], {'a': 1, 'b': 2}),
@@ -159,26 +159,26 @@ CAST_MODELS_CASES = [
 ]
 
 CAST_ENUMS_CASES = [
-    # ---- Int Enums - From Int ----
+    # ---- Int enums - from int ----
     (1, Color, Color.RED),
     (2, Color, Color.GREEN),
     (3, Color, Color.BLUE),
-    # ---- Int Enums - From String Name ----
+    # ---- Int enums - from string name ----
     ('RED', Color, Color.RED),
     ('red', Color, Color.RED),
     ('GREEN', Color, Color.GREEN),
-    # ---- Int Enums - From String Digit ----
+    # ---- Int enums - from string digit ----
     ('1', Color, Color.RED),
     ('2', Color, Color.GREEN),
-    # ---- String Enums ----
+    # ---- String enums ----
     ('active', Status, Status.ACTIVE),  # value
     ('ACTIVE', Status, Status.ACTIVE),  # name
     ('inactive', Status, Status.INACTIVE),
     ('pending', Status, Status.PENDING),
-    # ---- Enum To String ----
+    # ---- Enum to string ----
     (Color.RED, str, 'red'),
     (Status.ACTIVE, str, 'active'),
-    # ---- Enum To Int ----
+    # ---- Enum to int ----
     (Color.RED, int, 1),
     (Color.BLUE, int, 3),
     # ---- GroupKind (MyEnum & Flag) ----
@@ -187,12 +187,12 @@ CAST_ENUMS_CASES = [
 ]
 
 CAST_FLAGS_CASES = [
-    # ---- Single Flags From Int ----
+    # ---- Single flags from int ----
     (1, Permission, Permission.READ),
     (2, Permission, Permission.WRITE),
     (4, Permission, Permission.EXECUTE),
     (8, Permission, Permission.ADMIN),
-    # ---- Combined Flags From Int ----
+    # ---- Combined flags from int ----
     (3, Permission, Permission.READ | Permission.WRITE),
     (5, Permission, Permission.READ | Permission.EXECUTE),
     (
@@ -200,23 +200,23 @@ CAST_FLAGS_CASES = [
         Permission,
         Permission.READ | Permission.WRITE | Permission.EXECUTE | Permission.ADMIN,
     ),
-    # ---- Flags From String Name ----
+    # ---- Flags from string name ----
     ('READ', Permission, Permission.READ),
     ('WRITE', Permission, Permission.WRITE),
-    # ---- Flags From List (Series To Flag) ----
+    # ---- Flags from list (series to flag) ----
     (['READ', 'WRITE'], Permission, Permission.READ | Permission.WRITE),
     (['READ', 'EXECUTE'], Permission, Permission.READ | Permission.EXECUTE),
-    # ---- Flags From Pipe-Separated String ----
+    # ---- Flags from pipe-separated string ----
     ('READ|WRITE', Permission, Permission.READ | Permission.WRITE),
     (
         'READ | WRITE|EXECUTE',
         Permission,
         Permission.READ | Permission.WRITE | Permission.EXECUTE,
     ),
-    # ---- Flag To Int ----
+    # ---- Flag to int ----
     (Permission.READ, int, 1),
     (Permission.READ | Permission.WRITE, int, 3),
-    # ---- Flag To String ----
+    # ---- Flag to string ----
     (Permission.READ, str, 'read'),
 ]
 
@@ -255,7 +255,7 @@ CAST_UNIONS_CASES = [
     ('1', list[str] | str, '1'),  # avoid wrapping
     (['1'], str | list[str], ['1']),  # avoid unwrapping
     ((1, 2), tuple[str, ...] | tuple[int, int], (1, 2)),
-    # ---- Avoiding Problematic Clauses ----
+    # ---- Avoiding problematic clauses ----
     ('1', None | int, 1),
     # ---- Arbitrary Preferences ----
     (1, str | bool, True),
@@ -298,7 +298,7 @@ ROUND_TRIP_CASES = [
     ({'a', 'b'}, set[str]),
     ((1, 2, 3), tuple[int, ...]),
     (deque([1, 2, 3]), deque[int]),
-    # ---- Maps (Incl. Nested) ----
+    # ---- Maps (incl. nested) ----
     ({'a': 1, 'b': 2}, dict[str, int]),
     ({'a': {'b': 1}}, dict[str, dict[str, int]]),
     (Counter(a=1, b=2), Counter[str]),
@@ -307,18 +307,18 @@ ROUND_TRIP_CASES = [
     (Status.ACTIVE, Status),
     (Permission.READ | Permission.WRITE, Permission),
     (GroupKind.PLAIN, GroupKind),
-    # ---- Times -- Timezone-Aware Only; See The Exclusion Note Below ----
+    # ---- Times -- timezone-AWARE only; see the exclusion note below ----
     (date(2024, 1, 1), date),
     (datetime(2024, 1, 1, 10, 20, 30, tzinfo=UTC), datetime),
     (time(10, 20, 30, tzinfo=UTC), time),
     (timedelta(days=1, hours=1, minutes=1), timedelta),
-    # ---- Pydantic Model / Struct ----
+    # ---- Pydantic model / Struct ----
     (Buffer.new('hello'), Buffer),
     (MatchData.new({'a': ['1'], 'child.b': ['2']}), MatchData),
     (Span(1, 5), Span),
 ]
 
-# ---- Legitimate One-Way Exclusions -- Deliberately Not In `Round_Trip_Cases` ----
+# ---- Legitimate one-way exclusions -- deliberately NOT in `ROUND_TRIP_CASES` ----
 # `serialize -> cast` is lossy (not a bug) for these; the string form genuinely cannot carry the
 # information needed to recover the original value, so a round-trip equality assertion would be
 # wrong to make, not merely inconvenient:
@@ -378,13 +378,13 @@ class TestCast:
     @pyt.mark.parametrize(
         'data, expected',
         [
-            # ---- Already Clean ----
+            # ---- Already clean ----
             ('test', 'test'),
             ([1, 2, 3], [1, 2, 3]),
-            # ---- Strings Preserved Verbatim (String->String Never Strips) ----
+            # ---- Strings preserved verbatim (string->string never strips) ----
             ('  test  ', '  test  '),
             (b'  test  ', '  test  '),
-            # ---- Iterators To Lists ----
+            # ---- Iterators to lists ----
             (iter([1, 2, 3]), [1, 2, 3]),
             (iter(['a', 'b']), ['a', 'b']),
         ],
@@ -408,7 +408,7 @@ class TestCast:
     # `*` Public Methods
     # ------------------
     # -------------
-    # `*2` Coercion
+    # `*2` COERCION
     # -------------
     @pyt.mark.parametrize(
         'data, target, expected', CAST_ATOMICS_CASES, ids=type_ids(CAST_ATOMICS_CASES)
@@ -817,7 +817,7 @@ class TestCast:
         assert result == expected
 
     # -------------------
-    # `*3` Transformation
+    # `*3` TRANSFORMATION
     # -------------------
     @pyt.mark.parametrize(
         'data, expected',
@@ -878,7 +878,7 @@ class TestCast:
         result = typist.cast(serialized, target)
         assert result == data
 
-    # ---- Memy-325 Regression: Scalar Strings Must Not Be Split On Delimiters ----
+    # ---- MEMY-325 regression: scalar strings must not be split on delimiters ----
 
     @pyt.mark.parametrize(
         'data, target, expected',
@@ -902,7 +902,7 @@ class TestCast:
         """
         assert typist.cast(data, target) == expected
 
-    # ---- C9 Regression: The `Wraps` Fallback Must Coerce The Wrapped Element ----
+    # ---- C9 regression: the `wraps` fallback must coerce the wrapped element ----
 
     @pyt.mark.parametrize(
         'data, target, expected',
@@ -928,7 +928,7 @@ class TestCast:
         """
         assert typist.cast(data, target) == expected
 
-    # ---- Memy-326 Regression: AutocastModel Must Accept >=3-Char Field Names ----
+    # ---- MEMY-326 regression: AutocastModel must accept >=3-char field names ----
 
     def test_cast__long_model_fields(self):
         """Constructing an ``AutocastModel`` with field names >= 3 chars must not raise.
@@ -949,7 +949,7 @@ class TestCast:
         assert f.age == 30
         assert f.email == 'a@example.com'
 
-    # ---- C10 Regression: `Annotated[...]` Targets Must Unwrap To Their Underlying Type ----
+    # ---- C10 regression: `Annotated[...]` targets must unwrap to their underlying type ----
 
     def test_cast__annotated_target_unwraps(self):
         """Casting to an `Annotated[T, ...]` target must coerce against `T`, not return `None`.
@@ -961,7 +961,7 @@ class TestCast:
         """
         assert typist.cast('42', Annotated[int, 'meta']) == 42
 
-    # ---- C12 Regression: Cyclic Data Must Not Crash With A Bare `RecursionError` ----
+    # ---- C12 regression: cyclic data must not crash with a bare `RecursionError` ----
 
     def test_cast__cyclic_data_declines(self):
         """Casting a self-referential dict/list must raise `Decline`, not `RecursionError`.
@@ -981,7 +981,7 @@ class TestCast:
         with pyt.raises(Decline):
             typist.cast(cyclic_list, list)
 
-    # ---- Dispatch Ordering Must Be A Total Order, Identical On Every Interpreter ----
+    # ---- Dispatch ordering must be a total order, identical on every interpreter ----
 
     @pyt.mark.parametrize(
         'data, target',

@@ -49,7 +49,7 @@ class _RecordingHandler(lg.NullHandler):
 ############
 class TestMetricUtils:
     # -----------
-    # `3` Logging
+    # `3` LOGGING
     # -----------
     @pyt.mark.parametrize(
         'environment, expected',
@@ -569,7 +569,7 @@ class TestMetricUtils:
             cls.WARNINGS_SETUP = original
 
     # -----------
-    # `4` Metrics
+    # `4` METRICS
     # -----------
     def test_setup_metrics__clears_directory(self, tmp_path: Path, monkeypatch: pyt.MonkeyPatch):
         """A non-empty metrics directory is cleared recursively."""

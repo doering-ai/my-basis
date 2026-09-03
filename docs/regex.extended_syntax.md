@@ -18,7 +18,7 @@ Any allusions to "we" refer to Matthew and his fellow maintainers.
 If you're new to regex in general, I recommend you start by reading [python's quick tutorial](https://docs.python.org/3/howto/regex.html), skimming [regular-expression.info's much more in-depth tutorials](https://www.regular-expressions.info), and/or consulting python's [documentation for the `re` module](https://docs.python.org/3/library/re.html) directly.
 **For completeness, I have included brief quotes from the `re` documentation to set the stage for many of the extensions -- look out for "See Also" notes.**
 
-## Flags
+## `1.` Flags
 
 _([regular-expressions.info lesson](https://www.regular-expressions.info/modifiers.html))_
 
@@ -29,21 +29,21 @@ class: hint
 See Python's standard-library `re` documentation for the basic, global flag syntax; the sections below cover the scoped and extended flags added by the `regex` module.
 ```
 
-### Scoped Flags
+### `1.1.` Scoped Flags
 
 Scoped flags can apply to only part of a pattern and can be turned on or off.
 
-#### Encoding
+#### `1.1.1.` Encoding
 
-##### `(?u)` UNICODE
+##### `1.1.1.1.` `(?u)` UNICODE
 
 The default encoding of a regex string, matching everything according to international Unicode standards.
 
-##### `(?a)` ASCII
+##### `1.1.1.2.` `(?a)` ASCII
 
 Makes `\w`, `\W`, `\b`, `\B`, `\d`, `\D`, `\s` and `\S` match only ASCII characters.
 
-##### `(?L)` LOCALE
+##### `1.1.1.3.` `(?L)` LOCALE
 
 Makes `\w`, `\W`, `\b`, `\B`, `\d`, `\D`, `\s` and `\S` match according to the current locale settings.
 
@@ -52,13 +52,13 @@ This flag is intended for legacy code and has limited support.
 We recommended you use `UNICODE` instead.
 ```
 
-#### Case
+#### `1.1.2.` Case
 
-##### `(?i)` IGNORECASE
+##### `1.1.2.1.` `(?i)` IGNORECASE
 
 Upper and lower case alphabet characters are matched as if they were identical.
 
-##### `(?f)` FULLCASE
+##### `1.1.2.2.` `(?f)` FULLCASE
 
 When combined with `(?i)`, enables "full" [case-folding](https://www.w3.org/TR/charmod-norm/#definitionCaseFolding) of Unicode text, which is critical if dealing with non-romance languages.
 
@@ -69,21 +69,21 @@ regex.match(r"(?iV1)strasse", "stra\N{LATIN SMALL LETTER SHARP S}e").span() # ->
 regex.match(r"(?iV1)stra\N{LATIN SMALL LETTER SHARP S}e", "STRASSE").span() # -> (0, 7)
 ```
 
-#### Whitespace
+#### `1.1.3.` Whitespace
 
-##### `(?m)` MULTILINE
+##### `1.1.3.1.` `(?m)` MULTILINE
 
 _([regular-expressions.info lesson](https://www.regular-expressions.info/anchors.html))_
 
 The `^` and `$` literals now match the beginnings and ends of lines, rather than of the whole string/file.
 
-##### `(?s)` DOTALL
+##### `1.1.3.2.` `(?s)` DOTALL
 
 _([regular-expressions.info lesson](https://www.regular-expressions.info/dot.html))_
 
 The catch-all literal `.` now also catches line separators.
 
-##### `(?x)` VERBOSE (i.e. Extended)
+##### `1.1.3.3.` `(?x)` VERBOSE (i.e. Extended)
 
 _([regular-expressions.info lesson](https://www.regular-expressions.info/freespacing.html))_
 
@@ -92,7 +92,7 @@ Also allows comments, which begin with an "#" and continue until the end of the 
 
 To match whitespace in an extended expression, wrap it in a character set (e.g. ` ?` -> `[ ]?`).
 
-##### `(?w)` WORD
+##### `1.1.3.4.` `(?w)` WORD
 
 Changes the definition of a 'word boundary' (`\b`/`\B`) to that of a default Unicode word boundary, a better choice for a variety of non-romance languages.
 
@@ -101,14 +101,14 @@ It also affects line separators (and, in turn, `(?s)` and `(?m)`):
 - *Without* this flag, the only line separator is `\n` (`\x0A`),
 - *With* this flag, `\x0D\x0A`, `\x0A`, `\x0B`, `\x0C` and `\x0D` are valid line separators, plus `\x85`, `\u2028` and `\u2029` when working with Unicode.
 
-### Global Flags
+### `1.2.` Global Flags
 
 Global flags apply to the entire pattern and can only be turned on -- if these patterns are present anywhere in a given expression, they apply to the whole thing.
 **They cannot be disabled.**
 
-#### General
+#### `1.2.1.` General
 
-##### `(?p)` Posix
+##### `1.2.1.1.` `(?p)` Posix
 
 Enables POSIX (leftmost longest) matching.
 
@@ -122,7 +122,7 @@ regex.search(r'one(self)?(selfsufficient)?', 'oneselfsufficient') # -> oneself
 regex.search(r'(?p)one(self)?(selfsufficient)?', 'oneselfsufficient') # -> oneselfsufficient
 ```
 
-##### `(?r)` Reverse
+##### `1.2.1.2.` `(?r)` Reverse
 
 Enables reverse matching (from the end of the string to the beginning).
 
@@ -138,29 +138,29 @@ regex.findall(r"..", "abcde") # -> ['ab', 'cd']
 regex.findall(r"(?r)..", "abcde") # -> ['de', 'bc']
 ```
 
-#### Version
+#### `1.2.2.` Version
 
-##### `(?V0)` Version0
+##### `1.2.2.1.` `(?V0)` Version0
 
 Enables version 0 behaviour (old behaviour, compatible with the re module).
 
-##### `(?V1)` Version1
+##### `1.2.2.2.` `(?V1)` Version1
 
 Enables version 1 behaviour (new behaviour, possibly different from the re module).
 
-#### Fuzzy Match Modes
+#### `1.2.3.` Fuzzy Match Modes
 
-##### `(?b)` Best Match
+##### `1.2.3.1.` `(?b)` Best Match
 
 Enables [fuzzy matching](#fuzzy-matching) search for the best match instead of the next match.
 
-##### `(?e)` Enhance Match
+##### `1.2.3.2.` `(?e)` Enhance Match
 
 Enables [fuzzy matching](#fuzzy-matching) to attempt to improve the fit of the next match that it finds.
 
-## Sets
+## `2.` Sets
 
-### Simple vs. Expanded Sets
+### `2.1.` Simple vs. Expanded Sets
 
 In Version 0, only simple sets are supported.
 For example, the pattern `[[a-z]--[aeiou]]` is mangled and interpreted as:
@@ -172,19 +172,19 @@ For example, the pattern `[[a-z]--[aeiou]]` is mangled and interpreted as:
 
 In version 1, the same pattern (`[[a-z]--[aeiou]]`) is a single set that uses a **set operator** to match all the lowercase letters from `a` to `z` *except* for the vowels (`a`, `e`, `i`, `o`, `u`).
 
-### Set operators
+### `2.2.` Set operators
 
 _([regular-expressions.info lesson 1](https://www.regular-expressions.info/charclasssubtract.html), [lesson 2](https://www.regular-expressions.info/charclassintersect.html))_
 
 Version 1's set operators allow a set (`[...]`) to be composed of smaller sets.
 The operators, in order of increasing precedence, are:
 
-| Syntax | Name | Boolean | Example |
+| Syntax | Name                 | Boolean | Example                                                        |
 | ------ | -------------------- | ------- | -------------------------------------------------------------- |
-| `\|\|` | Union | OR | `[\w\|\|[:punct:]]` matches word and punctuation characters. |
-| `~~` | Symmetric Difference | XOR | `[\w~~[:punct:]]` matches words or punctuation, but *not* `_`. |
-| `&&` | Intersection | AND | `[\w&&[:punct:]]` matches *only* `_`. |
-| `--` | Difference | SUB | `[\w--[:punct:]]` matches all word characters *except* `_`. |
+| `\|\|` | Union                | OR      | `[\w\|\|[:punct:]]` matches word and punctuation characters.   |
+| `~~`   | Symmetric Difference | XOR     | `[\w~~[:punct:]]` matches words or punctuation, but *not* `_`. |
+| `&&`   | Intersection         | AND     | `[\w&&[:punct:]]` matches *only* `_`.                          |
+| `--`   | Difference           | SUB     | `[\w--[:punct:]]` matches all word characters *except* `_`.    |
 
 ```{note}
 Implicit union, ie, simple juxtaposition like in `[ab]`, has the highest precedence.
@@ -203,11 +203,11 @@ r'[\p{N}--[0-9]]' # Set containing all numbers except '0' .. '9'
 r'[\p{ASCII}&&\p{Letter}]' # Set containing all characters which are ASCII and letter
 ```
 
-## Groups
+## `3.` Groups
 
 _([regular-expressions.info lesson](https://www.regular-expressions.info/brackets.html))_
 
-### Subroutines
+### `3.1.` Subroutines
 
 _([regular-expressions.info lesson](https://www.regular-expressions.info/subroutine.html))_
 
@@ -217,7 +217,7 @@ Groups with the same group name will have the same group number, and groups with
 The same name can be used by more than one group, with later captures 'overwriting' earlier captures.
 All the captures of the group will be available from the `captures` method of the match object.
 
-#### Substituting & Invoking Subroutines
+#### `3.1.1.` Substituting & Invoking Subroutines
 
 Subroutines are useful for two things:
 
@@ -230,14 +230,14 @@ Subroutines are useful for two things:
 Although the former is supported by `re`, the latter requires the full `regex` package.
 Many different syntaxes are used across different languages, so for convenience, here is a table clarifying exactly which syntaxes are supported by `regex` for each of these functions:
 
-| Group Type | Action Type | Supported | Unsupported |
+| Group Type | Action Type  | Supported                            | Unsupported                                                              |
 | ---------- | ------------ | ------------------------------------ | ------------------------------------------------------------------------ |
-| Numbered | Definition | `(...)` | |
-| Numbered | Substitution | `\1`, `\g<1>`, `(?P=1)` | |
-| Numbered | Invocation | `(?1)`, `(?R)` | `(?-1)`, `(?+1)` |
-| Named | Definition | `(?P<name>...)` | `(?<name>...)`, `(?P'name'...)`, `(?P"name"...)` |
-| Named | Substitution | `(?P=name)`, `\g<name>` | `\k<name>`, `\k'name'`, `\k{name}`, `\g{name}`, `(?<name>)`, `(?'name')` |
-| Named | Invocation | `(?&name)`, `(?P>name)`, `(?P&name)` | |
+| Numbered   | Definition   | `(...)`                              |                                                                          |
+| Numbered   | Substitution | `\1`, `\g<1>`, `(?P=1)`              |                                                                          |
+| Numbered   | Invocation   | `(?1)`, `(?R)`                       | `(?-1)`, `(?+1)`                                                         |
+| Named      | Definition   | `(?P<name>...)`                      | `(?<name>...)`, `(?P'name'...)`, `(?P"name"...)`                         |
+| Named      | Substitution | `(?P=name)`, `\g<name>`              | `\k<name>`, `\k'name'`, `\k{name}`, `\g{name}`, `(?<name>)`, `(?'name')` |
+| Named      | Invocation   | `(?&name)`, `(?P>name)`, `(?P&name)` |                                                                          |
 
 When substituting, the result of the *most recent* invocation is used; sadly, [relative backreferences](https://www.regular-expressions.info/backrefrel.html) are not (yet?) supported.
 To get around this, wrap your subroutine with a new name (e.g. `(?P<important_quote>(?P>quote))`) for the calls whose results you want to substitute later on.
@@ -262,7 +262,7 @@ regex.match(r'(?P<quote>["\'])(\w+)(\g<quote>)', '"abc\' "def"') # -> "def"
 regex.match(r'(?P<quote>["\'])(\w+)(?P=quote)', "'abc\" 'def'") # -> 'def'
 ```
 
-#### Predefined Subroutines (`(?(DEFINE)...)`)
+#### `3.1.2.` Predefined Subroutines (`(?(DEFINE)...)`)
 
 This special group can be placed at the start of a complex pattern to define subroutines that can be invoked later on in the pattern, but that will not themselves be matched against the string.
 The normal rules for numbering groups still apply.
@@ -275,11 +275,11 @@ If you define a subroutine that shares the name `DEFINE`, this section will brea
 regex.search(r'(?(DEFINE)(?P<quant>\d+)(?P<item>\w+))(?&quant) (?&item)', '5 elephants') # -> 5 elephants
 ```
 
-### CONDITIONAL GROUPS (`(?(1)then|else)`)
+### `3.2.` Conditional Groups (`(?(1)then|else)`)
 
 _([regular-expressions.info lesson](https://www.regular-expressions.info/conditional.html))_
 
-#### Lookarounds in Conditionals
+#### `3.2.1.` Lookarounds in Conditionals
 
 The test of a conditional pattern can be a lookaround:
 
@@ -297,7 +297,7 @@ regex.match(r'(?(?=\d)\d+\b|\w+)', '123abc') # -> None
 
 In the first example, the lookaround matched, but the remainder of the first branch failed to match, and so the second branch was attempted, whereas in the second example, the lookaround matched, and the first branch failed to match, but the second branch was **not** attempted.
 
-### Branch Reset Groups (`(?|...)`)
+### `3.3.` Branch Reset Groups (`(?|...)`)
 
 _([regular-expressions.info lesson](https://www.regular-expressions.info/branchreset.html))_
 
@@ -319,17 +319,17 @@ regex.match(r"(?|(first)|(second))", "first").groups() # -> ('first',)
 regex.match(r"(?|(first)|(second))", "second").groups() # -> ('second',)
 ```
 
-### Variable-length lookbehind (`(?<=^.*)`)
+### `3.4.` Variable-length lookbehind (`(?<=^.*)`)
 
 _([regular-expressions.info lesson](https://www.regular-expressions.info/lookbehind.html))_
 
 A lookbehind can match a variable-length string.
 
-## Other Literals
+## `4.` Other Literals
 
 (unicode)=
 
-### UNICODE PROPERTIES (`\p{property}`)
+### `4.1.` Unicode Properties (`\p{property}`)
 
 _([regular-expressions.info lesson](https://www.regular-expressions.info/unicode.html))_
 
@@ -359,7 +359,7 @@ In addition to the usual properties, you can also use:
 
 (posix)=
 
-### POSIX CHARACTER CLASSES (`[[:class:]]`)
+### `4.2.` POSIX Character Classes (`[[:class:]]`)
 
 _([regular-expressions.info lesson](https://www.regular-expressions.info/posixbrackets.html))_
 
@@ -367,14 +367,14 @@ _([regular-expressions.info lesson](https://www.regular-expressions.info/posixbr
 
 These are normally treated as an alternative form of `\p{...}`, except for `alnum`, `digit`, `punct` and `xdigit`, whose definitions are different from those of Unicode:
 
-| POSIX Class | Equivalent Unicode Property |
+|    POSIX Class | Equivalent Unicode Property |
 | -------------: | --------------------------- |
-| `[[:alnum:]]` | `\p{posix_alnum}` |
-| `[[:digit:]]` | `\p{posix_digit}` |
-| `[[:punct:]]` | `\p{posix_punct}` |
-| `[[:xdigit:]]` | `\p{posix_xdigit}` |
+|  `[[:alnum:]]` | `\p{posix_alnum}`           |
+|  `[[:digit:]]` | `\p{posix_digit}`           |
+|  `[[:punct:]]` | `\p{posix_punct}`           |
+| `[[:xdigit:]]` | `\p{posix_xdigit}`          |
 
-### Search Anchors (`\G`)
+### `4.3.` Search Anchors (`\G`)
 
 _([regular-expressions.info lesson](https://www.regular-expressions.info/continue.html))_
 
@@ -390,7 +390,7 @@ regex.findall(r"(?<!X.*)\w+", "aXa bXb") # -> ['aXa']
 regex.findall(r"(?<!\G.*X.*)\w+", "aXa bXb") # -> ['aXa', 'bXb']
 ```
 
-### WORD BOUNDARIES (`\m\M\b\B`)
+### `4.4.` Word boundaries (`\m\M\b\B`)
 
 _([regular-expressions.info lesson](https://www.regular-expressions.info/wordboundaries.html))_
 
@@ -398,27 +398,27 @@ _([regular-expressions.info lesson](https://www.regular-expressions.info/wordbou
 
 The definition of a 'word' character (`\w`) has also been expanded to conform to the Unicode specification at http://www.unicode.org/reports/tr29 -- see [regular-expressions.info](https://www.regular-expressions.info/unicodeboundaries.html)'s discussion for details.
 
-### NAMED CHARACTERS (`\N{name}`)
+### `4.5.` Named characters (`\N{name}`)
 
 Named characters are supported.
 Note that only those known by Python's Unicode database will be recognised.
 
-### A single grapheme (`\X`)
+### `4.6.` A single grapheme (`\X`)
 
 _([regular-expressions.info lesson](https://www.regular-expressions.info/unicodechars.html))_
 
 The grapheme matcher is supported.
 It conforms to the Unicode specification at `http://www.unicode.org/reports/tr29/`.
 
-## Optimization
+## `5.` Optimization
 
-### Atomic grouping `(?>...)`
+### `5.1.` Atomic grouping `(?>...)`
 
 _([regular-expressions.info lesson](https://www.regular-expressions.info/atomic.html))_
 
 If the following pattern subsequently fails, then the subpattern as a whole will fail.
 
-### Possessive quantifiers (`.*+`)
+### `5.2.` Possessive quantifiers (`.*+`)
 
 _([regular-expressions.info lesson](https://www.regular-expressions.info/possessive.html))_
 
@@ -428,7 +428,7 @@ The subpattern is matched up to 'max' times.
 If the following pattern subsequently fails, then all the repeated subpatterns will fail as a whole.
 For example, `(?:...)++` is equivalent to `(?>(?:...)+)`.
 
-### Backtracking Control Verbs (`(*VERB)`)
+### `5.3.` Backtracking Control Verbs (`(*VERB)`)
 
 _([regular-expressions.info lesson](https://www.regular-expressions.info/verb.html))_
 
@@ -442,7 +442,7 @@ We support 3 of [the 7 control verbs](https://www.regular-expressions.info/refve
 
 3. `(*FAIL)`/`(*F)` causes immediate backtracking.
 
-### Keep (`\K`)
+### `5.4.` Keep (`\K`)
 
 _([regular-expressions.info lesson](https://www.regular-expressions.info/keep.html))_
 
@@ -459,7 +459,7 @@ m[0] # -> bc
 m[1] # -> bcdef
 ```
 
-### NAMED LISTS (`\L<name>`)
+### `5.5.` Named Lists (`\L<name>`)
 
 There are occasions where you may want to include a list (actually, a set) of options in a regex.
 
@@ -495,30 +495,30 @@ p = regex.compile(r"\L<options>", options=option_set, other_options=[])
 # -> ValueError: unused keyword argument 'other_options'
 ```
 
-## Python API
+## `6.` Python API
 
-### Environment
+### `6.1.` Environment
 
 - Python 2 is not supported.
 - This module is targeted at CPython.
 - Threading is supported **IF** strings don't change during matching.
 - This module supports Unicode 17.0.0 and full Unicode case-folding.
 
-### Repeated Matches
+### `6.2.` Repeated Matches
 
-#### Captures & Spans
+#### `6.2.1.` Captures & Spans
 
 A match object has additional methods which return information on all the successful matches of a repeated group.
 These methods are:
 
-| Method | Description | Singular Counterpart |
+| Method                     | Description                                                         | Singular Counterpart    |
 | -------------------------- | ------------------------------------------------------------------- | ----------------------- |
 | `.captures([group1, ...])` | The strings matched for one group, or a list of lists for multiple. | `.group([group1, ...])` |
-| `.starts([group])` | The start positions for this group. | `.start([group])` |
-| `.ends([group])` | The end positions for this group. | `.end([group])` |
-| `.spans([group])` | The spans for this group. | `.span([group])` |
-| `.allcaptures` | All the captures of all the groups. | N/A |
-| `.allspans` | All the spans of the all captures of all the groups. | N/A |
+| `.starts([group])`         | The start positions for this group.                                 | `.start([group])`       |
+| `.ends([group])`           | The end positions for this group.                                   | `.end([group])`         |
+| `.spans([group])`          | The spans for this group.                                           | `.span([group])`        |
+| `.allcaptures`             | All the captures of all the groups.                                 | N/A                     |
+| `.allspans`                | All the spans of the all captures of all the groups.                | N/A                     |
 
 ```python
 m = regex.search(r"(\w{3})+", "123456789")
@@ -536,7 +536,7 @@ m.allcaptures() # -> (['one 1\ntwo 2\nthree 3\n'], ['one', 'two', 'three'], ['1'
 m.allspans() # -> ([(0, 20)], [(0, 3), (6, 9), (12, 17)], [(4, 5), (10, 11), (18, 19)])
 ```
 
-#### Capture Mappings
+#### `6.2.2.` Capture Mappings
 
 `capturesdict` returns a dict of the named groups and lists of all the captures of those groups.
 It is a combination of `groupdict` and `captures`:
@@ -556,7 +556,7 @@ Group names can be duplicated:
 
 ```python
 # ---------------
-# Optional Groups
+# OPTIONAL GROUPS
 # ---------------
 # Both groups capture, the second capture 'overwriting' the first.
 m = regex.match(r"(?P<item>\w+)? or (?P<item>\w+)?", "first or second")
@@ -574,7 +574,7 @@ m.group("item") # -> 'first'
 m.captures("item") # -> ['first']
 
 # ----------------
-# Mandatory Groups
+# MANDATORY GROUPS
 # ----------------
 # Both groups capture, the second capture 'overwriting' the first.
 m = regex.match(r"(?P<item>\w\*) or (?P<item>\w\*)?", "first or second")
@@ -592,7 +592,7 @@ m.group("item") # -> ''
 m.captures("item") # -> ['first', '']
 ```
 
-#### Match Subscripting (`match[0]`)
+#### `6.2.3.` Match Subscripting (`match[0]`)
 
 Match objects now allow access to their results via subscripting and slicing:
 
@@ -618,14 +618,14 @@ m.expandf('{letter[0]} {letter[1]} {letter[2]}') # -> a b c
 m.expandf('{letter[-1]} {letter[-2]} {letter[-3]}') # -> c b a
 ```
 
-### New Functions
+### `6.3.` New Functions
 
-#### `splititer()`
+#### `6.3.1.` `splititer()`
 
 `regex.splititer` has been added.
 It's a generator equivalent of `regex.split`.
 
-#### `fullmatch()`
+#### `6.3.2.` `fullmatch()`
 
 `fullmatch` behaves like `match`, except that it must match all of the string.
 
@@ -640,7 +640,7 @@ regex.match(r"a.*?", "abcd").group(0) # -> 'a'
 regex.fullmatch(r"a.*?", "abcd").group(0) # -> 'abcd'
 ```
 
-#### `subf()` & `subfn()`
+#### `6.3.3.` `subf()` & `subfn()`
 
 `subf` and `subfn` are alternatives to `sub` and `subn` respectively.
 When passed a replacement string, they treat it as a format string.
@@ -651,7 +651,7 @@ regex.subf(r"(\w+) (\w+)", "{0} => {2} {1}", "foo bar") # -> 'foo bar => bar foo
 regex.subf(r"(?P<word1>\w+) (?P<word2>\w+)", "{word2} {word1}", "foo bar") # -> 'bar foo'
 ```
 
-#### `expandf()`
+#### `6.3.4.` `expandf()`
 
 `expandf` is an alternative to `expand`.
 When passed a replacement string, it treats it as a format string.
@@ -664,7 +664,7 @@ m = regex.match(r"(?P<word1>\w+) (?P<word2>\w+)", "foo bar")
 m.expandf("{word2} {word1}") # -> 'bar foo'
 ```
 
-#### `detach_string()`
+#### `6.3.5.` `detach_string()`
 
 A match object contains a reference to the string that was searched, via its `string` attribute.
 The `detach_string` method will 'detach' that string, making it available for garbage collection, which might save valuable memory if that string is very large.
@@ -679,9 +679,9 @@ print(m.group()) # -> Hello
 print(m.string) # -> None
 ```
 
-### New Arguments
+### `6.4.` New Arguments
 
-#### Partial Matches
+#### `6.4.1.` Partial Matches
 
 A partial match is one that matches up to the end of string, but that string has been truncated and you want to know whether a complete match could be possible if the string had not been truncated.
 
@@ -728,7 +728,7 @@ pattern.match('123', partial=True).partial # -> True
 pattern.match('1233', partial=True).partial # -> False
 ```
 
-#### Special Escapes
+#### `6.4.2.` Special Escapes
 
 regex.escape has an additional keyword parameter `special_only`.
 When True, only 'special' regex characters, such as '?', are escaped.
@@ -741,19 +741,19 @@ regex.escape("foo bar!?", literal_spaces=False) # -> 'foo\ bar!\?'
 regex.escape("foo bar!?", literal_spaces=True) # -> 'foo bar!\?'
 ```
 
-#### Boundaries
+#### `6.4.3.` Boundaries
 
 `regex.sub` and `regex.subn` support 'pos' and 'endpos' arguments.
 
-#### Overlaps
+#### `6.4.4.` Overlaps
 
 `regex.findall` and `regex.finditer` support an 'overlapped' argument which permits overlapped matches.
 
-#### Flags
+#### `6.4.5.` Flags
 
 `regex.split`, `regex.sub` and `regex.subn` support a 'flags' argument.
 
-#### Timeouts
+#### `6.4.6.` Timeouts
 
 The matching methods and functions support timeouts.
 The timeout (in seconds) applies to the entire operation:
@@ -772,11 +772,11 @@ regex.sub(r'[a-z]', fast_replace, 'abcde', timeout=2) # -> 'XXXXX'
 regex.sub(r'[a-z]', slow_replace, 'abcde', timeout=2) # -> TimeoutError: regex timed out
 ```
 
-## Fuzzy Matching
+## `7.` Fuzzy Matching
 
 Regex usually attempts an exact match, but sometimes an approximate, or "fuzzy", match is needed, for those cases where the text being searched may contain errors in the form of inserted, deleted or substituted characters.
 
-### Basics
+### `7.1.` Basics
 
 A fuzzy regex specifies A) which types of errors are permitted, and, optionally, B) either the minimum and maximum or only the maximum permitted number of each type.
 The 3 types of error are: Insertion (`i`), Deletion (`d`), Substitution (`s`), or any (`e`).
@@ -799,14 +799,14 @@ If a certain type of error is specified, then any type not specified will **not*
 - `(...){1<=e<=3}` permit at least 1 and at most 3 errors
 - `(...){i<3,d<=2,e<4}` permit at most 2 insertions, at most 2 deletions, at most 3 errors in total, but no substitutions
 
-### Costs & Budgets
+### `7.2.` Costs & Budgets
 
 It's also possible to state the costs of each type of error and the maximum permitted total cost:
 
 - `(...){2i+2d+1s<=4}` each insertion costs 2, each deletion costs 2, each substitution costs 1, the total cost must not exceed 4
 - `(...){i<=1,d<=1,s<=1,2i+2d+1s<=4}` at most 1 insertion, at most 1 deletion, at most 1 substitution; each insertion costs 2, each deletion costs 2, each substitution costs 1, the total cost must not exceed 4
 
-### Tests
+### `7.3.` Tests
 
 You can add a test to perform on a character that's substituted or inserted.
 
@@ -815,7 +815,7 @@ You can add a test to perform on a character that's substituted or inserted.
 - `(...){s<=2:[a-z]}` at most 2 substitutions, which must be in the character set `[a-z]`.
 - `(...){s<=2,i<=3:\d}` at most 2 substitutions, at most 3 insertions, which must be digits.
 
-### Flags
+### `7.4.` Flags
 
 By default, fuzzy matching searches for the first match that meets the given constraints.
 The `ENHANCEMATCH` flag will cause it to attempt to improve the fit (i.e. reduce the number of errors) of the match that it has found.
@@ -877,9 +877,9 @@ So the actual string was:
 'anaconda foo bar'
 ```
 
-## Known Issues / Complexities
+## `8.` Known Issues / Complexities
 
-### `*` operator not working correctly with sub()
+### `8.1.` `*` operator not working correctly with sub()
 
 Sometimes it's not clear how zero-width matches should be handled.
 For example, should `.*` match 0 characters directly after matching >0 characters?

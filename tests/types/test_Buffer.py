@@ -467,9 +467,9 @@ class TestBuffer:
         assert len(after) == 1
         assert after[0][2] == ' d '
 
-    # ---------------------------
-    # `raw_pair_iterator` Helpers
-    # ---------------------------
+    # -----------------------------
+    # `raw_pair_iterator` helpers
+    # -----------------------------
     @pyt.mark.parametrize(
         'text, span, params, mode, starts_before, expected_action, starts_after',
         [

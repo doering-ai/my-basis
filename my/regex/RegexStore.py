@@ -153,7 +153,7 @@ class RegexStore(pyd.BaseModel):
         """Configuration options for RegexStore behavior -- must be set at initialization time."""
 
         # -------------------
-        # Convenience Options
+        # Convenience options
         # -------------------
         #: Function to format ***only*** definitions provided at initialization time.
         init_formatter: Callable[..., str] | None = None
@@ -173,7 +173,7 @@ class RegexStore(pyd.BaseModel):
         lazy_load: bool = True
 
         # ------------------
-        # Autostrip Behavior
+        # Autostrip behavior
         # ------------------
         #: Whether to automatically strip spaces from matched group values (` text ` -> `text`).
         autostrip_spaces: bool = True

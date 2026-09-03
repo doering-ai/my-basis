@@ -18,7 +18,7 @@ It is meant to answer three questions without requiring a tour through the imple
 > Do not cut `v1.0.0` from this document alone.
 > Merge only after the submitted GitLab pipeline is green and the maintainer has authored the 1.0 stability promise.
 
-## Executive disposition
+## `1.` Executive disposition
 
 The work supports merging the Basis branch once its final integrated gates are green.
 It does **not** claim that 1.0 has been released, tagged, or published.
@@ -37,9 +37,9 @@ The campaign deliberately did not maximize use of Basis.
 Five of the nine repositories were declined, deferred, or left as already-adopted because their Python floor, zero-dependency promise, failure-path constraints, or lack of a coherent replacement outweighed any code reduction.
 That restraint is part of the 1.0 result.
 
-## What changed
+## `2.` What changed
 
-### Tests: house style became an enforceable contract
+### `2.1.` Tests: house style became an enforceable contract
 
 The test pass preserves behavior while moving scenario variation into parameter tables.
 Long names were not mechanically shortened at the expense of meaning; repeated arrangements became rows with readable IDs, and the remaining two-level names identify a genuinely different subtype or failure mode.
@@ -58,7 +58,7 @@ The audit also reports suite-wide shape: files, functions, parameterized functio
 It is a guardrail, not a demand that every test be parameterized.
 A single focused behavior remains a single focused test.
 
-### The library: tests exposed contract defects worth fixing before 1.0
+### `2.2.` The library: tests exposed contract defects worth fixing before 1.0
 
 The review was not merely editorial.
 Consolidating the tests made several public contracts legible enough to repair:
@@ -83,7 +83,7 @@ Consolidating the tests made several public contracts legible enough to repair:
 These are stability fixes, not a redesign of the public surface.
 Their common theme is that provenance, boundaries, flags, and persistence should survive a round trip or fail loudly.
 
-### Adoption tooling: a beginner can produce evidence before asking for judgment
+### `2.3.` Adoption tooling: a beginner can produce evidence before asking for judgment
 
 The package now carries an `adopt-my-basis` skill and exposes the `my-basis-adopt` command.
 A beginner can discover or export the skill and build an intake without installing a permanent development environment:
@@ -116,7 +116,7 @@ The report leads with the repository story, adoption thesis, deliberate non-chan
 File inventories and logs belong in appendices.
 The tool can render evidence; it cannot decide that a dependency belongs on a latency-sensitive hook or zero-dependency core.
 
-### Typst: one repository, two deliberately separate products
+### `2.4.` Typst: one repository, two deliberately separate products
 
 Folding `typst-basis` into this repository is the lower-maintenance topology.
 The prepared history import preserves its four source commits, relocates it to top-level `typst/`, and adds the boundary material needed for life inside a monorepo:
@@ -136,7 +136,7 @@ The history merge entered Basis as `c63d6eed41b9a490d43cfce6f3b180b0ab1f9275`.
 The old checkout should remain in place until the Basis merge, package installation, and downstream Corpus gate all succeed.
 History preservation is the safety net; a hurried directory copy followed by deletion is not.
 
-## Fleet dispositions
+## `3.` Fleet dispositions
 
 The canonical pass covered these nine public Python repositories.
 "No change" is a result when it protects a deliberate compatibility or dependency boundary.
@@ -162,7 +162,7 @@ Two supporting Corpus changes sit outside the nine-repository disposition matrix
   changes the downstream `@dtm/basis` integration seam to the new monorepo
   location. It must follow, not precede, the Basis fold.
 
-## RegexStore DSL walkthrough
+## `4.` RegexStore DSL walkthrough
 
 RegexStore is valuable when patterns form a vocabulary: reusable pieces, a grammar, a router, a recursive structure, or a repeated transform.
 One obvious `re.compile` should stay one obvious `re.compile`.
@@ -170,7 +170,7 @@ One obvious `re.compile` should stay one obvious `re.compile`.
 The examples below are executable against this candidate.
 Each uses `lazy_load=False` so a malformed production grammar fails at construction rather than on its first user input.
 
-### Exact composition and repeated captures
+### `4.1.` Exact composition and repeated captures
 
 Lists normally use an optional-space separator.
 Set `separator=''` when every character is part of the grammar:
@@ -198,7 +198,7 @@ assert match.flat == {
 `MatchData` keeps all repeated named captures as lists.
 Its `flat` view selects the last non-empty capture, which is convenient but should not replace `match.data` when repetition matters.
 
-### Named subroutine is not a backreference
+### `4.2.` Named subroutine is not a backreference
 
 These two constructs answer different questions:
 
@@ -223,7 +223,7 @@ This distinction is especially important because the default `force_reinvocation
 Use `\g<word>` when equality with the earlier capture is the actual contract.
 The Corpus fence fix is the practical version of this lesson: the closing fence must repeat the opening delimiter, not merely match the delimiter grammar again.
 
-### Flags must travel with reusable definitions
+### `4.3.` Flags must travel with reusable definitions
 
 A compiled pattern's flags are preserved while that pattern stands alone, including through store import and union.
 Those compile-time flags cannot be embedded into a larger pattern's source, so RegexStore now refuses a composed dependency that would silently lose them.
@@ -247,7 +247,7 @@ For a standalone imported `regex.Pattern`, external flags are fine.
 For a definition referenced by `(?P>name)`, use scoped inline flags such as `(?i:...)`.
 Supplying both a compiled pattern and another `flags=` value is ambiguous and fails loudly.
 
-### Substitution inherits the unattended-processing timeout
+### `4.4.` Substitution inherits the unattended-processing timeout
 
 `sub` and `subn` route replacement through the same store-wide regex deadline as the other public matching operations.
 The caller does not add a separate `timeout=` argument:
@@ -276,7 +276,7 @@ assert CLEANUP.subn(
 The timeout is a containment boundary, not a proof that a hostile pattern is safe.
 Security-sensitive patterns should still be eagerly compiled, exercised against adversarially long inputs, and kept as simple as the behavior permits.
 
-### Router order is public behavior
+### `4.5.` Router order is public behavior
 
 Router mappings are ordered.
 When categories overlap, the first matching branch wins:
@@ -302,7 +302,7 @@ Reversing those two mapping entries classifies `'42'` as `wordish`.
 Router tests therefore need an overlap example, not only disjoint happy paths.
 Routers deliberately use ordinary ordered alternation: optimized atomic condensation can change the meaning of lazy or overlapping branches.
 
-### The compact DSL vocabulary
+### `4.6.` The compact DSL vocabulary
 
 - `(':', children)` makes a non-capturing group, keeping a composed sequence together.
 - `('|:', children)` makes an ordered non-capturing alternation for classifications where branch priority matters.
@@ -323,7 +323,7 @@ Before accepting a complex RegexStore change, ask:
 7. Do differential tests cover positives, negatives, near misses, malformed
    inputs, overlaps, and length boundaries?
 
-## Independent Python and Typst release boundaries
+## `5.` Independent Python and Typst release boundaries
 
 The monorepo removes a repository without pretending the two packages are one artifact.
 
@@ -346,7 +346,7 @@ The Python build checker must prove both halves of the packaging promise:
 
 That keeps a Typst checkout from inflating the Python package while ensuring the new agent workflow actually ships to Python users.
 
-## Verification ledger
+## `6.` Verification ledger
 
 Local proof is literal below.
 The submitted review and its exact-source pipeline are explicit pre-merge gates, not soft passes.
@@ -373,9 +373,9 @@ The submitted review and its exact-source pipeline are explicit pre-merge gates,
 | WikiParse draft                | controlled candidate run                                                                                              | 1,996 passed, 9 xfailed, 3 unrelated failures; remains draft.                                                                                                                                                                |
 | Arch draft                     | focused and separated broader runs                                                                                    | 41 focused passed; 966 broader tests passed with 3 known stale defects separated; remains draft.                                                                                                                             |
 
-## Merge or request another round
+## `7.` Merge or request another round
 
-### Merge sequence
+### `7.1.` Merge sequence
 
 Use this order.
 It prevents downstream repositories from depending on a path or behavior that has not landed.
@@ -424,7 +424,7 @@ It prevents downstream repositories from depending on a path or behavior that ha
    Delete or archive `/home/robbd/my/libs/typst-basis` only after the installed
    package target and Corpus consumer proof both point at Basis.
 
-### The human 1.0 gate
+### `7.2.` The human 1.0 gate
 
 No agent should manufacture the social guarantee implied by 1.0.
 After the merge sequence above, the maintainer must:
@@ -438,7 +438,7 @@ After the merge sequence above, the maintainer must:
 The manual job uploads; it is not permission for an agent to publish early.
 A future `typst-v0.1.0` tag is independent and must not activate the PyPI path.
 
-### Request another round
+### `7.3.` Request another round
 
 Use the following prompt and name only the areas being reopened:
 
@@ -462,7 +462,7 @@ Preserve accepted change IDs. Revise basis-003 and basis-006 as follows:
 report.
 ```
 
-## Infrastructure limitations
+## `8.` Infrastructure limitations
 
 The work proceeded with local evidence when coordination services were unreliable:
 
@@ -481,7 +481,7 @@ The work proceeded with local evidence when coordination services were unreliabl
 None of these limitations justifies weakening the local verification contract.
 They explain why the branch, commits, rendered artifacts, and command results are the durable handoff.
 
-## Problem space
+## `9.` Problem space
 
 - **★ Keystone — close the exact-source proof and merge Basis before any dependent
   draft.**

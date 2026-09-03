@@ -52,7 +52,7 @@ class TestMyType:
     """Test MyType."""
 
     # ------------
-    # Test Helpers
+    # TEST HELPERS
     # ------------
     def check_inst(self, inst: MyType | None, exp: Expected):
         """Helper method for checking expectations against an instance."""
@@ -168,7 +168,7 @@ class TestMyType:
             (Annotated[list[int], dict[int, int], 5], (list, int)),
             (Annotated[str, 'metadata'], str),
             (Unpack[tuple[dict[str, int], int]], [(dict, str, int), int]),
-            # ---- Nested Generics ----
+            # ---- Nested generics ----
             (list[list[int]], (list, (list, int))),
             (dict[str, list[int]], (dict, str, (list, int))),
             (set[tuple[str, ...]], (set, (tuple, str))),
@@ -269,10 +269,10 @@ class TestMyType:
             (list[int] | set[str], [(list, int), (set, str)]),
             (Coroutine | dict[str, int] | int, [None, (dict, str, int), int]),
             (Coroutine | Generator, [None, None]),
-            # ---- Super New TypeTuples (Idiomatically Speaking) ----
+            # ---- Super new TypeTuples (idiomatically speaking) ----
             ((str, int, float), [str, int, float]),
             ((dict[str, int], int), [(dict, str, int), int]),
-            # ---- Complex Unions With Nested Generics ----
+            # ---- Complex unions with nested generics ----
             (Optional[str], [str, types.NoneType]),  # noqa: UP045
             (Optional[list[int]], [(list, int), types.NoneType]),  # noqa: UP045
             (list[int] | dict[str, list[int]], [(list, int), (dict, str, (list, int))]),
@@ -312,7 +312,7 @@ class TestMyType:
             Literal,
             Generator,
             Generator[int, None, float],
-            # ---- Exotic Type Params: No Single Stand-In Type, Stay Inert ----
+            # ---- Exotic type params: no single stand-in type, stay inert ----
             typing.TypeVarTuple('Ts'),
             typing.ParamSpec('P'),
             typing.ParamSpec('P').args,
@@ -332,7 +332,7 @@ class TestMyType:
             (typing.TypeVar('T', bound=Real), Real),  # union bound -> the union itself
             # ---- Constrained ----
             (typing.TypeVar('T', str, bytes), str | bytes),  # constraints -> union of all
-            # ---- Defaulted (Pep 696) ----
+            # ---- Defaulted (PEP 696) ----
             # default beats bound
             (typing_extensions.TypeVar('T', bound=Real, default=float), float),
             # ---- Unconstrained ----
@@ -380,7 +380,7 @@ class TestMyType:
     @pyt.mark.parametrize(
         'data, expected',
         [
-            # ---- Atomic Types ----
+            # ---- Atomic types ----
             (42, int),
             ('hello', str),
             (3.14, float),
@@ -391,35 +391,35 @@ class TestMyType:
             (time(12, 0, 0), time),
             (timedelta(days=1), timedelta),
             (BaseEnum.A, BaseEnum),
-            # ---- Empty Containers ----
+            # ---- Empty containers ----
             ([], list),
             ({}, dict),
             (set(), set),
             (tuple(), tuple),
             (deque(), deque),
             (Counter(), (Counter, None, int)),
-            # ---- Homogeneous Lists ----
+            # ---- Homogeneous lists ----
             ([1, 2, 3], (list, int)),
             (['a', 'b', 'c'], (list, str)),
             ([1.0, 2.0, 3.0], (list, float)),
-            # ---- Heterogeneous Lists ----
+            # ---- Heterogeneous lists ----
             ([1, 'a', 2.0], (list, int | str | float)),
             ([1, 2, 'three'], (list, int | str)),
-            # ---- Homogeneous Tuples ----
+            # ---- Homogeneous tuples ----
             ((1, 2, 3), (tuple, int)),
             (('a', 'b', 'c'), (tuple, str)),
-            # ---- Homogeneous Sets ----
+            # ---- Homogeneous sets ----
             ({1, 2, 3}, (set, int)),
             ({'a', 'b', 'c'}, (set, str)),
-            # ---- Heterogeneous Sets ----
+            # ---- Heterogeneous sets ----
             ({1, 'a'}, (set, int | str)),
-            # ---- Homogeneous Dicts ----
+            # ---- Homogeneous dicts ----
             ({'a': 1, 'b': 2}, (dict, str, int)),
             ({1: 'a', 2: 'b'}, (dict, int, str)),
-            # ---- Heterogeneous Dicts ----
+            # ---- Heterogeneous dicts ----
             ({'a': 1, 'b': 'c'}, (dict, str, int | str)),
             ({1: 'a', 'b': 2}, (dict, int | str, str | int)),
-            # ---- Nested Structures ----
+            # ---- Nested structures ----
             ([[1, 2], [3, 4]], (list, (list, int))),
             ([{'a': 1}, {'b': 2}], (list, (dict, str, int))),
             ({'x': [1, 2], 'y': [3, 4]}, (dict, str, (list, int))),
@@ -523,7 +523,7 @@ class TestMyType:
         assert cls.parse(tvar).check(data) == expected
 
     def test_check_iter(self):
-        # ---- Test Successful Iteration ----
+        # ---- Test successful iteration ----
         int_type = cls.parse(int)
         results = list(int_type.check_iter([1, 2, 3]))
         assert results == [True, True, True]
@@ -531,12 +531,12 @@ class TestMyType:
         results = list(int_type.check_iter([1, 'a', 3]))
         assert results == [True, False, True]
 
-        # ---- Test With Strings ----
+        # ---- Test with strings ----
         str_type = cls.parse(str)
         results = list(str_type.check_iter(['a', 'b', 'c']))
         assert results == [True, True, True]
 
-        # ---- Test With Complex Types ----
+        # ---- Test with complex types ----
         list_int_type = cls.parse(list[int])
         results = list(list_int_type.check_iter([[1, 2], [3, 4], ['a']]))
         assert results == [True, True, False]
@@ -568,7 +568,7 @@ class TestMyType:
     @pyt.mark.parametrize(
         'inst1, inst2, expected',
         [
-            # ---- Equality By Uid ----
+            # ---- Equality by uid ----
             (cls.parse(int), cls.parse(int), True),
             (cls.parse(str), cls.parse(str), True),
             (cls.parse(list[int]), cls.parse(list[int]), True),
@@ -577,13 +577,13 @@ class TestMyType:
             (cls.parse(int), cls.parse(str), False),
             (cls.parse(list[int]), cls.parse(list[str]), False),
             (cls.parse(dict[str, int]), cls.parse(dict[int, str]), False),
-            # ---- Equality With Raw Types ----
+            # ---- Equality with raw types ----
             (cls.parse(int), int, True),
             (cls.parse(str), str, True),
-            # ---- Inequality With Raw Types ----
+            # ---- Inequality with raw types ----
             (cls.parse(int), str, False),
             (cls.parse(str), int, False),
-            # ---- None Comparisons ----
+            # ---- None comparisons ----
             (cls.parse(None), None, True),
             (cls.parse(int), None, False),
         ],
@@ -594,14 +594,14 @@ class TestMyType:
     @pyt.mark.parametrize(
         'inst, expected',
         [
-            # ---- Truthy Instances ----
+            # ---- Truthy instances ----
             (cls.parse(int), True),
             (cls.parse(str), True),
             (cls.parse(list[int]), True),
             (cls.parse(dict[str, int]), True),
             (cls.parse(Literal['a', 'b']), True),
             (cls.parse(tuple[int, str]), True),
-            # ---- Falsy Instances ----
+            # ---- Falsy instances ----
             (cls.parse(None), False),
             (cls.parse(Any), False),
             (cls.parse(Callable), False),

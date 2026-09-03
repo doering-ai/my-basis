@@ -191,14 +191,14 @@ NOWHERE: _NowhereType = _NowhereType()
 ### BODY ###
 ############
 # ---------
-# Constants
+# CONSTANTS
 # ---------
 #: The package-wide separator used when joining rendered fragments (e.g. `Span` collections).
 DELIM = ' // '
 
 
 # -----
-# Jinja
+# JINJA
 # -----
 #: Cache for the package Jinja environment, built lazily by `_jinja_env`. Deferred so a
 #: bare `import my` -- which reaches `infra` eagerly -- does not import `jinja2` or stat

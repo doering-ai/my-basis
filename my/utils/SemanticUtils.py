@@ -10,7 +10,7 @@ import itertools as it
 ### EXTERNAL
 import regex as re
 
-### INTERNAL (NOTE: IF ADDING NEW INTERNAL IMPORTS, UPDATE THE COMMENTS IN `__INIT__.PY`)
+### INTERNAL (NOTE: If adding new internal imports, update the comments in `__init__.py`)
 from ._UtilsBase import _UtilsBase
 from .IterUtils import iter_utils
 from .TextUtils import text_utils
@@ -23,7 +23,7 @@ class SemanticUtils(_UtilsBase):
     """Methods for semantic-y tasks (i.e. related to data's content rather than its form)."""
 
     # ------------------
-    # `0` Roman Numerals
+    # `0` ROMAN NUMERALS
     # ------------------
     ROMAN_ARR: ClassVar = ['M', 'D', 'C', 'L', 'X', 'V', 'I']
     ROMAN_MAP: ClassVar = dict(
@@ -126,7 +126,7 @@ class SemanticUtils(_UtilsBase):
         return ans
 
     # -----------
-    # `1` Amounts
+    # `1` AMOUNTS
     # -----------
     BASELINES: ClassVar = [(10**9, 'B', 'GB'), (10**6, 'M', 'MB'), (10**3, 'K', 'KB'), (1, '', 'B')]
 
@@ -165,7 +165,7 @@ class SemanticUtils(_UtilsBase):
         return f'{amount}'
 
     # -----------------
-    # `2` Pluralization
+    # `2` PLURALIZATION
     # -----------------
     type Singularizer = tuple[re.Pattern, Callable[[str], str]]
     SINGULAR_MAP: ClassVar[list[Singularizer]] = text_utils.regex_array(
@@ -329,7 +329,7 @@ class SemanticUtils(_UtilsBase):
         return f'{num}{ordinal}'
 
     # ---------------
-    # `3` Identifiers
+    # `3` IDENTIFIERS
     # ---------------
     TS_KEYWORDS: ClassVar[list[str]] = [
         'break',

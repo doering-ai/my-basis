@@ -214,7 +214,7 @@ class MyType[T](_TypingBase, pyd.BaseModel, arbitrary_types_allowed=True):
     #: Can sometimes be monotype, e.g. ``Counter[str]`` -> ``dict[str, int]``
     keys: MyType | None = None
 
-    # ---- Internal Attributes ----
+    # ---- Internal attributes ----
     #: The origin of the type, if it has one (e.g. ``dict`` for ``dict[str, int]``); otherwise None.
     origin: type | None = None
 

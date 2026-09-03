@@ -45,7 +45,7 @@ META_RGXS: dict[str, re.Pattern] = ut.regex_dict(
     QUANT=QUANT,
     FLAGS=FLAGS,
     # ---------------------
-    # Primary Decomposition
+    # Primary decomposition
     # ---------------------
     set=ut.multi_rgx(r'(?P<start>\[)', rf'(?P<end>\]{QUANT})', pre=NO_ESC),
     group=ut.multi_rgx(
@@ -67,7 +67,7 @@ META_RGXS: dict[str, re.Pattern] = ut.regex_dict(
         suf=QUANT,
     ),
     # -------------------------------------------
-    # Second-Order Decomposition (Parts Of Atoms)
+    # Second-order decomposition (parts of atoms)
     # -------------------------------------------
     quant=ut.multi_rgx(
         r'[?*+]',
@@ -82,7 +82,7 @@ META_RGXS: dict[str, re.Pattern] = ut.regex_dict(
     no_set=rf'(?<!{NON_ESC}\[[^\]]{{0,8}})',
     no_set_suf=rf'(?!\]|[^\[]{{0,8}}{NON_ESC}\])',
     # -----------------
-    # Dsl Specification
+    # DSL specification
     # -----------------
     struct_mark=''.join(
         [

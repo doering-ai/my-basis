@@ -469,10 +469,26 @@ class TestUpstreamSpec:
         assert slot == 'smith-j_mason-a_et-al'
         assert slot.count('_') == 2 and DocName.is_valid(f'{slot}__2024__a-title')
 
-    def test_creators__is_capped_like_every_other_slot(self):
-        """wikiparse truncates `name_creators()` too, so one slot cannot eat the budget."""
-        slot = DocName.creators_slot(['Wolfeschlegelsteinhausenbergerdorff Aaaa', 'Bbbb' * 12])
+    @pyt.mark.parametrize(
+        'surnames',
+        [
+            # Realistic: the longest compound surnames the shelf actually holds
+            ('Wittgenstein-Perez', 'Kauark-Leite'),
+            # Absurd, to prove the cap itself cannot eat the claim
+            ('Wolfeschlegelsteinhausenbergerdorff', 'Wolfeschlegelsteinhausenberger'),
+            ('Featherstonehaugh' * 3, 'Featherstonehaugh' * 3),
+        ],
+    )
+    def test_creators__is_capped_without_losing_et_al(self, surnames: tuple[str, str]):
+        """wikiparse truncates `name_creators()` too, but `et-al` is a claim, not filler.
+
+        A cut that dropped it would turn "and others" into "and no others", which is a
+        different statement about the work.
+        """
+        slot = DocName.creators_slot([f'A {surnames[0]}', f'B {surnames[1]}', 'C D'])
         assert len(slot) <= 48
+        assert slot.endswith('_et-al')
+        assert DocName.is_valid(f'{slot}__2024__a-title')
 
     def test_prose_stopwords_are_kept(self):
         """The documented divergence: wikiparse's prose path would drop `a`, `of`, `from`."""

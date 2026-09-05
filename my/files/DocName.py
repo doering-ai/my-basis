@@ -395,12 +395,18 @@ def creators_slot(names: Iterable[str], et_al: bool = False, limit: int = MAX_CR
     slots = [slot for name in names if (slot := person_slot(name))]
     if not slots:
         return ''
+
     kept = slots[:limit]
-    if et_al or len(slots) > limit:
-        kept.append('et-al')
+    tail = 'et-al' if (et_al or len(slots) > limit) else ''
+
     # The origin caps this slot too (`truncate_filename_section(name_creators())`), so a
-    # pair of very long surnames cannot push one slot past the whole name's budget.
-    return clean_section('_'.join(kept))
+    # pair of very long surnames cannot push one slot past the whole name's budget. The
+    # cap is applied to the *named* part alone and `et-al` appended afterwards: it is a
+    # claim about how many authors a work has, and a truncation that silently dropped it
+    # would turn "and others" into "and no others".
+    budget = MAX_SECTION - len(f'_{tail}') if tail else MAX_SECTION
+    named = clean_section('_'.join(kept), budget)
+    return '_'.join(part for part in (named, tail) if part)
 
 
 def year_slot(value: int | str | None) -> str:

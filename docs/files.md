@@ -9,12 +9,13 @@ numbering:
 ```
 
 The `files` subpackage provides structured representations and utilities for working with file
-formats. Currently it only contains one format, a somewhat-specialized (opinionated?) markdown
-format.
+formats. It holds a somewhat-specialized (opinionated?) markdown format, and the canonical
+`creators__year__title` name a document corpus indexes itself by.
 
 ```{toctree}
 ---
 maxdepth: 2
 ---
+files.DocName
 files.Markdown
 ```

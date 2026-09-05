@@ -106,7 +106,7 @@ from .utils import (
 if TYPE_CHECKING:
     from .apis import GoogleSheet, Environment, ENV, env, Filesystem, PATHS, FS, fs
     from .caches import Cache, NestedCache, PickleCache, FileCache
-    from .files import Markdown
+    from .files import DocName, Markdown
     from .regex import (
         RegexStore,
         RegexDebugger,
@@ -246,6 +246,7 @@ __all__ = [
     'META_RGXS',
     'COMMON_RGXS',
     # /files/
+    'DocName',
     'Markdown',
 ]
 
@@ -305,6 +306,7 @@ _LAZY_ATTRS: dict[str, str] = {
     'RegexDef': 'my.regex',
     'META_RGXS': 'my.regex',
     'COMMON_RGXS': 'my.regex',
+    'DocName': 'my.files',
     'Markdown': 'my.files',
 }
 

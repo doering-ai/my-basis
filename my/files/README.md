@@ -17,3 +17,15 @@ Nodes can be retrieved by index, child position, title, or path, and the class p
 The class integrates YAML parsing for structured metadata, automatically extracting data from "Notes" sections and storing them in the node's `notes` dictionary.
 Prose content is stored in `Buffer` objects from `my.types` for text manipulation.
 The entire tree can be rendered back to markdown text with optional formatting via `mdformat`, and templates from `my.templates` control the output structure.
+
+## DocName
+
+The `DocName` class is the canonical `creators__year__title` name a document corpus indexes itself by: lowercase, `-` joining the words inside one semantic sub-unit, `_` delineating the sub-units of one typed slot, and `__` separating the three slots.
+`arendt-h__1958__human-condition` names one work; `gendler-t_hawthorne-j__2002__conceivability-and-possibility` names two creators; `aristotle__-0350__categories` carries a signed BCE year.
+
+The grammar and its normalizations are transcribed from the two applications that already implement it -- `wikiparse.citations.CitationFactory` and the pure half of the literature corpus's slug normalizer -- and live here because an application may not import another for a shared primitive.
+`ut.clean_string`, in the neighbouring `utils` subpackage, is the root all of it descends from.
+
+`DocName.mint()` walks an evidence ladder rather than inventing a name: named creators first, then the work's own identifier (`uid-arxiv`), then whoever published it (`site-example-org`).
+It returns `None` when the metadata names nothing at all, and a year nobody has triaged is the literal `0000` -- a different claim from `undated`, which asserts a date was sought and does not exist.
+The model is frozen and validates its own grammar, so a `DocName` that exists is a name that can be written to disk.

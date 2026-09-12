@@ -329,15 +329,20 @@ tasks:
         aliases: ['check:py']
 
     eval:check:md:
-        desc: Check markdown formatting with `mdformat --check` (reads `.mdformat.toml`); skipped
-            if mdformat is not installed in the env.
+        desc: Check markdown formatting with `mdformat --check` (reads `.mdformat.toml`) over
+            TRACKED files only; skipped if mdformat is not installed in the env.
         cmd: |
             if ! {{.UV}} run --quiet mdformat --version >/dev/null 2>&1; then
               echo "mdformat not installed in this env — skipping markdown check." >&2
             elif [ -n "{{.CLI_ARGS}}" ]; then
               {{.UV}} run mdformat --check {{.CLI_ARGS}}
             else
-              {{.UV}} run mdformat --check .
+              # Tracked files only (MEMY-1612): mdformat does not read .gitignore, so a
+              # whole-tree walk reddens the gate on untracked local installs (e.g.
+              # gitignored skills/3p) — content that is not ours to normalize. Explicitly
+              # named paths stay explicit: if a caller names a file, check that file.
+              git ls-files -z -- '*.md' \
+                | xargs -0 -r {{.UV}} run mdformat --check
             fi
 
     eval:check:yaml:
@@ -439,15 +444,19 @@ tasks:
         aliases: ['fmt:py', 'format:py']
 
     eval:format:md:
-        desc: Format markdown in place with `mdformat` (reads `.mdformat.toml`); skipped if
-            mdformat is not installed in the env.
+        desc: Format tracked markdown in place with `mdformat` (reads `.mdformat.toml`); skipped
+            if mdformat is not installed in the env.
         cmd: |
             if ! {{.UV}} run --quiet mdformat --version >/dev/null 2>&1; then
               echo "mdformat not installed in this env — skipping markdown formatting." >&2
             elif [ -n "{{.CLI_ARGS}}" ]; then
               {{.UV}} run mdformat {{.CLI_ARGS}}
             else
-              {{.UV}} run mdformat .
+              # Tracked files only, matching eval:check:md (MEMY-1612): a format sweep must
+              # not rewrite gitignored local installs — that would dirty a tree the gate
+              # never checks and create drift the next resync has to reconcile.
+              git ls-files -z -- '*.md' \
+                | xargs -0 -r {{.UV}} run mdformat
             fi
 
     eval:format:yaml:

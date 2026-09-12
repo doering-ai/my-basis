@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "registry_uid": "my-basis",
+  "target_origin": "git@gitlab.com:doering-ai/libs/basis.git",
+  "asset": "logo_512.png",
+  "sha256": "4fe30a262a51c15f70eca8c0b1991bda60f046ef586e0464203ca9fca180ff29",
+  "dimensions": [512, 512],
+  "source": {
+    "collection": "logosheet/containers",
+    "filename": "my-basis.png",
+    "manifest_sha256": "7eddc77833d4e4a0beba6c89aa29f7e9fca2b219bc2df1fd26d9ac6c4fe6ae79",
+    "run": "round-03",
+    "model": "google--gemini-3-pro-image",
+    "attempt": 2
+  },
+  "purpose": "Generated brand artwork; not a product screenshot.",
+  "integrated": "2026-09-07",
+  "task": "MEMY-1694"
+}

@@ -1,5 +1,5 @@
 include = ["**/*.toml", "**/*.yapf"]
-exclude = ["**/syntax_test_*"]
+exclude = ["**/syntax_test_*", "**/.*/**"]
 
 [formatting]
 # Align entries vertically. Entries that have table headers, comments, or blank lines between them are not aligned.   false
@@ -38,7 +38,10 @@ column_width = 100
 # Indent entries under tables.
 # indent_entries = false
 
-# Indentation to use, should be tabs or spaces but technically could be anything. 2 spaces (" ")
+# Indentation to use, should be tabs or spaces but technically could be anything. This project
+# uses 4 spaces, per SET-yaml4's sibling convention for the generated ecosystem files. A
+# comment here previously said "2 spaces" while the value below has always been 4; that stale
+# comment once caused a filed mismatch report that turned out not to exist.
 indent_string = "    "
 
 # Add trailing newline to the source.

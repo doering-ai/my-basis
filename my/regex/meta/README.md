@@ -1,55 +1,41 @@
-# Meta - Regex Introspection
+# `my.regex.meta`
 
-The `meta` subdirectory provides tools for parsing, analyzing, and manipulating regular expressions at a structural level.
-These are "meta-patterns"—regular expressions designed to match and decompose other regular expressions.
-This enables programmatic transformation and optimization of regex patterns.
+> Left-rule blocks mark artificial prose; quotations retain their own attribution.
 
-## Atomic Components
+<blockquote class="artificial-prose">
 
-The package defines three types of atoms representing the fundamental building blocks of regex patterns.
-`Atom` is the base class representing any atomic unit, whether a literal character, escape sequence, or special construct.
-It provides methods for quantifier attachment, plain text atomization (handling escapes and special characters), and string representation.
+`my.regex.meta` is the structural view of the parent regex package. It exposes the pieces of a regex and the trees assembled from them, so callers can inspect or transform an expression without first reducing it to an opaque compiled pattern. Install the parent package through the [root myBasis guide](../../../README.md#installation).
 
-`GroupAtom` represents any parenthetical group construct, from simple capturing groups `(...)` to complex constructs like atomic groups `(?>...)`, lookaheads `(?=...)`, or named captures `(?P<name>...)`.
-The atom stores the group's kind (via `GroupKind`), its start syntax, body content, and any trailing quantifier.
-Methods support extracting the group name for named groups and determining structural properties.
+</blockquote>
 
-`SetAtom` represents character class expressions like `[a-z]`, `[^0-9]`, or `[:alpha:]`.
-Sets can be negated and may contain ranges, character class shortcuts, or POSIX character classes.
-Like groups, sets can have trailing quantifiers.
+## Atomic components
 
-## Group Classification
+<blockquote class="artificial-prose">
 
-`GroupKind` is an `IntFlag` enum providing fine-grained classification of all group types supported by the `regex` library.
-The enum distinguishes between basic types (plain/positional captures vs non-capturing groups), named constructs (named captures, subroutine calls, backreferences), lookarounds (lookahead/behind, positive/negative), and special forms (atomic groups, conditionals, comments, DEFINE blocks).
+`Atom`, `GroupAtom`, and `SetAtom` describe the units recognized while parsing an expression. An atom retains its original source text; group and set atoms add the delimiters, contents, and spans that make their structure meaningful. `Quantifier` records the repetition suffix associated with an atom when one is present.
 
-The enum supports bitwise operations for filtering, with predefined masks like `_NAMED` (all named group types), `_SIMPLE` (plain groups), and `_INVOC` (subroutine invocations).
-The `read()` classmethod parses group opening syntax to determine the kind, handling the complex decision tree of `(?...` forms.
+</blockquote>
 
-## Regex Decomposition
+## Group classification
 
-The `Regex` class provides the core functionality for breaking down regex strings into atomic components.
-The `atomize()` classmethod recursively parses a pattern string, correctly handling nesting, escaping, and the interactions between groups and character sets.
-It uses the `group_iterator()` and `set_iterator()` methods which leverage buffer pair matching to identify balanced constructs.
+<blockquote class="artificial-prose">
 
-The class stores its data as a list of `Atom` objects and supports pattern splitting at branch points (the `|` operator).
-Methods like `is_split()` determine if a pattern contains top-level alternation, while `split()` breaks patterns into their branches.
-The class integrates with Pydantic for use in typed data models.
+`GroupKind` is a flag-based classification for the group forms the parser recognizes. Its masks, including `_NAMED`, `_SIMPLE`, and `_INVOC`, let a caller distinguish ordinary grouping, named definitions, and named invocations. `GroupKind.read()` derives that classification from a group prefix.
 
-## Tree Optimization
+</blockquote>
 
-The `Tree` class represents branching regex patterns as hierarchical structures suitable for optimization.
-A tree consists of multiple branches (alternation arms), and each branch is a sequence of atoms.
-The `expand()` method recursively replaces groups with their expanded forms, while `condense()` factors out common prefixes and suffixes to reduce pattern complexity.
+## Decomposition and trees
 
-Condensation works by identifying shared leading or trailing atoms across all branches and hoisting them outside the alternation group.
-This process repeats recursively on nested groups until no further optimization is possible.
-The `render()` method converts the optimized tree back to a regex string.
+<blockquote class="artificial-prose">
 
-## Meta-Patterns
+`Regex` atomizes a source expression and provides iterators over its groups and sets. `ParseData` keeps the original text beside that parsed structure. `Tree` can expand, condense, and render the resulting branches, which is useful when a tool needs to compare or factor alternatives.
 
-The `meta_patterns.py` module defines `META_RGXS`, a `RegexStore` containing patterns for matching regex syntax elements themselves.
-These patterns identify group opening delimiters, character sets, escape sequences, quantifiers, inline flags, and special characters.
-They power the parsing logic in `Regex` and enable the DSL mark syntax in `RegexStore`.
+</blockquote>
 
-The `Quantifier` class represents quantifier syntax (like `*`, `+`, `?`, `{n,m}`, including lazy and possessive variants), providing utilities for comparing and manipulating quantifiers programmatically.
+## Meta patterns
+
+<blockquote class="artificial-prose">
+
+`META_RGXS` is the store of patterns used by this layer to identify the regex syntax it understands. It is an implementation vocabulary for the introspector, not a second matching API.
+
+</blockquote>

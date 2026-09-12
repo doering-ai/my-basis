@@ -1,45 +1,43 @@
-# my.regex
+# `my.regex`
 
-## Pattern Management
+> Left-rule blocks mark artificial prose; quotations retain their own attribution.
 
-The `RegexStore` class is the centerpiece of this subpackage.
-It provides a compositional DSL (domain-specific language) for defining and managing complex regex patterns.
-Rather than working with raw regex strings, you define patterns using a hierarchical structure of strings, lists, tuples, and custom mark syntax.
-Patterns can reference other patterns as subroutines using the `(?P>name)` syntax, and the store automatically resolves dependencies and compiles them into execution-ready objects.
+<blockquote class="artificial-prose">
 
-The DSL supports several composition primitives: strings are composed directly, lists concatenate their elements with a configurable separator, tuples create groups with custom separators and quantifiers, and the special `<|>` mark triggers pattern optimization.
-The mark syntax provides a concise way to specify group types (capturing, non-capturing, atomic, etc.), separators, inline flags, and quantifiers.
-For example, `('|:', [pattern1, pattern2])` creates a non-capturing alternation group.
+`my.regex` treats regular expressions as named, composable structures rather than anonymous strings. It provides stores for shared patterns, match data for predicate-style processing, and a small introspection layer for understanding a pattern's shape. Install the parent Python package through the [root myBasis guide](../../README.md#installation).
 
-Pattern optimization uses router trees to factor common prefixes and suffixes from long alternations.
-The `compose_tree()` method recursively expands and condenses branching patterns to reduce repeated pattern structure.
+</blockquote>
 
-## Match Processing
+## Pattern management
 
-`MatchData` and `ParseData` provide ergonomic containers for regex match results.
-`MatchData` extends the `Predicate` type with cached properties for common match attributes like `span`, `start`, `end`, and `text`.
-It maintains both the original `regex.Match` object and a cleaned dictionary of captured groups, with support for accessing group values, positions, and spans.
+<blockquote class="artificial-prose">
 
-`ParseData` handles the transformation of raw match data through custom parser functions.
-Parsers can be simple string-based renaming, dictionary-based routing (for routers), or arbitrary functions that transform captured values.
-The parsing infrastructure supports interleaving captures from multiple matches and applying field-specific transformations.
+`RegexStore` accepts strings, lists, tuples, and the package's compact marked syntax. A named subpattern can be invoked with `(?P>name)`; a string containing `<|>` is split into alternatives and optimized before it is compiled. This makes a store useful where a project has a vocabulary of reusable fragments rather than one isolated expression.
 
-## Common Patterns
+`compose_tree()` turns a collection of related expressions into a factored pattern tree, so common prefixes and suffixes need not be repeated in every branch.
 
-The `common.py` module exports `COMMON_RGXS`, a `RegexStore` containing frequently-used patterns for URLs, dates, numeric values, and prose elements.
-Patterns include web URLs with automatic detritus removal, various date formats (symbolic, YMD, DMY, MDY), Roman numerals, and common prepositions.
-The `format_url()` function demonstrates custom pattern parsers that clean matched results.
+</blockquote>
 
-## Meta - Regex Introspection
+## Match processing
 
-The `meta` subdirectory contains tools for parsing and analyzing regex patterns themselves—essentially "regex for regex".
-The `Regex` class breaks regex strings into atomic components (`Atom`, `GroupAtom`, `SetAtom`) representing individual characters, groups, and character sets.
-This enables programmatic manipulation of regex patterns, such as transforming positional captures to non-capturing groups or extracting all subroutine invocations.
+<blockquote class="artificial-prose">
 
-`GroupKind` is an `IntFlag` enum representing all possible group types (capturing, non-capturing, atomic, lookahead/behind, named, backreferences, etc.).
-The `group_iterator()` method uses buffer pair matching to correctly identify groups even in complex patterns, respecting nesting and ignoring escaped parentheses or those within character sets.
+`MatchData` carries the original `regex.Match` while participating in the package's predicate machinery. It exposes the matched text, captures, and their positions without discarding the result that produced them. `ParseData` is the intermediate store used when `RegexStore` parsers rename, route, interleave, or transform captured fields.
 
-The `Tree` class represents branching patterns as hierarchical structures that can be optimized through expansion and condensation.
-This powers the router tree optimization in `RegexStore`, factoring out common prefixes and suffixes to reduce backtracking.
+</blockquote>
 
-Together, these meta tools enable `RegexStore` to validate patterns, resolve dependencies, transform syntax, and generate optimized compiled expressions from high-level DSL descriptions.
+## Common patterns
+
+<blockquote class="artificial-prose">
+
+`common_rgxs.py` exports `COMMON_RGXS`, a store of patterns for URLs, dates, numeric prose, and related recurring forms. Its `format_url()` helper normalizes a parsed URL into a concise human-readable form.
+
+</blockquote>
+
+## Regex introspection
+
+<blockquote class="artificial-prose">
+
+The [`meta`](meta/README.md) layer decomposes expressions into atoms, groups, sets, quantifiers, and trees. It is intended for tools that need to reason about a regex before using it, rather than treating it solely as a compiled matcher.
+
+</blockquote>

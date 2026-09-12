@@ -1,41 +1,41 @@
 # My Utilities
 
-## Iteration Utilities
+> Left-rule blocks mark artificial prose; quotations retain their own attribution.
 
-`IterUtils` provides functional programming primitives and collection manipulation tools.
-The `partition()` and `multi_partition()` methods split iterables based on predicates, while `bucket()` groups items by key function.
-The `find()` and `find_key()` methods locate items or keys in sequences and mappings using predicates or value matching.
+<blockquote class="artificial-prose">
 
-Mapping utilities include `map_items()` for extracting key-value pairs from dict-like objects, `map_condense()` for filtering by value, and `val_map()` for transforming all values while preserving keys.
-The `build()` function enables function composition via reduce, and various has/all methods check for element presence across collections.
+`my.utils` collects small typed operations behind the `Utils` facade, exported as both `ut` and `utils`. The facade is a class rather than this package module, so `from my import utils as ut` exposes the combined methods. For installation, start at the [project README](../../README.md).
 
-## Text Utilities
+</blockquote>
 
-`TextUtils` provides regex-based text processing without requiring the full `my.regex` package.
-The `replace()` function applies multiple sequential regex substitutions, while `split_into()` guarantees exactly n parts with padding.
-The `multi_rgx()` function combines patterns into branching groups, and `regex_dict()`/`regex_array()` compile pattern collections.
+## Five eager utility families
 
-Formatting utilities include `wrap()` for decorative text borders, `indent()`/`unindent()` for whitespace manipulation, and `has_any()`/`has_all()` for substring presence checking.
-The `unwrap_paragraphs()` method removes hard line breaks while preserving paragraph structure, useful for reformatting wrapped text.
+<blockquote class="artificial-prose">
 
-## System Utilities
+Five families load as the ordinary utility surface. Their public methods remain available through `ut`, while importing a concrete class is useful when a caller wants a narrower dependency or a more legible type reference.
 
-`SystemUtils` handles system-level operations across several domains.
-Time utilities like `posix()` convert between timestamps and UTC datetimes, while `posix_since()` calculates elapsed time.
-Filesystem utilities `validate_file()` and `validate_dir()` assert path existence, and `path_sub()` performs component substitution in Path objects.
+</blockquote>
 
-Terminal interaction is supported through `get_terminal_width()`, `terminal_linewrap()` for text wrapping, and `zsh_colorize()` for colored output.
-The `confirm()` method provides user confirmation prompts with auto-confirm mode available for scripting.
-Logging setup via `setup_logging()` configures standard library loggers with file rotation.
+| Family          | Examples                                                                                                              |
+| --------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `IterUtils`     | `partition`, `multi_partition`, `bucket`, `find`, `map_items`, and `val_map` for iterable and mapping work.           |
+| `TextUtils`     | `replace`, `split_into`, `multi_rgx`, `regex_dict`, `indent`, and paragraph wrapping helpers.                         |
+| `SystemUtils`   | POSIX-time conversion, path validation and substitution, terminal formatting, confirmation, and async bridge helpers. |
+| `SyntaxUtils`   | Python-syntax and code-structure helpers, including Pydantic schema adaptation and cached-property invalidation.      |
+| `SemanticUtils` | Content-level conversions such as Roman numerals, numeric formatting, singular forms, ordinals, and identifiers.      |
 
-The class also provides `clear_cached_properties()` for invalidating `functools.cached_property` values, `run_async()` for executing async functions from sync contexts, and Pydantic field helpers like `pyd_schemify()` for integrating non-Pydantic types into models.
+## Lazy metrics: the sixth family
 
-## Syntax Utilities
+<blockquote class="artificial-prose">
 
-`SyntaxUtils` provides tools for working with Python syntax and code structure.
-These utilities help with parsing, analyzing, and manipulating Python code at the syntactic level, supporting code generation and metaprogramming tasks.
+`MetricUtils` is the sixth public base of `Utils`, but its implementation loads only when a metrics method is used or its implementation module is imported. The optional `metrics` extra supplies its Pandas, Logfire, and OpenTelemetry stack. This split keeps ordinary `my` imports from warming that optional stack while preserving the same `ut` facade for metrics when it is available.
 
-## Semantic Utilities
+</blockquote>
 
-`SemanticUtils` handles content-level conversions rather than structural parsing.
-It converts Roman numerals, formats numeric amounts, singularizes English nouns, creates ordinals, and validates identifiers.
+## Importing the facade
+
+<blockquote class="artificial-prose">
+
+The top-level `my.utils` attribute intentionally names the `Utils` class, which shadows the package module at that attribute path. Use the re-exported concrete names such as `my.iter_utils` or `my.SystemUtils`, or import a class from its concrete module, when you need one family rather than the aggregate facade.
+
+</blockquote>

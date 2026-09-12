@@ -18,153 +18,110 @@
 
 <!-- readme-header:end -->
 
--->
-
-[![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit)](https://github.com/pre-commit/pre-commit) [![pyrefly](https://img.shields.io/endpoint?url=https://pyrefly.org/badge.json)](https://github.com/facebook/pyrefly) [![ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
-
 The myBasis utility package — imported as `my` — is a broad extension of the Python standard library centered on text processing, functional programming, and runtime type coercion.
-The use cases are diverse enough to not enumerate them all here, but they all share a strong sense of discipline: all code is thoroughly typed, tested, and [documented](https://my-basis.readthedocs.io) following my best pass at best practices (it does get easier!).
+The use cases are diverse enough to not enumerate them all here, but they all share a strong sense of discipline: all code is thoroughly typed, tested, and [documented](docs/index.md) following my best pass at best practices (it does get easier!).
 
 I made this module to streamline some patterns that seemed both A) frequently-relevant and feasible to streamline.
 The repo thus grew alongside my projects over time, a genesis which gives it the advantage of being in daily use by the original author in multiple examples right off the bat.
 
-Its breadth is somewhat unusual: any given application will probably use a small subset of the contents, so it shines where dependency purity isn't paramount — personal projects, local dev scripts, offline data processing, prototypes, and the project you're working on right now are the ideal usecases.[^1].
-As a rough sense of scale: a bare `pip install my-basis` pulls a couple dozen distributions (on the order of ~80 MB unpacked), and turning on every optional extra can push a full environment past ~290 MB because of heavy common dependencies like `pandas`, `numpy`, and various pieces of rubble amongst the ruins Google's Python SDK ecosystem.
-I do still kinda recommend that for personal scripts/admin/env/dev projects, where having the ability to easily work with google sheets, cast types, or performantly write all kinds of filetypes is worth more than some disk space.
+> Left-rule blocks mark artificial prose; quotations retain their own attribution.
 
-## Exports
+## Installation
 
-The package is built into a mostly-flat tree with 7 branches, but the exception ends up making the rule: the first branch is `utils`, the catch-all for dependency-free, relatively-stateless utility functions covering six distinct arenas.
+<blockquote class="artificial-prose">
 
-| Area                                                                             | Exports                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Iteration** <br> [`my.utils`](docs/utils.md)                                   | [`IterUtils`](docs/utils.IterUtils.md) — `partition` · `multi_partition` · `type_partition` · `bucket` · `find` · `find_key` · `next_in` · `condense` · `map_condense` · `get_all` · `get_any` · `get_first` · `val_map` · `attr_map` · `inverse_map` · `apply` · `safe` · `normalize` · `indexof` · `has_all` / `has_any` / `has_only` / `has_none` · `all_has_all` … `any_has_any` · `predicate` · `normalize_predicate` · `shared_prefix` · `shared_suffix` · `common_elements` · `exclusive_elements` · `drop_at` · `drop_duplicates` · `repeat_until_complete` · `build` · `map_items`                                                                                                                                                                                                                                                                                                                                                         |
-| **Text** <br> [`my.utils`](docs/utils.md), [`my.types`](docs/types.md)           | [`TextUtils`](docs/utils.TextUtils.md) — `replace` · `split_into` · `regex_dict` · `regex_array` · `multi_rgx` · `strip_quotes` · `clean_string` · `wrap` · `to_words` · `line_num` · `parse_domain` · `indent` / `unindent` · `wrap_paragraphs` / `unwrap_paragraphs` <br> [`Buffer`](docs/types.Buffer.md) — a mutable text container for iterative string surgery                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| **Syntax & semantics** <br> [`my.utils`](docs/utils.md)                          | [`SyntaxUtils`](docs/utils.SyntaxUtils.md) — `fill_tree` · `tree_size` · `pyd_schemify` · `instance_fields` · `instance_aliases` · `nested_replace` · `import_module` · `clear_cached_properties` <br> [`SemanticUtils`](docs/utils.SemanticUtils.md) — `decimal_to_roman` / `roman_to_decimal` · `format_amount` · `to_singular` · `to_ordinal` · `validate_identifier`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| **System & shell** <br> [`my.utils`](docs/utils.md), [`my.types`](docs/types.md) | [`SystemUtils`](docs/utils.SystemUtils.md) — `posix` · `posix_since` · `validate_dir` / `validate_file` · `path` · `path_sub` · `is_pathy` · `from_file` / `to_file` (+ `json` / `yaml` / `toml` / `pickle` variants) · `serialize` · `log` / `info` / `warn` / `error` · `multiprint` · `debug_fence` · `is_installed` · `mock_if_uninstalled` · `get_terminal_width` · `terminal_linewrap` · `zsh_colorize` · `print_in_color` · `confirm` / `auto_confirm` <br> [`Command`](docs/types.Command.md) — durable shell invocations, sync or async <br> [`Platform`](docs/types.Platform.md) — a small enum of supported OSes                                                                                                                                                                                                                                                                                                                         |
-| **Observability** <br> [`my.utils`](docs/utils.md)                               | [`MetricUtils`](docs/utils.MetricUtils.md) (`[metrics]` extra) — `setup_logging` · `setup_fire_logging` · `setup_metrics` · `setup_warnings` · `measure_context` · `monitor`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| **Vibe typing** <br> [`my.typing`](docs/typing.md)                               | [`ty` / `Typist`](docs/typing.Typist.md) — the `cast` / `check` / `match` singleton <br> [`MyType`](docs/typing.MyType.md) — any annotation, parsed into one introspectable node <br> [`AutocastModel`](docs/typing.AutocastModel.md) — a Pydantic base that casts on validation <br> [`TypeCast`/`tyt`](docs/typing.cast.md) · [`TypeCheck`/`tyc`](docs/typing.check.md) · [`TypeMatch`/`tym`](docs/typing.match.md) · [`CastFlags`](docs/typing.cast.md) · `TypeArg`                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| **Type vocabulary** <br> `my.infra`                                              | Union aliases with matching `isinstance` tuples: `Atom`/`Atoms` · `Scalar`/`Scalars` · `Real`/`Reals` · `String`/`Strings` · `Time`/`Times` · `Vec`/`Vecs` · `Map`/`Maps` · `Struct`/`Structs` · `Func`/`Funcs` · `Stream`/`Streams` · `Model` — plus the generic alias quartet `FuncT` / `MapT` / `VecT` / `StructT`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| **Reusable types** <br> [`my.types`](docs/types.md)                              | [`MyEnum`](docs/types.MyEnum.md) — enums with forgiving parsing & arithmetic <br> [`Span`](docs/types.Span.md) — immutable half-open `[start, end)` intervals <br> [`UniqueId` / `Uid`](docs/types.UniqueId.md) — validated uuid4 wrappers <br> [`Predicate`](docs/types.Predicate.md) — string-set predicates for vibe-typed matching                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| **Regex** <br> [`my.regex`](docs/regex.md)                                       | [`RegexStore`](docs/regex.RegexStore.md) — `define` · `compose` · `search` / `findall` / `finditer` / `fullmatch` · `fullsplit` · `polymatch` · `route_match` · `apply` · `filter` · `atom` · `pretty_print` <br> [`MatchData`](docs/regex.MatchData.md) — ergonomic match results, repeated groups included <br> [`RegexDebugger`](docs/regex.RegexDebugger.md) — find out _why_ a pattern fails <br> [`COMMON_RGXS`](docs/regex.common.md) — a battery of ready-made patterns (`url`, `md_url`, `tld`, …) <br> [meta layer](docs/regex.meta.md): [`Regex`](docs/regex.meta.Regex.md) · [`Tree`](docs/regex.meta.Tree.md) · [`RgxAtom`](docs/regex.meta.Atom.md) · [`GroupAtom`](docs/regex.meta.GroupAtom.md) · [`SetAtom`](docs/regex.meta.SetAtom.md) · [`GroupKind`](docs/regex.meta.GroupKind.md) · [`Quantifier`](docs/regex.meta.Quantifier.md) · [`ParseData`](docs/regex.meta.ParseData.md) · [`META_RGXS`](docs/regex.meta.meta_rgxs.md) |
-| **Caches** <br> [`my.caches`](docs/caches.md)                                    | [`Cache`](docs/caches.Cache.md) — pruned LRU dict <br> [`NestedCache`](docs/caches.NestedCache.md) — hierarchical, self-pruning levels <br> [`FileCache`](docs/caches.FileCache.md) — two-level memory + disk <br> [`PickleCache`](docs/caches.PickleCache.md) — pickle-backed persistence with TTL                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| **Interfaces** <br> [`my.apis`](docs/apis.md)                                    | [`env` / `Environment`](docs/apis.Environment.md) — typed, ergonomic environment variables <br> [`fs` / `Filesystem` / `PATHS`](docs/apis.Filesystem.md) — a named registry of filesystem paths <br> [`GoogleSheet`](docs/apis.GoogleSheet.md) (`[google]` extra) — sheets in, `DataFrame`s out                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| **File formats** <br> [`my.files`](docs/files.md)                                | [`Markdown`](docs/files.Markdown.md) — fence-aware hierarchical document trees: parse · walk · edit · render                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+In an activated Python 3.13+ environment:
 
-A few conventions worth knowing up front:
-
-- **Everything is one import away.** `from my import ut, ty, Span, Markdown` — the root re-exports the whole public surface, while the heavier leaves (`apis`, `files`) load lazily so a bare `import my` stays fast.
-- **Every utility class has a snake_case twin.** `iter_utils is IterUtils`, `text_utils is TextUtils`, and so on — pick the import style you like; they are literally the same object.
-- **The `ut` facade flattens all six utility classes into one namespace**, so `ut.partition(...)` works without remembering that `partition` lives on `IterUtils`.
-- **The type vocabulary comes in pairs**: `Atom` is a union alias for annotations, `Atoms` is the matching tuple for runtime checks — `isinstance('s', Atoms)` is `True`, `isinstance([], Atoms)` is `False`.
-
-## Install
-
-`my-basis` [is on PyPI](https://pypi.org/project/my-basis), which makes it instantly available via `pip install my-basis`, `uv add my-basis`, etc.
-
-The 1.0 release has been cut, beyond which I intend to enforce strict semver; don't expect breaking changes any time in the foreseeable future.
-If you're like me (i.e. have ADHD?), this library will spark the most joy when you are vaguely aware of its contents and know it's at your fingertips at any time while coding; not only can it save you a bunch of time writing functions, but the prospect of attempting functions with it in hand is so much more approachable that a lot more ends up getting done.
-
-If that makes sense?
-I guess I'm really trying to sell you the promise of **bolder, quicker software engineering.**
-
-```toml
-# pyproject.toml
-dependencies = [
-  "my-basis",
-  # ...
-]
-
-[tool.uv.sources]
-my-basis = { git = "https://gitlab.com/doering-ai/libs/basis.git", tag = "stable" }
-```
-
-Run `uv sync` to install.
-
-### Refactor an existing repository
-
-The 1.0 line also packages a read-only intake tool and the `adopt-my-basis` agent skill.
-From a Python repository you want to assess:
+</blockquote>
 
 ```sh
-uvx --from my-basis my-basis-adopt skill path
-uvx --from my-basis my-basis-adopt skill export .agents/skills/adopt-my-basis
-uvx --from my-basis my-basis-adopt prepare .
+uv pip install my-basis
+# or:
+python -m pip install my-basis
 ```
 
-Give the printed `intake.json` path to your agent and ask it to use `adopt-my-basis`.
-The scanner inventories files, dependency declarations, Python compatibility, candidate native gates, and regex structure without importing the target package or editing its source.
-The agent then validates an evidence-bound proposal and can render a high-level MyST, standalone HTML, or Typst/PDF report with exact merge and revision instructions.
-A justified decline or no-op is a successful result; the skill is designed to preserve dependency budgets and deliberate failure paths, not maximize adoption.
+## A first example
 
-The one-shot commands above require no persistent installation.
-`skill path` exposes the packaged source directly; `skill export` is only needed when the receiving agent needs its own catalog copy.
-See [`my/skills/adopt-my-basis/SKILL.md`](my/skills/adopt-my-basis/SKILL.md) for the full workflow and the runnable [`RegexStore` adoption guide](my/skills/adopt-my-basis/references/regexstore.md) for complex grammars.
+<blockquote class="artificial-prose">
 
-### Optional extras
+Start with `ty`: cast a value into a target type, check whether it already fits, or inspect the type itself.
+Casting and checking are deliberately different operations.
 
-Core stays as small as this library knows how to be; everything heavier hangs off an extra you opt into with `pip install my-basis[<extra>]` (or `uv add my-basis --extra <extra>`):
-
-| Extra      | Unlocks                                                                                                                                                          |
-| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `metrics`  | `MetricUtils` — Logfire/OpenTelemetry logging, metrics counters, and instrumentation helpers.                                                                    |
-| `google`   | `GoogleSheet` — read/write Google Sheets as pandas `DataFrame`s, with OAuth2 handled for you.                                                                    |
-| `myst`     | MyST markdown syntax (admonitions, directives, ...) in `Markdown.render()`'s formatting pass.                                                                    |
-| `terminal` | The `pyratatui`-backed terminal-art demos under `my/scripts/tuitorii/`.                                                                                          |
-| `aiohttp`  | A convenience pin so `MetricUtils.setup_fire_logging()` can auto-instrument your app's `aiohttp` client when one's already installed — gates nothing on its own. |
-
-Call a `[metrics]` or `[google]` method without installing its extra and you get an actionable `ImportError` naming the exact extra to add, not a bare traceback.
-
-## Quickstart
-
-The core loop: cast untyped data into a target type, check whether a value already fits one, and introspect a type itself as a `MyType` node.
+</blockquote>
 
 ```python
 from my import ty, MyType
 
-# Cast: coerce arbitrary data into a target type, best-effort.
-ty.cast('42', int)                              # -> 42
-ty.cast(['1', '2', '3'], list[int])             # -> [1, 2, 3]   (every element coerced)
-ty.cast({'a': '1', 'b': '2'}, dict[str, int])   # -> {'a': 1, 'b': 2}
+ty.cast('42', int)                            # -> 42
+ty.cast(['1', '2', '3'], list[int])           # -> [1, 2, 3]
+ty.cast({'a': '1', 'b': '2'}, dict[str, int]) # -> {'a': 1, 'b': 2}
 
-# Check: does this value already conform to a type, without coercing it?
 ty.check(42, int)      # -> True
 ty.check('42', int)    # -> False
+ty.match('hello', str | int)  # -> True
 
-# Match: the best-of-both hybrid -- does it fit, or could it be made to?
-ty.match('hello', str | int)   # -> True
-
-# MyType: parse any type expression into an introspectable node.
 t = MyType(dict[str, int])
 t.main    # -> <class 'dict'>
-t.args    # -> (MyType[str], MyType[int])
+t.args    # child MyType nodes for str and int
 t.root    # -> dict[str, int]
 ```
 
-`ty` is the package-wide `Typist` singleton — the `cast`/`check`/`match` chambers composed onto one object.
-The rest of the library follows the same grain: import one name, get one coherent tool.
+<blockquote class="artificial-prose">
 
-## The grand tour
+`ty` is the shared `Typist` instance, combining `cast`, `check`, and `match`.
+Use the [typing guide](my/typing/README.md) when the coercion rules themselves matter.
 
-Seven subpackages, in rough order from most- to least-general.
-Every snippet below is real, executed output — and every non-trivial method in the library has an example like these in [its docs](#documentation).
+</blockquote>
 
-### 1. `my.utils` — Pure, Typed Functional Utilities
+## Find your corner
 
-Six static utility classes — [`IterUtils`](docs/utils.IterUtils.md), [`TextUtils`](docs/utils.TextUtils.md), [`SyntaxUtils`](docs/utils.SyntaxUtils.md), [`SemanticUtils`](docs/utils.SemanticUtils.md), [`SystemUtils`](docs/utils.SystemUtils.md), [`MetricUtils`](docs/utils.MetricUtils.md) — composed into the single flat facade `ut`, so you call `ut.method()` without caring which class defines it.
+<blockquote class="artificial-prose">
+
+Seven public subpackages cover the main jobs.
+The root re-exports their public names, so `from my import ut, ty, Span, Markdown` is enough for the examples here.
+The heavier `apis` and `files` branches load lazily.
+
+</blockquote>
+
+| Area                | Start here                                                                | Useful for                                                                          |
+| ------------------- | ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Utilities           | [`ut`](my/utils/README.md)                                                | Partitioning iterables, transforming text, working with syntax and system resources |
+| Runtime typing      | [`ty`, `MyType`, `AutocastModel`](my/typing/README.md)                    | Coercion, conformance checks, and inspecting annotations                            |
+| Reusable types      | [`Span`, `Buffer`, `Command`](my/types/README.md)                         | Intervals, mutable text, and reusable shell invocations                             |
+| Regular expressions | [`RegexStore`, `MatchData`](my/regex/README.md)                           | Composing named patterns and inspecting matches                                     |
+| Caches              | [`Cache`, `NestedCache`, `FileCache`, `PickleCache`](my/caches/README.md) | In-memory, hierarchical, disk-backed, and expiring storage                          |
+| Interfaces          | [`env`, `fs`, `GoogleSheet`](my/apis/README.md)                           | Typed environment access, named paths, and optional spreadsheet integration         |
+| File formats        | [`Markdown`](my/files/README.md)                                          | Parsing, walking, and editing a document tree                                       |
+
+## A short tour
+
+### Utilities
+
+<blockquote class="artificial-prose">
+
+`ut` collects the utility families into one namespace.
+You can also import a family directly—`IterUtils` and `iter_utils`, for example, name the same class.
+One detail worth noticing below: `find` returns an index, not the matching value.
+
+</blockquote>
 
 ```python
 from my import ut
 
-ut.partition([1, 2, 3, 4], lambda x: x % 2 == 0)   # -> ([1, 3], [2, 4])
-ut.condense(['a', None, '', 'b', 0])               # -> ['a', 'b']
-ut.find([3, 8, 2], lambda x: x > 5)                # -> 1   (the index, not the value)
+ut.partition([1, 2, 3, 4], lambda x: x % 2 == 0)  # -> ([1, 3], [2, 4])
+ut.condense(['a', None, '', 'b', 0])              # -> ['a', 'b']
+ut.find([3, 8, 2], lambda x: x > 5)               # -> 1
 ```
 
-### 2. `my.typing` — Vibe Typists
+### Runtime typing
 
-The crown jewel: runtime type coercion built for the age of language models, where a tool call's arguments are *almost* the right shape a thousand times a day.
-Beyond the `ty` loop above, [`AutocastModel`](docs/typing.AutocastModel.md) bakes the cast into Pydantic validation itself:
+<blockquote class="artificial-prose">
+
+[`AutocastModel`](docs/typing.AutocastModel.md) applies the casting rules during Pydantic validation.
+It's useful when incoming values are close to the shape you need, including a scalar where your model expects a list.
+Use it where that permissiveness is intended.
+
+</blockquote>
 
 ```python
 from my import AutocastModel
@@ -175,25 +132,36 @@ class Settings(AutocastModel):
     tags: list[str] = []
 
 s = Settings(port='8080', debug='true', tags='solo')
-(s.port, s.debug, s.tags)   # -> (8080, True, ['solo'])
+(s.port, s.debug, s.tags)  # -> (8080, True, ['solo'])
 ```
 
-### 3. `my.types` — Extensible, Ergonomic Miscellaneous Types
+### Reusable types
 
-Small, sharp classes that extend the built-ins with the affordances they always seemed to be missing — all Pydantic-native, all serializable.
+<blockquote class="artificial-prose">
+
+The types branch gives recurring concepts their own objects.
+[`Span`](docs/types.Span.md), for instance, represents a half-open interval and handles its length and overlap checks.
+The shared type vocabulary also pairs annotation aliases such as `Atom` with runtime tuples such as `Atoms`.
+
+</blockquote>
 
 ```python
 from my import Span
 
 a, b = Span(3, 9), Span(8, 12)
-a.delta           # -> 6
-a.intersects(b)   # -> True
+a.delta          # -> 6
+a.intersects(b)  # -> True
 ```
 
-### 4. `my.regex` — Optimized, Readable Regular Expressions
+### Regular expressions
 
-[`RegexStore`](docs/regex.RegexStore.md) treats patterns as a managed vocabulary: define them once, compose them by name, and get [`MatchData`](docs/regex.MatchData.md) results that make repeated groups pleasant.
-A stocked [`COMMON_RGXS`](docs/regex.common.md) store ships in the box, and a whole [meta layer](docs/regex.meta.md) can parse, optimize, and explain the patterns themselves.
+<blockquote class="artificial-prose">
+
+[`RegexStore`](docs/regex.RegexStore.md) gives patterns names you can compose and reuse.
+[`MatchData`](docs/regex.MatchData.md) keeps repeated groups accessible, and `COMMON_RGXS` supplies a collection of ready-made patterns.
+The [meta layer](my/regex/meta/README.md) is there when you need to inspect the expression itself.
+
+</blockquote>
 
 ```python
 from my import RegexStore, COMMON_RGXS
@@ -204,80 +172,148 @@ COMMON_RGXS.findall('url', 'visit https://example.com or www.foo.dev')
 
 store = RegexStore()
 store.define('greeting', r'hello (?P<name>\w+)')
-print(store.search('greeting', 'hello world'))   # -> name: world
+print(store.search('greeting', 'hello world'))  # -> name: world
 ```
 
-### 5. `my.caches` — Extensible, Performant Local Caches
+### Caches
 
-Four Pydantic-validated caches, one per access pattern: [`Cache`](docs/caches.Cache.md) (pruned LRU dict), [`NestedCache`](docs/caches.NestedCache.md) (hierarchical levels), [`FileCache`](docs/caches.FileCache.md) (memory over disk), and [`PickleCache`](docs/caches.PickleCache.md) (persistent, TTL-invalidated).
+<blockquote class="artificial-prose">
+
+Choose a cache by its storage pattern: bounded memory, nested levels, memory over disk, or pickle-backed persistence with expiry.
+The simplest case is a [`Cache`](docs/caches.Cache.md).
+If you use `PickleCache`, load only data you trust—unpickling can execute code.
+
+</blockquote>
 
 ```python
 from my import Cache
 
-cache = Cache(max_size=256)
+cache = Cache(maxsize=256)
 cache['answer'] = 42
-cache['answer']   # -> 42
+cache['answer']  # -> 42
 ```
 
-### 6. `my.apis` — API Wrappers
+### Interfaces
 
-Ready-made singletons for the resources every script ends up touching: [`env`](docs/apis.Environment.md) for typed environment variables, [`fs`](docs/apis.Filesystem.md) for a named registry of paths, and [`GoogleSheet`](docs/apis.GoogleSheet.md) for spreadsheets as `DataFrame`s.
+<blockquote class="artificial-prose">
+
+`env` snapshots environment variables when it first loads; `fs` provides a named path registry.
+Set demonstration variables before importing `env` (or use a fresh process if you've already loaded it).
+`GoogleSheet` adds spreadsheet access through the optional `google` extra.
+
+</blockquote>
 
 ```python
 import os
-os.environ['DEMO_FLAG'] = 'true'   # (before the first `my.apis` import -- `env` snapshots on load)
+os.environ['DEMO_FLAG'] = 'true'
 
 from my import env
 
-env.get('DEMO_FLAG')    # -> 'true'
-env.flag('DEMO_FLAG')   # -> 1   (0 when unset)
+env.get('DEMO_FLAG')   # -> 'true'
+env.flag('DEMO_FLAG')  # -> 1 (0 when unset)
 ```
 
-### 7. `my.files` — File Formats
+### File formats
 
-[`Markdown`](docs/files.Markdown.md) parses a document into a hierarchical, fence-aware node tree — every section a node you can walk, query, edit, and render back out.
+<blockquote class="artificial-prose">
+
+[`Markdown`](docs/files.Markdown.md) parses a document into a hierarchy of sections while respecting fenced code.
+You can walk the nodes, edit them, and render the result.
+
+</blockquote>
 
 ```python
 from my import Markdown
 
 root = Markdown.parse('# Title\n\nIntro prose\n\n## Section A\n\nBody\n')[0]
-[str(node).splitlines()[0] for node in root.walk()]   # -> ['# Title', '## Section A']
+[str(node).splitlines()[0] for node in root.walk()]  # -> ['# Title', '## Section A']
 ```
 
-## Documentation
+## Optional integrations
 
-The full documentation — one page per class, an example for every non-trivial method — is a Sphinx + MyST + furo site that builds in seconds:
+<blockquote class="artificial-prose">
+
+Install extras only for the integrations you use: `uv pip install "my-basis[metrics]"` or `python -m pip install "my-basis[metrics]"`, for example.
+In a uv-managed project, the equivalent dependency declaration is `uv add "my-basis[metrics]"`.
+
+</blockquote>
+
+| Extra      | Adds                                                                                        |
+| ---------- | ------------------------------------------------------------------------------------------- |
+| `metrics`  | Logfire/OpenTelemetry logging, counters, and instrumentation helpers through `MetricUtils`  |
+| `google`   | `GoogleSheet` access, OAuth support, and pandas `DataFrame` conversion                      |
+| `myst`     | MyST syntax support in `Markdown.render()`'s formatting pass                                |
+| `terminal` | The pyratatui-backed examples under [`my/scripts/tuitorii/`](my/scripts/tuitorii/README.md) |
+| `aiohttp`  | An HTTP-client convenience dependency; it does not unlock a separate API by itself          |
+
+## Why this library
+
+Its breadth is somewhat unusual: any given application will probably use a small subset of the contents, so it shines where dependency purity isn't paramount — personal projects, local dev scripts, offline data processing, prototypes, and the project you're working on right now are the ideal usecases.
+As a rough sense of scale: a bare `pip install my-basis` pulls a couple dozen distributions (on the order of ~80 MB unpacked), and turning on every optional extra can push a full environment past ~290 MB because of heavy common dependencies like `pandas`, `numpy`, and various pieces of rubble amongst the ruins Google's Python SDK ecosystem.
+I do still kinda recommend that for personal scripts/admin/env/dev projects, where having the ability to easily work with google sheets, cast types, or performantly write all kinds of filetypes is worth more than some disk space.
+
+The 1.0 release has been cut, beyond which I intend to enforce strict semver; don't expect breaking changes any time in the foreseeable future.
+If you're like me (i.e. have ADHD?), this library will spark the most joy when you are vaguely aware of its contents and know it's at your fingertips at any time while coding; not only can it save you a bunch of time writing functions, but the prospect of attempting functions with it in hand is so much more approachable that a lot more ends up getting done.
+
+If that makes sense?
+I guess I'm really trying to sell you the promise of **bolder, quicker software engineering.**
+
+## Refactor an existing repository
+
+<blockquote class="artificial-prose">
+
+The package includes a read-only source scanner and the `adopt-my-basis` agent skill.
+From a Python repository you want to assess:
+
+</blockquote>
 
 ```sh
-task docs   # -> docs/_build/index.html
+uvx --from my-basis my-basis-adopt skill path
+uvx --from my-basis my-basis-adopt skill export .agents/skills/adopt-my-basis
+uvx --from my-basis my-basis-adopt prepare .
 ```
 
-A hosted copy on ReadTheDocs is provisioned-but-pending; until it lands, the docs links in this README render directly on GitLab as well.
+<blockquote class="artificial-prose">
 
-## Caveats
+Give the resulting `intake.json` path to your agent.
+The scanner inventories files, dependencies, Python compatibility, candidate checks, and regex structure without importing the target package or editing its source; `prepare` writes its intake artifacts.
+The agent can then assess a proposal and produce a MyST, HTML, or Typst/PDF report.
+A justified decline or no-op is a valid result.
 
-### Pydantic-first
+`skill path` locates the packaged instructions; `skill export` copies them when your agent needs a local catalogue entry.
+See the [full workflow](my/skills/adopt-my-basis/SKILL.md) and [RegexStore adoption guide](my/skills/adopt-my-basis/references/regexstore.md).
 
-You can absolutely use this package without using Pydantic yourself, but you'd be missing out on a lot of the ergonomic benefits: basically every class is a Pydantic model, and the logging functionality in [`MetricUtils`](docs/utils.MetricUtils.md) exclusively supports Pydantic's Logfire.
+</blockquote>
 
-### Python 3.12+
+## Documentation and development
 
-The project is written in modern Python syntax (`requires-python >= 3.12`) and the typing subpackage leans hard on recent typing semantics — PEP 695 generics throughout, and `typing_extensions` as the one compatibility shim, for the handful of constructs that only reached the stdlib in 3.13 (`TypeIs`, PEP 696 type-parameter defaults).
-Every release is tested against **3.12, 3.13, and 3.14** (`task test:matrix`), and the declared dependency floors are exercised too (`task test:floor`).
+<blockquote class="artificial-prose">
 
-3.12 is a deliberate floor rather than a stepping stone: below it, PEP 695 syntax stops parsing, and the 20-odd modules that would need rewriting are the package's core — not optional leaves that could be excluded on old runtimes.
-If an older runtime blocks you, either let me know — or lift the one or two modules you need straight out of the repo; the subpackages are deliberately self-contained.
+The [Sphinx/MyST documentation](docs/index.md) provides class references and examples.
+From a checkout, install the development dependencies and build it with:
 
-## Development
+</blockquote>
 
-GitLab is the canonical development forge.
-The GitHub repository is a read-only source mirror; report issues and propose changes at <https://gitlab.com/doering-ai/libs/basis>.
+```sh
+task sync
+task docs
+```
+
+<blockquote class="artificial-prose">
+
+Use the [test guide](tests/README.md) for the suite and its conventions.
+Python 3.13 is the current minimum; the source uses modern typing syntax throughout.
+Pydantic is a core dependency even when your own code does not use Pydantic models.
+The separate [Typst package](typst/README.md) has its own installation path and is not part of the Python wheel.
+
+GitLab is the development forge; the GitHub repository is a read-only source mirror.
+Report issues and propose changes at [the GitLab project](https://gitlab.com/doering-ai/libs/basis).
+
+</blockquote>
 
 ## Contributing
 
 The project was built over the course of 2025 for its author's own use, so it's definitely opinionated — influenced by a weathered respect for polymorphism, an addiction to ergonomic code in the Don-Norman sense, and a reliance on symbolic, deterministic devtools (heavy typing, even at runtime).
 If any of that resonates: get in touch, or open an issue or merge request on GitLab.
 
-Licensed under [MPL-2.0](/LICENSE).
-
-\[^1\]:
+Licensed under [MPL-2.0](LICENSE).

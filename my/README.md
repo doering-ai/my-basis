@@ -1,21 +1,37 @@
 # `my` Python Library
 
-This document is a high-level overview of the engineering decisions behind the my Python package.
-For general project information, see [the root directory](/README.md).
+> Left-rule blocks mark artificial prose; quotations retain their own attribution.
 
-### Subpackage Dependency Tree
+<blockquote class="artificial-prose">
 
-When adding new relative imports to any of the modules in this package, make sure to either respect or update this structure (in order to prevent circular dependencies).
+`my` is the public namespace for the library’s internal layers. This page is the import map to consult before adding a relative import or moving a shared abstraction. For package installation and ordinary use, see the [project README](../README.md).
 
-- `utils` imports nothing.
-  - `caches` imports `utils`
-    - `typing` imports `utils` and `caches`
-      - `types` imports `utils` and `typing`
-        - `apis` imports `utils` and `types`
-        - `regex` imports `utils` and `types`
-          - `files` imports `utils`, `typing`, `types`, and `regex`
+</blockquote>
 
-### Contributing
+## Subpackage dependency tree
+
+<blockquote class="artificial-prose">
+
+The graph records relative-import dependencies. Keep a new edge within this ordering, or update the map with the implementation; that keeps an apparently small import from turning into a cycle through a higher layer.
+
+</blockquote>
+
+- `infra` imports nothing.
+  - `utils` imports `infra`.
+    - `caches` imports `utils`.
+      - `typing` imports `infra`, `utils`, and `caches`.
+        - `types` imports `infra`, `utils`, and `typing`.
+          - `regex` imports `infra`, `utils`, `types`, and `typing`.
+            - `apis` imports `infra`, `utils`, `types`, `regex`, and `typing`.
+            - `files` imports `infra`, `utils`, `typing`, `types`, and `regex`.
+
+<blockquote class="artificial-prose">
+
+`data` and `scripts` sit outside this relative-import graph. `data` is a resource namespace read through `importlib.resources`, while scripts consume the finished public API through absolute `from my import ...` imports.
+
+</blockquote>
+
+## Contributing
 
 I created this project over the course of 2025 for my own use, so it's definitely 'opinionated', for better or worse.
 Specifically, it is influenced by:

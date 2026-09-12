@@ -1,26 +1,28 @@
-default_spec: decimal
-insertion: observed
+indexing:
+    default: off
+    insertion: observed
 
-specs:
-  decimal:
-    styles: [number]
-    separator: '.'
-    marker: ''
+header_defaults:
+    markdown: markdown
+    source: source
+    typst: off
+    rst: off
+    unknown: off
 
 ignore:
-  - '.git/**'
-  - '.venv/**'
-  - 'node_modules/**'
-  - '__pycache__/**'
-  - 'dist/**'
-  - 'docs/_build/**'
-  - '*.egg-info/**'
-  - '.ruff_cache/**'
-  - '.pytest_cache/**'
-  - '.hypothesis/**'
-  - '.coverage'
-  - '*.lock'
-  - '.task/**'
-  - '.claude/**'
-  - '.factory/**'
-  - 'RELEASE-READINESS.md'
+    - '.git/**'
+    - '.venv/**'
+    - 'node_modules/**'
+    - '__pycache__/**'
+    - 'dist/**'
+    - 'docs/_build/**'
+    - '*.egg-info/**'
+    - '.ruff_cache/**'
+    - '.pytest_cache/**'
+    - '.hypothesis/**'
+    - '.coverage'
+    - '*.lock'
+    - '.task/**'
+    - '.claude/**'
+    - '.factory/**'
+    - 'RELEASE-READINESS.md'

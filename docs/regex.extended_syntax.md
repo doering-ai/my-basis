@@ -207,6 +207,8 @@ r'[\p{ASCII}&&\p{Letter}]' # Set containing all characters which are ASCII and l
 
 _([regular-expressions.info lesson](https://www.regular-expressions.info/brackets.html))_
 
+(subroutines)=
+
 ### `3.1.` Subroutines
 
 _([regular-expressions.info lesson](https://www.regular-expressions.info/subroutine.html))_
@@ -410,6 +412,8 @@ _([regular-expressions.info lesson](https://www.regular-expressions.info/unicode
 The grapheme matcher is supported.
 It conforms to the Unicode specification at `http://www.unicode.org/reports/tr29/`.
 
+(optimization)=
+
 ## `5.` Optimization
 
 ### `5.1.` Atomic grouping `(?>...)`
@@ -503,6 +507,8 @@ p = regex.compile(r"\L<options>", options=option_set, other_options=[])
 - This module is targeted at CPython.
 - Threading is supported **IF** strings don't change during matching.
 - This module supports Unicode 17.0.0 and full Unicode case-folding.
+
+(repeated-matches)=
 
 ### `6.2.` Repeated Matches
 
@@ -771,6 +777,8 @@ def slow_replace(m):
 regex.sub(r'[a-z]', fast_replace, 'abcde', timeout=2) # -> 'XXXXX'
 regex.sub(r'[a-z]', slow_replace, 'abcde', timeout=2) # -> TimeoutError: regex timed out
 ```
+
+(fuzzy-matching)=
 
 ## `7.` Fuzzy Matching
 

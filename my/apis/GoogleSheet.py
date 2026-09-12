@@ -611,6 +611,452 @@ class GoogleSheet:
 
         self.LOGGER.info(f'Created {len(worksheets)} new worksheets in {self.name}')
 
+    # ------------------
+    # `&` Styling Helpers
+    # ------------------
+    @staticmethod
+    def hex_color(color: str) -> dict[str, float]:
+        """Convert a `#RRGGBB` hexcode into the API's fractional RGB color object.
+
+        Args:
+            color: The hexcode, with or without the leading `#`.
+        Returns:
+            A `{red, green, blue}` dict of 0..1 floats, as Sheets API formatting
+            expects.
+        Examples:
+            Convert a theme hexcode::
+
+                >>> {k: round(v, 4) for k, v in GoogleSheet.hex_color('#5A6169').items()}
+                {'red': 0.3529, 'green': 0.3804, 'blue': 0.4118}
+        """
+
+        def channel(part: str) -> float:
+            return int(part, 16) / 255
+
+        h = color.lstrip('#')
+        assert len(h) == 6, f'Expected #RRGGBB, got {color!r}.'
+        return dict(red=channel(h[0:2]), green=channel(h[2:4]), blue=channel(h[4:6]))
+
+    @staticmethod
+    def repeat_cell(
+        sheet_id: int,
+        col0: int,
+        col1: int,
+        row0: int,
+        row1: int,
+        cell: dict[str, Any],
+        fields: str = 'userEnteredFormat',
+    ) -> dict[str, Any]:
+        """Build a `repeatCell` request applying one cell format over a rectangle.
+
+        All indices are 0-based and half-open (end-exclusive), matching the API.
+
+        Args:
+            sheet_id: The worksheet's `sheetId` (not the spreadsheet ID).
+            col0: First styled column index.
+            col1: One past the last styled column index.
+            row0: First styled row index.
+            row1: One past the last styled row index.
+            cell: The cell payload, e.g. `{'userEnteredFormat': {...}}`.
+            fields: The field mask of `cell` to apply.
+        Returns:
+            The request dict, ready for `batch()`.
+        """
+        return {
+            'repeatCell': {
+                'range': {
+                    'sheetId': sheet_id,
+                    'startColumnIndex': col0,
+                    'endColumnIndex': col1,
+                    'startRowIndex': row0,
+                    'endRowIndex': row1,
+                },
+                'cell': cell,
+                'fields': fields,
+            }
+        }
+
+    @classmethod
+    def set_widths(cls, sheet_id: int, widths: list[int], start: int = 0) -> list[dict[str, Any]]:
+        """Build `updateDimensionProperties` requests setting per-column pixel widths.
+
+        Args:
+            sheet_id: The worksheet's `sheetId`.
+            widths: Pixel widths, one per column from `start`.
+            start: The first column index to size.
+        Returns:
+            One request per column, ready for `batch()`.
+        """
+        return [
+            {
+                'updateDimensionProperties': {
+                    'range': {
+                        'sheetId': sheet_id,
+                        'dimension': 'COLUMNS',
+                        'startIndex': start + i,
+                        'endIndex': start + i + 1,
+                    },
+                    'properties': {'pixelSize': width},
+                    'fields': 'pixelSize',
+                }
+            }
+            for i, width in enumerate(widths)
+        ]
+
+    @classmethod
+    def add_banding(
+        cls,
+        sheet_id: int,
+        n_cols: int,
+        n_rows: int,
+        header: str = '',
+        first: str = '',
+        second: str = '',
+    ) -> dict[str, Any]:
+        """Build an `addBanding` request with row bands over a rectangle.
+
+        Args:
+            sheet_id: The worksheet's `sheetId`.
+            n_cols: Number of banded columns.
+            n_rows: Number of banded rows (including the header row).
+            header: Header band hexcode, or `''` for the theme default.
+            first: First band hexcode, or `''` for the theme default.
+            second: Second band hexcode, or `''` for the theme default.
+        Returns:
+            The request dict, ready for `batch()`.
+        """
+        row_props: dict[str, Any] = {}
+        for key, hexcode in (
+            ('headerColor', header),
+            ('firstBandColor', first),
+            ('secondBandColor', second),
+        ):
+            if hexcode:
+                row_props[key] = cls.hex_color(hexcode)
+        return {
+            'addBanding': {
+                'bandedRange': {
+                    'range': {
+                        'sheetId': sheet_id,
+                        'startRowIndex': 0,
+                        'endRowIndex': n_rows,
+                        'startColumnIndex': 0,
+                        'endColumnIndex': n_cols,
+                    },
+                    'rowProperties': row_props,
+                }
+            }
+        }
+
+    @classmethod
+    def gradient_rule(
+        cls,
+        sheet_id: int,
+        col: int,
+        row1: int,
+        lo: str,
+        mid: str,
+        hi: str,
+        lo_color: str,
+        mid_color: str,
+        hi_color: str,
+        row0: int = 1,
+        index: int = 0,
+    ) -> dict[str, Any]:
+        """Build a 3-point `gradientRule` conditional format for one column.
+
+        Args:
+            sheet_id: The worksheet's `sheetId`.
+            col: The conditioned column index.
+            row1: One past the last conditioned row index.
+            lo: The number mapping to the low color.
+            mid: The number mapping to the midpoint color.
+            hi: The number mapping to the high color.
+            lo_color: Low hexcode.
+            mid_color: Midpoint hexcode.
+            hi_color: High hexcode.
+            row0: First conditioned row index.
+            index: Insert position among the sheet's conditional format rules.
+        Returns:
+            The request dict, ready for `batch()`.
+        """
+        points = (
+            ('minpoint', lo, lo_color),
+            ('midpoint', mid, mid_color),
+            ('maxpoint', hi, hi_color),
+        )
+        return {
+            'addConditionalFormatRule': {
+                'index': index,
+                'rule': {
+                    'ranges': [
+                        {
+                            'sheetId': sheet_id,
+                            'startColumnIndex': col,
+                            'endColumnIndex': col + 1,
+                            'startRowIndex': row0,
+                            'endRowIndex': row1,
+                        }
+                    ],
+                    'gradientRule': {
+                        key: {'color': cls.hex_color(color), 'type': 'NUMBER', 'value': str(value)}
+                        for key, value, color in points
+                    },
+                },
+            }
+        }
+
+    @classmethod
+    def text_rule(
+        cls,
+        sheet_id: int,
+        col: int,
+        row1: int,
+        value: str,
+        fg: str = '',
+        bg: str = '',
+        bold: bool = False,
+        row0: int = 1,
+        index: int = 0,
+    ) -> dict[str, Any]:
+        """Build a `TEXT_EQ` boolean conditional format rule for one column.
+
+        Args:
+            sheet_id: The worksheet's `sheetId`.
+            col: The conditioned column index.
+            row1: One past the last conditioned row index.
+            value: The exact cell text to match.
+            fg: Text color hexcode, or `''` to leave color unset.
+            bg: Background hexcode tint, or `''` to leave background unset.
+            bold: Whether matched cells render bold.
+            row0: First conditioned row index.
+            index: Insert position among the sheet's conditional format rules.
+        Returns:
+            The request dict, ready for `batch()`.
+        """
+        text_format: dict[str, Any] = {'bold': bold}
+        if fg:
+            text_format['foregroundColor'] = cls.hex_color(fg)
+        cell_format: dict[str, Any] = {'textFormat': text_format}
+        if bg:
+            cell_format['backgroundColor'] = cls.hex_color(bg)
+        return cls._boolean_rule(sheet_id, col, row1, 'TEXT_EQ', [value], cell_format, row0, index)
+
+    @classmethod
+    def formula_rule(
+        cls,
+        sheet_id: int,
+        col: int,
+        row1: int,
+        condition: str,
+        fg: str = '',
+        row0: int = 1,
+        index: int = 0,
+    ) -> dict[str, Any]:
+        """Build a formula boolean conditional format rule for one column.
+
+        Args:
+            sheet_id: The worksheet's `sheetId`.
+            col: The conditioned column index.
+            row1: One past the last conditioned row index.
+            condition: A condition string starting with `=`, used as the rule's
+                sole criterion (e.g. `=TODAY()` with condition type
+                `NUMBER_LESS_THAN` -- see `formula_condition`).
+            fg: Text color hexcode.
+            row0: First conditioned row index.
+            index: Insert position among the sheet's conditional format rules.
+        Returns:
+            The request dict, ready for `batch()`.
+        """
+        cell_format: dict[str, Any] = {'textFormat': {'foregroundColor': cls.hex_color(fg)}}
+        parts = condition.split(' ')
+        cond_type, cond_values = parts[0], parts[1:]
+        return cls._boolean_rule(
+            sheet_id, col, row1, cond_type, cond_values, cell_format, row0, index
+        )
+
+    @staticmethod
+    def formula_condition(cond_type: str, *formulas: str) -> str:
+        """Render a condition string for `formula_rule` as `TYPE =f1 =f2 ...`.
+
+        Args:
+            cond_type: The API condition type, e.g. `NUMBER_LESS_THAN` or
+                `NUMBER_BETWEEN`.
+            *formulas: The criterion formulas, each starting with `=`.
+        Returns:
+            The packed condition string.
+        Examples:
+            Pack a between-today-and-fortnight condition::
+
+                >>> GoogleSheet.formula_condition('NUMBER_BETWEEN', '=TODAY()', '=TODAY()+14')
+                'NUMBER_BETWEEN =TODAY() =TODAY()+14'
+        """
+        return ' '.join((cond_type, *formulas))
+
+    @classmethod
+    def _boolean_rule(
+        cls,
+        sheet_id: int,
+        col: int,
+        row1: int,
+        cond_type: str,
+        cond_values: list[str],
+        cell_format: dict[str, Any],
+        row0: int,
+        index: int,
+    ) -> dict[str, Any]:
+        """Build a booleanRule request from a condition type and criterion formulas."""
+        values = [{'userEnteredValue': v} for v in cond_values]
+        return {
+            'addConditionalFormatRule': {
+                'index': index,
+                'rule': {
+                    'ranges': [
+                        {
+                            'sheetId': sheet_id,
+                            'startColumnIndex': col,
+                            'endColumnIndex': col + 1,
+                            'startRowIndex': row0,
+                            'endRowIndex': row1,
+                        }
+                    ],
+                    'booleanRule': {
+                        'condition': {'type': cond_type, 'values': values},
+                        'format': cell_format,
+                    },
+                },
+            }
+        }
+
+    @classmethod
+    def data_validation(
+        cls,
+        sheet_id: int,
+        col: int,
+        row1: int,
+        formula: str,
+        strict: bool = False,
+        row0: int = 1,
+    ) -> dict[str, Any]:
+        """Build a `setDataValidation` request with a one-of-range dropdown.
+
+        Args:
+            sheet_id: The worksheet's `sheetId`.
+            col: The validated column index.
+            row1: One past the last validated row index.
+            formula: A range formula feeding the allowed values, e.g.
+                `=meta!$A$2:$A$10`.
+            strict: `True` rejects invalid input; `False` (the default) shows a
+                warning but accepts it, so pre-existing prose survives until
+                the cell is edited.
+            row0: First validated row index.
+        Returns:
+            The request dict, ready for `batch()`.
+        """
+        return {
+            'setDataValidation': {
+                'range': {
+                    'sheetId': sheet_id,
+                    'startColumnIndex': col,
+                    'endColumnIndex': col + 1,
+                    'startRowIndex': row0,
+                    'endRowIndex': row1,
+                },
+                'rule': {
+                    'condition': {
+                        'type': 'ONE_OF_RANGE',
+                        'values': [{'userEnteredValue': formula}],
+                    },
+                    'showCustomUi': True,
+                    'strict': strict,
+                },
+            }
+        }
+
+    @staticmethod
+    def insert_columns(sheet_id: int, at: int, count: int = 1) -> dict[str, Any]:
+        """Build an `insertDimension` request inserting blank columns at `at`.
+
+        Args:
+            sheet_id: The worksheet's `sheetId`.
+            at: The 0-based index the first new column occupies.
+            count: How many columns to insert.
+        Returns:
+            The request dict, ready for `batch()`.
+        """
+        return {
+            'insertDimension': {
+                'range': {
+                    'sheetId': sheet_id,
+                    'dimension': 'COLUMNS',
+                    'startIndex': at,
+                    'endIndex': at + count,
+                },
+                'inheritFromBefore': False,
+            }
+        }
+
+    @classmethod
+    def sheet_properties(
+        cls,
+        sheet_id: int,
+        *,
+        frozen_rows: int | None = None,
+        frozen_cols: int | None = None,
+        hide_gridlines: bool | None = None,
+        tab_color: str = '',
+    ) -> dict[str, Any]:
+        """Build an `updateSheetProperties` request for common sheet surfaces.
+
+        Args:
+            sheet_id: The worksheet's `sheetId`.
+            frozen_rows: Frozen row count, or `None` to leave unchanged.
+            frozen_cols: Frozen column count, or `None` to leave unchanged.
+            hide_gridlines: `True` hides gridlines, `None` leaves unchanged.
+            tab_color: Tab color hexcode, or `''` to leave unchanged.
+        Returns:
+            The request dict, ready for `batch()`.
+        """
+        grid_properties: dict[str, Any] = {}
+        fields: list[str] = []
+        if frozen_rows is not None:
+            grid_properties['frozenRowCount'] = frozen_rows
+            fields.append('gridProperties.frozenRowCount')
+        if frozen_cols is not None:
+            grid_properties['frozenColumnCount'] = frozen_cols
+            fields.append('gridProperties.frozenColumnCount')
+        if hide_gridlines is not None:
+            grid_properties['hideGridlines'] = hide_gridlines
+            fields.append('gridProperties.hideGridlines')
+        properties: dict[str, Any] = {'sheetId': sheet_id, 'gridProperties': grid_properties}
+        if tab_color:
+            properties['tabColor'] = cls.hex_color(tab_color)
+            fields.append('tabColor')
+        return {
+            'updateSheetProperties': {
+                'properties': properties,
+                'fields': ','.join(fields),
+            }
+        }
+
+    @_import_guard
+    def batch(self, requests: list[dict[str, Any]], chunk: int = 90) -> list[dict[str, Any]]:
+        """Execute styling/structure requests through `batchUpdate`, chunked.
+
+        Args:
+            requests: Request dicts from the builders (`repeat_cell`,
+                `set_widths`, `gradient_rule`, ...).
+            chunk: Requests per API call; bounded to keep responses small.
+        Returns:
+            The concatenated `replies` from all calls.
+        """
+        replies: list[dict[str, Any]] = []
+        for i in range(0, len(requests), chunk):
+            response = self.genexec('batchUpdate', body={'requests': requests[i : i + chunk]})
+            replies.extend(response.get('replies', []))
+        self.LOGGER.info(f'Executed {len(requests)} requests against {self.name}.')
+        return replies
+
 
 #: Global instance of this class for convenient access.
 gsheet = GoogleSheet()

@@ -135,3 +135,153 @@ class TestGoogleSheet:
         assert 'pip install my-basis[google]' in message
         assert '[metrics]' not in message
         assert 'utils.' not in message
+
+
+class TestGoogleSheetStyling:
+    def test_hex_color(self):
+        assert cls.hex_color('#5A6169') == {
+            'red': 90 / 255,
+            'green': 97 / 255,
+            'blue': 105 / 255,
+        }
+        assert cls.hex_color('B6ECF7') == {
+            'red': 182 / 255,
+            'green': 236 / 255,
+            'blue': 247 / 255,
+        }
+
+    def test_hex_color_rejects_non_hex(self):
+        with pyt.raises(AssertionError):
+            cls.hex_color('#5A616')
+
+    def test_repeat_cell(self):
+        result = cls.repeat_cell(7, 0, 3, 1, 10, {'userEnteredFormat': {'bold': True}})
+        assert result == {
+            'repeatCell': {
+                'range': {
+                    'sheetId': 7,
+                    'startColumnIndex': 0,
+                    'endColumnIndex': 3,
+                    'startRowIndex': 1,
+                    'endRowIndex': 10,
+                },
+                'cell': {'userEnteredFormat': {'bold': True}},
+                'fields': 'userEnteredFormat',
+            }
+        }
+
+    def test_set_widths(self):
+        result = cls.set_widths(7, [80, 150], start=3)
+        assert result == [
+            {
+                'updateDimensionProperties': {
+                    'range': {
+                        'sheetId': 7,
+                        'dimension': 'COLUMNS',
+                        'startIndex': 3,
+                        'endIndex': 4,
+                    },
+                    'properties': {'pixelSize': 80},
+                    'fields': 'pixelSize',
+                }
+            },
+            {
+                'updateDimensionProperties': {
+                    'range': {
+                        'sheetId': 7,
+                        'dimension': 'COLUMNS',
+                        'startIndex': 4,
+                        'endIndex': 5,
+                    },
+                    'properties': {'pixelSize': 150},
+                    'fields': 'pixelSize',
+                }
+            },
+        ]
+
+    def test_add_banding(self):
+        result = cls.add_banding(7, 18, 187, header='#5A6169', first='#2E3135', second='#212225')
+        banding = result['addBanding']['bandedRange']
+        assert banding['range'] == {
+            'sheetId': 7,
+            'startRowIndex': 0,
+            'endRowIndex': 187,
+            'startColumnIndex': 0,
+            'endColumnIndex': 18,
+        }
+        assert banding['rowProperties']['headerColor'] == cls.hex_color('#5A6169')
+
+    def test_gradient_rule(self):
+        result = cls.gradient_rule(7, 5, 50, 0, 5, 10, '#B54548', '#5A6169', '#4CA96B')
+        rule = result['addConditionalFormatRule']['rule']
+        gradient = rule['gradientRule']
+        assert gradient['minpoint'] == {
+            'color': cls.hex_color('#B54548'),
+            'type': 'NUMBER',
+            'value': '0',
+        }
+        assert gradient['maxpoint']['value'] == '10'
+        assert rule['ranges'] == [
+            {
+                'sheetId': 7,
+                'startColumnIndex': 5,
+                'endColumnIndex': 6,
+                'startRowIndex': 1,
+                'endRowIndex': 50,
+            }
+        ]
+
+    def test_text_rule(self):
+        result = cls.text_rule(7, 4, 50, 'open', fg='#3DD68C', bg='#0F2E22', bold=True)
+        boolean = result['addConditionalFormatRule']['rule']['booleanRule']
+        assert boolean['condition'] == {'type': 'TEXT_EQ', 'values': [{'userEnteredValue': 'open'}]}
+        assert boolean['format']['textFormat']['bold'] is True
+        assert boolean['format']['backgroundColor'] == cls.hex_color('#0F2E22')
+
+    def test_formula_condition_and_rule(self):
+        packed = cls.formula_condition('NUMBER_BETWEEN', '=TODAY()', '=TODAY()+14')
+        assert packed == 'NUMBER_BETWEEN =TODAY() =TODAY()+14'
+        result = cls.formula_rule(7, 4, 50, packed, fg='#FFCA16')
+        boolean = result['addConditionalFormatRule']['rule']['booleanRule']
+        assert boolean['condition'] == {
+            'type': 'NUMBER_BETWEEN',
+            'values': [{'userEnteredValue': '=TODAY()'}, {'userEnteredValue': '=TODAY()+14'}],
+        }
+        assert boolean['format'] == {'textFormat': {'foregroundColor': cls.hex_color('#FFCA16')}}
+
+    def test_data_validation_warn_mode(self):
+        result = cls.data_validation(7, 4, 100, '=meta!$A$2:$A$10')
+        rule = result['setDataValidation']['rule']
+        assert rule['condition']['values'] == [{'userEnteredValue': '=meta!$A$2:$A$10'}]
+        assert rule['strict'] is False
+        assert rule['showCustomUi'] is True
+
+    def test_insert_columns(self):
+        result = cls.insert_columns(7, 12)
+        assert result == {
+            'insertDimension': {
+                'range': {
+                    'sheetId': 7,
+                    'dimension': 'COLUMNS',
+                    'startIndex': 12,
+                    'endIndex': 13,
+                },
+                'inheritFromBefore': False,
+            }
+        }
+
+    def test_sheet_properties(self):
+        result = cls.sheet_properties(
+            7, frozen_rows=1, frozen_cols=4, hide_gridlines=True, tab_color='#714F19'
+        )
+        request = result['updateSheetProperties']
+        assert request['properties']['gridProperties'] == {
+            'frozenRowCount': 1,
+            'frozenColumnCount': 4,
+            'hideGridlines': True,
+        }
+        assert request['properties']['tabColor'] == cls.hex_color('#714F19')
+        assert request['fields'] == (
+            'gridProperties.frozenRowCount,gridProperties.frozenColumnCount,'
+            'gridProperties.hideGridlines,tabColor'
+        )

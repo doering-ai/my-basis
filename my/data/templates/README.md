@@ -1,23 +1,30 @@
 # Templates
 
-The `templates` subdirectory contains Jinja2 template files used throughout the package for code generation and document rendering.
-These templates provide consistent formatting and structure for various output types.
+> Left-rule blocks mark artificial prose; quotations retain their own attribution.
 
-## Document Templates
+<blockquote class="artificial-prose">
 
-The `document.md.jinja` template serves as the base for hierarchical document rendering.
-It defines a recursive structure with extensible blocks for headers, prose content, and child nodes.
-The template uses Jinja2's recursive loop feature to handle arbitrary nesting depth, rendering each node's header and content before recursing into its children.
+These Jinja templates are the small rendering layer shared by the package. They are resources consumed by code, rather than a second public API: a template change matters through the data shape supplied by its caller.
 
-`Markdown.md.jinja` extends the document template specifically for the `Markdown` class in `my.files`.
-It maps Markdown node properties (header, prose, nodes) to the document template's blocks and adds special handling for a "Notes" section.
-When a Markdown node has associated notes (typically parsed from YAML), they're rendered in a fenced YAML code block at the end of the node's content.
+</blockquote>
 
-## Code Generation Templates
+## Document templates
 
-The `MyEnum.py.jinja` template generates Python enum class definitions following the package's standard structure.
-It creates a class inheriting from `MyEnum` (and optionally `Flag` for bit-flag enums), with proper imports based on the nesting depth in the package hierarchy.
-The template accepts variables for the class name, whether it's a flag enum, and the enum member content.
+<blockquote class="artificial-prose">
 
-These templates are accessed via the `get_template()` function in `my.infra`, which handles template loading from this directory.
-Classes like `Markdown` reference templates by name (e.g., `TEMPLATE = 'Markdown.md.jinja'`) and render them with their data via `get_template(name).render(data)`.
+`document.md.jinja` is the recursive base. It renders a node's header and prose, then walks into child nodes. `Markdown.md.jinja` extends that shape for `my.files.Markdown`: it maps header, prose, and nodes to Markdown output and adds a fenced YAML block for a node's notes when notes are present.
+
+</blockquote>
+
+```text
+document.md.jinja  -> recursive document structure
+Markdown.md.jinja  -> Markdown nodes and optional Notes YAML
+```
+
+## Code generation templates
+
+<blockquote class="artificial-prose">
+
+`MyEnum.py.jinja` generates Python enum definitions that follow the package's source layout. It can add `Flag` behavior and adjusts imports from the nesting depth supplied by the caller. `get_template()` in `my.infra` loads these resources, and callers such as `Markdown` render a named template with their serialized model data.
+
+</blockquote>

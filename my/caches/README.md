@@ -1,30 +1,76 @@
 # Caches
 
+> Left-rule blocks mark artificial prose; quotations retain their own attribution.
+
+<blockquote class="artificial-prose">
+
+Start with `Cache` when a bounded in-memory map is enough. The other three classes add nested keys, sharded disk storage, or expiry. All come with [myBasis](../../README.md#installation).
+
+</blockquote>
+
 ## Cache
 
-The `Cache` class implements a simple LRU (Least Recently Used) cache with automatic eviction.
-When the cache reaches its `maxsize`, it prunes entries in buckets from the front, removing the oldest items first.
-Items are moved to the end of the dictionary on access to maintain proper LRU ordering.
-The cache supports configurable bucket sizes for bulk pruning operations.
+<blockquote class="artificial-prose">
 
-## PickleCache
+`Cache` is a Pydantic generic implementing a bucket-pruned LRU map. The constructor calls the size limit `maxsize` and the eviction batch `bucket_size`. Reads move an existing key to the newest end of insertion order. A new write at the limit prunes the oldest bucket before storing the value.
 
-`PickleCache` provides persistent caching with a three-tier fallback hierarchy: in-memory data, pickle files on disk, and an optional async callback function.
-Data freshness is determined by a configurable TTL (time-to-live), defaulting to one day.
-When accessing data, the cache first checks if in-memory data is fresh, then loads from the pickle file if it exists and is within the TTL window, and finally invokes the async callback to refresh stale data.
-The class writes refreshed data to disk and manages timestamps for TTL checks.
+</blockquote>
 
-## FileCache
+```python
+from my import Cache
 
-The `FileCache` class implements a two-level cache that combines an in-memory LRU with on-disk file storage.
-Items are organized into a hierarchical directory structure using `group/prefix/filename`, where the prefix is automatically derived from the filename.
-The cache maintains separate indices for hot (in-memory) and cold (on-disk) data, with automatic promotion when cold items are accessed.
-When memory limits are exceeded, items are proportionally pruned from each group and written to disk.
-The cache supports regex-based searching across both memory and disk, making it suitable for large-scale data with pattern-based access.
+cache = Cache[str, int](maxsize=4, bucket_size=2)
+for i, key in enumerate('abcd'):
+    cache[key] = i
+_ = cache['a']
+cache['e'] = 4
+assert cache.keys() == ['d', 'a', 'e']
+```
 
 ## NestedCache
 
-`NestedCache` provides multi-level hierarchical caching with arbitrary nesting depth determined by a signature tuple.
-Each level in the hierarchy maintains its own LRU ordering, and child caches are themselves `NestedCache` instances.
-When pruning is needed, the removal load is distributed proportionally across child caches based on their relative sizes.
-The cache supports path-based access using tuples of keys, making it ideal for multi-dimensional indexing scenarios where data is naturally hierarchical.
+<blockquote class="artificial-prose">
+
+`NestedCache` takes a signature tuple such as `(str, int)` and stores a value at each matching tuple path. Nested children maintain their own access order. `set()` and `delete()` return the number of newly added or removed leaves, while `items()`, `keys()`, and `values()` walk the complete paths. When `max_size` is exceeded, pruning is distributed approximately according to child sizes.
+
+</blockquote>
+
+```python
+from my import NestedCache
+
+cache = NestedCache(signature=(str, int))
+cache[('user', 1)] = 'robb'
+assert cache.set(('user', 2), 'ada') == 1
+assert cache[('user', 1)] == 'robb'
+assert len(cache) == 2
+assert cache.delete(('user', 2)) == 1
+```
+
+## FileCache
+
+<blockquote class="artificial-prose">
+
+`FileCache` keeps hot deserialized items in memory and indexes cold items under `group/prefix/file`. Its default writer and reader use JSON. The prefix is derived from the file stem, and the cache can move a shard from memory to disk or back again. `prune()` writes older items before dropping them from memory and apportions work across groups. The constructor requires an existing cache directory.
+
+</blockquote>
+
+```python
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from my import FileCache
+
+with TemporaryDirectory() as directory:
+    cache = FileCache(Path(directory))
+    cache.write('users', 'robb_doering', {'role': 'author'})
+    assert cache[('users', 'robb_doering')] == {'role': 'author'}
+```
+
+## PickleCache
+
+<blockquote class="artificial-prose">
+
+`PickleCache` checks fresh in-memory data first, then a pickle file whose modification time is inside the configured TTL, and finally an optional async callback. A callback result is written back to disk, and writes use a temporary file followed by an atomic replacement. The default TTL is one day.
+
+Pickle is a trust boundary. `read()` calls `pickle.loads()` on the cache file, so the file must be trusted local storage rather than an interchange format. Do not point this class at bytes supplied by another party.
+
+</blockquote>

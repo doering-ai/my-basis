@@ -22,6 +22,10 @@
 ```
 
 ```{eval-rst}
+.. automethod:: my.utils.TextUtils.TextUtils.safe_compile
+```
+
+```{eval-rst}
 .. automethod:: my.utils.TextUtils.TextUtils.regex_array
 ```
 
@@ -49,6 +53,23 @@
 
 ```{eval-rst}
 .. automethod:: my.utils.TextUtils.TextUtils.clean_string
+```
+
+```{eval-rst}
+.. autoclass:: my.utils.TextUtils.TextUtils.TextCase
+   :members: apply
+```
+
+```{eval-rst}
+.. automethod:: my.utils.TextUtils.TextUtils.recase
+```
+
+```{eval-rst}
+.. automethod:: my.utils.TextUtils.TextUtils.from_pascal
+```
+
+```{eval-rst}
+.. automethod:: my.utils.TextUtils.TextUtils.to_pascal
 ```
 
 ```{eval-rst}

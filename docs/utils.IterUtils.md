@@ -105,6 +105,18 @@
 .. automethod:: my.utils.IterUtils.IterUtils.indexof
 ```
 
+```{eval-rst}
+.. automethod:: my.utils.IterUtils.IterUtils.sorted_insert
+```
+
+```{eval-rst}
+.. automethod:: my.utils.IterUtils.IterUtils.groupby
+```
+
+```{eval-rst}
+.. automethod:: my.utils.IterUtils.IterUtils.locate
+```
+
 ## `IV` Execution
 
 ```{eval-rst}

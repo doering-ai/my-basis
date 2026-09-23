@@ -30,6 +30,10 @@
 ```
 
 ```{eval-rst}
+.. automethod:: my.utils.SemanticUtils.SemanticUtils.plural
+```
+
+```{eval-rst}
 .. automethod:: my.utils.SemanticUtils.SemanticUtils.to_ordinal
 ```
 

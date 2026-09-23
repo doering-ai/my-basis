@@ -6,6 +6,28 @@ Where a change is a behavior break rather than an internal fix, it's called out 
 
 ## [Unreleased]
 
+### `LIBS-62`: absorbed mySublimeBasis's `Utils` superset, lazy-imported the channel gap
+
+Sublime Text 4213's plugin host runs Python 3.14 and provisions packages outside `uv`/PyPI;
+the Package Control channel doesn't carry `srsly`, `tomli-w`, or `unidecode` for 3.14 yet, so
+`import my` needed to stop requiring them eagerly before mySublimeBasis's own migration
+(`SUBL-32`) could adopt this package's `Utils` facade in place of its local copy.
+
+- `srsly`, `tomli_w`, and `unidecode` (all unconditional dependencies, not optional extras)
+  now import lazily on first use, through a shared `_UtilsBase._optional_import()` helper that
+  raises a clear `ImportError` naming the missing library. `SystemUtils.YAML_CONFIG`'s eager
+  class-body `CustomYaml()` instantiation is now a cached, lazily-built accessor
+  (`_yaml_config()`) for the same reason.
+- `TextUtils.regex_dict()` gained mySublimeBasis's `rgx_dict` superset: `{{.name}}`
+  back-references to earlier entries in the same call, `sep`-joined list values, and a
+  positioned diagnostic on compile failure, alongside new `safe_compile()`/`_debug_rgx_dict()`
+  methods -- the existing signature keeps working unchanged for current callers.
+- Upstreamed from mySublimeBasis, each with its ported ST test suite: a shell-exec family
+  (`SystemUtils.ex`/`exa`/`execute`/`execute_async`/`_clean_shell_args`) and `milliseconds`;
+  text-casing (`TextUtils.TextCase`/`recase`/`from_pascal`/`to_pascal`); `IterUtils.sorted_insert`/
+  `groupby`/`locate`; `SemanticUtils.plural`; and `Multiplex` (a singleton stdout/stderr tee
+  writer, pure stdlib) as the new, eagerly-exposed `my.infra.Multiplex`.
+
 ### 1.0 candidate hardening
 
 - `RegexStore` now preserves externally compiled flags through construction, import, union, and debugging; refuses dependent composition that would silently discard out-of-band flags; keeps ordered-router first-match semantics; and applies the configured timeout to substitution as well as matching.

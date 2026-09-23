@@ -47,6 +47,7 @@ from .types import (
     TYPESET,
 )
 from .constants import INFRA_PATHS, InfraPaths, DELIM, NOWHERE, get_template
+from .Multiplex import Multiplex
 
 __all__ = [
     'Stream',
@@ -89,6 +90,7 @@ __all__ = [
     'NOWHERE',
     'JINJA',
     'get_template',
+    'Multiplex',
 ]
 
 

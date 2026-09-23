@@ -108,6 +108,27 @@ class TestSystemUtils:
         patch.setattr(cls, 'posix', fixed_posix)
         assert cls.posix_since(value) == expected
 
+    @pyt.mark.parametrize(
+        'val, expected',
+        [
+            (0.25, 250),  # small values are treated as seconds
+            (5, 5000),
+            (9.999, 9999),
+            (100, 100),  # values >= 10 are already milliseconds
+            (timedelta(seconds=2), 2000),
+            (timedelta(milliseconds=250), 250),
+        ],
+    )
+    def test_milliseconds(self, val: Any, expected: int):
+        assert cls.milliseconds(val) == expected
+
+    def test_milliseconds__datetime_is_epoch_ms(self):
+        dt = datetime(1970, 1, 2, tzinfo=UTC)
+        assert cls.milliseconds(dt) == 24 * 3600 * 1000
+
+    def test_milliseconds__none_is_now(self):
+        assert cls.milliseconds() >= 1_500_000_000_000
+
     # --------------
     # `1` FILESYSTEM
     # --------------
@@ -790,3 +811,72 @@ class TestSystemUtils:
         """Test serialize is a thin wrapper around ty.serialize."""
         result = cls.serialize({'key': 'value'})
         assert result == {'key': 'value'}
+
+    # ---------
+    # `4` SHELL
+    # ---------
+    @pyt.fixture
+    def resolved_tmp_path(self, tmp_path: Path) -> str:
+        """`str(tmp_path.resolve())`, precomputed outside any async test (ASYNC240)."""
+        return str(tmp_path.resolve())
+
+    def test_clean_shell_args__flattens_and_splits(self):
+        result = list(cls._clean_shell_args(('git status', ['--short', '-b']), {}))
+        assert result == ['git', 'status', '--short', '-b']
+
+    def test_clean_shell_args__kwargs_become_flags(self):
+        result = list(cls._clean_shell_args(('cmd',), {'v': True, 'depth': '2'}))
+        assert result == ['cmd', '-v', '--depth', '2']
+
+    def test_clean_shell_args__iterable_values_repeat_flag(self):
+        result = list(cls._clean_shell_args(('cmd',), {'opt': ['a', 'b']}))
+        assert result == ['cmd', '--opt', 'a', '--opt', 'b']
+
+    def test_ex__basic_output(self):
+        assert cls.ex('echo hello') == 'hello'
+
+    def test_ex__failure_returns_none(self):
+        assert cls.ex('false') is None
+
+    def test_ex__cwd_is_applied(self, tmp_path: Path):
+        """`cwd=` must change the subprocess working directory, not become a CLI flag."""
+        assert cls.ex('pwd', cwd=tmp_path) == str(tmp_path.resolve())
+
+    def test_ex__cwd_not_leaked_into_argv(self, tmp_path: Path):
+        """If cwd leaked through kwargs it would surface as a literal `--cwd` argument."""
+        out = cls.ex('echo marker', cwd=tmp_path)
+        assert out == 'marker'
+        assert '--cwd' not in (out or '')
+
+    @pyt.mark.asyncio
+    async def test_exa__basic_output(self):
+        assert await cls.exa('echo hello') == 'hello'
+
+    @pyt.mark.asyncio
+    async def test_exa__failure_returns_none(self):
+        assert await cls.exa('false') is None
+
+    @pyt.mark.asyncio
+    async def test_exa__cwd_is_applied(self, tmp_path: Path, resolved_tmp_path: str):
+        """`cwd=` must change the subprocess working directory, not become a CLI flag."""
+        assert await cls.exa('pwd', cwd=tmp_path) == resolved_tmp_path
+
+    @pyt.mark.asyncio
+    async def test_exa__cwd_not_leaked_into_argv(self, tmp_path: Path):
+        out = await cls.exa('echo marker', cwd=tmp_path)
+        assert out == 'marker'
+        assert '--cwd' not in (out or '')
+
+    @pyt.mark.asyncio
+    async def test_exa__nonexistent_cwd_returns_none(self, tmp_path: Path):
+        """An invalid cwd fails the subprocess launch and is swallowed to None."""
+        assert await cls.exa('echo hello', cwd=tmp_path / 'missing') is None
+
+    def test_execute__forwards_to_ex_including_cwd(self, tmp_path: Path):
+        assert cls.execute('pwd', cwd=tmp_path) == str(tmp_path.resolve())
+
+    @pyt.mark.asyncio
+    async def test_execute_async__forwards_to_exa_including_cwd(
+        self, tmp_path: Path, resolved_tmp_path: str
+    ):
+        assert await cls.execute_async('pwd', cwd=tmp_path) == resolved_tmp_path

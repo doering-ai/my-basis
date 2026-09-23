@@ -17,6 +17,10 @@
 .. automethod:: my.utils.SystemUtils.SystemUtils.posix_since
 ```
 
+```{eval-rst}
+.. automethod:: my.utils.SystemUtils.SystemUtils.milliseconds
+```
+
 ## `II` Filesystem
 
 ```{eval-rst}
@@ -141,4 +145,22 @@
 
 ```{eval-rst}
 .. automethod:: my.utils.SystemUtils.SystemUtils.serialize
+```
+
+## `V` Shell
+
+```{eval-rst}
+.. automethod:: my.utils.SystemUtils.SystemUtils.ex
+```
+
+```{eval-rst}
+.. automethod:: my.utils.SystemUtils.SystemUtils.execute
+```
+
+```{eval-rst}
+.. automethod:: my.utils.SystemUtils.SystemUtils.exa
+```
+
+```{eval-rst}
+.. automethod:: my.utils.SystemUtils.SystemUtils.execute_async
 ```

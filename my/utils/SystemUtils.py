@@ -3,16 +3,18 @@
 ############
 ### STANDARD
 from __future__ import annotations
-from typing import Any, overload, TypeVar
+from typing import Any, overload, TypeVar, TYPE_CHECKING
 from collections.abc import Collection, Sequence, Iterable, Generator
 from datetime import datetime, timedelta, UTC
 from pathlib import Path
 from shutil import get_terminal_size
 from typing import ClassVar
 from unittest.mock import MagicMock
+import asyncio as aio
 import functools as ft
 import contextlib as ctx
 import itertools as it
+import shlex
 import subprocess as sbp
 import sys
 import textwrap
@@ -23,9 +25,6 @@ import regex as re
 # I/O
 import pickle
 import tomllib
-import srsly
-from srsly._yaml_api import CustomYaml
-import tomli_w
 
 ### EXTERNAL
 import pydantic as pyd
@@ -41,6 +40,12 @@ from ..infra.types import (
 )
 from ._UtilsBase import _UtilsBase
 from .TextUtils import text_utils
+
+# `srsly`/`tomli_w` are unconditional dependencies (see `pyproject.toml`), but are imported
+# lazily through `_UtilsBase._optional_import()` at each call site below so bare `import my`
+# does not require them -- only the methods that actually serialize YAML/JSON/TOML do.
+if TYPE_CHECKING:
+    from srsly._yaml_api import CustomYaml
 
 # from typing import TYPE_CHECKING
 # if TYPE_CHECKING:
@@ -72,7 +77,8 @@ class SystemUtils(_UtilsBase):
     """Methods that deal with low-level system resources & APIs."""
 
     AUTO_CONFIRM: ClassVar[bool] = False
-    YAML_CONFIG: ClassVar[CustomYaml] = CustomYaml()
+    #: Built and configured lazily by `_yaml_config()` -- never read this directly.
+    _YAML_CONFIG: ClassVar[CustomYaml | None] = None
     LOGGER: ClassVar[logging.Logger] = logger
 
     ### Regular Expressions (can't use RegexStore because it depends on this class)
@@ -146,6 +152,36 @@ class SystemUtils(_UtilsBase):
             return timedelta(0)
         else:
             return cls.posix() - cls.posix(val)
+
+    @classmethod
+    def milliseconds(cls, val: int | float | datetime | timedelta | None = None) -> int:
+        """Convert a timedelta, datetime, or numeric timestamp to milliseconds.
+
+        Args:
+            val: A timedelta, a datetime, a numeric timestamp, or None for the current time.
+                A numeric value `< 10` is treated as already being in seconds (e.g. a small
+                relative duration) rather than a Unix timestamp, and scaled up.
+        Returns:
+            The equivalent millisecond count, rounded to the nearest integer.
+        Examples:
+            A `timedelta` and a `datetime` both convert directly::
+
+                >>> from datetime import timedelta, datetime, timezone
+                >>> from my import ut
+                >>> ut.milliseconds(timedelta(seconds=1))
+                1000
+                >>> ut.milliseconds(datetime(1970, 1, 2, tzinfo=timezone.utc))
+                86400000
+        """
+        if val is None:
+            val = cls.posix()
+
+        if isinstance(val, timedelta):
+            return round(val.total_seconds() * 1000)
+        elif isinstance(val, datetime):
+            return round(val.timestamp() * 1000)
+        else:
+            return int((val * 1000) if val < 10 else val)
 
     # --------------
     # `1` FILESYSTEM
@@ -856,9 +892,9 @@ class SystemUtils(_UtilsBase):
             return tvar()  # type: ignore
         elif isinstance(file, Path):
             cls.validate_file(file)
-            ret = srsly.read_json(file)
+            ret = cls._optional_import('srsly').read_json(file)
         elif (text := cls.ty.cast(file, str)) is not None:
-            ret = srsly.json_loads(text)
+            ret = cls._optional_import('srsly').json_loads(text)
         else:
             raise ValueError(f'Unsupported input type for JSON loading: {type(file)}')
 
@@ -933,7 +969,7 @@ class SystemUtils(_UtilsBase):
         elif isinstance(file, Path):
             # I.ii. Local case: Read directly from file
             cls.validate_file(file)
-            ret = srsly.read_yaml(file)
+            ret = cls._optional_import('srsly').read_yaml(file)
         else:
             # I.iii. Main Case: Attempt to parse in-memory YAML strings
             text = file.decode() if isinstance(file, bytes) else file
@@ -945,7 +981,7 @@ class SystemUtils(_UtilsBase):
                     )
                 text = match.group('content')
 
-            ret = srsly.yaml_loads(text)
+            ret = cls._optional_import('srsly').yaml_loads(text)
 
         # II. Verify & format the response
         # if isinstance(ret, tvar):
@@ -1074,7 +1110,7 @@ class SystemUtils(_UtilsBase):
                     - 2
         """
         obj = cls.ty.serialize(data)
-        text = cls.YAML_CONFIG.dump(obj, **kwargs)
+        text = cls._yaml_config().dump(obj, **kwargs)
         assert isinstance(text, str), 'Failed to write YAML data.'
 
         # If we printed a root array, de-intent it
@@ -1108,7 +1144,7 @@ class SystemUtils(_UtilsBase):
         obj = cls.ty.serialize(data)
         if 'indent' not in kwargs:
             kwargs['indent'] = 4
-        text = srsly.json_dumps(obj, **kwargs)
+        text = cls._optional_import('srsly').json_dumps(obj, **kwargs)
 
         # If requested, wrap in markdown bactics
         if wrap:
@@ -1142,7 +1178,7 @@ class SystemUtils(_UtilsBase):
                 obj = dict(content=obj)
 
         # II. Serialize w/ default params
-        text = tomli_w.dumps(obj, **kwargs)
+        text = cls._optional_import('tomli_w').dumps(obj, **kwargs)
 
         # If requested, wrap in markdown bactics
         if wrap:
@@ -1168,6 +1204,28 @@ class SystemUtils(_UtilsBase):
         obj = cls.ty.serialize(data)
         return pickle.dumps(obj, **kwargs)
 
+    @classmethod
+    def _yaml_config(cls) -> CustomYaml:
+        """Return the shared YAML dumper, building and configuring it on first use.
+
+        Building `CustomYaml` -- and therefore importing `srsly` -- is deferred to this
+        accessor (instead of a class-body `ClassVar[CustomYaml] = CustomYaml()`) so that
+        importing `SystemUtils`, and therefore bare `import my`, does not require `srsly`
+        to be installed. Only a YAML-serializing call pays that cost.
+
+        Returns:
+            The process-shared, already-configured `CustomYaml` instance.
+        Raises:
+            ImportError: If the optional `srsly` dependency is not installed.
+        """
+        if SystemUtils._YAML_CONFIG is None:
+            cls._optional_import('srsly')  # clear error naming `srsly` if entirely missing
+            from srsly._yaml_api import CustomYaml as _CustomYaml
+
+            SystemUtils._YAML_CONFIG = _CustomYaml()
+            cls._configure_yaml()
+        return SystemUtils._YAML_CONFIG
+
     @staticmethod
     def _configure_yaml(
         mapping: int = 4,
@@ -1188,7 +1246,7 @@ class SystemUtils(_UtilsBase):
             offset: Indentation delta between a parent and a child sequence's bullet points.
             sort_keys: Whether to sort mapping keys on output.
         """
-        cfg = SystemUtils.YAML_CONFIG
+        cfg = SystemUtils._yaml_config()
         cfg.indent(mapping=mapping, sequence=sequence, offset=offset)
         cfg.sort_base_mapping_type_on_output = sort_keys  # type: ignore
 
@@ -1208,10 +1266,118 @@ class SystemUtils(_UtilsBase):
         """
         return cls.ty.serialize(data, full=full)
 
+    # ---------
+    # `4` SHELL
+    # ---------
+    @classmethod
+    def _clean_shell_args(
+        cls, args: tuple[str | Iterable[str], ...], kwargs: dict[str, Any]
+    ) -> Generator[str]:
+        """Flatten positional shell tokens and turn keyword arguments into CLI flags.
 
-# `_configure_yaml()` was never invoked, so `YAML_CONFIG` sat at ruamel's own defaults
-# (alphabetically-sorted keys, 2-space indent) instead of this project's intended ones.
-SystemUtils._configure_yaml()
+        Args:
+            args: Positional tokens, each a string or an iterable of strings (one level of
+                nesting is collapsed); each is further shlex-split.
+            kwargs: Keyword arguments, turned into `-x`/`--xyz` flags. A `True` value yields a
+                bare flag; a string value yields `flag value`; an iterable yields `flag v1
+                flag v2 ...`; anything else is stringified.
+        Yields:
+            Individual shell tokens, ready to `shlex.join()`.
+        """
+        for arg in mi.collapse(args, base_type=str, levels=1):
+            yield from filter(bool, shlex.split(str(arg).strip()))
+        for key, val in kwargs.items():
+            if not key.startswith('-'):
+                key = f'-{key}' if len(key) == 1 else f'--{key}'
+
+            if isinstance(val, bool) and val is True:
+                yield key
+            elif isinstance(val, str):
+                yield from (key, val)
+            elif isinstance(val, Iterable):
+                yield from mi.flatten((key, str(v)) for v in val)
+            else:
+                yield from (key, str(val))
+
+    @staticmethod
+    def ex(
+        *args: str | list[str],
+        cwd: str | Path | None = None,
+        **kwargs: Any,
+    ) -> str | None:
+        """Execute the given command as a shell-interpreted subprocess.
+
+        Any exception (including a non-zero exit) is swallowed; a caller that needs to
+        distinguish "failed" from "produced no output" should shell out directly instead.
+
+        Args:
+            *args: Command and arguments to execute. Can be multiple strings or lists of strings.
+            cwd: Optional working directory to execute the command in.
+            **kwargs: Additional keyword arguments that are parsed into command line options
+                (see `_clean_shell_args()`).
+        Returns:
+            The stripped stdout (or stderr, if stdout was empty) on success, else None.
+        Examples:
+            Run a trivial command and capture its output::
+
+                >>> from my import ut
+                >>> ut.ex('echo', 'hi')
+                'hi'
+        """
+        with ctx.suppress(Exception):
+            result = sbp.run(
+                shlex.join(SystemUtils._clean_shell_args(args, kwargs)),
+                shell=True,
+                capture_output=True,
+                text=True,
+                cwd=str(cwd) if cwd else None,
+            )
+            if result.returncode == 0:
+                return (result.stdout or result.stderr).strip('\n').rstrip(' ')
+        return None
+
+    @classmethod
+    def execute(cls, *args: str | list[str], **kwargs: Any) -> str | None:
+        """Alias of `ex()`. Execute the given command as a shell-interpreted subprocess."""
+        return cls.ex(*args, **kwargs)
+
+    @staticmethod
+    async def exa(
+        *args: str | Iterable[str],
+        cwd: str | Path | None = None,
+        **kwargs: Any,
+    ) -> str | None:
+        """Execute the given command as a shell-interpreted subprocess, asynchronously.
+
+        See `ex()` for the argument/return contract; this is its `asyncio` counterpart.
+
+        Examples:
+            >>> import asyncio
+            >>> from my import ut
+            >>> asyncio.run(ut.exa('echo', 'hi'))
+            'hi'
+        """
+        with ctx.suppress(Exception):
+            proc = await aio.create_subprocess_shell(
+                shlex.join(SystemUtils._clean_shell_args(args, kwargs)),
+                stdout=aio.subprocess.PIPE,
+                stderr=aio.subprocess.PIPE,
+                cwd=str(cwd) if cwd else None,
+            )
+            stdout, stderr = await proc.communicate()
+            if proc.returncode == 0:
+                return (stdout.decode() or stderr.decode()).strip('\n').rstrip(' ')
+        return None
+
+    @classmethod
+    async def execute_async(cls, *args: str, **kwargs: Any) -> str | None:
+        """Alias of `exa()`. Execute the given command as an async shell subprocess."""
+        return await cls.exa(*args, **kwargs)
+
+
+# `_configure_yaml()` is no longer called eagerly here: `_yaml_config()` applies the same
+# defaults (4/6/4 indentation, unsorted keys) the first time any `to_yaml()` call builds the
+# shared `CustomYaml` instance, keeping `srsly` out of the eager `import my` path.
 
 system_utils = SystemUtils
 """An alias of `SystemUtils`, cased so as to imply static usage."""

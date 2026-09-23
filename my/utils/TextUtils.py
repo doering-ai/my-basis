@@ -2,14 +2,16 @@
 ### HEAD ###
 ############
 ### STANDARD
+from enum import Enum, auto
 from typing import Literal, ClassVar, overload
 from collections.abc import Callable, Mapping, Hashable
+import functools as ft
+import re as stdlib_re
 import textwrap
 import itertools as it
 
 ### EXTERNAL
 from regex import Pattern, Match
-from unidecode import unidecode
 import pydantic as pyd
 import regex as re
 
@@ -17,6 +19,16 @@ import regex as re
 # NOTE: If adding new internal imports, update the comments in `__init__.py`
 from ._UtilsBase import _UtilsBase
 from .IterUtils import iter_utils
+
+
+############
+### DATA ###
+############
+#: Matches a literal `{{.name}}` in a `regex_dict()` value, excluding an escaped `\{{.name}}`
+#: (single backslash) but permitting a literal `\\{{.name}}` (escaped backslash). Ported
+#: byte-for-byte from mySublimeBasis's `Utils.NO_ESC`/`RGX_REF_RGX` (LIBS-62).
+_NO_ESC = r'(?<![^\\]\\)(?<!\\{3})'
+_RGX_REF_RGX = re.compile(_NO_ESC + r'\{\{\.(?P<name>[_[:lower:]][_[:lower:]\d]*)\}\}')
 
 
 ############
@@ -97,16 +109,27 @@ class TextUtils(_UtilsBase):
     def regex_dict[K: Hashable, V](
         expressions: Mapping[K, V | Pattern] | None = None,
         compile_function: Callable[[V], Pattern] = re.compile,  # type: ignore
+        sep: str = '',
         **kwargs: V | Pattern,
     ) -> dict[K, Pattern]:
         r"""Compile the expression strings in the given dictionary, mapping names to Patterns.
 
+        A string value may reference an *earlier* entry in the same call with `{{.name}}`;
+        the reference is substituted with that entry's (already-compiled) pattern text before
+        compiling. A non-string, non-Pattern value is treated as an iterable of strings and
+        joined with `sep` before compiling (and before reference substitution).
+
         Args:
             expressions: A mapping of string names to regular expressions (compiled or otherwise).
             compile_function: Function to compile patterns (default: re.compile).
+            sep: Separator used to join a list-of-strings value before compiling.
             **kwargs: Additional named patterns to include.
         Returns:
             The expressions mapping with all values now compiled.
+        Raises:
+            AssertionError: If a `{{.name}}` reference names a group not yet defined.
+            ValueError: If a pattern fails to compile; the message reports the offending key
+                and, where possible, the exact column.
         Examples:
             Compile a named batch of patterns::
 
@@ -114,15 +137,117 @@ class TextUtils(_UtilsBase):
                 >>> rgxs = ut.regex_dict(word=r'\w+')
                 >>> rgxs['word'].findall('a b')
                 ['a', 'b']
+
+            Reference an earlier entry, and join a list of alternatives with `sep`::
+
+                >>> rgxs = ut.regex_dict(digit=r'\d', pair=r'{{.digit}}{{.digit}}')
+                >>> bool(rgxs['pair'].fullmatch('42'))
+                True
+                >>> rgxs = ut.regex_dict(sep='|', either=['aa', 'bb'])
+                >>> bool(rgxs['either'].fullmatch('bb'))
+                True
         """
-        ret = {}
+        ret: dict[K, Pattern] = {}
         _expr: dict[K, str | V | Pattern] = dict(expressions or {}) | kwargs  # type: ignore
-        for key, val in _expr.items():
-            if isinstance(val, Pattern):
-                ret[key] = val
-            else:
-                ret[key] = compile_function(val)  # type: ignore
+        key: K | None = None
+        text: str = ''
+        try:
+            for key, val in _expr.items():
+                if isinstance(val, Pattern):
+                    ret[key] = val
+                    continue
+                elif not isinstance(val, str):
+                    val = sep.join(val)  # type: ignore
+                text = val
+
+                # Splice by match span, reversed so earlier spans stay valid:
+                # str.replace would also rewrite the escaped `\{{.name}}`
+                # occurrences the matcher deliberately skipped.
+                for match in reversed(list(_RGX_REF_RGX.finditer(text))):
+                    name = match['name']
+                    assert name in ret, f"Referenced non-existent group {name!r} in r'{text}'"
+                    text = f'{text[: match.start()]}{ret[name].pattern}{text[match.end() :]}'
+
+                ret[key] = compile_function(text)  # type: ignore
+        except (re.error, stdlib_re.error) as exc:
+            if key is None or key in ret:
+                raise ValueError(f'Unknown regex compilation error: {exc}.') from exc
+            TextUtils._debug_rgx_dict(exc, key, text)
+
         return ret
+
+    @classmethod
+    def safe_compile(cls, key: str, expr: str, fn: Callable[[str], Pattern[str]]) -> Pattern[str]:
+        r"""Compile a regex pattern, falling back to a matches-nothing-useful pattern on failure.
+
+        Unlike `regex_dict()`, a compilation failure here is reported (printed) rather than
+        raised, so a caller assembling many independent patterns can keep going.
+
+        Args:
+            key: Name of the regex pattern (used only for the printed diagnostic).
+            expr: Regular expression to compile.
+            fn: Function to compile the pattern (e.g. `re.compile`).
+        Returns:
+            The compiled pattern, or a pattern compiled from the literal text `'ERROR'` if
+            `expr` failed to compile.
+        Examples:
+            A valid pattern compiles and matches normally::
+
+                >>> import regex as re
+                >>> from my import ut
+                >>> bool(ut.safe_compile('ok', r'\w+', re.compile).fullmatch('abc'))
+                True
+        """
+        try:
+            ret = fn(expr)
+        except (re.error, stdlib_re.error) as exc:
+            print('RGX COMPILATION ERROR')
+            try:
+                cls._debug_rgx_dict(exc, key, expr)
+            except ValueError as debug_error:
+                # `_debug_rgx_dict` reports by raising; here we only want its diagnostic text.
+                print(debug_error)
+            ret = fn(r'ERROR')
+        return ret
+
+    @classmethod
+    def _debug_rgx_dict(
+        cls, e: 're.error | stdlib_re.error', key: Hashable, pattern: str | Pattern[str]
+    ) -> None:
+        """Format a `re.error` into a positioned diagnostic and raise it as a `ValueError`.
+
+        Args:
+            e: The `regex` compilation error being reported.
+            key: Name of the offending pattern (for the diagnostic header).
+            pattern: The offending pattern text, or its already-compiled form.
+        Raises:
+            ValueError: Always -- this method's entire purpose is to format and raise `e`.
+        """
+        if not isinstance(pattern, str):
+            pattern = pattern.pattern
+        pos = getattr(e, 'pos', -1)
+        msg = getattr(e, 'msg', '[NO MESSAGE FOUND?]').replace('\n', ' ')
+        row = getattr(e, 'lineno', 1) - 1
+
+        preamble = f'Invalid Regular Expression "{key}"'
+        if pos == -1:
+            out = [f"{preamble} = r'{pattern}'", f'ERROR: {e}']
+        elif row == 0:
+            offset = len('ValueError: ') + len(preamble) + len("= r'") + pos
+            out = [
+                f"{preamble} = r'{pattern}'",
+                f'{f"ERROR @ {pos} --> ":>{offset}}^ <-- ERROR: "{msg}"',
+            ]
+        else:
+            lines = pattern.splitlines()
+            if row < len(lines):
+                lines.insert(
+                    row + 1,
+                    f'{"ERROR -->" if pos > 9 else "":>{pos}}^ <-- ERROR',
+                )
+            out = [f"{preamble} = r'''", *lines, "'''"]
+
+        raise ValueError('\n'.join(out).strip()) from e
 
     @overload
     @staticmethod
@@ -328,6 +453,8 @@ class TextUtils(_UtilsBase):
             case: Case conversion - 'lower', 'upper', or 'none' (default: 'lower').
         Returns:
             Cleaned and normalized string suitable for identifiers.
+        Raises:
+            ImportError: If the optional `unidecode` dependency is not installed.
         Examples:
             Slugify arbitrary text::
 
@@ -337,6 +464,7 @@ class TextUtils(_UtilsBase):
                 >>> ut.clean_string("Zoë's Café", case='none')
                 'Zoes-Cafe'
         """
+        unidecode = cls._optional_import('unidecode').unidecode
         ret = iter_utils.build(string, unidecode, str.strip, cls._clean_nonwords)
         if case == 'lower':
             return ret.lower()
@@ -344,6 +472,123 @@ class TextUtils(_UtilsBase):
             return ret.upper()
         else:
             return ret
+
+    class TextCase(Enum):
+        """Enumeration of common text case styles, each able to `apply()` itself to a string."""
+
+        LOWER = auto()  #: text case
+        UPPER = auto()  #: TEXT CASE
+        TITLE = auto()  #: Text Case
+        CAPITAL = auto()  #: Text case
+        KEBAB = auto()  #: text-case
+        SNAKE = auto()  #: text_case
+        PASCAL = auto()  #: TextCase
+        CAMEL = auto()  #: textCase
+
+        @staticmethod
+        @ft.lru_cache(maxsize=1)
+        def _formatters() -> dict[str, Callable[[str], str]]:
+            return dict(
+                LOWER=str.lower,
+                UPPER=str.upper,
+                TITLE=str.title,
+                CAPITAL=str.capitalize,
+            )
+
+        def apply(self, text: str, _from: 'TextUtils.TextCase | None' = None) -> str:
+            """Apply this case style to `text`, first splitting it into words.
+
+            Args:
+                text: Text to reformat.
+                _from: The text's current case, when it isn't plain whitespace-separated --
+                    required to split `KEBAB`/`SNAKE`/`PASCAL`/`CAMEL` input correctly.
+            Returns:
+                `text` reformatted to this case, or `''` if `text` is blank.
+            """
+            if not (text := text.strip()):
+                return ''
+            cls = type(self)
+
+            if _from == cls.KEBAB:
+                words = text.split('-')
+            elif _from == cls.SNAKE:
+                words = text.split('_')
+            elif _from in {cls.PASCAL, cls.CAMEL}:
+                words = TextUtils.RGXS['case_split'].split(text)
+            else:
+                words = text.split()
+
+            if words := list(filter(bool, words)):
+                if _fn := self._formatters().get(self.name):
+                    return _fn(' '.join(words))
+                elif self in {cls.PASCAL, cls.CAMEL}:
+                    words = list(map(str.capitalize, words))
+                    if self == cls.CAMEL:
+                        words[0] = words[0].lower()
+                    return ''.join(words)
+                elif self in {cls.KEBAB, cls.SNAKE}:
+                    sep = '-' if self == cls.KEBAB else '_'
+                    return sep.join(map(str.lower, words))
+                else:
+                    raise ValueError(f'Unknown formatter: {self}')
+            return ''
+
+    @classmethod
+    def recase(
+        cls,
+        string: str,
+        to: 'TextUtils.TextCase | str' = TextCase.SNAKE,
+        _from: 'TextUtils.TextCase | str | None' = None,
+        clean: bool = True,
+    ) -> str:
+        """Convert a string between case styles (snake_case, camelCase, kebab-case, ...).
+
+        Args:
+            string: String to convert.
+            to: The target case (default: `SNAKE`); a case name string is also accepted.
+            _from: The string's current case -- required for `KEBAB`/`SNAKE`/`PASCAL`/`CAMEL`
+                input, since those don't split on whitespace.
+            clean: Whether to also apply `_clean_nonwords()` to the result (default: True).
+        Returns:
+            `string` reformatted to the `to` case.
+        Examples:
+            Convert between styles, with and without an explicit source case::
+
+                >>> from my import ut
+                >>> ut.recase('hello world', to='kebab')
+                'hello-world'
+                >>> ut.recase('helloWorld', to=ut.TextCase.SNAKE, _from=ut.TextCase.CAMEL)
+                'hello_world'
+        """
+        if isinstance(to, str):
+            to = cls.TextCase[to.upper().strip()]
+        if isinstance(_from, str):
+            _from = cls.TextCase[_from.upper().strip()]
+
+        string = to.apply(string, _from=_from)
+        return cls._clean_nonwords(string) if clean else string
+
+    @classmethod
+    def from_pascal(cls, string: str) -> str:
+        """Convert a PascalCase string to snake_case.
+
+        Examples:
+            >>> from my import ut
+            >>> ut.from_pascal('MyClassName')
+            'my_class_name'
+        """
+        return cls.recase(string, to=cls.TextCase.SNAKE, _from=cls.TextCase.PASCAL)
+
+    @classmethod
+    def to_pascal(cls, string: str) -> str:
+        """Convert a snake_case string to PascalCase.
+
+        Examples:
+            >>> from my import ut
+            >>> ut.to_pascal('my_class_name')
+            'MyClassName'
+        """
+        return cls.recase(string, to=cls.TextCase.PASCAL, _from=cls.TextCase.SNAKE)
 
     @classmethod
     def to_words(cls, text: str) -> list[str]:
@@ -483,6 +728,8 @@ if not TextUtils.RGXS:
             nonwords=r' *[^-\w\s]+ *',  # All non-whitespace breaks are underlines
             spaces=r' +',  # Spaces are just hyphens
             multihyphens=r'-{2,}',
+            # Case conversion (`TextCase.apply`'s PASCAL/CAMEL word-splitter)
+            case_split=r'\s+|(?<=\w)_(?=\w)|(?<=\p{Ll})(?=\p{Lu})|(?<=\p{Lu})(?=\p{Lu}\p{Ll})',
         )
     )
 

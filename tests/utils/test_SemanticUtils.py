@@ -130,6 +130,19 @@ class TestSemanticUtils:
             cls.to_singular('notaword')
 
     @pyt.mark.parametrize(
+        'count, singular, plural, expected',
+        [
+            (1, 'file', None, 'file'),
+            (0, 'file', None, 'files'),
+            (2, 'file', None, 'files'),
+            (2, 'index', 'indices', 'indices'),
+            (1.5, 'hour', None, 'hours'),
+        ],
+    )
+    def test_plural(self, count: int | float, singular: str, plural: 'str | None', expected: str):
+        assert cls.plural(count, singular, plural) == expected
+
+    @pyt.mark.parametrize(
         'num, expected',
         [
             (1, '1st'),

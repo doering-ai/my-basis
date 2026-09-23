@@ -70,6 +70,7 @@ from .infra.types import (
     Vec,
     Vecs,
 )
+from .infra.Multiplex import Multiplex
 from .utils import (
     Utils,
     ut,
@@ -173,6 +174,7 @@ __all__ = [
     'Times',
     'Vec',
     'Vecs',
+    'Multiplex',
     # /utils/
     'iter_utils',
     'IterUtils',

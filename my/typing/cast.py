@@ -670,15 +670,30 @@ class Transform[T0, T1]:
 
         # Construct the concrete target type from the (already element-coerced) `data`. NOTE: call
         # `t1.main` -- the underlying type (e.g. `str`, `list`) -- NOT the `MyType` itself, which is
-        # not callable.
-        if t1.main is None:
+        # not callable. (Bound to a plain `type` local first: narrowing `data` against the
+        # `type[T] | type[UnionType] | ...` attribute form confuses the checker below.)
+        main: type | None = t1.main
+        if main is None:
             return None
         # Constructing the concrete target from already-coerced data. A `TypeError`/`ValueError`
         # here means this data simply isn't valid for that constructor -- a decline (pydantic's
         # `ValidationError` is a `ValueError`, so model construction failures are covered). Any
         # other exception is an unexpected crash and now reaches the dispatch valve.
         with ctx.suppress(TypeError, ValueError):
-            return t1.main(data) if not isinstance(data, t1.main) else data  # type: ignore[bad-return]
+            if not isinstance(data, main):
+                # Re-bind past the `isinstance(data, main)` narrow: the checker models the
+                # complement of a `type` variable as `Never`-overlapping, which then makes the
+                # runtime-checkable `Iterator` protocol below look unsound to it.
+                raw: object = data
+                if getattr(main, '_fields', None) and isinstance(raw, (list, tuple, Iterator)):
+                    # A NamedTuple rebuild is positional: one argument per declared field. Handing
+                    # the whole sequence to the constructor binds it to the FIRST field -- and
+                    # when the remaining fields have defaults, `Move([2, 3])` quietly "succeeds"
+                    # as `Move(depth=[2, 3], place=0)` instead of declining (SUBL-32). A wrong-
+                    # arity sequence raises here and declines like any other invalid build.
+                    return main(*raw)  # type: ignore[bad-return]
+                return main(data)  # type: ignore[bad-return]
+            return data  # type: ignore[bad-return]
 
     @ft.cached_property
     def map_items(self: Transform) -> list[tuple[Any, Any]] | None:

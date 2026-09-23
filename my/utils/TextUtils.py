@@ -9,7 +9,6 @@ import itertools as it
 
 ### EXTERNAL
 from regex import Pattern, Match
-from unidecode import unidecode
 import pydantic as pyd
 import regex as re
 
@@ -328,6 +327,8 @@ class TextUtils(_UtilsBase):
             case: Case conversion - 'lower', 'upper', or 'none' (default: 'lower').
         Returns:
             Cleaned and normalized string suitable for identifiers.
+        Raises:
+            ImportError: If the optional `unidecode` dependency is not installed.
         Examples:
             Slugify arbitrary text::
 
@@ -337,6 +338,7 @@ class TextUtils(_UtilsBase):
                 >>> ut.clean_string("Zoë's Café", case='none')
                 'Zoes-Cafe'
         """
+        unidecode = cls._optional_import('unidecode').unidecode
         ret = iter_utils.build(string, unidecode, str.strip, cls._clean_nonwords)
         if case == 'lower':
             return ret.lower()

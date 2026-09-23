@@ -762,6 +762,112 @@ assert 'PYDANTIC_DISABLE_PLUGINS' not in os.environ
         assert proc.returncode == 0, proc.stderr
 
 
+#: Channel-gap dependencies: declared in `pyproject.toml`, but imported lazily (via
+#: `_UtilsBase._optional_import()`) so bare `import my` never requires them. Not optional
+#: extras -- see LIBS-62 and `SUBL-32` harness/libs.md #2c for why a plugin host that
+#: provisions Python packages outside `uv`/PyPI needs `import my` to succeed without them.
+CHANNEL_GAP_MODULES = ('srsly', 'tomli_w', 'unidecode')
+
+
+class TestLazyFacadeDefersChannelGapDependencies:
+    """`import my` must not require `srsly`, `tomli_w`, or `unidecode`.
+
+    These three are ordinary, unconditional `my-basis` dependencies -- not optional extras --
+    but Sublime Text's ST 4213 plugin host (Python 3.14) provisions packages into its own
+    `Lib/python314` directory outside `uv`/PyPI, and the Package Control channel does not yet
+    carry them for 3.14. Deferring their imports past `import my` lets the host load `my` at
+    all; only the methods that actually need them (YAML/JSON/TOML serialization, `srsly`'s
+    dumps; `clean_string`'s transliteration, `unidecode`) still require them installed, and do
+    so with a clear, greppable `ImportError` instead of a bare `ModuleNotFoundError`.
+    """
+
+    def test_bare_import__succeeds_with_channel_gap_modules_blocked(self):
+        """A fresh `import my` succeeds even when `srsly`/`tomli_w`/`unidecode` are absent."""
+        proc = _probe(
+            f"""
+import importlib.abc
+import sys
+
+class BlockChannelGap(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname.partition('.')[0] in {CHANNEL_GAP_MODULES!r}:
+            raise ModuleNotFoundError(fullname)
+        return None
+
+sys.meta_path.insert(0, BlockChannelGap())
+import my
+for name in {CHANNEL_GAP_MODULES!r}:
+    assert name not in sys.modules, f'{{name}} eagerly imported'
+assert my.ut.multi_rgx('cat', 'dog') == '(?:cat|dog)'
+"""
+        )
+        assert proc.returncode == 0, proc.stderr
+
+    def test_call_without_dependency__raises_clear_import_error(self):
+        """Calling a guarded method without its dependency names the missing library plainly.
+
+        One probe, sequenced deliberately, rather than three independently-blocked ones:
+        `to_yaml`/`to_json`/`from_json`/`from_yaml`/`to_toml` all route through the shared
+        `Typist` (`cls.ty`), which is only populated by importing `my.typing` -- and
+        `my.typing` transitively imports `my.caches.FileCache`, which itself eagerly imports
+        `srsly` (already lazy relative to bare `import my`, per LIBS-62 step 1, but not
+        relative to `my.typing`). So `ut.ty` is primed first, with `srsly` genuinely
+        importable, then `sys.modules['srsly'] = None` re-blocks it -- overriding the now-
+        cached real module -- immediately before exercising the srsly-guarded calls. A
+        `None` entry makes any subsequent `import <name>` (including a submodule import,
+        since Python must first successfully import the parent) raise `ImportError`.
+        """
+        proc = _probe(
+            """
+import sys
+
+for name in ('srsly', 'tomli_w', 'unidecode'):
+    sys.modules[name] = None
+
+import my
+assert my.ut.multi_rgx('cat', 'dog') == '(?:cat|dog)'
+
+# `clean_string` needs `unidecode` and touches no `Typist` state.
+try:
+    my.ut.clean_string('Cafe')
+except ImportError as exc:
+    assert 'unidecode' in str(exc)
+else:
+    raise AssertionError('clean_string did not raise without unidecode')
+
+# Populate `ut.ty` via a real import; `tomli_w`/`unidecode` stay blocked throughout.
+del sys.modules['srsly']
+import my.typing
+assert my.ut.ty is not None
+
+# `to_toml` needs `tomli_w`.
+try:
+    my.ut.to_toml({'a': 1})
+except ImportError as exc:
+    assert 'tomli_w' in str(exc)
+else:
+    raise AssertionError('to_toml did not raise without tomli_w')
+
+# Re-block `srsly` to exercise its own guarded call sites.
+sys.modules['srsly'] = None
+calls = (
+    lambda: my.ut.to_yaml({'a': 1}),
+    lambda: my.ut.to_json({'a': 1}),
+    lambda: my.ut.from_json('{"a": 1}'),
+    lambda: my.ut.from_yaml('a: 1'),
+)
+for call in calls:
+    try:
+        call()
+    except ImportError as exc:
+        assert 'srsly' in str(exc)
+    else:
+        raise AssertionError('a srsly-backed call did not raise without srsly')
+"""
+        )
+        assert proc.returncode == 0, proc.stderr
+
+
 class TestLazyFacadeContract:
     """Deferred names must resolve with the same identity and errors as eager imports."""
 

@@ -3,7 +3,7 @@
 ############
 ### STANDARD
 from __future__ import annotations
-from typing import Any, overload, TypeVar
+from typing import Any, overload, TypeVar, TYPE_CHECKING
 from collections.abc import Collection, Sequence, Iterable, Generator
 from datetime import datetime, timedelta, UTC
 from pathlib import Path
@@ -23,9 +23,6 @@ import regex as re
 # I/O
 import pickle
 import tomllib
-import srsly
-from srsly._yaml_api import CustomYaml
-import tomli_w
 
 ### EXTERNAL
 import pydantic as pyd
@@ -41,6 +38,12 @@ from ..infra.types import (
 )
 from ._UtilsBase import _UtilsBase
 from .TextUtils import text_utils
+
+# `srsly`/`tomli_w` are unconditional dependencies (see `pyproject.toml`), but are imported
+# lazily through `_UtilsBase._optional_import()` at each call site below so bare `import my`
+# does not require them -- only the methods that actually serialize YAML/JSON/TOML do.
+if TYPE_CHECKING:
+    from srsly._yaml_api import CustomYaml
 
 # from typing import TYPE_CHECKING
 # if TYPE_CHECKING:
@@ -72,7 +75,8 @@ class SystemUtils(_UtilsBase):
     """Methods that deal with low-level system resources & APIs."""
 
     AUTO_CONFIRM: ClassVar[bool] = False
-    YAML_CONFIG: ClassVar[CustomYaml] = CustomYaml()
+    #: Built and configured lazily by `_yaml_config()` -- never read this directly.
+    _YAML_CONFIG: ClassVar[CustomYaml | None] = None
     LOGGER: ClassVar[logging.Logger] = logger
 
     ### Regular Expressions (can't use RegexStore because it depends on this class)
@@ -856,9 +860,9 @@ class SystemUtils(_UtilsBase):
             return tvar()  # type: ignore
         elif isinstance(file, Path):
             cls.validate_file(file)
-            ret = srsly.read_json(file)
+            ret = cls._optional_import('srsly').read_json(file)
         elif (text := cls.ty.cast(file, str)) is not None:
-            ret = srsly.json_loads(text)
+            ret = cls._optional_import('srsly').json_loads(text)
         else:
             raise ValueError(f'Unsupported input type for JSON loading: {type(file)}')
 
@@ -933,7 +937,7 @@ class SystemUtils(_UtilsBase):
         elif isinstance(file, Path):
             # I.ii. Local case: Read directly from file
             cls.validate_file(file)
-            ret = srsly.read_yaml(file)
+            ret = cls._optional_import('srsly').read_yaml(file)
         else:
             # I.iii. Main Case: Attempt to parse in-memory YAML strings
             text = file.decode() if isinstance(file, bytes) else file
@@ -945,7 +949,7 @@ class SystemUtils(_UtilsBase):
                     )
                 text = match.group('content')
 
-            ret = srsly.yaml_loads(text)
+            ret = cls._optional_import('srsly').yaml_loads(text)
 
         # II. Verify & format the response
         # if isinstance(ret, tvar):
@@ -1074,7 +1078,7 @@ class SystemUtils(_UtilsBase):
                     - 2
         """
         obj = cls.ty.serialize(data)
-        text = cls.YAML_CONFIG.dump(obj, **kwargs)
+        text = cls._yaml_config().dump(obj, **kwargs)
         assert isinstance(text, str), 'Failed to write YAML data.'
 
         # If we printed a root array, de-intent it
@@ -1108,7 +1112,7 @@ class SystemUtils(_UtilsBase):
         obj = cls.ty.serialize(data)
         if 'indent' not in kwargs:
             kwargs['indent'] = 4
-        text = srsly.json_dumps(obj, **kwargs)
+        text = cls._optional_import('srsly').json_dumps(obj, **kwargs)
 
         # If requested, wrap in markdown bactics
         if wrap:
@@ -1142,7 +1146,7 @@ class SystemUtils(_UtilsBase):
                 obj = dict(content=obj)
 
         # II. Serialize w/ default params
-        text = tomli_w.dumps(obj, **kwargs)
+        text = cls._optional_import('tomli_w').dumps(obj, **kwargs)
 
         # If requested, wrap in markdown bactics
         if wrap:
@@ -1168,6 +1172,28 @@ class SystemUtils(_UtilsBase):
         obj = cls.ty.serialize(data)
         return pickle.dumps(obj, **kwargs)
 
+    @classmethod
+    def _yaml_config(cls) -> CustomYaml:
+        """Return the shared YAML dumper, building and configuring it on first use.
+
+        Building `CustomYaml` -- and therefore importing `srsly` -- is deferred to this
+        accessor (instead of a class-body `ClassVar[CustomYaml] = CustomYaml()`) so that
+        importing `SystemUtils`, and therefore bare `import my`, does not require `srsly`
+        to be installed. Only a YAML-serializing call pays that cost.
+
+        Returns:
+            The process-shared, already-configured `CustomYaml` instance.
+        Raises:
+            ImportError: If the optional `srsly` dependency is not installed.
+        """
+        if SystemUtils._YAML_CONFIG is None:
+            cls._optional_import('srsly')  # clear error naming `srsly` if entirely missing
+            from srsly._yaml_api import CustomYaml as _CustomYaml
+
+            SystemUtils._YAML_CONFIG = _CustomYaml()
+            cls._configure_yaml()
+        return SystemUtils._YAML_CONFIG
+
     @staticmethod
     def _configure_yaml(
         mapping: int = 4,
@@ -1188,7 +1214,7 @@ class SystemUtils(_UtilsBase):
             offset: Indentation delta between a parent and a child sequence's bullet points.
             sort_keys: Whether to sort mapping keys on output.
         """
-        cfg = SystemUtils.YAML_CONFIG
+        cfg = SystemUtils._yaml_config()
         cfg.indent(mapping=mapping, sequence=sequence, offset=offset)
         cfg.sort_base_mapping_type_on_output = sort_keys  # type: ignore
 
@@ -1209,9 +1235,9 @@ class SystemUtils(_UtilsBase):
         return cls.ty.serialize(data, full=full)
 
 
-# `_configure_yaml()` was never invoked, so `YAML_CONFIG` sat at ruamel's own defaults
-# (alphabetically-sorted keys, 2-space indent) instead of this project's intended ones.
-SystemUtils._configure_yaml()
+# `_configure_yaml()` is no longer called eagerly here: `_yaml_config()` applies the same
+# defaults (4/6/4 indentation, unsorted keys) the first time any `to_yaml()` call builds the
+# shared `CustomYaml` instance, keeping `srsly` out of the eager `import my` path.
 
 system_utils = SystemUtils
 """An alias of `SystemUtils`, cased so as to imply static usage."""

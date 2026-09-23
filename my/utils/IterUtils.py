@@ -830,6 +830,104 @@ class IterUtils(_UtilsBase):
         uni_pred = lambda item: any(fn(item) for fn in _preds)
         return mi.first(mi.locate(iterable, uni_pred), default=-1)
 
+    @classmethod
+    def sorted_insert[T](
+        cls, array: MutableSequence[T], item: T, key: Callable[[T], Any] = lambda x: x
+    ) -> int:
+        """Insert an item into a sorted sequence, keeping it sorted by `key`.
+
+        Args:
+            array: A mutable sequence, already sorted ascending by `key`. Mutated in place.
+            item: The item to insert.
+            key: Sort key function (default: the item itself).
+        Returns:
+            The index the item was inserted at.
+        Examples:
+            Keep a running sorted list without a full re-sort::
+
+                >>> from my import ut
+                >>> array = [1, 3, 5]
+                >>> ut.sorted_insert(array, 4)
+                2
+                >>> array
+                [1, 3, 4, 5]
+        """
+        new_key = key(item)
+        index = mi.first(mi.locate(array, lambda old: key(old) > new_key), default=len(array))
+        array.insert(index, item)
+        return index
+
+    @classmethod
+    def groupby[T](
+        cls,
+        iterable: Iterable[T],
+        key: int | str | Callable[[T], Hashable],
+        drop: bool = False,
+        keys: type[Hashable] | None = None,
+    ) -> Iterable[tuple[Hashable, list[T]]]:
+        """Group the items in the given iterable by the given key.
+
+        Unlike `itertools.groupby`, the input does not need to already be sorted by `key`
+        -- this sorts internally first, so every group is returned complete and contiguous.
+
+        The key type is left as the broad `Hashable` (rather than inferred through a generic
+        type parameter) because `key`'s three accepted shapes -- an int index, an attribute
+        name, or a callable -- don't let a type checker relate the argument to a single
+        concrete key type; narrow the result at the call site if a caller needs more.
+
+        Args:
+            iterable: Items to group.
+            key: An int index (for tuple/sequence items), an attribute name (`str`), or a
+                callable extracting the group key from an item.
+            drop: If True, drop items whose key is falsy before grouping.
+            keys: Unused; reserved for a future explicit key-type annotation/validation.
+        Yields:
+            `(key, items)` pairs, one per distinct key, each with every matching item.
+        Examples:
+            Group by an attribute name, dropping items with a falsy key::
+
+                >>> from my import ut
+                >>> class Item:
+                ...     def __init__(self, tag):
+                ...         self.tag = tag
+                >>> items = [Item('x'), Item(''), Item('y'), Item('x')]
+                >>> {k: len(v) for k, v in ut.groupby(items, 'tag', drop=True)}
+                {'x': 2, 'y': 1}
+        """
+        if isinstance(key, int):
+            pred = lambda item: item[key]  # type: ignore
+        elif isinstance(key, str):
+            pred = lambda item: getattr(item, key)
+        else:
+            pred = key
+
+        _iter = iter(iterable)
+        if drop:
+            _iter = filter(lambda item: bool(pred(item)), _iter)
+        _iter = sorted(_iter, key=pred)  # type: ignore
+
+        yield from ((k, list(items)) for k, items in it.groupby(_iter, key=pred))
+
+    @classmethod
+    def locate[T](cls, seq: Sequence[T], pred: Callable[[T], bool]) -> tuple[int, T]:
+        """Return the `(index, item)` pair for the first item in `seq` matching `pred`.
+
+        Args:
+            seq: Sequence to search.
+            pred: Predicate function to apply to each item.
+        Returns:
+            A `(index, item)` tuple for the first match.
+        Raises:
+            AssertionError: If no item in `seq` satisfies `pred`.
+        Examples:
+            >>> from my import ut
+            >>> ut.locate([10, 20, 30], lambda x: x > 15)
+            (1, 20)
+        """
+        index = cls.indexof(seq, pred)
+        assert index != -1, 'No item found matching predicate.'
+        return index, seq[index]
+
     # -------------
     # `3` EXECUTION
     # -------------

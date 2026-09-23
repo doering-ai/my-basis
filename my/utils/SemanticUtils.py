@@ -293,6 +293,32 @@ class SemanticUtils(_UtilsBase):
 
         raise ValueError(f'Failed to convert {plural} to singular form.')
 
+    @classmethod
+    def plural(cls, count: int | float, singular: str, plural: str | None = None) -> str:
+        """Return the singular or plural form of a word based on a count.
+
+        The counterpart of `to_singular()`: that goes plural -> singular; this goes the
+        other way, from a count and a known singular (optionally with an irregular plural).
+
+        Args:
+            count: The count determining which form to use.
+            singular: The word's singular form.
+            plural: The word's irregular plural form, if `singular + 's'` isn't correct.
+        Returns:
+            `singular` if `count == 1`, else `plural` (or `singular + 's'` if not given).
+        Examples:
+            Regular and irregular plurals::
+
+                >>> from my import ut
+                >>> ut.plural(1, 'file')
+                'file'
+                >>> ut.plural(0, 'file')
+                'files'
+                >>> ut.plural(2, 'index', 'indices')
+                'indices'
+        """
+        return singular if count == 1 else (plural or singular + 's')
+
     @staticmethod
     def to_ordinal(num: int | str) -> str:
         """Convert number to ordinal string (e.g., 1 -> '1st', 2 -> '2nd').

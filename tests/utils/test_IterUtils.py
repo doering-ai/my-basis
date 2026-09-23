@@ -260,6 +260,54 @@ class TestIterUtils:
     def test_apply(self, funcs: list[Callable], item: Any, expected: list):
         assert list(cls.apply(funcs, item)) == expected
 
+    @pyt.mark.parametrize(
+        'array, item, expected_index',
+        [([1, 3, 5], 4, 2), ([1, 3, 5], 0, 0), ([1, 3, 5], 9, 3), ([], 1, 0)],
+    )
+    def test_sorted_insert(self, array: list, item: int, expected_index: int):
+        index = cls.sorted_insert(array, item)
+        assert index == expected_index
+        assert array == sorted(array)
+        assert item in array
+
+    def test_sorted_insert__with_key(self):
+        array = [(1, 'a'), (3, 'c')]
+        cls.sorted_insert(array, (2, 'b'), key=lambda t: t[0])
+        assert array == [(1, 'a'), (2, 'b'), (3, 'c')]
+
+    def test_locate__returns_index_and_item(self):
+        assert cls.locate([10, 20, 30], lambda x: x > 15) == (1, 20)
+
+    def test_locate__missing_asserts(self):
+        with pyt.raises(AssertionError, match='No item found'):
+            cls.locate([1], lambda x: x > 5)
+
+    def test_groupby__by_index(self):
+        data = [(1, 'a'), (0, 'b'), (2, 'c'), (0, 'd'), (1, 'e')]
+        result = dict(cls.groupby(data, 0))
+        assert result[1] == [(1, 'a'), (1, 'e')]
+        assert result[0] == [(0, 'b'), (0, 'd')]
+
+    def test_groupby__by_attribute_name(self):
+        class Item:
+            def __init__(self, tag: str) -> None:
+                self.tag = tag
+
+        items = [Item('x'), Item('y'), Item('x')]
+        result = dict(cls.groupby(items, 'tag'))
+        assert len(result['x']) == 2 and len(result['y']) == 1
+
+    def test_groupby__by_callable(self):
+        result = dict(cls.groupby([1, 2, 3, 4], lambda x: x % 2))
+        assert result[0] == [2, 4] and result[1] == [1, 3]
+
+    def test_groupby__drop_removes_falsy_keys(self):
+        """Regression: ``drop=True`` must not be silently ignored."""
+        data = [(1, 'a'), (0, 'b'), (2, 'c'), (0, 'd'), (1, 'e')]
+        result = dict(cls.groupby(data, 0, drop=True))
+        assert 0 not in result
+        assert set(result) == {1, 2}
+
     # -------------
     # `3` EXECUTION
     # -------------

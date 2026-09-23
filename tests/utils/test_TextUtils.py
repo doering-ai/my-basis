@@ -2,6 +2,7 @@
 ### HEAD ###
 ############
 ### STANDARD
+import re as stdlib_re
 import regex as re
 
 ### EXTERNAL
@@ -57,6 +58,66 @@ class TestTextUtils:
         # Test with already compiled patterns
         compiled = cls.regex_dict({'test': re.compile(r'\d+')})
         assert isinstance(compiled['test'], re.Pattern)
+
+    def test_regex_dict__precompiled_pattern_passthrough(self):
+        """A precompiled Pattern value is returned by identity, never recompiled."""
+        pattern = re.compile(r'\d+')
+        result = cls.regex_dict(num=pattern)
+        assert result['num'] is pattern
+
+    def test_regex_dict__list_value_joined_with_sep(self):
+        """A non-string value is treated as an iterable of strings joined by `sep`."""
+        result = cls.regex_dict(sep='|', either=['aa', 'bb'])
+        assert result['either'].fullmatch('aa')
+        assert result['either'].fullmatch('bb')
+
+    def test_regex_dict__reference_expansion(self):
+        """A `{{.name}}` reference expands to an earlier entry's pattern text."""
+        result = cls.regex_dict(digit=r'\d', pair=r'{{.digit}}{{.digit}}')
+        assert result['pair'].fullmatch('42')
+        assert not result['pair'].fullmatch('4')
+
+    def test_regex_dict__reference_to_unknown_group_raises(self):
+        """A `{{.name}}` reference to an undefined group raises, naming the group."""
+        with pyt.raises(AssertionError, match='non-existent group'):
+            cls.regex_dict(pair=r'{{.missing}}')
+
+    def test_regex_dict__invalid_pattern_raises_value_error(self, capsys: pyt.CaptureFixture):
+        """An unparsable pattern raises `ValueError` naming the offending key."""
+        with pyt.raises(ValueError, match='Invalid Regular Expression "bad"'):
+            cls.regex_dict(bad=r'(')
+        # Regression guard: no stray debug output on the raising path.
+        assert capsys.readouterr().out == ''
+
+    def test_regex_dict__multiline_invalid_pattern_annotates_row(self):
+        """A multiline pattern's error report still resolves without crashing."""
+        with pyt.raises(ValueError, match=r'ERROR'):
+            cls.regex_dict(bad='(?x)\nabc\n(')
+
+    def test_regex_dict__stdlib_re_compile_function_also_reports(self):
+        """`compile_function` isn't required to come from the `regex` module either."""
+        with pyt.raises(ValueError, match='Invalid Regular Expression "bad"'):
+            cls.regex_dict(bad=r'(', compile_function=stdlib_re.compile)  # pyrefly: ignore[bad-argument-type]
+
+    def test_safe_compile__valid_pattern(self):
+        """A valid pattern compiles and matches normally."""
+        pattern = cls.safe_compile('ok', r'\w+', re.compile)
+        assert pattern.fullmatch('abc')
+
+    def test_safe_compile__invalid_pattern_returns_fallback(self, capsys: pyt.CaptureFixture):
+        """An invalid pattern reports the error and returns the `'ERROR'` fallback pattern."""
+        pattern = cls.safe_compile('broken', r'(', re.compile)
+        assert pattern is not None
+        assert pattern.pattern == r'ERROR'
+        out = capsys.readouterr().out
+        assert 'RGX COMPILATION ERROR' in out
+        assert 'broken' in out
+
+    def test_safe_compile__stdlib_re_compile_fn_also_falls_back(self):
+        """`fn` isn't required to come from the `regex` module -- stdlib `re` must work too."""
+        pattern = cls.safe_compile('broken', r'(', stdlib_re.compile)  # pyrefly: ignore[bad-argument-type]
+        assert pattern is not None
+        assert pattern.pattern == r'ERROR'
 
     def test_regex_array(self):
         """Test compiling array of (pattern, replacement) tuples."""
@@ -138,6 +199,49 @@ class TestTextUtils:
     )
     def test_clean_string(self, text: str, expected: str):
         assert cls.clean_string(text) == expected
+
+    @pyt.mark.parametrize(
+        'case, expected',
+        [
+            ('lower', 'text case'),
+            ('upper', 'TEXT CASE'),
+            ('title', 'Text Case'),
+            ('capital', 'Text case'),
+            ('kebab', 'text-case'),
+            ('snake', 'text_case'),
+            ('pascal', 'TextCase'),
+            ('camel', 'textCase'),
+        ],
+    )
+    def test_recase__all_cases_from_words(self, case: str, expected: str):
+        assert cls.recase('Text Case', to=case, clean=False) == expected
+
+    @pyt.mark.parametrize(
+        'text, from_case, expected',
+        [
+            ('foo-bar-baz', 'kebab', 'fooBarBaz'),
+            ('foo_bar_baz', 'snake', 'fooBarBaz'),
+            ('FooBarBaz', 'pascal', 'fooBarBaz'),
+            ('fooBarBaz', 'camel', 'fooBarBaz'),
+        ],
+    )
+    def test_recase__camel_from_other_cases(self, text: str, from_case: str, expected: str):
+        assert cls.recase(text, to='camel', _from=from_case, clean=False) == expected
+
+    @pyt.mark.parametrize('empty', ['', '   ', '\n\t'])
+    def test_recase__empty_input(self, empty: str):
+        assert cls.recase(empty) == ''
+
+    def test_recase__cleans_nonwords_by_default(self):
+        assert cls.recase('Hello World!') == 'hello_world'
+
+    def test_recase__accepts_textcase_enum_instances(self):
+        assert cls.recase('one two', to=cls.TextCase.KEBAB) == 'one-two'
+
+    def test_pascal_roundtrip(self):
+        assert cls.to_pascal('foo_bar') == 'FooBar'
+        assert cls.from_pascal('FooBar') == 'foo_bar'
+        assert cls.from_pascal(cls.to_pascal('foo_bar')) == 'foo_bar'
 
     @pyt.mark.parametrize(
         'text, expected',

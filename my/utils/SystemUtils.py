@@ -10,9 +10,11 @@ from pathlib import Path
 from shutil import get_terminal_size
 from typing import ClassVar
 from unittest.mock import MagicMock
+import asyncio as aio
 import functools as ft
 import contextlib as ctx
 import itertools as it
+import shlex
 import subprocess as sbp
 import sys
 import textwrap
@@ -150,6 +152,36 @@ class SystemUtils(_UtilsBase):
             return timedelta(0)
         else:
             return cls.posix() - cls.posix(val)
+
+    @classmethod
+    def milliseconds(cls, val: int | float | datetime | timedelta | None = None) -> int:
+        """Convert a timedelta, datetime, or numeric timestamp to milliseconds.
+
+        Args:
+            val: A timedelta, a datetime, a numeric timestamp, or None for the current time.
+                A numeric value `< 10` is treated as already being in seconds (e.g. a small
+                relative duration) rather than a Unix timestamp, and scaled up.
+        Returns:
+            The equivalent millisecond count, rounded to the nearest integer.
+        Examples:
+            A `timedelta` and a `datetime` both convert directly::
+
+                >>> from datetime import timedelta, datetime, timezone
+                >>> from my import ut
+                >>> ut.milliseconds(timedelta(seconds=1))
+                1000
+                >>> ut.milliseconds(datetime(1970, 1, 2, tzinfo=timezone.utc))
+                86400000
+        """
+        if val is None:
+            val = cls.posix()
+
+        if isinstance(val, timedelta):
+            return round(val.total_seconds() * 1000)
+        elif isinstance(val, datetime):
+            return round(val.timestamp() * 1000)
+        else:
+            return int((val * 1000) if val < 10 else val)
 
     # --------------
     # `1` FILESYSTEM
@@ -1233,6 +1265,114 @@ class SystemUtils(_UtilsBase):
                 '2026-01-01T00:00:00'
         """
         return cls.ty.serialize(data, full=full)
+
+    # ---------
+    # `4` SHELL
+    # ---------
+    @classmethod
+    def _clean_shell_args(
+        cls, args: tuple[str | Iterable[str], ...], kwargs: dict[str, Any]
+    ) -> Generator[str]:
+        """Flatten positional shell tokens and turn keyword arguments into CLI flags.
+
+        Args:
+            args: Positional tokens, each a string or an iterable of strings (one level of
+                nesting is collapsed); each is further shlex-split.
+            kwargs: Keyword arguments, turned into `-x`/`--xyz` flags. A `True` value yields a
+                bare flag; a string value yields `flag value`; an iterable yields `flag v1
+                flag v2 ...`; anything else is stringified.
+        Yields:
+            Individual shell tokens, ready to `shlex.join()`.
+        """
+        for arg in mi.collapse(args, base_type=str, levels=1):
+            yield from filter(bool, shlex.split(str(arg).strip()))
+        for key, val in kwargs.items():
+            if not key.startswith('-'):
+                key = f'-{key}' if len(key) == 1 else f'--{key}'
+
+            if isinstance(val, bool) and val is True:
+                yield key
+            elif isinstance(val, str):
+                yield from (key, val)
+            elif isinstance(val, Iterable):
+                yield from mi.flatten((key, str(v)) for v in val)
+            else:
+                yield from (key, str(val))
+
+    @staticmethod
+    def ex(
+        *args: str | list[str],
+        cwd: str | Path | None = None,
+        **kwargs: Any,
+    ) -> str | None:
+        """Execute the given command as a shell-interpreted subprocess.
+
+        Any exception (including a non-zero exit) is swallowed; a caller that needs to
+        distinguish "failed" from "produced no output" should shell out directly instead.
+
+        Args:
+            *args: Command and arguments to execute. Can be multiple strings or lists of strings.
+            cwd: Optional working directory to execute the command in.
+            **kwargs: Additional keyword arguments that are parsed into command line options
+                (see `_clean_shell_args()`).
+        Returns:
+            The stripped stdout (or stderr, if stdout was empty) on success, else None.
+        Examples:
+            Run a trivial command and capture its output::
+
+                >>> from my import ut
+                >>> ut.ex('echo', 'hi')
+                'hi'
+        """
+        with ctx.suppress(Exception):
+            result = sbp.run(
+                shlex.join(SystemUtils._clean_shell_args(args, kwargs)),
+                shell=True,
+                capture_output=True,
+                text=True,
+                cwd=str(cwd) if cwd else None,
+            )
+            if result.returncode == 0:
+                return (result.stdout or result.stderr).strip('\n').rstrip(' ')
+        return None
+
+    @classmethod
+    def execute(cls, *args: str | list[str], **kwargs: Any) -> str | None:
+        """Alias of `ex()`. Execute the given command as a shell-interpreted subprocess."""
+        return cls.ex(*args, **kwargs)
+
+    @staticmethod
+    async def exa(
+        *args: str | Iterable[str],
+        cwd: str | Path | None = None,
+        **kwargs: Any,
+    ) -> str | None:
+        """Execute the given command as a shell-interpreted subprocess, asynchronously.
+
+        See `ex()` for the argument/return contract; this is its `asyncio` counterpart.
+
+        Examples:
+            >>> import asyncio
+            >>> from my import ut
+            >>> asyncio.run(ut.exa('echo', 'hi'))
+            'hi'
+        """
+        with ctx.suppress(Exception):
+            proc = await aio.create_subprocess_shell(
+                shlex.join(SystemUtils._clean_shell_args(args, kwargs)),
+                stdout=aio.subprocess.PIPE,
+                stderr=aio.subprocess.PIPE,
+                cwd=str(cwd) if cwd else None,
+            )
+            stdout, stderr = await proc.communicate()
+            if proc.returncode == 0:
+                return (stdout.decode() or stderr.decode()).strip('\n').rstrip(' ')
+        return None
+
+    @classmethod
+    async def execute_async(cls, *args: str, **kwargs: Any) -> str | None:
+        """Alias of `exa()`. Execute the given command as an async shell subprocess."""
+        return await cls.exa(*args, **kwargs)
 
 
 # `_configure_yaml()` is no longer called eagerly here: `_yaml_config()` applies the same

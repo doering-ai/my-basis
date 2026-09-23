@@ -77,6 +77,15 @@ class TestTextUtils:
         assert result['pair'].fullmatch('42')
         assert not result['pair'].fullmatch('4')
 
+    def test_regex_dict__escaped_reference_survives_expansion(self):
+        r"""An escaped `\{{.name}}` stays literal while an identical unescaped twin expands.
+
+        `str.replace()` used to rewrite the skipped escape as well, producing `a\xx`,
+        which failed to compile.
+        """
+        result = cls.regex_dict(foo='x', pair=r'a\{{.foo}}{{.foo}}')
+        assert result['pair'].pattern == r'a\{{.foo}}x'
+
     def test_regex_dict__reference_to_unknown_group_raises(self):
         """A `{{.name}}` reference to an undefined group raises, naming the group."""
         with pyt.raises(AssertionError, match='non-existent group'):

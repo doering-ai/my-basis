@@ -160,10 +160,13 @@ class TextUtils(_UtilsBase):
                     val = sep.join(val)  # type: ignore
                 text = val
 
-                for match in list(_RGX_REF_RGX.finditer(text)):
+                # Splice by match span, reversed so earlier spans stay valid:
+                # str.replace would also rewrite the escaped `\{{.name}}`
+                # occurrences the matcher deliberately skipped.
+                for match in reversed(list(_RGX_REF_RGX.finditer(text))):
                     name = match['name']
                     assert name in ret, f"Referenced non-existent group {name!r} in r'{text}'"
-                    text = text.replace(match[0], ret[name].pattern)
+                    text = f'{text[: match.start()]}{ret[name].pattern}{text[match.end() :]}'
 
                 ret[key] = compile_function(text)  # type: ignore
         except (re.error, stdlib_re.error) as exc:

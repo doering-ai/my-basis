@@ -2,7 +2,7 @@
 ### HEAD ###
 ############
 ### STANDARD
-from typing import Annotated, Any, Literal, cast as type_cast
+from typing import Annotated, Any, Literal, NamedTuple, cast as type_cast
 from collections.abc import Sequence, Collection
 from collections import Counter, deque
 from datetime import date, datetime, time, timedelta, UTC
@@ -55,6 +55,13 @@ class Permission(Flag):
     WRITE = 2
     EXECUTE = 4
     ADMIN = 8
+
+
+class Move(NamedTuple):
+    """A defaulted NamedTuple for positional-rebuild tests (mirrors `Header.Move`)."""
+
+    depth: int = 0
+    place: int = 0
 
 
 #: `data, target, expected` matrices for `test_cast__*`, hoisted to module scope so `ids=` (via
@@ -1033,3 +1040,51 @@ class TestCast:
                     f'{later[2].__name__} is strictly more specific than '
                     f'{earlier[2].__name__} but dispatches after it'
                 )
+
+    # ---- SUBL-32 regression: NamedTuple/tuple targets must rebuild positionally ----
+
+    def test_cast__namedtuple_positional_rebuild(self):
+        """A defaulted NamedTuple must rebuild from a sequence one field at a time.
+
+        `flexcast((2, 3), Move)` used to return ``Move(depth=[2, 3], place=0)``: the
+        candidate chain handed the element list to `_finalize`, whose construction step
+        called ``Move([2, 3])`` -- the whole sequence landed in the first declared field
+        whenever the remaining fields had defaults (without defaults the constructor's
+        `TypeError` accidentally pushed the cast to a candidate that unpacked). A cast
+        coerces; it never reinterprets the sequence as a single field's value.
+        """
+        assert typist.flexcast((2, 3), Move) == Move(2, 3)
+        assert typist.flexcast([2, 3], Move) == Move(2, 3)
+        # An already-correct instance must survive the round-trip unchanged (in value;
+        # `normalize` listifies tuples, so identity is not preserved by design).
+        assert typist.flexcast(Move(2, 3), Move) == Move(2, 3)
+        # As a union member (the downstream `CommandArguments` shape):
+        assert typist.flexcast(Move(2, 3), Move | int) == Move(2, 3)
+        # Wrong arity is a decline -- flexcast falls back to the original input rather
+        # than reinterpreting the tail of the sequence as defaults.
+        assert typist.flexcast((2, 3, 4), Move) == (2, 3, 4)
+
+    def test_cast__tuple_field_positional(self):
+        """Plain `tuple[X, Y]` targets keep their element positions through the rebuild."""
+        assert typist.flexcast((2, 3), tuple[int, int]) == (2, 3)
+        assert typist.flexcast(('1', 2), tuple[int, str]) == (1, '2')
+        # A normalized input that already satisfies a union member is a NOOP per
+        # `to_union`'s contract -- `list[int]` legitimately owns the list form.
+        assert typist.flexcast((2, 3), tuple[int, int] | list[int]) == [2, 3]
+
+    def test_cast__command_args_union_fields(self):
+        """An `AutocastModel` field typed with NamedTuple-union members must validate.
+
+        Mirrors the downstream `CommandArguments` shape (e.g. `HeaderNavArgs`'s
+        ``moves: Sequence[Move | int]``): `_auto_validate` re-casts each field value,
+        and a `Move` member used to round-trip into ``Move(depth=[2, 3], place=0)``,
+        failing pydantic's union validation outright.
+        """
+        from my.typing import AutocastModel
+
+        class NavArgs(AutocastModel):
+            moves: Sequence[Move | int] = pyd.Field(default_factory=list)
+
+        assert NavArgs(moves=[Move(2, 3), 5]).moves == [Move(2, 3), 5]
+        assert NavArgs(moves=[(2, 3), 5]).moves == [Move(2, 3), 5]
+        assert NavArgs(moves=[(2, 3)]).moves == [Move(2, 3)]

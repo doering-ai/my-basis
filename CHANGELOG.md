@@ -6,6 +6,24 @@ Where a change is a behavior break rather than an internal fix, it's called out 
 
 ## [Unreleased]
 
+### `SUBL-32`: `flexcast` rebuilds NamedTuple targets positionally, not first-field-bound
+
+The wave-2 pydantic 2.13.5 / Python 3.14 re-locks (Sublime 4213's plugin host) exposed a
+positional-rebuild bug in the cast engine: `Transform._finalize` constructed the target with
+`t1.main(data)`, so a NamedTuple target rebuilt from a normalized sequence bound the whole
+sequence to its first declared field. With field defaults the construction quietly
+"succeeded" -- `ty.flexcast((2, 3), Move)` returned `Move(depth=[2, 3], place=0)` -- while
+without defaults the constructor's `TypeError` accidentally pushed the cast to a candidate
+that unpacked, which is why only defaulted NamedTuple fields (e.g. `CommandArguments` unions
+with tuple members) mangled.
+
+- NamedTuple targets (tuple subclasses with `_fields`) now rebuild one argument per declared
+  field, for list/tuple/iterator-shaped data; a wrong-arity sequence declines like any other
+  invalid construction, so `flexcast` falls back to the original input instead of
+  reinterpreting it.
+- Plain `tuple` targets (`tuple.__init__` takes an iterable) and every non-tuple path
+  construct exactly as before.
+
 ### `LIBS-62`: absorbed mySublimeBasis's `Utils` superset, lazy-imported the channel gap
 
 Sublime Text 4213's plugin host runs Python 3.14 and provisions packages outside `uv`/PyPI;

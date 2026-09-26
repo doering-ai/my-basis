@@ -231,6 +231,9 @@ myst_enable_extensions = [
 # ----
 # html_theme = 'sphinx_rtd_theme' # The standard ReadTheDocs theme.
 html_theme = 'furo'  # copied from https://more-itertools.readthedocs.io/en/stable/
+html_title = f'{project} {release}'
+# Canonical links point at the hosted build (docs-hub, MEMY-1860).
+html_baseurl = 'https://basis.docs.doering.ai/'
 pygments_style = 'sphinx'
 pygments_dark_style = 'monokai'  # specific to `furo` theme
 # html_theme_options=

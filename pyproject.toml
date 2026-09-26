@@ -25,7 +25,7 @@ classifiers = [
 urls.Homepage      = "https://gitlab.com/doering-ai/libs/basis"
 urls.Source        = "https://gitlab.com/doering-ai/libs/basis"
 urls.Issues        = "https://gitlab.com/doering-ai/libs/basis/-/issues"
-urls.Documentation = "https://my-basis.readthedocs.io"
+urls.Documentation = "https://basis.docs.doering.ai/"
 
 
 ########################

@@ -19,12 +19,14 @@
 <!-- readme-header:end -->
 
 The myBasis utility package — imported as `my` — is a broad extension of the Python standard library centered on text processing, functional programming, and runtime type coercion.
-The use cases are diverse enough to not enumerate them all here, but they all share a strong sense of discipline: all code is thoroughly typed, tested, and [documented](docs/index.md) following my best pass at best practices (it does get easier!).
+The use cases are diverse enough to not enumerate them all here, but they all share a strong sense of discipline: all code is thoroughly typed, tested, and [documented](https://basis.docs.doering.ai/) following my best pass at best practices (it does get easier!).
 
 I made this module to streamline some patterns that seemed both A) frequently-relevant and feasible to streamline.
 The repo thus grew alongside my projects over time, a genesis which gives it the advantage of being in daily use by the original author in multiple examples right off the bat.
 
 > Left-rule blocks mark artificial prose; quotations retain their own attribution.
+
+**Documentation:** [basis.docs.doering.ai](https://basis.docs.doering.ai/)
 
 ## Installation
 
@@ -83,15 +85,15 @@ The heavier `apis` and `files` branches load lazily.
 
 </blockquote>
 
-| Area                | Start here                                                                | Useful for                                                                          |
-| ------------------- | ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| Utilities           | [`ut`](my/utils/README.md)                                                | Partitioning iterables, transforming text, working with syntax and system resources |
-| Runtime typing      | [`ty`, `MyType`, `AutocastModel`](my/typing/README.md)                    | Coercion, conformance checks, and inspecting annotations                            |
-| Reusable types      | [`Span`, `Buffer`, `Command`](my/types/README.md)                         | Intervals, mutable text, and reusable shell invocations                             |
-| Regular expressions | [`RegexStore`, `MatchData`](my/regex/README.md)                           | Composing named patterns and inspecting matches                                     |
-| Caches              | [`Cache`, `NestedCache`, `FileCache`, `PickleCache`](my/caches/README.md) | In-memory, hierarchical, disk-backed, and expiring storage                          |
-| Interfaces          | [`env`, `fs`, `GoogleSheet`](my/apis/README.md)                           | Typed environment access, named paths, and optional spreadsheet integration         |
-| File formats        | [`Markdown`](my/files/README.md)                                          | Parsing, walking, and editing a document tree                                       |
+| Area                | Start here                                                                | Useful for                                                                          | API reference                                       |
+| ------------------- | ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | --------------------------------------------------- |
+| Utilities           | [`ut`](my/utils/README.md)                                                | Partitioning iterables, transforming text, working with syntax and system resources | [Hosted](https://basis.docs.doering.ai/utils.html)  |
+| Runtime typing      | [`ty`, `MyType`, `AutocastModel`](my/typing/README.md)                    | Coercion, conformance checks, and inspecting annotations                            | [Hosted](https://basis.docs.doering.ai/typing.html) |
+| Reusable types      | [`Span`, `Buffer`, `Command`](my/types/README.md)                         | Intervals, mutable text, and reusable shell invocations                             | [Hosted](https://basis.docs.doering.ai/types.html)  |
+| Regular expressions | [`RegexStore`, `MatchData`](my/regex/README.md)                           | Composing named patterns and inspecting matches                                     | [Hosted](https://basis.docs.doering.ai/regex.html)  |
+| Caches              | [`Cache`, `NestedCache`, `FileCache`, `PickleCache`](my/caches/README.md) | In-memory, hierarchical, disk-backed, and expiring storage                          | [Hosted](https://basis.docs.doering.ai/caches.html) |
+| Interfaces          | [`env`, `fs`, `GoogleSheet`](my/apis/README.md)                           | Typed environment access, named paths, and optional spreadsheet integration         | [Hosted](https://basis.docs.doering.ai/apis.html)   |
+| File formats        | [`Markdown`](my/files/README.md)                                          | Parsing, walking, and editing a document tree                                       | [Hosted](https://basis.docs.doering.ai/files.html)  |
 
 ## A short tour
 
@@ -117,7 +119,7 @@ ut.find([3, 8, 2], lambda x: x > 5)               # -> 1
 
 <blockquote class="artificial-prose">
 
-[`AutocastModel`](docs/typing.AutocastModel.md) applies the casting rules during Pydantic validation.
+[`AutocastModel`](https://basis.docs.doering.ai/typing.AutocastModel.html) applies the casting rules during Pydantic validation.
 It's useful when incoming values are close to the shape you need, including a scalar where your model expects a list.
 Use it where that permissiveness is intended.
 
@@ -140,7 +142,7 @@ s = Settings(port='8080', debug='true', tags='solo')
 <blockquote class="artificial-prose">
 
 The types branch gives recurring concepts their own objects.
-[`Span`](docs/types.Span.md), for instance, represents a half-open interval and handles its length and overlap checks.
+[`Span`](https://basis.docs.doering.ai/types.Span.html), for instance, represents a half-open interval and handles its length and overlap checks.
 The shared type vocabulary also pairs annotation aliases such as `Atom` with runtime tuples such as `Atoms`.
 
 </blockquote>
@@ -157,8 +159,8 @@ a.intersects(b)  # -> True
 
 <blockquote class="artificial-prose">
 
-[`RegexStore`](docs/regex.RegexStore.md) gives patterns names you can compose and reuse.
-[`MatchData`](docs/regex.MatchData.md) keeps repeated groups accessible, and `COMMON_RGXS` supplies a collection of ready-made patterns.
+[`RegexStore`](https://basis.docs.doering.ai/regex.RegexStore.html) gives patterns names you can compose and reuse.
+[`MatchData`](https://basis.docs.doering.ai/regex.MatchData.html) keeps repeated groups accessible, and `COMMON_RGXS` supplies a collection of ready-made patterns.
 The [meta layer](my/regex/meta/README.md) is there when you need to inspect the expression itself.
 
 </blockquote>
@@ -180,7 +182,7 @@ print(store.search('greeting', 'hello world'))  # -> name: world
 <blockquote class="artificial-prose">
 
 Choose a cache by its storage pattern: bounded memory, nested levels, memory over disk, or pickle-backed persistence with expiry.
-The simplest case is a [`Cache`](docs/caches.Cache.md).
+The simplest case is a [`Cache`](https://basis.docs.doering.ai/caches.Cache.html).
 If you use `PickleCache`, load only data you trust—unpickling can execute code.
 
 </blockquote>
@@ -217,7 +219,7 @@ env.flag('DEMO_FLAG')  # -> 1 (0 when unset)
 
 <blockquote class="artificial-prose">
 
-[`Markdown`](docs/files.Markdown.md) parses a document into a hierarchy of sections while respecting fenced code.
+[`Markdown`](https://basis.docs.doering.ai/files.Markdown.html) parses a document into a hierarchy of sections while respecting fenced code.
 You can walk the nodes, edit them, and render the result.
 
 </blockquote>
@@ -289,7 +291,7 @@ See the [full workflow](my/skills/adopt-my-basis/SKILL.md) and [RegexStore adopt
 
 <blockquote class="artificial-prose">
 
-The [Sphinx/MyST documentation](docs/index.md) provides class references and examples.
+The [hosted documentation](https://basis.docs.doering.ai/) covers the package API; its sources are in [`docs/`](docs/).
 From a checkout, install the development dependencies and build it with:
 
 </blockquote>

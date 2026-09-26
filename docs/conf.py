@@ -30,7 +30,7 @@ JNJ_DIR = SRC_DIR + '/data/templates'
 # -------
 # Project
 # -------
-project = 'MyBasis'
+project = 'myBasis'
 author = 'Robb Doering'
 version = metadata.version('my-basis')  # the [project].name in pyproject.toml
 release = version

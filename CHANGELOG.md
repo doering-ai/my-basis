@@ -6,6 +6,14 @@ Where a change is a behavior break rather than an internal fix, it's called out 
 
 ## [Unreleased]
 
+### `LIBS-80`: `MY_REGEX_TIMEOUT` sets the regex deadline
+
+- `Buffer`, `RegexStore` and `Filesystem` take their `REGEX_TIMEOUT` from one value, read once from
+  the `MY_REGEX_TIMEOUT` environment variable when `my.infra.constants` is imported. It is a positive,
+  finite number of seconds and defaults to 10.0. Any other value, including an empty string, raises
+  `ValueError` at import. A batch caller on a busy machine can now lift the deadline with the
+  variable instead of assigning a module global.
+
 ### `LIBS-70`: `Buffer` regex replacement keeps its context, and `rgx_iterator` ends on empty matches
 
 - `Buffer.replace()` with a compiled pattern expanded its template by matching the pattern again on the

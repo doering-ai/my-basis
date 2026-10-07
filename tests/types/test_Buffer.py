@@ -196,6 +196,20 @@ class TestBuffer:
         assert str(buf) == expected
 
     @pyt.mark.parametrize(
+        'text, rgx, expected',
+        [
+            ('one two', r'\b', [(0, 0), (3, 3), (4, 4), (7, 7)]),
+            ('ab', r'x*', [(0, 0), (1, 1), (2, 2)]),
+            ('', r'', [(0, 0)]),
+            ('a1 b2', r'(?=\d)', [(1, 1), (4, 4)]),
+        ],
+    )
+    def test_rgx_iterator__zero_width(self, text: str, rgx: str, expected: list[tuple[int, int]]):
+        """An empty match is yielded once, then the search moves on and ends with the text."""
+        matches = it.islice(cls.new(text).rgx_iterator(rgx), len(expected) + 5)
+        assert [match.span() for match in matches] == expected
+
+    @pyt.mark.parametrize(
         'text, rgx, new, expected',
         [
             # Context outside the match: lookbehind, lookahead and `\B`
@@ -204,6 +218,10 @@ class TestBuffer:
             ('xy', r'\By', 'X', 'xX'),
             # The template still expands groups
             ('k1 k2', r'k(\d)', r'v\1', 'v1 v2'),
+            # Empty matches insert once each
+            ('one two', r'\b', '|', '|one| |two|'),
+            ('a\nb', r'(?m)^', '> ', '> a\n> b'),
+            ('abc', r'(?=b)', '-', 'a-bc'),
         ],
     )
     def test_replace__regex_context(self, text: str, rgx: str, new: str, expected: str):

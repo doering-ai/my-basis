@@ -1066,6 +1066,9 @@ class Buffer(pyd.BaseModel):
         modify the buffer's text while they iterate over it. To make this possible, it is assumed
         that the caller will only ever modify the last-yielded match of text during each iteration.
 
+        A zero-width match is yielded once. The search then resumes one character past it (plus any
+        length the caller added), so a non-empty match starting at the same position is not found.
+
         By default, every match is yielded, including matches inside configured fences. This
         historical behavior lets callers deliberately process or remove the text defining a fence.
         Set `skip_fenced` to protect matches that begin inside fences, as the pair iterators do.
@@ -1093,7 +1096,9 @@ class Buffer(pyd.BaseModel):
 
         pos = b0
         b1 = b1 if b1 != -1 else len(self)
-        while match := rgx.search(self.text[0], pos, timeout=REGEX_TIMEOUT):
+        # `search()` clamps a `pos` past the end of the text, which would find a trailing
+        # zero-width match again, so the loop also stops once `pos` leaves the text.
+        while pos <= len(self) and (match := rgx.search(self.text[0], pos, timeout=REGEX_TIMEOUT)):
             x0, x1 = match.span()
             if x1 > b1:
                 break
@@ -1109,8 +1114,9 @@ class Buffer(pyd.BaseModel):
             # Yield last match, allowing caller to modify it
             yield match
 
-            # Continue on to the next match (if present)
-            pos = x0 if recursive else x1
+            # Continue on to the next match (if present). Like the fenced branch above, step over a
+            # zero-width match by one character, so the search cannot find it again.
+            pos = x0 if recursive else max(x1, x0 + 1)
             if delta := len(self) - last_len:
                 if not recursive:
                     pos += delta

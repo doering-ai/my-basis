@@ -1066,8 +1066,10 @@ class Buffer(pyd.BaseModel):
         modify the buffer's text while they iterate over it. To make this possible, it is assumed
         that the caller will only ever modify the last-yielded match of text during each iteration.
 
-        A zero-width match is yielded once. The search then resumes one character past it (plus any
-        length the caller added), so a non-empty match starting at the same position is not found.
+        In the default mode, a zero-width match is yielded once. The search then resumes one
+        character past it (plus any length the caller added), so a non-empty match starting at the
+        same position is not found. With `recursive` set, the search resumes at the match's start,
+        so the caller must edit the match or the iteration will not move on.
 
         By default, every match is yielded, including matches inside configured fences. This
         historical behavior lets callers deliberately process or remove the text defining a fence.

@@ -317,9 +317,10 @@ class Buffer(pyd.BaseModel):
                 i += 1
 
     def _replace_regex(self, rgx: Pattern, new: str, count: int = 0) -> None:
-        """Replaces occurrences of a regex pattern with new text, updating fences.
+        r"""Replaces occurrences of a regex pattern with new text, updating fences.
 
-        Regex variable substitution is performed as usual for each match.
+        Regex variable substitution is performed as usual for each match, expanding the template
+        against the match in its original context (so lookarounds, `\b` and `^` still apply).
 
         Args:
             rgx: The regex pattern to replace.
@@ -329,7 +330,7 @@ class Buffer(pyd.BaseModel):
         for i, match in enumerate(self.rgx_iterator(rgx, skip_fenced=True)):
             if count and i >= count:
                 break
-            self._replace_span(match.span(), rgx.sub(new, match[0]))
+            self._replace_span(match.span(), match.expand(new))
 
     def _yield_pair(self, pair: Pair) -> tuple[Span, str, str, str]:
         """Helper function that formats the given pair of spans into a helpful 4-tuple.

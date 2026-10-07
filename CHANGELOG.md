@@ -6,6 +6,15 @@ Where a change is a behavior break rather than an internal fix, it's called out 
 
 ## [Unreleased]
 
+### `LIBS-70`: `Buffer` regex replacement keeps its context, and `rgx_iterator` ends on empty matches
+
+- `Buffer.replace()` with a compiled pattern expanded its template by matching the pattern again on the
+  isolated matched text, so a lookbehind, lookahead, `\B`, `\b` or `^` saw the wrong context and the
+  replacement silently did nothing. It now expands the template against the original match.
+- `Buffer.rgx_iterator()` never moved past a zero-width match in its default mode, so `\b` on a plain
+  buffer yielded the same empty match forever. It now steps one character past an empty match, as the
+  fenced branch already did, and stops at the end of the text.
+
 ### `SUBL-32`: `flexcast` rebuilds NamedTuple targets positionally, not first-field-bound
 
 The wave-2 pydantic 2.13.5 / Python 3.14 re-locks (Sublime 4213's plugin host) exposed a

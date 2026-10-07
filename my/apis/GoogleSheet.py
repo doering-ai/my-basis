@@ -754,9 +754,9 @@ class GoogleSheet:
         sheet_id: int,
         col: int,
         row1: int,
-        lo: str,
-        mid: str,
-        hi: str,
+        lo: float | str,
+        mid: float | str,
+        hi: float | str,
         lo_color: str,
         mid_color: str,
         hi_color: str,
@@ -769,9 +769,9 @@ class GoogleSheet:
             sheet_id: The worksheet's `sheetId`.
             col: The conditioned column index.
             row1: One past the last conditioned row index.
-            lo: The number mapping to the low color.
-            mid: The number mapping to the midpoint color.
-            hi: The number mapping to the high color.
+            lo: The number (or its text) mapping to the low color.
+            mid: The number (or its text) mapping to the midpoint color.
+            hi: The number (or its text) mapping to the high color.
             lo_color: Low hexcode.
             mid_color: Midpoint hexcode.
             hi_color: High hexcode.

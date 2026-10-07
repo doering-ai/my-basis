@@ -16,6 +16,7 @@ import pydantic as pyd
 import regex as re
 
 ### INTERNAL
+from ..infra.constants import REGEX_TIMEOUT
 from ..utils import ut
 from ..types import Buffer
 from ..typing import typist
@@ -70,8 +71,8 @@ DEBUG = True
 NO_FLAG = RegexFlag(0)
 #: Flags the engine adds when compiling an ordinary Unicode string with no explicit options.
 DEFAULT_PATTERN_FLAGS = RegexFlag(re.compile('').flags)
-#: Deadline for every public regex search path used in unattended processing.
-REGEX_TIMEOUT: float = 10.0
+# `REGEX_TIMEOUT` (imported above) is the deadline, in seconds, for every public regex search path
+# used in unattended processing. It follows `MY_REGEX_TIMEOUT` (10.0 when unset).
 
 type LockField = Annotated[Lock, ut.pyd_schemify(Lock)]
 
@@ -94,8 +95,9 @@ class RegexStore(pyd.BaseModel):
         - Automatic parsing of match results into a more ergonomic form (see MatchData).
         - Pattern optimization applied by default.
         - Construction of "Router trees" for efficient matching of long patterns to long texts.
-        - A `REGEX_TIMEOUT` deadline (10s) guarding every public engine call, including
-          substitutions, so runaway backtracking cannot hang unattended processing.
+        - A `REGEX_TIMEOUT` deadline (10s unless `MY_REGEX_TIMEOUT` says otherwise) guarding every
+          public engine call, including substitutions, so runaway backtracking cannot hang
+          unattended processing.
 
     The DSL used to specify patterns can combine a variety of input types into one, including:
         - String literals and pre-compiled patterns.

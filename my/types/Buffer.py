@@ -17,6 +17,7 @@ import numpy as np
 import numpy.typing as npt
 
 ### INTERNAL
+from ..infra.constants import REGEX_TIMEOUT
 from ..utils import ut
 from .Span import Span
 
@@ -35,9 +36,9 @@ def _no_spans() -> SpanArray:
 
 NO_ESC = r'(?<!(?:^|[^\\])\\)'
 
-#: Timeout (seconds) for regex searches in hot iterators. Catches catastrophic
-#: backtracking in unattended processing without false-positives on normal input.
-REGEX_TIMEOUT: float = 10.0
+# `REGEX_TIMEOUT` (imported above) is the deadline in seconds for regex searches in hot iterators.
+# It catches catastrophic backtracking in unattended processing without false positives on normal
+# input, and follows `MY_REGEX_TIMEOUT` (10.0 when unset).
 DEBUG = False
 
 PairMode = Literal['all', 'roots', 'leaves']

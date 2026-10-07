@@ -13,7 +13,7 @@ import pydantic as pyd
 import regex as re
 
 ### INTERNAL
-from ..infra.constants import INFRA_PATHS, NOWHERE  # noqa: F401
+from ..infra.constants import INFRA_PATHS, NOWHERE, REGEX_TIMEOUT  # noqa: F401
 from ..utils import ut
 from ..regex import RegexStore
 from ..typing import typist
@@ -109,11 +109,11 @@ RGXS = RegexStore.new(
     platform=r'',
 )
 
-#: Timeout (seconds) for searches against raw patterns pulled off `RGXS` (e.g. `RGXS['leaf']`).
-#: Subscripting a `RegexStore` hands back the bare compiled pattern, bypassing the store's own
-#: timeout-guarded `search()`/`match()` -- so call sites that go this route must pass this
-#: explicitly. Mirrors `RegexStore.REGEX_TIMEOUT` / `Buffer.REGEX_TIMEOUT`.
-REGEX_TIMEOUT: float = 10.0
+# `REGEX_TIMEOUT` (imported above) is the timeout in seconds for searches against raw patterns
+# pulled off `RGXS` (e.g. `RGXS['leaf']`). Subscripting a `RegexStore` hands back the bare compiled
+# pattern, bypassing the store's own timeout-guarded `search()`/`match()` -- so call sites that go
+# this route must pass this explicitly. It is the same value as `RegexStore.REGEX_TIMEOUT` and
+# `Buffer.REGEX_TIMEOUT`, which follows `MY_REGEX_TIMEOUT` (10.0 when unset).
 
 
 Leaf, Branch = pyd.FilePath, pyd.DirectoryPath

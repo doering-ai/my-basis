@@ -6,6 +6,7 @@ from collections.abc import Generator, Iterator
 from pathlib import Path, PosixPath, WindowsPath
 from typing import TYPE_CHECKING, Self
 import functools as ft
+import math
 import os
 from importlib.resources import files
 
@@ -26,6 +27,42 @@ re.DEFAULT_VERSION = re.VERSION1  # pyrefly: ignore[bad-assignment]
 ############
 ### DATA ###
 ############
+#: Environment variable that sets the regex deadline, in seconds.
+REGEX_TIMEOUT_ENV = 'MY_REGEX_TIMEOUT'
+
+#: The regex deadline, in seconds, when `MY_REGEX_TIMEOUT` is unset.
+DEFAULT_REGEX_TIMEOUT: float = 10.0
+
+
+def regex_timeout() -> float:
+    """Read the regex deadline, in seconds, from `MY_REGEX_TIMEOUT`.
+
+    The deadline is a policy about load, not about correctness: a batch caller on a busy machine
+    may need longer than the default to avoid false timeouts.
+
+    Returns:
+        The variable's value, or `DEFAULT_REGEX_TIMEOUT` when it is unset.
+    Raises:
+        ValueError: If the variable is set to anything but a positive, finite number of seconds.
+    """
+    if (raw := os.environ.get(REGEX_TIMEOUT_ENV)) is None:
+        return DEFAULT_REGEX_TIMEOUT
+    try:
+        seconds = float(raw)
+    except ValueError:
+        seconds = math.nan
+    if not (math.isfinite(seconds) and seconds > 0):
+        raise ValueError(
+            f'{REGEX_TIMEOUT_ENV} must be a positive, finite number of seconds: {raw!r}'
+        )
+    return seconds
+
+
+#: Deadline, in seconds, for each regex search guarded against runaway backtracking (`Buffer`,
+#: `RegexStore` and `Filesystem` each bind this value). Read once, when this module is imported.
+REGEX_TIMEOUT: float = regex_timeout()
+
+
 class InfraPaths(pyd.BaseModel, arbitrary_types_allowed=True, defer_build=True, frozen=True):
     """A model containing important paths within the package."""
 

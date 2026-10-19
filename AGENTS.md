@@ -165,6 +165,31 @@ Each public class and function should have a docstring that describes its purpos
 Use Google-style Python docstrings.
 Do not repeat type annotations in the docstring.
 
+### Examples
+
+Every non-trivial public feature carries an executed `Examples:` block in one shape.
+End the lead-in with `::`, leave a blank line, then indent a doctest.
+Never use markdown fences: they render broken through `eval-rst`.
+`tests/test_examples.py` sweeps every module's doctests inside the ordinary suite.
+A behavior change therefore needs its docstring example updated in the same commit, or the suite goes red.
+Opt a side-effectful or connection-gated example out inline with `# doctest: +SKIP`.
+The README's "What's inside" table enumerates `__all__`, so adding or removing an export means touching that table.
+
+### Cast semantics
+
+- String casts never strip.
+  `cast('  test  ', str)` returns the value verbatim.
+  Per-type parsers handle the whitespace they care about at parse time, so do not add `.strip()` to string-producing transforms or to `clean_data`.
+- `my.typing` assumes UTC.
+  Serializing a `datetime` or `time` drops the offset (`replace(tzinfo=None)`, with no conversion), so `10:20:30+00:00` becomes `10:20:30`.
+  Parsing normalizes naive inputs to UTC.
+
+### Regex performance
+
+`RegexStore.match(name, text)` builds a pydantic `MatchData`, which costs roughly 13x a bare match on a short line (measured 0.055 s against 0.0043 s per 20,000 calls on Python 3.14).
+Use it for one-off validation, via `RGXS.fullmatch(...)`.
+In a per-line hot loop, call the store's compiled pattern, `RGXS['name'].match(line)`, which the store still owns.
+
 ______________________________________________________________________
 
 ## Task backlog: `~/local/tasks`

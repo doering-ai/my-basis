@@ -733,13 +733,27 @@ class Buffer(pyd.BaseModel):
         return self
 
     def set(self, text: str) -> Self:
-        """Convenience setter for replacing the entire content of the buffer at once.
+        r"""Replace the entire buffer, updating fences and invalidating cached pairs.
 
         Args:
             text: The new text to set the buffer to.
+        Returns:
+            The same (modified) Buffer instance.
+        Examples:
+            Replace text after caching delimiter pairs::
+
+                >>> from my import Buffer
+                >>> import regex as re
+                >>> rgx = re.compile(r'(?P<start>\()|(?P<end>\))')
+                >>> buf = Buffer.new('(a)')
+                >>> [pair[2] for pair in buf.pair_list(rgx)]
+                ['a']
+                >>> buf.set('(bb)') is buf
+                True
+                >>> [pair[2] for pair in buf.pair_list(rgx)]
+                ['bb']
         """
-        self.text[0] = text
-        self.fences = self._build_fences()
+        self._replace_span((0, len(self)), text)
         return self
 
     def clear(self) -> Self:

@@ -478,6 +478,76 @@ class TestBuffer:
         second = buf.pair_list(rgx)
         assert first is second
 
+    @pyt.mark.parametrize(
+        'text, replacement, expected',
+        [
+            # Lengthening, shortening, and same-length replacement
+            ('(a)', '(bb)', [(Span(0, 4), '(', 'bb', ')')]),
+            ('(long)', '(c)', [(Span(0, 3), '(', 'c', ')')]),
+            ('(a)', '(b)', [(Span(0, 3), '(', 'b', ')')]),
+            # Empty, clearing, and unchanged text
+            ('', '(a)', [(Span(0, 3), '(', 'a', ')')]),
+            ('(a)', '', []),
+            ('', '', []),
+            ('(a)', '(a)', [(Span(0, 3), '(', 'a', ')')]),
+        ],
+    )
+    def test_set__cached_pairs(self, text: str, replacement: str, expected: list):
+        rgx = re.compile(r'(?P<start>\()|(?P<end>\))')
+        buf = cls.new(text)
+        before = buf.pair_list(rgx)
+
+        assert buf.set(replacement) is buf
+        assert str(buf) == replacement
+        assert len(buf) == len(replacement)
+        after = buf.pair_list(rgx)
+        assert after == expected
+        assert list(buf.pair_iterator(rgx)) == expected
+        assert buf.pair_list(rgx) is after
+        if text != replacement:
+            assert after is not before
+
+    @pyt.mark.parametrize(
+        'b0, b1, expected',
+        [
+            (0, -1, ['long', 'c']),
+            (0, 6, ['long']),
+            (10, -1, ['c']),
+            (10, 13, ['c']),
+        ],
+    )
+    def test_set__cached_pair_bounds(self, b0: int, b1: int, expected: list[str]):
+        rgx = re.compile(r'(?P<start>\()|(?P<end>\))')
+        buf = cls.new('(a)   (b)')
+        buf.pair_list(rgx, b0=b0, b1=b1)
+
+        buf.set('(long)    (c)')
+        assert [body for _, _, body, _ in buf.pair_list(rgx, b0=b0, b1=b1)] == expected
+
+    @pyt.mark.parametrize(
+        'text, replacement, fences, bodies',
+        [
+            # Move, create, and remove fences containing delimiter pairs
+            ('`(a)` (b)', '(long) `(c)`', [[7, 12]], ['long']),
+            ('(a)', '`(bb)`', [[0, 6]], []),
+            ('`(a)`', '(bb)', [], ['bb']),
+            ('`(a)`', '', [], []),
+            ('', '`(a)`', [[0, 5]], []),
+            ('`(a)`', '`(a)`', [[0, 5]], []),
+        ],
+    )
+    def test_set__fences(
+        self, text: str, replacement: str, fences: list[list[int]], bodies: list[str]
+    ):
+        rgx = re.compile(r'(?P<start>\()|(?P<end>\))')
+        buf = DefBuf(text)
+        buf.pair_list(rgx)
+
+        buf.set(replacement)
+        assert buf.fences.tolist() == fences
+        assert [body for _, _, body, _ in buf.pair_list(rgx)] == bodies
+        assert [body for _, _, body, _ in buf.pair_iterator(rgx)] == bodies
+
     def test_pair_list__invalidates_on_mutation(self):
         """basis-T1 item 3: a version-bumping mutation forces a re-scan, not stale cached pairs.
 

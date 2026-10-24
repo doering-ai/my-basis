@@ -478,6 +478,166 @@ class TestBuffer:
         second = buf.pair_list(rgx)
         assert first is second
 
+    @pyt.mark.parametrize(
+        'text, replacement, expected',
+        [
+            # Lengthening, shortening, and same-length replacement
+            ('(a)', '(bb)', [(Span(0, 4), '(', 'bb', ')')]),
+            ('(long)', '(c)', [(Span(0, 3), '(', 'c', ')')]),
+            ('(a)', '(b)', [(Span(0, 3), '(', 'b', ')')]),
+            # Empty, clearing, and unchanged text
+            ('', '(a)', [(Span(0, 3), '(', 'a', ')')]),
+            ('(a)', '', []),
+            ('', '', []),
+            ('(a)', '(a)', [(Span(0, 3), '(', 'a', ')')]),
+        ],
+    )
+    def test_set__cached_pairs(self, text: str, replacement: str, expected: list):
+        rgx = re.compile(r'(?P<start>\()|(?P<end>\))')
+        buf = cls.new(text)
+        before = buf.pair_list(rgx)
+
+        assert buf.set(replacement) is buf
+        assert str(buf) == replacement
+        assert len(buf) == len(replacement)
+        after = buf.pair_list(rgx)
+        assert after == expected
+        assert list(buf.pair_iterator(rgx)) == expected
+        assert buf.pair_list(rgx) is after
+        if text != replacement:
+            assert after is not before
+
+    @pyt.mark.parametrize(
+        'b0, b1, expected',
+        [
+            (0, -1, ['long', 'c']),
+            (0, 6, ['long']),
+            (10, -1, ['c']),
+            (10, 13, ['c']),
+        ],
+    )
+    def test_set__cached_pair_bounds(self, b0: int, b1: int, expected: list[str]):
+        rgx = re.compile(r'(?P<start>\()|(?P<end>\))')
+        buf = cls.new('(a)   (b)')
+        buf.pair_list(rgx, b0=b0, b1=b1)
+
+        buf.set('(long)    (c)')
+        assert [body for _, _, body, _ in buf.pair_list(rgx, b0=b0, b1=b1)] == expected
+
+    @pyt.mark.parametrize(
+        'text, replacement, fences, bodies',
+        [
+            # Move, create, and remove fences containing delimiter pairs
+            ('`(a)` (b)', '(long) `(c)`', [[7, 12]], ['long']),
+            ('(a)', '`(bb)`', [[0, 6]], []),
+            ('`(a)`', '(bb)', [], ['bb']),
+            ('`(a)`', '', [], []),
+            ('', '`(a)`', [[0, 5]], []),
+            ('`(a)`', '`(a)`', [[0, 5]], []),
+        ],
+    )
+    def test_set__fences(
+        self, text: str, replacement: str, fences: list[list[int]], bodies: list[str]
+    ):
+        rgx = re.compile(r'(?P<start>\()|(?P<end>\))')
+        buf = DefBuf(text)
+        buf.pair_list(rgx)
+
+        buf.set(replacement)
+        assert buf.fences.tolist() == fences
+        assert [body for _, _, body, _ in buf.pair_list(rgx)] == bodies
+        assert [body for _, _, body, _ in buf.pair_iterator(rgx)] == bodies
+
+    @pyt.mark.parametrize(
+        'method, text, replacement',
+        [
+            # Whole-buffer resets discard explicit spans without a defining regex
+            ('set', ' abc ', 'xyz'),
+            ('set', ' abc ', 'longer replacement'),
+            ('set', ' abc ', ' abc '),
+            ('set', ' abc ', ''),
+            ('clear', ' abc ', None),
+            ('clear', '', None),
+        ],
+    )
+    def test_mutators__explicit_fence_reset(self, method: str, text: str, replacement: str | None):
+        buf = cls(text=[text], fences=np.array([[1, 4]]))
+
+        if method == 'clear':
+            result = buf.clear()
+        else:
+            assert replacement is not None
+            result = buf.set(replacement)
+
+        assert result is buf
+        assert str(buf) == (replacement or '')
+        assert buf.fences.shape == (0, 2)
+        assert not buf.has_fences
+        assert list(buf.fence_spans) == []
+
+    @pyt.mark.parametrize(
+        'method, text, argument, expected, fences, bodies',
+        [
+            # Clear populated and empty buffers
+            ('clear', '(a) `(b)`', None, '', [], []),
+            ('clear', '', None, '', [], []),
+            # Strip default/custom characters, including fence removal
+            ('strip', ' (a) `(b)` ', '', '(a) `(b)`', [[4, 9]], ['a']),
+            ('strip', 'x(a)x', 'x', '(a)', [], ['a']),
+            ('strip', '`(a)`', '`', '(a)', [], ['a']),
+            ('strip', '(a)', '', '(a)', [], ['a']),
+            ('strip', '   ', '', '', [], []),
+            ('strip', '', '', '', [], []),
+            # Dedent multiline text and preserve relative indentation
+            ('dedent', '  (a)\n  `(b)`', None, '(a)\n`(b)`', [[4, 9]], ['a']),
+            ('dedent', '  (a)\n    (b)', None, '(a)\n  (b)', [], ['a', 'b']),
+            ('dedent', '(a)', None, '(a)', [], ['a']),
+            ('dedent', '', None, '', [], []),
+            # Append either supported operand type, including new/cross-boundary fences
+            ('iadd', '(a)', '(bb)', '(a)(bb)', [], ['a', 'bb']),
+            ('iadd_buffer', '(a)', '(bb)', '(a)(bb)', [], ['a', 'bb']),
+            ('iadd', '(a)', ' `(bb)`', '(a) `(bb)`', [[4, 10]], ['a']),
+            ('iadd', '`(a)', '`', '`(a)`', [[0, 5]], []),
+            ('iadd', '(a)', '', '(a)', [], ['a']),
+            ('iadd', '', '', '', [], []),
+        ],
+    )
+    def test_mutators__cached_pairs(
+        self,
+        method: str,
+        text: str,
+        argument: str | None,
+        expected: str,
+        fences: list[list[int]],
+        bodies: list[str],
+    ):
+        rgx = re.compile(r'(?P<start>\()|(?P<end>\))')
+        buf = DefBuf(text)
+        original = buf
+        buf.pair_list(rgx)
+
+        if method in ('clear', 'dedent'):
+            result = getattr(buf, method)()
+        elif method == 'strip':
+            assert argument is not None
+            result = buf.strip(argument)
+        else:
+            assert argument is not None
+            buf += cls.new(argument) if method == 'iadd_buffer' else argument
+            result = buf
+
+        assert result is original
+        assert str(buf) == expected
+        assert buf.fences.tolist() == fences
+        assert [body for _, _, body, _ in buf.pair_list(rgx)] == bodies
+        assert buf.pair_list(rgx) == list(buf.pair_iterator(rgx))
+
+    def test_iadd__invalid_operand(self):
+        buf = DefBuf('(a)')
+        with pyt.raises(TypeError, match='Cannot concatenate Buffer'):
+            buf += 1  # type: ignore[unsupported-operation]
+        assert str(buf) == '(a)'
+
     def test_pair_list__invalidates_on_mutation(self):
         """basis-T1 item 3: a version-bumping mutation forces a re-scan, not stale cached pairs.
 

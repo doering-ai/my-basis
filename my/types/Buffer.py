@@ -667,11 +667,12 @@ class Buffer(pyd.BaseModel):
 
     def __iadd__(self, other: Self | str) -> Self:
         if isinstance(other, Buffer):
-            self.text[0] += other.text[0]
+            text = other.text[0]
         elif isinstance(other, str):
-            self.text[0] += other
+            text = other
         else:
             raise TypeError(f'Cannot concatenate Buffer with {type(other)}')
+        self._replace_span((len(self), len(self)), text)
         return self
 
     def replace(
@@ -733,20 +734,34 @@ class Buffer(pyd.BaseModel):
         return self
 
     def set(self, text: str) -> Self:
-        """Convenience setter for replacing the entire content of the buffer at once.
+        r"""Replace the entire buffer, updating fences and invalidating cached pairs.
 
         Args:
             text: The new text to set the buffer to.
+        Returns:
+            The same (modified) Buffer instance.
+        Examples:
+            Replace text after caching delimiter pairs::
+
+                >>> from my import Buffer
+                >>> import regex as re
+                >>> rgx = re.compile(r'(?P<start>\()|(?P<end>\))')
+                >>> buf = Buffer.new('(a)')
+                >>> [pair[2] for pair in buf.pair_list(rgx)]
+                ['a']
+                >>> buf.set('(bb)') is buf
+                True
+                >>> [pair[2] for pair in buf.pair_list(rgx)]
+                ['bb']
         """
-        self.text[0] = text
+        self._replace_span((0, len(self)), text)
         self.fences = self._build_fences()
         return self
 
     def clear(self) -> Self:
         """Convenience setter for clearing the entire content of the buffer at once."""
-        self.text[0] = ''
-        if self.has_fences:
-            self.fences = _no_spans()
+        self._replace_span((0, len(self)), '')
+        self.fences = _no_spans()
         return self
 
     def strip(self, chars: str = '') -> Self:
@@ -762,13 +777,7 @@ class Buffer(pyd.BaseModel):
         n_right = len(list(it.takewhile(lambda i: self[i] in chars, range(-1, -len(self), -1))))
         if n_left or n_right:
             end = len(self) - n_right
-            self.text[0] = self.text[0][n_left:end]
-
-            if self.has_fences:
-                if self.fences[0][0] < n_left or self.fences[-1][1] > end:
-                    self.fences = self._build_fences()
-                elif n_left:
-                    self.fences -= n_left
+            self._replace_span((0, len(self)), self.text[0][n_left:end])
 
         return self
 
@@ -846,7 +855,7 @@ class Buffer(pyd.BaseModel):
 
     def dedent(self) -> Self:
         """Dedents all text evenly, so that the line with the fewest spaces starts at column 0."""
-        self.text[0] = textwrap.dedent(self.text[0])
+        self._replace_span((0, len(self)), textwrap.dedent(self.text[0]))
         return self
 
     def write(self, span: Span, text: str | Iterable[str], spacing: int = 0, diff: int = 0) -> None:

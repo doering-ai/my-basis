@@ -306,7 +306,7 @@ tasks:
             for f in {{.CLI_ARGS}}; do
               case "$f" in
                 *.py|*.pyi)   py="$py $f" ;;
-                *.md)         md="$md $f" ;;
+                *.md|*.markdown|*.mdx|*.mdc)         md="$md $f" ;;
                 *.yaml|*.yml) yaml="$yaml $f" ;;
                 *.toml)       toml="$toml $f" ;;
                 *.typ)        typ="$typ $f" ;;
@@ -329,20 +329,13 @@ tasks:
         aliases: ['check:py']
 
     eval:check:md:
-        desc: Check markdown formatting with `mdformat --check` (reads `.mdformat.toml`) over
-            TRACKED files only; skipped if mdformat is not installed in the env.
+        desc: Check tracked Markdown with the shared preserving formatter.
         cmd: |
-            if ! {{.UV}} run --quiet mdformat --version >/dev/null 2>&1; then
-              echo "mdformat not installed in this env — skipping markdown check." >&2
-            elif [ -n "{{.CLI_ARGS}}" ]; then
-              {{.UV}} run mdformat --check {{.CLI_ARGS}}
+            if [ -n "{{.CLI_ARGS}}" ]; then
+              fleet-format-markdown --check {{.CLI_ARGS}}
             else
-              # Tracked files only (MEMY-1612): mdformat does not read .gitignore, so a
-              # whole-tree walk reddens the gate on untracked local installs (e.g.
-              # gitignored skills/3p) — content that is not ours to normalize. Explicitly
-              # named paths stay explicit: if a caller names a file, check that file.
-              git ls-files -z -- '*.md' \
-                | xargs -0 -r {{.UV}} run mdformat --check
+              git ls-files -z -- '*.md' '*.markdown' '*.mdx' '*.mdc' \
+                | xargs -0 -r fleet-format-markdown --check
             fi
 
     eval:check:yaml:
@@ -421,7 +414,7 @@ tasks:
             for f in {{.CLI_ARGS}}; do
               case "$f" in
                 *.py|*.pyi)   py="$py $f" ;;
-                *.md)         md="$md $f" ;;
+                *.md|*.markdown|*.mdx|*.mdc)         md="$md $f" ;;
                 *.yaml|*.yml) yaml="$yaml $f" ;;
                 *.toml)       toml="$toml $f" ;;
                 *.typ)        typ="$typ $f" ;;
@@ -444,19 +437,13 @@ tasks:
         aliases: ['fmt:py', 'format:py']
 
     eval:format:md:
-        desc: Format tracked markdown in place with `mdformat` (reads `.mdformat.toml`); skipped
-            if mdformat is not installed in the env.
+        desc: Format tracked Markdown with the shared preserving formatter.
         cmd: |
-            if ! {{.UV}} run --quiet mdformat --version >/dev/null 2>&1; then
-              echo "mdformat not installed in this env — skipping markdown formatting." >&2
-            elif [ -n "{{.CLI_ARGS}}" ]; then
-              {{.UV}} run mdformat {{.CLI_ARGS}}
+            if [ -n "{{.CLI_ARGS}}" ]; then
+              fleet-format-markdown {{.CLI_ARGS}}
             else
-              # Tracked files only, matching eval:check:md (MEMY-1612): a format sweep must
-              # not rewrite gitignored local installs — that would dirty a tree the gate
-              # never checks and create drift the next resync has to reconcile.
-              git ls-files -z -- '*.md' \
-                | xargs -0 -r {{.UV}} run mdformat
+              git ls-files -z -- '*.md' '*.markdown' '*.mdx' '*.mdc' \
+                | xargs -0 -r fleet-format-markdown
             fi
 
     eval:format:yaml:
@@ -515,27 +502,59 @@ tasks:
             - task: precommit:lint
 
     precommit:format:
-        desc: Format staged python, markdown, yaml, toml, and typst files.
+        desc: Format staged python, markdown, yaml, toml, and typst files, then re-stage the
+            fixes so a formatting-only diff never aborts the commit.
+        # Under prek, a hook that leaves a file modified-but-unstaged aborts the commit ("files
+        # were modified by this hook") -- exactly the interruption the operator does not want
+        # for mechanical fixes. `git add -- <path>` immediately after each formatter re-stages
+        # its output, so the fix rides along in the same commit instead.
+        #
+        # Safe under prek's stash discipline: prek stashes any UNSTAGED changes before running
+        # hooks, so while a hook runs, the working tree holds exactly the staged content -- there
+        # is nothing else on disk that `git add` could accidentally sweep in.
+        #
+        # Residual edge, verified empirically (not merely reasoned about) on prek 0.4.6: a file
+        # that has BOTH a staged hunk and an UNSTAGED hunk touching the same lines a formatter
+        # rewrites. When the staged+unstaged edits are on disjoint lines, prek's post-hook stash
+        # restore applies cleanly on top of the commit -- no issue. When they overlap, prek's
+        # stash-pop patch fails to apply; prek does *not* surface this as a normal resolvable git
+        # conflict (no conflict markers, no `git stash list` entry) -- it silently rolls the
+        # working tree back to the pre-hook state and drops the unstaged hunk from the tree,
+        # logging one line and leaving the original patch sitting in
+        # `~/.cache/prek/patches/<ts>-<pid>.patch` for manual recovery if you know to look. The
+        # commit itself still succeeds (with the staged+formatted content). This is a pre-existing
+        # prek/pre-commit stash-based-hook limitation, not something this re-stage step
+        # introduces -- any hook that rewrites a file on disk under prek's stash model has this
+        # exposure. It only bites a workflow that leaves unstaged edits on the exact lines a
+        # formatter is about to touch, which most agent commits (`git add -A` before commit)
+        # never do.
         cmd: |
             set -e
             unset TAPLO_CONFIG 2>/dev/null || true
             git diff -z --diff-filter=d --cached --name-only -- '*.py' \
               | xargs -0 -r {{.UV}} run ruff format
-            if {{.UV}} run --quiet mdformat --version >/dev/null 2>&1; then
-              git diff -z --diff-filter=d --cached --name-only -- '*.md' \
-                | xargs -0 -r {{.UV}} run mdformat
-            fi
+            # These inputs are already cached index entries: update mode re-stages them without
+            # force-adding ignored or untracked paths.
+            git diff -z --diff-filter=d --cached --name-only -- '*.py' \
+              | xargs -0 -r git add -u --
+            fleet-format-markdown --staged
             if {{.UV}} run --quiet taplo --version >/dev/null 2>&1; then
               git diff -z --diff-filter=d --cached --name-only -- '*.toml' \
                 | xargs -0 -r {{.UV}} run taplo format
+              git diff -z --diff-filter=d --cached --name-only -- '*.toml' \
+                | xargs -0 -r git add -u --
             fi
             if command -v yamlfmt >/dev/null 2>&1; then
               git diff -z --diff-filter=d --cached --name-only -- '*.yaml' '*.yml' \
                 | xargs -0 -r yamlfmt
+              git diff -z --diff-filter=d --cached --name-only -- '*.yaml' '*.yml' \
+                | xargs -0 -r git add -u --
             fi
             if command -v typstyle >/dev/null 2>&1; then
               git diff -z --diff-filter=d --cached --name-only -- '*.typ' \
                 | xargs -0 -r typstyle -i
+              git diff -z --diff-filter=d --cached --name-only -- '*.typ' \
+                | xargs -0 -r git add -u --
             fi
 
     precommit:lint:

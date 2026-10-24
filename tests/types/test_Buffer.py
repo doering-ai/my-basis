@@ -548,6 +548,69 @@ class TestBuffer:
         assert [body for _, _, body, _ in buf.pair_list(rgx)] == bodies
         assert [body for _, _, body, _ in buf.pair_iterator(rgx)] == bodies
 
+    @pyt.mark.parametrize(
+        'method, text, argument, expected, fences, bodies',
+        [
+            # Clear populated and empty buffers
+            ('clear', '(a) `(b)`', None, '', [], []),
+            ('clear', '', None, '', [], []),
+            # Strip default/custom characters, including fence removal
+            ('strip', ' (a) `(b)` ', '', '(a) `(b)`', [[4, 9]], ['a']),
+            ('strip', 'x(a)x', 'x', '(a)', [], ['a']),
+            ('strip', '`(a)`', '`', '(a)', [], ['a']),
+            ('strip', '(a)', '', '(a)', [], ['a']),
+            ('strip', '   ', '', '', [], []),
+            ('strip', '', '', '', [], []),
+            # Dedent multiline text and preserve relative indentation
+            ('dedent', '  (a)\n  `(b)`', None, '(a)\n`(b)`', [[4, 9]], ['a']),
+            ('dedent', '  (a)\n    (b)', None, '(a)\n  (b)', [], ['a', 'b']),
+            ('dedent', '(a)', None, '(a)', [], ['a']),
+            ('dedent', '', None, '', [], []),
+            # Append either supported operand type, including new/cross-boundary fences
+            ('iadd', '(a)', '(bb)', '(a)(bb)', [], ['a', 'bb']),
+            ('iadd_buffer', '(a)', '(bb)', '(a)(bb)', [], ['a', 'bb']),
+            ('iadd', '(a)', ' `(bb)`', '(a) `(bb)`', [[4, 10]], ['a']),
+            ('iadd', '`(a)', '`', '`(a)`', [[0, 5]], []),
+            ('iadd', '(a)', '', '(a)', [], ['a']),
+            ('iadd', '', '', '', [], []),
+        ],
+    )
+    def test_mutators__cached_pairs(
+        self,
+        method: str,
+        text: str,
+        argument: str | None,
+        expected: str,
+        fences: list[list[int]],
+        bodies: list[str],
+    ):
+        rgx = re.compile(r'(?P<start>\()|(?P<end>\))')
+        buf = DefBuf(text)
+        original = buf
+        buf.pair_list(rgx)
+
+        if method in ('clear', 'dedent'):
+            result = getattr(buf, method)()
+        elif method == 'strip':
+            assert argument is not None
+            result = buf.strip(argument)
+        else:
+            assert argument is not None
+            buf += cls.new(argument) if method == 'iadd_buffer' else argument
+            result = buf
+
+        assert result is original
+        assert str(buf) == expected
+        assert buf.fences.tolist() == fences
+        assert [body for _, _, body, _ in buf.pair_list(rgx)] == bodies
+        assert buf.pair_list(rgx) == list(buf.pair_iterator(rgx))
+
+    def test_iadd__invalid_operand(self):
+        buf = DefBuf('(a)')
+        with pyt.raises(TypeError, match='Cannot concatenate Buffer'):
+            buf += 1  # type: ignore[unsupported-operation]
+        assert str(buf) == '(a)'
+
     def test_pair_list__invalidates_on_mutation(self):
         """basis-T1 item 3: a version-bumping mutation forces a re-scan, not stale cached pairs.
 

@@ -549,6 +549,33 @@ class TestBuffer:
         assert [body for _, _, body, _ in buf.pair_iterator(rgx)] == bodies
 
     @pyt.mark.parametrize(
+        'method, text, replacement',
+        [
+            # Whole-buffer resets discard explicit spans without a defining regex
+            ('set', ' abc ', 'xyz'),
+            ('set', ' abc ', 'longer replacement'),
+            ('set', ' abc ', ' abc '),
+            ('set', ' abc ', ''),
+            ('clear', ' abc ', None),
+            ('clear', '', None),
+        ],
+    )
+    def test_mutators__explicit_fence_reset(self, method: str, text: str, replacement: str | None):
+        buf = cls(text=[text], fences=np.array([[1, 4]]))
+
+        if method == 'clear':
+            result = buf.clear()
+        else:
+            assert replacement is not None
+            result = buf.set(replacement)
+
+        assert result is buf
+        assert str(buf) == (replacement or '')
+        assert buf.fences.shape == (0, 2)
+        assert not buf.has_fences
+        assert list(buf.fence_spans) == []
+
+    @pyt.mark.parametrize(
         'method, text, argument, expected, fences, bodies',
         [
             # Clear populated and empty buffers

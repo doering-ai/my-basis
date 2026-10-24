@@ -755,11 +755,13 @@ class Buffer(pyd.BaseModel):
                 ['bb']
         """
         self._replace_span((0, len(self)), text)
+        self.fences = self._build_fences()
         return self
 
     def clear(self) -> Self:
         """Convenience setter for clearing the entire content of the buffer at once."""
         self._replace_span((0, len(self)), '')
+        self.fences = _no_spans()
         return self
 
     def strip(self, chars: str = '') -> Self:

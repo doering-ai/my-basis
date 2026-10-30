@@ -1,10 +1,23 @@
 # Changelog
 
 All notable changes to `my-basis` are documented here.
-The project has no prior tagged release -- `0.2.0` is the first tag, closing out a multi-month typing/subpackage overhaul that landed while the version stayed pinned at `0.1.0`.
+The first tag, `0.2.0`, closed out a multi-month typing/subpackage overhaul that landed while the version stayed pinned at `0.1.0`.
 Where a change is a behavior break rather than an internal fix, it's called out explicitly; mechanism and rationale live in the cited commit bodies, not repeated here.
 
 ## [Unreleased]
+
+## [1.2.3] — prepared, unpublished
+
+- Invalidate Buffer's cached bracket pairs after `set`, `sub`, and every public mutation.
+- Reset fence ranges after whole-buffer replacement, so later matching uses the current text.
+- Inherit shared Markdown defaults in development hooks.
+
+This compatible fix release contains the changes since v1.2.2 only.
+Publish from the reviewed landed commit after its exact-head main pipeline is green;
+the operator alone plays the manual `Publish PyPI` job after inspecting artifacts.
+Earlier entries below retain their historical unreleased classification.
+
+## Earlier unreleased entries (historical)
 
 ### `LIBS-80`: `MY_REGEX_TIMEOUT` sets the regex deadline
 

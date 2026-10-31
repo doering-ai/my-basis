@@ -98,13 +98,14 @@ class TestTree:
             true=[
                 cls(r'a|b|c'),
                 cls(r'a|\[b\]|c'),
-                cls(r'a|\(?:b\)|c'),
-                cls(r'a|(?:b)|(?>c)'),
                 cls(r'a|b[b]|c'),
-                cls(r'a|[b]|c'),
                 cls(r'a|b[b]|c', suffix=r'd'),
+                cls(r'a|(?:b)|(?>c)'),
+                cls(r'a|[b]|c'),
             ],
             false=[
+                cls(r'a|\(?:b\)|c'),
+                cls(r'a|ab|b'),
                 cls(r'a++|[b]|c'),
                 cls(r'a|(?:b)++|c'),
             ],
@@ -146,7 +147,7 @@ class TestTree:
             (r'(ab)?', [r'(ab)?']),
             (r'(?:a|b)', [r'a', r'b']),
             (r'(?:footnotes|reliable)', ['footnotes', 'reliable']),
-            (r'(?i-s:ab)?', ['', r'ab']),
+            (r'(?i-s:ab)?', [r'(?i-s:ab)?']),
             # Sets
             (r'[ab]?', ['', 'a', 'b']),
             (r'[+*?]', [r'\+', r'\*', r'\?']),
@@ -170,7 +171,7 @@ class TestTree:
         [
             (cls(r'z|y|x'), ['[xyz]']),
             (cls(r'z|[yx]'), ['[xyz]']),
-            (cls(r'[\P{S}z]|[yx]'), [r'[\P{S}xyz]']),
+            (cls(r'[\P{S}z]|[yx]'), [r'[\P{S}z]', '[yx]']),
             (
                 cls(r'(?:a)|x|[yz]|[^[:lower:]]|[A-Z]'),
                 [r'[xyz]', r'(?:a)', r'[^[:lower:]]', r'[A-Z]'],
@@ -209,7 +210,7 @@ class TestTree:
             ),
             (
                 [cls(r'abX|cdX'), cls(r'ef|gh', suffix=r'X')],
-                [r'(?>ab|cd|(?>ef|gh))X'],
+                [r'abX', r'cdX', r'(?>ef|gh)X'],
             ),
         ],
     )
@@ -314,16 +315,16 @@ class TestTree:
         'tree, expected',
         [
             # NOOPS
-            (cls(r'ab|cd?|ef'), r'(?>ab|cd?|ef)'),
-            (cls(r'ab|cd{,5}|ef*', quantifier=r'?'), r'(?>ab|cd{,5}|ef*)?'),
-            # Bubble-up optionality
-            (cls(r'ab|(?:cd)?|[ef]'), r'(?>ab|(?:cd)|[ef])?'),
-            (cls(r'ab|(?:cd)?|[ef]', quantifier=r'?'), r'(?>ab|(?:cd)|[ef])?'),
-            (cls(r'|a|b'), r'(?>a|b)?'),
-            (cls(r'a||b', quantifier=r'?'), r'(?>a|b)?'),
-            (cls(r'a|b|', quantifier=r'*?'), r'(?>a|b)*?'),
-            (cls(r'a{,5}|b*', quantifier=r'?'), r'(?:a{,5}|b+)?'),
-            (cls(r'', r'ed', r'ing', prefix=r'Publish'), r'Publish(?>ed|ing)?'),
+            (cls(r'ab|cd?|ef'), r'(?:ab|cd?|ef)'),
+            (cls(r'ab|cd{,5}|ef*', quantifier=r'?'), r'(?:ab|cd{,5}|ef*)?'),
+            # Preserve branch-local optionality and interior empty alternatives
+            (cls(r'ab|(?:cd)?|[ef]'), r'(?:ab|(?:cd)?|[ef])'),
+            (cls(r'ab|(?:cd)?|[ef]', quantifier=r'?'), r'(?:ab|(?:cd)?|[ef])?'),
+            (cls(r'|a|b'), r'(?>a|b)??'),
+            (cls(r'a||b', quantifier=r'?'), r'(?:a||b)?'),
+            (cls(r'a|b|', quantifier=r'*?'), r'(?:a|b|)*?'),
+            (cls(r'a{,5}|b*', quantifier=r'?'), r'(?:a{,5}|b*)?'),
+            (cls(r'', r'ed', r'ing', prefix=r'Publish'), r'Publish(?>ed|ing)??'),
         ],
     )
     def test_clean(self, tree: Tree, expected: str):
@@ -335,7 +336,7 @@ class TestTree:
         [
             (cls(r'a[bc]d'), 2),
             (cls(r'a(?:b|c)d'), 2),
-            (cls(r'a(?:b|c)(?>d|e)'), ['abd', 'abe', 'acd', 'ace']),
+            (cls(r'a(?:b|c)(?>d|e)'), [r'a(?:b|c)(?>d|e)']),
             (cls(r'a(?:b|c)|(?:d|e)'), 4),
             # Nested
             (cls(r'a(?:b|[cd]e)z'), 3),
@@ -343,7 +344,7 @@ class TestTree:
             (cls(r'a(?:b|[cd]?e)z'), 4),
             (
                 cls(r'a(?:b|c(?>d|t?[de]?))z'),
-                ['abz', 'acdz', 'actdz', 'acz', 'actz', 'acez', 'actez'],
+                [r'a(?:b|c(?>d|t?[de]?))z'],
             ),
             # Optionals
             (cls(r'ab?cd?ef?g'), 8),
@@ -397,12 +398,12 @@ class TestTree:
         'tree, expected',
         [
             (cls(r'abc', r'abd'), r'ab[cd]'),
-            (cls(r'test', r'foo'), r'(?>foo|test)'),
+            (cls(r'test', r'foo'), r'(?>test|foo)'),
             (cls(r'xyz', r'xyz'), r'xyz'),
             (cls(r'abc1cde', r'abc[2]cde'), r'abc[12]cde'),
-            (cls(r'p', r'PP', r'Pp', r'pp'), r'(?>P[Pp]|pp?)'),
-            (cls(r'p', r'PP', r'Pp', r'pp', prefix=r'xX', suffix=r'Xx'), r'xX(?>P[Pp]|pp?)Xx'),
-            (cls(r'R', 'RF', 'RFC', 'Rat', 'at'), r'(?>R(?>FC?|at)?|at)'),
+            (cls(r'p', r'PP', r'Pp', r'pp'), r'(?:p|P[Pp]|pp)'),
+            (cls(r'p', r'PP', r'Pp', r'pp', prefix=r'xX', suffix=r'Xx'), r'xX(?:p|P[Pp]|pp)Xx'),
+            (cls(r'R', 'RF', 'RFC', 'Rat', 'at'), r'(?:R(?:FC??|at)??|at)'),
         ],
     )
     def test_condense(self, tree: Tree, expected: str):
@@ -418,7 +419,7 @@ class TestTree:
             (cls(r'abc'), r'abc'),
             (cls(r'a[bc]d'), r'a[bc]d'),
             (cls('ab', 'cd', 'ef'), r'(?>ab|cd|ef)'),
-            (cls('ab', '(?:cd)', '[ef]'), r'(?>ab|(?:cd)|[ef])'),
+            (cls('ab', '(?:cd)', '[ef]'), r'(?:ab|(?:cd)|[ef])'),
             (cls('', 'cd', 'ef'), r'(?:|cd|ef)'),
             (cls('', 'cd', 'ef', quantifier=r'?'), r'(?:|cd|ef)?'),
         ],

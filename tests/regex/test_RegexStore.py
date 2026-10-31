@@ -402,8 +402,8 @@ class TestRegexStore:
             (['abcx', 'abcy'], r'abc[xy]'),
             (['abxc', 'abyc'], r'ab[xy]c'),
             (['axbc', 'aybc'], r'a[xy]bc'),
-            (['is', 'in', 'into'], r'i(?>n(?:to)?|s)'),
-            (['Publish', 'Publishing', 'Published'], r'Publish(?>ed|ing)?'),
+            (['is', 'in', 'into'], r'i(?:s|n(?:to)??)'),
+            (['Publish', 'Publishing', 'Published'], r'Publish(?>ing|ed)??'),
             (['Publisher', 'Publishing', 'Published'], r'Publish(?>e[dr]|ing)'),
             (
                 [
@@ -423,17 +423,17 @@ class TestRegexStore:
                     'UP',
                 ],
                 (
-                    r'(?>Books|Company|Group|House|International|Library|'
-                    r'P(?>(?>icture|r(?>es|oduction))s|ubli(?>cations|sh(?>ers|ing)))|Studios|UP)'
+                    r'(?:Books|Company|Group|House|International|Library|'
+                    r'P(?:ubli(?>sh(?>ers|ing)|cations)|r(?>oduction|es)s|ictures)|Studios|UP)'
                 ),
             ),
             (
                 [r'no-(?:footnotes|reliable-sources|significant-coverage)'],
-                r'no-(?>(?>footnot|reliable-sourc)es|significant-coverage)',
+                r'no-(?:(?>footnot|reliable-sourc)es|significant-coverage)',
             ),
             (
                 [r'(?P>_ws)(?:p?p|P[Pp])\.(?!\S)'],
-                r'(?P>_ws)(?>P[Pp]|pp?)\.(?!\S)',
+                r'(?:(?P>_ws)(?:p?p|P[Pp])\.(?!\S))',
             ),
         ],
     )

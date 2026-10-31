@@ -36,6 +36,10 @@
 ```
 
 ```{eval-rst}
+.. autoproperty:: my.regex.meta.Atom.Atom.literal
+```
+
+```{eval-rst}
 .. autoproperty:: my.regex.meta.Atom.Atom.is_simple
 ```
 

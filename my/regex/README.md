@@ -12,9 +12,13 @@
 
 <blockquote class="artificial-prose">
 
-`RegexStore` accepts strings, lists, tuples, and the package's compact marked syntax. A named subpattern can be invoked with `(?P>name)`; a string containing `<|>` is split into alternatives and optimized before it is compiled. This makes a store useful where a project has a vocabulary of reusable fragments rather than one isolated expression.
+`RegexStore` accepts strings, lists, tuples, and the package's compact marked syntax. A named subpattern can be invoked with `(?P>name)`. The tuple `('<|>', ['cat', 'car', 'dog'])` requests tree optimization; a raw string containing `<|>` remains a raw string.
 
-`compose_tree()` turns a collection of related expressions into a factored pattern tree, so common prefixes and suffixes need not be repeated in every branch.
+`compose_tree()` reuses the regex AST to factor finite literals, positive literal sets and unflagged noncapturing groups, including greedy optional atoms. Caller priority is preserved: `['a', 'ab']` searches short first; put `'ab'` first to prefer the longer match. Equal-width alternatives and disjoint ASCII first-character classes may regroup without changing the chosen match; potentially competing prefixes retain relative order. Eligible trees share prefixes/suffixes and sets, and insert atomic groups only when a unique endpoint is proved. Prefix-containing choices keep the backtracking needed by an enclosing continuation.
+
+Captures, assertions, wildcard/repeated/lazy syntax, existing atomic groups and unsupported grammar use ordinary ordered alternation. Compiler flags flow from `define(flags=...)`, enclosing DSL marks and `compose(..., flags=...)`. Full Unicode folding with ignore-case (including VERSION1's default full folding), reverse, verbose, locale and fuzzy matching modes conservatively skip optimization. Raw inline flag or fuzzy-constraint fragments also keep surrounding composition ordinary. An arbitrary configured formatter conservatively disables nested tree optimization because it can introduce flags after the initial context scan.
+
+For a string that will be compiled elsewhere, pass its intended flags to `compose_tree(..., flags=...)` or `compose(..., flags=...)`. Flags applied only after composition cannot be inferred. For example, full-fold `ss|st` accepts `ß`, while factoring it to `s[st]` would change its language. Direct `Tree` transformations operate on forward literal syntax without an external compiler-mode context.
 
 </blockquote>
 

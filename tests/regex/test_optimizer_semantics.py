@@ -132,13 +132,24 @@ class TestOptimizerSemantics:
             re.ENHANCEMATCH,
         ],
     )
-    def test_compose_tree__known_flags(self, store, flags):
-        branches = ['ss', 'st', 'Straße', 'strasse', 'a b', 'ab']
-        texts = ['ß', 'ss', 'st', 'Straße', 'STRASSE', 'a b', 'ab']
+    @pyt.mark.parametrize(
+        'branches, texts',
+        [
+            (['ss', 'st'], ['ß', 'ss', 'st', 'SS', 'ST', 'ﬆ']),
+            (['ab', 'cab'], ['ab', 'cab', 'cabab']),
+            (['Straße', 'strasse'], ['Straße', 'STRASSE', 'strasse']),
+            (['a b', 'ab'], ['a b', 'ab']),
+        ],
+    )
+    def test_compose_tree__known_flags(self, store, flags, branches, texts):
         raw = '(?:' + '|'.join(branches) + ')'
         assert_equivalent(raw, store.compose_tree(branches, flags=flags), texts, flags)
         store.define('flagged', ('<|>', branches), flags=flags)
         assert_equivalent('(?P<flagged>' + raw + ')', store['flagged'].pattern, texts, flags)
+        # Exercise flag forwarding into a deeper optimized tuple and its external continuation.
+        nested = ['c', ('<|>', branches)]
+        store.define('nested', nested, flags=flags)
+        assert_equivalent('(?P<nested>c' + raw + ')', store['nested'].pattern, texts, flags)
 
     @pyt.mark.parametrize(
         'definition',
@@ -153,6 +164,25 @@ class TestOptimizerSemantics:
     def test_compose_tree__inline_flag_context(self, store, definition):
         result = store.compose(definition)
         assert re.fullmatch(result, 'ß') is not None, result
+
+    def test_compose_tree__default_version(self, store, monkeypatch):
+        monkeypatch.setattr(re, 'DEFAULT_VERSION', re.V0)
+        simple = store.compose(('<|>i', ['ss', 'st']))
+        assert_equivalent('(?i:ss|st)', simple, ['ß', 'ss', 'st', 'SS'])
+        monkeypatch.setattr(re, 'DEFAULT_VERSION', re.V1)
+        full_fold = store.compose(('<|>i', ['ss', 'st']))
+        assert_equivalent('(?i:ss|st)', full_fold, ['ß', 'ss', 'st', 'SS'])
+
+    def test_compose_tree__formatter_flag_context(self):
+        store = RegexStore.new(
+            dict(
+                lazy_load=False,
+                separator='',
+                formatter=lambda value: value.replace('FLAG', '(?fi)'),
+            )
+        )
+        result = store.compose(['FLAG', ('<|>', ['ss', 'st'])])
+        assert_equivalent('(?fi)(?:ss|st)', result, ['ß', 'ss', 'st', 'SS'])
 
     def test_compose_tree__fuzzy_context(self, store):
         definition = [('<|>', ['cat', 'car', 'dog']), '{e<=1}']

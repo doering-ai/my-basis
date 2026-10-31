@@ -774,7 +774,9 @@ class RegexStore(pyd.BaseModel):
     def _compose_list(
         self, data: list, sep: str | None = None, *, flags: RegexFlag = NO_FLAG
     ) -> str:
-        if self._has_inline_flags(data):
+        if self.options.formatter is not None or self._has_inline_flags(data):
+            # A caller's formatter can introduce flags in a raw sibling. Do not evaluate
+            # arbitrary callbacks twice merely to predict a later compiler context.
             flags |= re.FULLCASE | re.IGNORECASE
         if sep is None:
             sep = self.options.separator

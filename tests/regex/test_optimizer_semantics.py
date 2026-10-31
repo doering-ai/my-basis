@@ -9,12 +9,26 @@ import pytest as pyt
 import regex as re
 
 ### INTERNAL
-from my import RegexStore, Tree
+from my import RegexStore, Regex, Tree
 
 
 ############
 ### DATA ###
 ############
+WHITESPACE = [
+    *range(0x09, 0x0E),
+    *range(0x1C, 0x21),
+    0x85,
+    0xA0,
+    0x1680,
+    *range(0x2000, 0x200B),
+    0x2028,
+    0x2029,
+    0x202F,
+    0x205F,
+    0x3000,
+]
+
 WITNESSES = [
     # Wildcards, zero-width assertions and existing atomic commitments are opaque.
     (['cat', 'ca.'], ['cab', 'cat', 'ca.', 'dog']),
@@ -237,6 +251,94 @@ class TestOptimizerSemantics:
         for branches in [['a?a', 'a?b'], ['a?', 'b?']]:
             raw = '(?:' + '|'.join(branches) + ')'
             assert_equivalent(raw, str(Tree.new(*branches).condense()), ['ab', 'b', 'aa', 'a'])
+
+    @pyt.mark.parametrize('codepoint', WHITESPACE, ids=lambda cp: f'U+{cp:04X}')
+    @pyt.mark.parametrize('flags', [re.V0, re.V0 | re.I, re.V1 | re.I, re.X])
+    def test_compose_tree__escaped_whitespace(self, store, codepoint, flags):
+        text = 'abc' + chr(codepoint) + 'def'
+        leaf = re.escape(text)
+        # The AST must retain every source character before eligibility or factoring.
+        assert str(Regex(leaf)) == leaf
+        assert Tree.new(leaf).is_transformable
+        assert store.compose_tree([leaf], flags=re.V0) == leaf
+        texts = [text, 'abcdef', 'abcxdef', text + ' ' + text]
+        for branches in [[leaf], [leaf, 'abcdef', 'abcxdef']]:
+            raw = '(?:' + '|'.join(branches) + ')'
+            for optimized in [
+                store.compose_tree(branches, flags=flags),
+                store.compose(('<|>', branches), flags=flags),
+                store.compose(dict(mark='<|>', body=branches), flags=flags),
+                store.compose(('|:', branches), flags=flags),
+            ]:
+                assert_equivalent(raw, optimized, texts, flags)
+        pre, suf = r'(?<!\w)', r'(?!\w)'
+        store.define('whitespace', [pre, ('<|>', [leaf]), suf], flags=flags)
+        assert_equivalent(
+            '(?P<whitespace>' + pre + leaf + suf + ')', store['whitespace'].pattern, texts, flags
+        )
+        assert store['whitespace'].fullmatch(text) is not None
+
+    @pyt.mark.parametrize(
+        'text',
+        [
+            'abc\ndef',
+            'abc\n\ndef',
+            'abc\r\ndef',
+            'a complete *good*\n\nobject and to identify himself',
+            'dynamic categories-container-con-\n\ntained, empty-full',
+            'Crane, Stephen, *Red Badge of Courage,*\n*the*, 101',
+        ],
+    )
+    def test_compose_tree__multiline_learned_batch(self, store, text):
+        # Mend's learned path: longest-first escaped literals inside external word boundaries.
+        words = sorted([text, text.replace('\n', ''), 'unrelated'], key=lambda s: (-len(s), s))
+        branches = [re.escape(word) for word in words]
+        pre, suf = r'(?<!\w)', r'(?!\w)'
+        raw = pre + '(?:' + '|'.join(branches) + ')' + suf
+        definition = [pre, ('<|>', branches), suf]
+        texts = [*words, text + ' ' + text, 'x' + text, text + 'x']
+        assert_equivalent(raw, store.compose(definition), texts)
+        assert_equivalent(raw, store.compose(('<|>', pre, branches, suf)), texts)
+        assert_equivalent(raw, store.compose(('|:', pre, branches, suf)), texts)
+        store.define('learned', definition)
+        assert_equivalent('(?P<learned>' + raw + ')', store['learned'].pattern, texts)
+        assert store['learned'].fullmatch(text) is not None
+
+    @pyt.mark.parametrize('leaf', [r'abc\ndef', r'abc\x0adef', r'abc\u000adef'])
+    def test_compose_tree__symbolic_whitespace(self, store, leaf):
+        assert_equivalent(leaf, store.compose_tree([leaf]), ['abc\ndef', 'abcdef'])
+
+    @pyt.mark.parametrize('flags', [re.V0 | re.X, re.V1 | re.X])
+    def test_compose_tree__verbose_formatting(self, store, flags):
+        branches = ['a b', 'a# comment\nb', 'a# comment\\\nb', 'acb']
+        optimized = store.compose_tree(branches, flags=flags)
+        assert_equivalent('(?:' + '|'.join(branches) + ')', optimized, ['ab', 'a b', 'acb'], flags)
+        assert re.fullmatch(optimized, 'ab', flags) is not None
+        assert re.fullmatch(optimized, 'a b', flags) is None
+
+    @pyt.mark.parametrize(
+        'leaf, texts',
+        [
+            (r'\N{LINE FEED}', ['\n', '']),
+            (r'(?i:abc)', ['abc', 'ABC', 'ab']),
+            ('(?x:a # comment\n b)', ['ab', 'a b']),
+            (r'(?P<word>abc)', ['abc', 'ab']),
+            (r'(?:a(?:b|c)[x])', ['abx', 'acx', 'abcx']),
+        ],
+    )
+    def test_compose_tree__opaque_syntax(self, store, leaf, texts):
+        assert str(Regex(leaf)) == leaf
+        assert_equivalent(leaf, store.compose_tree([leaf]), texts)
+
+    def test_compose_tree__incomplete_escape(self, store):
+        # Unknown trailing bytes remain opaque rather than becoming a different valid literal.
+        leaf = 'abc\\'
+        assert str(Regex(leaf)) == leaf
+        assert not Tree.new(leaf).is_transformable
+        optimized = store.compose_tree([leaf])
+        assert optimized == '(?:' + leaf + ')'
+        with pyt.raises(re.error, match=r'missing \)'):
+            re.compile(optimized)
 
     def test_compose_tree__capture_replacement(self, store):
         branches = ['(?P<z>ab)', '(?P<a>a)']

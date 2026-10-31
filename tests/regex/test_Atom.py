@@ -30,6 +30,14 @@ class TestAtom:
             (r'abc', [r'a', r'b', r'c']),
             (r'a|b?|c++', [r'a', r'|', r'b?', r'|', r'c++']),
             (r'\d{4,5}\g<1>', [r'\d{4,5}', r'\g<1>']),
+            # Escaped actual whitespace is one consuming atom, including LF and its quantifier.
+            ('a\\\nb', ['a', '\\\n', 'b']),
+            ('a\\\n?b', ['a', '\\\n?', 'b']),
+            ('a\\\r\\\nb', ['a', '\\\r', '\\\n', 'b']),
+            ('a\\\tb', ['a', '\\\t', 'b']),
+            # Incomplete expressions remain lossless; the engine owns compilation errors.
+            ('abc\\', ['a', 'b', 'c', '\\']),
+            ('\\', ['\\']),
         ],
     )
     def test_plain_atomize(self, expr: str, expected: list[str]):

@@ -58,7 +58,7 @@ META_RGXS: dict[str, re.Pattern] = ut.regex_dict(
             r'\d+|g<\d+>',
             r'L<\w+>',
             r'[Pp]\{[[:alpha:]]+\}',
-            r'.',
+            r'(?s:.)',  # A backslash may escape an actual LF, not only a printable character.
             pre=r'\\',
         ),
         r'(?<!\[)\[(?s:[^\\\[\]]++|\\.|\[.+?\])*\](?!\])',  # Character sets

@@ -6,7 +6,11 @@ Where a change is a behavior break rather than an internal fix, it's called out 
 
 ## [Unreleased]
 
-## [1.2.4] — prepared, unpublished
+## [1.2.5] — prepared, unpublished
+
+- Preserve escaped actual LF and other literal whitespace during regex AST tokenization and `<|>` factoring. Tokenization now retains unmatched source fragments instead of silently turning an incomplete expression into a different pattern; compiler validation remains authoritative.
+
+## [1.2.4] — 2026-10-31
 
 - Preserve caller order and external backtracking in `RegexStore`'s `<|>`/`compose_tree` optimizer. **Behavior change:** it no longer silently sorts alternatives or makes short-first prefixes greedy; order literal dictionaries longest first when that is the intended search/replacement policy.
 - Reuse the existing regex AST/tree factoring for eligible finite literals, sets and plain groups. Captures, assertions, wildcard/repeated/lazy syntax, atomic commitments and unsupported syntax retain ordinary ordered composition. Literal punctuation remains escaped when moved into a set.

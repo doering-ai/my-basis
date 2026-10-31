@@ -67,6 +67,8 @@ class Atom(pyd.BaseModel):
             This function is "plain" because it does NOT handle groups or sets -- the caller must
             guarantee that neither type of atom appears in the snippet before calling this function.
 
+        Unmatched fragments remain opaque atoms so parsing never silently drops source text.
+        The engine remains responsible for rejecting incomplete or unsupported expressions.
         For general-purpose atomization, see `Regex.atomize()`.
 
         Args:
@@ -79,7 +81,14 @@ class Atom(pyd.BaseModel):
                 >>> list(Atom.plain_atomize(r'ab\d+c?'))
                 ['a', 'b', '\\d+', 'c?']
         """
-        yield from map(cls, META_RGXS['atom'].findall(expr))
+        end = 0
+        for match in META_RGXS['atom'].finditer(expr):
+            if match.start() > end:
+                yield cls(expr[end : match.start()])
+            yield cls(match[0])
+            end = match.end()
+        if end < len(expr):
+            yield cls(expr[end:])
 
     # -------------------
     # `-` Private Methods

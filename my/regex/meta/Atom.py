@@ -186,6 +186,28 @@ class Atom(pyd.BaseModel):
         return len(self) >= 3 and self.data[0] == '['
 
     @ft.cached_property
+    def literal(self) -> str | None:
+        r"""The consumed literal character, or None for syntax and character classes.
+
+        This deliberately excludes alphanumeric escapes, wildcard/assertion syntax and
+        unescaped whitespace/comments whose meaning depends on verbose mode.
+
+        Examples:
+            Literal punctuation must retain its escaping outside a set::
+
+                >>> Atom(r'\.').literal, Atom('.').literal, Atom(r'\b').literal
+                ('.', None, None)
+        """
+        base = self.base
+        if self.is_group or self.is_set:
+            return None
+        if len(base) == 1 and base not in r'.^$|?*+()[]{}\#' and not base.isspace():
+            return base
+        if len(base) == 2 and base[0] == '\\' and not base[1].isalnum():
+            return base[1]
+        return None
+
+    @ft.cached_property
     def is_simple(self) -> bool:
         """Whether this atom is 'simple': a single literal w/ no repeating quantifier."""
         return bool(self) and self.quantifier.is_simple

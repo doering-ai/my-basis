@@ -9,9 +9,9 @@ import more_itertools as mi
 
 ### EXTERNAL
 import pydantic as pyd
+import regex as re
 
 ### INTERNAL
-from ...utils import ut
 from .GroupKind import GroupKind
 from .Quantifier import Quantifier
 from .Atom import Atom
@@ -83,7 +83,8 @@ class Tree(pyd.BaseModel):
 
     @pyd.model_validator(mode='after')
     def _validate_branches(self) -> Self:
-        self.branches = list(mi.unique_everseen(self.branches))
+        if self.is_transformable:
+            self.branches = list(mi.unique_everseen(self.branches))
         return self
 
     @classmethod
@@ -138,20 +139,92 @@ class Tree(pyd.BaseModel):
             raise TypeError(f'Unsupported type for Branches initialization: {type(arg)}')
 
     def supports_atomic_grouping(self) -> bool:
-        """Decides whether this tree's branches can be safely grouped in an atomic group.
+        """Prove a unique endpoint for forward, simple-fold literal branches.
 
         Returns:
             True if this tree can be joined atomically (i.e. with `(?>...)`), False otherwise.
         """
-        if not all(self.branches):
+        widths = [self._fixed_width(branch) for branch in self.branches]
+        if not widths or any(width is None or width == 0 for width in widths):
             return False
-        if self.suffix:
-            search_space = (atom for branch in self.branches for atom in branch)
-        else:
-            search_space = (branch.first for branch in self.branches)
+        if len(set(widths)) == 1:
+            return True
 
-        # return all(atom.is_simple and not isinstance(atom, SetAtom) for atom in search_space)
-        return all(atom.is_simple for atom in search_space)
+        # Different endpoints are safe only when the branches cannot compete at this
+        # position. Restrict the disjointness proof to ASCII simple-fold classes.
+        seen: set[str] = set()
+        for branch in self.branches:
+            first = branch.first
+            members = self._literal_members(first)
+            if not members or any(not char.isascii() for char in members):
+                return False
+            folded = {char.lower() for char in members}
+            if seen & folded:
+                return False
+            seen |= folded
+        return True
+
+    @classmethod
+    def _literal_members(cls, atom: Atom) -> list[str] | None:
+        if isinstance(atom, SetAtom) and atom.is_simple:
+            members = [member.literal for member in atom.members]
+            return (
+                [char for char in members if char is not None]
+                if all(char is not None for char in members)
+                else None
+            )
+        return [atom.literal] if atom.literal is not None else None
+
+    @classmethod
+    def _is_transformable(cls, atom: Atom) -> bool:
+        if not atom.quantifier.is_simple:
+            return False
+        if isinstance(atom, GroupAtom):
+            return (
+                atom.kind == GroupKind.PLAIN
+                and not atom.flags
+                and all(
+                    cls._is_transformable(child)
+                    for branch in Regex(atom.body).split()
+                    for child in branch
+                )
+            )
+        return cls._literal_members(atom) is not None
+
+    @classmethod
+    def _fixed_width(cls, branch: Regex) -> int | None:
+        width = 0
+        for atom in branch:
+            if atom.quantifier:
+                return None
+            if isinstance(atom, GroupAtom):
+                if atom.kind not in GroupKind._SIMPLE or atom.flags:
+                    return None
+                widths = {cls._fixed_width(part) for part in Regex(atom.body).split()}
+                if None in widths or len(widths) != 1:
+                    return None
+                part_width = widths.pop()
+                assert part_width is not None
+                width += part_width
+            elif cls._literal_members(atom) is not None:
+                width += 1
+            else:
+                return None
+        return width
+
+    @property
+    def is_transformable(self) -> bool:
+        """Whether every branch admits ordered finite literal factoring.
+
+        Examples:
+            Assertions remain opaque even if their bodies contain literals::
+
+                >>> Tree('cat', 'car').is_transformable
+                True
+                >>> Tree('(?=a|b)c').is_transformable
+                False
+        """
+        return all(self._is_transformable(atom) for branch in self.branches for atom in branch)
 
     @staticmethod
     def _is_set_eligible(atom: Atom | Regex) -> bool:
@@ -164,7 +237,7 @@ class Tree(pyd.BaseModel):
         """
         if isinstance(atom, Regex):
             atom = atom.one
-        return atom.is_simple and not (atom.is_group or atom.quantifier)
+        return not atom.quantifier and Tree._literal_members(atom) is not None
 
     @staticmethod
     def greatest_common_prefix(*args: Regex) -> Regex:
@@ -174,6 +247,13 @@ class Tree(pyd.BaseModel):
         elif len(args) == 1:
             return args[0]
         return Regex(mi.longest_common_prefix(args))
+
+    @classmethod
+    def _factoring_prefix(cls, *branches: Regex) -> Regex:
+        # Moving a backtracking prefix outside an ordered alternation can change which
+        # branch wins: a?a|a?b on "ab" must choose "a", not "ab".
+        prefix = cls.greatest_common_prefix(*branches)
+        return Regex(it.takewhile(lambda atom: cls._fixed_width(Regex(atom)) is not None, prefix))
 
     @staticmethod
     def greatest_common_suffix(*args: Regex) -> Regex:
@@ -203,7 +283,7 @@ class Tree(pyd.BaseModel):
         Yields:
             Lists of branches, each representing a contiguous subset of the given branches.
         """
-        _split = lambda lhs, rhs: not cls.greatest_common_prefix(lhs, rhs)
+        _split = lambda lhs, rhs: not cls._factoring_prefix(lhs, rhs)
         yield from mi.split_when(branches, _split)
 
     @classmethod
@@ -327,11 +407,8 @@ class Tree(pyd.BaseModel):
         # 0. Validate and normalize arguments
         assert isinstance(atom, GroupAtom), f'Expected group atom, got: {atom!r}'
         kwargs: dict = dict(max_expand=self.max_expand)
-        if atom.inline_flags:
-            kwargs['prefix'] = Regex(atom.inline_flags)
-
         # I. Don't try to split complex groups
-        if not atom.quantifier.is_simple or atom.kind not in GroupKind._SPLITTABLE:
+        if not self._is_transformable(atom):
             return self.new(atom, **kwargs)
 
         # II. Split the group's contents into branches, then recursively expand them
@@ -339,7 +416,7 @@ class Tree(pyd.BaseModel):
 
         # III. Expand out an optional quantifier into a new, empty branch
         if atom.is_optional and all(tree.branches):
-            tree.branches.insert(0, Regex.empty())
+            tree.branches.append(Regex.empty())
 
         return tree
 
@@ -353,20 +430,19 @@ class Tree(pyd.BaseModel):
                 >>> from my.regex.meta import SetAtom
                 >>> tree = Tree.expand_set(SetAtom('[abc]?'))
                 >>> ([str(branch) for branch in tree.branches], str(tree.quantifier))
-                (['', 'a', 'b', 'c'], '')
+                (['a', 'b', 'c', ''], '')
         """
         # 0. Validate
         assert isinstance(atom, SetAtom), f'Expected set atom, got: {atom!r}'
-        if not atom.is_simple:
+        if not cls._is_transformable(atom):
             return cls.new(atom)
         result: list[Regex] = []
 
         # I. Expand out optional quantifier into a new branch
-        if atom.quantifier.is_optional:
-            result.append(Regex.empty())
-
         # II. Atomize the set body into individual atomic branches
         result.extend(map(Regex, atom.members))
+        if atom.quantifier.is_optional:
+            result.append(Regex.empty())
         return cls.new(*result, quantifier=atom.quantifier.as_required())
 
     def expand_atom(self, atom: Atom) -> Self:
@@ -375,8 +451,8 @@ class Tree(pyd.BaseModel):
             return self.expand_group(atom)
         elif atom.is_set:
             return self.expand_set(atom)
-        elif atom.is_optional:
-            return self.new(Regex.empty(), Regex(atom.as_required()))
+        elif atom.quantifier == '?':
+            return self.new(Regex(atom.as_required()), Regex.empty())
         else:
             return self.new(atom)
 
@@ -398,24 +474,23 @@ class Tree(pyd.BaseModel):
                 >>> from my import Regex
                 >>> branches = [Regex('a'), Regex('b'), Regex('(?:one)')]
                 >>> [str(branch) for branch in Tree.condense_atomic_branches(branches)]
-                ['(?:one)', '[ab]']
+                ['[ab]', '(?:one)']
         """
         # I. Validate that this block only has single-atom branches
         atoms = [br.one for br in branches]
 
-        # II. Separate out the "simple" branches, e.g. plain sets, individual characters, etc.
-        rest, eligible = map(list, mi.partition(cls._is_set_eligible, atoms))
-        if len(eligible) < 2:
-            return branches
-
-        # III. Combine multiple simple branches into a single set
-        plain_atoms, set_atoms = map(set, mi.partition(lambda atom: atom.is_set, eligible))
-        expanded_sets = list(mi.flatten(cls.expand_set(a).branches for a in set_atoms))
-        all_members = plain_atoms | {branch.one for branch in expanded_sets}
-        new_set_body = ''.join(map(str, sorted(all_members)))
-
-        # IV. Save the results to this object
-        return list(map(Regex, sorted([f'[{new_set_body}]', *rest])))
+        # Only contiguous eligible alternatives may move into a set. An opaque branch
+        # between them must retain its original priority.
+        result: list[Regex] = []
+        for eligible, group in it.groupby(atoms, cls._is_set_eligible):
+            members = list(group)
+            if not eligible or len(members) < 2:
+                result.extend(map(Regex, members))
+                continue
+            characters = {char for atom in members for char in (cls._literal_members(atom) or [])}
+            body = ''.join(re.escape(char, special_only=False) for char in sorted(characters))
+            result.append(Regex(f'[{body}]'))
+        return result
 
     @classmethod
     def condense_blocks(cls, trees: list[Self]) -> list[Regex]:
@@ -496,7 +571,7 @@ class Tree(pyd.BaseModel):
     # `*2` Modifiers
     # --------------
     def clean(self) -> Self:
-        """Clean the given branches by removing empty branches and combining optional ones.
+        """Absorb an edge empty branch while preserving its ordered choice.
 
         Uses the parent's context to allow for further optimizations that are only valid in the
         given context.
@@ -511,21 +586,15 @@ class Tree(pyd.BaseModel):
                 >>> ([str(branch) for branch in tree.branches], str(tree.quantifier))
                 (['a', 'b'], '?')
         """
-        # I. FIRST PASS
-        to_drop: set[int] = set()
-        for i, branch in enumerate(self.branches):
-            n = len(branch)
-            if not branch:
-                # I.i. Empty branch -- whole thing is now optional, if that's possible
-                if self.set_quantifier(r'?'):
-                    to_drop.add(i)
-            elif n == 1 and branch.one.is_optional and self.set_quantifier(r'?'):
-                # I.ii. Single atom -- check for optionality
-                branch[0] = branch.one.as_required()
-        if to_drop:
-            self.branches = ut.drop_at(self.branches, to_drop)
-        to_drop.clear()
-
+        # An interior empty branch is an ordered choice, not global optionality.
+        # Never promote optional atoms from individual branches across their neighbors.
+        if len(self.branches) > 1 and not (self.quantifier or self.inner_quant):
+            if not self.branches[-1]:
+                self.set_quantifier('?')
+                self.branches.pop()
+            elif not self.branches[0]:
+                self.set_quantifier('??')
+                self.branches.pop(0)
         return self
 
     def expand(self) -> Self:
@@ -540,16 +609,17 @@ class Tree(pyd.BaseModel):
 
                 >>> from my import Tree
                 >>> [str(branch) for branch in Tree(r'confirm(?:ation)?').expand().branches]
-                ['confirm', 'confirmation']
+                ['confirmation', 'confirm']
 
             Character sets expand too::
 
                 >>> [str(branch) for branch in Tree(r'a[bc]d').expand().branches]
                 ['abd', 'acd']
         """
-        if self:
-            self.branches = list(mi.flatten(map(self.expand_branch, self.branches)))
-            self.branches.sort()
+        if self and self.is_transformable:
+            self.branches = list(
+                mi.unique_everseen(mi.flatten(map(self.expand_branch, self.branches)))
+            )
         return self
 
     def factor(self) -> Self:
@@ -561,14 +631,14 @@ class Tree(pyd.BaseModel):
                 >>> from my import Tree
                 >>> tree = Tree('street', 'stream', 'strap').factor()
                 >>> (str(tree.prefix), str(tree.render()))
-                ('str', 'str(?>eet|eam|ap)')
+                ('str', 'str(?:eet|eam|ap)')
         """
         # 0. Return immediately if this is a single branch
-        if len(self) <= 1 or self.max_length <= 1:
+        if not self.is_transformable or len(self) <= 1 or self.max_length <= 1:
             return self
 
         # I. Determine the prefix for this block (which should always exist if this func is called)
-        if prefix := self.greatest_common_prefix(*self.branches):
+        if prefix := self._factoring_prefix(*self.branches):
             self.branches = [branch[len(prefix) :] for branch in self.branches]
             self.prefix += prefix
 
@@ -579,12 +649,8 @@ class Tree(pyd.BaseModel):
 
         # III. Apply optimizations to newly mono-atomic branches
         if self.max_length == 1:
-            # III.i. Factor out a quantifier shared between all branches
-            if not self.quantifier:
-                quantifiers = {branch.one.quantifier for branch in self.branches if branch}
-                if len(quantifiers) == 1 and self.set_quantifier(quantifiers.pop()):
-                    self.branches = [branch.quantify('') for branch in self.branches]
-
+            # Shared optional quantifiers remain branch-local: a?|b? on "b"
+            # chooses the first branch's empty match, whereas [ab]? would consume "b".
             # III.ii. Condense simple branches into sets
             if any(map(self._is_set_eligible, self.branches)):
                 self.branches = self.condense_atomic_branches(self.branches)
@@ -603,13 +669,15 @@ class Tree(pyd.BaseModel):
                 >>> from my import Tree
                 >>> tree = Tree('grape', 'grapefruit', 'apple').expand()
                 >>> str(tree.condense().render())
-                '(?>apple|grape(?:fruit)?)'
+                '(?:grape(?:fruit)??|apple)'
         """
         cls = self.__class__
 
         # I. Prepare the block; the main stage is the "factor" step, where prefixes are found
         # breakpoint()
-        self.sort().clean().factor().clean()
+        if not self.is_transformable:
+            return self
+        self.clean().factor().clean()
 
         # II. Recursively replace the block's body with an equivalent tree
         if not self:

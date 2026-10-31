@@ -424,7 +424,7 @@ class RegexStore(pyd.BaseModel):
         if sep == '|' and not group:
             group = '|'
         elif sep == '<|>' and not group:
-            group = '>'
+            group = ':'
         elif len(sep) >= 2 and sep[0] == '[' and sep[-1] == ']':
             sep = sep[1:-1]
         elif not sep:
@@ -564,7 +564,15 @@ class RegexStore(pyd.BaseModel):
         else:
             return groups_used
 
-    def compose_group(self, mark: str, children: RegexList, pre: str = '', suf: str = '') -> str:
+    def compose_group(
+        self,
+        mark: str,
+        children: RegexList,
+        pre: str = '',
+        suf: str = '',
+        *,
+        flags: RegexFlag = NO_FLAG,
+    ) -> str:
         """Compose a regex group from a mark, children, and optional prefix/suffix.
 
         Args:
@@ -572,6 +580,7 @@ class RegexStore(pyd.BaseModel):
             children: List of child regex values to compose.
             pre: Optional prefix string to prepend inside the group.
             suf: Optional suffix string to append inside the group.
+            flags: Known enclosing compiler flags, used to admit or skip tree optimization.
         Returns:
             Complete regex group string with composed children.
         """
@@ -585,7 +594,17 @@ class RegexStore(pyd.BaseModel):
         end = ')'
 
         # II. Recursively compose the list component into a single string
-        body = self.compose(children, sep)
+        mark_match = META_RGXS['struct_mark'].fullmatch(mark.strip())
+        assert mark_match is not None
+        inline_flags = mark_match['flags']
+        if inline_flags:
+            # Conservative union: disabling an inherited flag need not re-enable factoring.
+            enabled = inline_flags.split('-')[0]
+            if enabled:
+                flags |= RegexFlag(re.compile(f'(?{enabled})').flags)
+        if self._has_inline_flags([pre, suf]):
+            flags |= re.FULLCASE | re.IGNORECASE
+        body = self.compose(children, sep, flags=flags)
 
         # III. Add wrappers to handle surrounding context
         has_context = pre or suf or start[-1] == ')'
@@ -601,19 +620,48 @@ class RegexStore(pyd.BaseModel):
         # e.g.          (?:    \(?  ...   \)?  )    ?
         return ''.join([start, pre, body, suf, end, quant])
 
-    def compose_tree(self, data: RegexList) -> str:
-        """Compose an optimized/"condensed" version of the given regex branches.
+    def compose_tree(self, data: RegexList, *, flags: RegexFlag = NO_FLAG) -> str:
+        """Factor eligible finite branches without changing ordinary alternation priority.
+
+        Captures, assertions, existing atomic groups and unsupported syntax retain ordinary
+        composition. Known full-fold, reverse, verbose and locale modes also skip factoring.
+        Pass eventual external compiler flags here; unknown flags applied to the returned text
+        cannot be accounted for. This method does not compile its result.
 
         Args:
-            data: List of branched regex expressions.
+            data: Ordered branched regex expressions.
+            flags: Known enclosing compiler flags, including the effective version.
         Returns:
-            The corresponding optimized branching tree regex expression.
+            A factored tree or the ordinary noncapturing alternation.
+        Examples:
+            Prefix alternatives preserve the caller's short-first priority::
+
+                >>> store = RegexStore.new(dict(lazy_load=False))
+                >>> store.compose_tree(['a', 'ab'])
+                'ab??'
+                >>> store.compose_tree(['cat', 'ca.'])
+                '(?:cat|ca.)'
         """
         # 0. Finish composing definitions below this one into valid expressions
-        rendered_branches = [self.compose(branch, sep='|') for branch in data]
+        rendered_branches = [self.compose(branch, sep='|', flags=flags) for branch in data]
 
-        # I. Initialize a "tree" object containing these branches
-        tree = Tree.new(*sorted(rendered_branches))
+        # I. Initialize the existing AST in caller order. Unknown syntax and compiler modes
+        # retain ordinary composition rather than changing assertion/capture/commit semantics.
+        if not flags & (re.VERSION0 | re.VERSION1):
+            flags |= RegexFlag(re.DEFAULT_VERSION)
+        unsafe_flags = re.REVERSE | re.VERBOSE | re.LOCALE | re.BESTMATCH | re.ENHANCEMATCH
+        full_fold = bool(flags & re.IGNORECASE and flags & (re.FULLCASE | re.VERSION1))
+        ordinary = '(?:' + '|'.join(rendered_branches) + ')'
+        if full_fold or flags & unsafe_flags or self._has_inline_flags(rendered_branches):
+            return ordinary
+        try:
+            tree = Tree.new(*rendered_branches)
+        except (AssertionError, ValueError):
+            # The AST is intentionally smaller than the engine's grammar. Unsupported
+            # syntax stays intact; compilation remains the engine's responsibility.
+            return ordinary
+        if not tree.is_transformable:
+            return ordinary
 
         # II. Recursively "expand" all the branches, replacing them with more verbose equivalents
         tree.expand()
@@ -676,12 +724,13 @@ class RegexStore(pyd.BaseModel):
         return ret
 
     @ft.singledispatchmethod
-    def compose(self, data: RegexVal, sep: str | None = None) -> str:
+    def compose(self, data: RegexVal, sep: str | None = None, *, flags: RegexFlag = NO_FLAG) -> str:
         """Recursively transform a DSL-compliant definition into a valid regular expression.
 
         Args:
             data: The regex value to compose.
             sep: Optional separator string for lists (defaults to store's separator).
+            flags: Known enclosing compiler flags, forwarded to nested tree optimization.
         Returns:
             The composed expression.
         Examples:
@@ -699,7 +748,9 @@ class RegexStore(pyd.BaseModel):
         raise NotImplementedError(f'Unsupported data type: {type(data)}')
 
     @compose.register
-    def _compose_string(self, data: str, sep: str | None = None) -> str:
+    def _compose_string(
+        self, data: str, sep: str | None = None, *, flags: RegexFlag = NO_FLAG
+    ) -> str:
         # I.i. Change all positional capture groups to non-capturing
         if self.options.force_named_groups and '(' in data:
             buf = RegexBuffer(data)
@@ -713,26 +764,36 @@ class RegexStore(pyd.BaseModel):
         return data
 
     @compose.register
-    def _compose_pattern(self, data: re.Pattern, sep: str | None = None) -> str:
+    def _compose_pattern(
+        self, data: re.Pattern, sep: str | None = None, *, flags: RegexFlag = NO_FLAG
+    ) -> str:
         # I.ii. Extract the (raw) expressions behind (compiled) patterns
         return data.pattern
 
     @compose.register
-    def _compose_list(self, data: list, sep: str | None = None) -> str:
+    def _compose_list(
+        self, data: list, sep: str | None = None, *, flags: RegexFlag = NO_FLAG
+    ) -> str:
+        if self._has_inline_flags(data):
+            flags |= re.FULLCASE | re.IGNORECASE
         if sep is None:
             sep = self.options.separator
-        elif sep == '<|>':
-            return self.compose_tree(data)
+        if sep == '<|>':
+            return self.compose_tree(data, flags=flags)
 
-        return sep.join(map(self.compose, data))
+        return sep.join(self.compose(child, flags=flags) for child in data)
 
     @compose.register
-    def _compose_tuple(self, data: tuple, sep: str | None = None) -> str:
+    def _compose_tuple(
+        self, data: tuple, sep: str | None = None, *, flags: RegexFlag = NO_FLAG
+    ) -> str:
         # II. Handle the main/complex case: a tuple describing a group
-        return self.compose_group(*self._parse_tuple(data))
+        return self.compose_group(*self._parse_tuple(data), flags=flags)
 
     @compose.register
-    def _compose_dict(self, data: dict, sep: str | None = None) -> str:
+    def _compose_dict(
+        self, data: dict, sep: str | None = None, *, flags: RegexFlag = NO_FLAG
+    ) -> str:
         # III. Special case: an explicitly-specified tuple (likely by a .yaml file)
         tup = (
             data.get('mark', ''),
@@ -740,7 +801,32 @@ class RegexStore(pyd.BaseModel):
             data.get('body', []),
             data.get('suf', ''),
         )
-        return self.compose_group(*self._parse_tuple(tup))
+        return self.compose_group(*self._parse_tuple(tup), flags=flags)
+
+    @classmethod
+    def _has_inline_flags(cls, data: RegexVal) -> bool:
+        """Conservatively detect flag-bearing raw fragments before optimizing siblings."""
+        if isinstance(data, re.Pattern):
+            return data.flags != DEFAULT_PATTERN_FLAGS or cls._has_inline_flags(data.pattern)
+        if isinstance(data, str):
+            # Fuzzy constraints may attach to a neighboring composed group. Treat all
+            # braces conservatively; fixed/ranged quantifiers already fall outside admission.
+            if '{' in data:
+                return True
+            if '(?' not in data:
+                return False
+            try:
+                return any(
+                    group.kind == GroupKind.FLAGS or group.flags
+                    for group in Regex.group_iterator(data)
+                )
+            except (AssertionError, ValueError):
+                return True
+        if isinstance(data, dict):
+            return any(cls._has_inline_flags(value) for value in data.values())
+        if isinstance(data, (list, tuple)):
+            return any(cls._has_inline_flags(value) for value in data)
+        return False
 
     def clean(self, name: str, text: Buffer) -> set[str]:
         """Clean and validate a regex pattern, identifying all group dependencies.
@@ -853,7 +939,7 @@ class RegexStore(pyd.BaseModel):
 
         try:
             # I. Compose complex data structures into a string, and apply universal formatting
-            raw_text = self.compose(val, self.options.separator)
+            raw_text = self.compose(val, self.options.separator, flags=compile_flags)
 
             # II. Clean up the pattern and store it as-is, while noticing which groups are used
             text = RegexBuffer(raw_text)

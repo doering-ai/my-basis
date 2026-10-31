@@ -6,6 +6,10 @@ Where a change is a behavior break rather than an internal fix, it's called out 
 
 ## [Unreleased]
 
+- Preserve caller order and external backtracking in `RegexStore`'s `<|>`/`compose_tree` optimizer. **Behavior change:** it no longer silently sorts alternatives or makes short-first prefixes greedy; order literal dictionaries longest first when that is the intended search/replacement policy.
+- Reuse the existing regex AST/tree factoring for eligible finite literals, sets and plain groups. Captures, assertions, wildcard/repeated/lazy syntax, atomic commitments and unsupported syntax retain ordinary ordered composition. Literal punctuation remains escaped when moved into a set.
+- Propagate known compiler flags through composition and `define`; full-fold ignore-case, reverse, verbose, locale and fuzzy modes conservatively keep ordinary alternation. String-composition callers can pass eventual compiler flags with the optional `flags=` keyword.
+
 ## [1.2.3] — prepared, unpublished
 
 - Invalidate Buffer's cached bracket pairs after `set`, `sub`, and every public mutation.

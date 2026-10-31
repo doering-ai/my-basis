@@ -46,6 +46,10 @@
 ## `III` Properties
 
 ```{eval-rst}
+.. autoproperty:: my.regex.meta.Tree.Tree.is_transformable
+```
+
+```{eval-rst}
 .. autoproperty:: my.regex.meta.Tree.Tree.lengths
 ```
 

@@ -642,7 +642,10 @@ class RegexStore(pyd.BaseModel):
                 >>> store.compose_tree(['cat', 'ca.'])
                 '(?:cat|ca.)'
         """
-        # 0. Finish composing definitions below this one into valid expressions
+        # 0. A flag-bearing sibling can affect nested optimized children. Establish that
+        # context before rendering them, including on the direct compose_tree entry point.
+        if self.options.formatter is not None or self._has_inline_flags(data):
+            flags |= re.FULLCASE | re.IGNORECASE
         rendered_branches = [self.compose(branch, sep='|', flags=flags) for branch in data]
 
         # I. Initialize the existing AST in caller order. Unknown syntax and compiler modes

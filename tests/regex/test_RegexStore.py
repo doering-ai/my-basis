@@ -404,7 +404,7 @@ class TestRegexStore:
             (['axbc', 'aybc'], r'a[xy]bc'),
             (['is', 'in', 'into'], r'i(?:s|n(?:to)??)'),
             (['Publish', 'Publishing', 'Published'], r'Publish(?>ing|ed)??'),
-            (['Publisher', 'Publishing', 'Published'], r'Publish(?:er|ing|ed)'),
+            (['Publisher', 'Publishing', 'Published'], r'Publish(?>e[dr]|ing)'),
             (
                 [
                     'Books',

@@ -173,6 +173,44 @@ class TestOptimizerSemantics:
         full_fold = store.compose(('<|>i', ['ss', 'st']))
         assert_equivalent('(?i:ss|st)', full_fold, ['ß', 'ss', 'st', 'SS'])
 
+    @pyt.mark.parametrize('prefix', ['(?fi)', '(?V1)(?i)'])
+    def test_compose_tree__direct_nested_flag_context(self, store, prefix):
+        data = [prefix, ('<|>', ['ss', 'st'])]
+        assert_equivalent(
+            '(?:' + prefix + '|(?:ss|st))', store.compose_tree(data), ['ß', 'ss', 'st', 'SS']
+        )
+
+    @pyt.mark.parametrize(
+        'branches',
+        [
+            ['a', 'b', 'ab', 'ba', 'abc'],
+            ['ab', 'b', 'a', 'ba', 'abc'],
+            ['a', '[ab]c', 'ab', 'b'],
+            ['a', '', 'b', 'ab'],
+            ['i', 'b', 'Ix', 'İx', 'ix'],
+            ['a?', 'b', 'ab', 'a'],
+        ],
+    )
+    @pyt.mark.parametrize('flags', [re.V0, re.V0 | re.I, re.V1])
+    def test_compose_tree__independent_regrouping(self, store, branches, flags):
+        raw = '(?:' + '|'.join(branches) + ')'
+        optimized = store.compose_tree(branches, flags=flags)
+        texts = ['ab', 'ba', 'abc', 'ac', 'a', 'b', 'İx', 'ix', 'Ix', '']
+        for suffix in ['', 'b', 'c', 'a?']:
+            assert_equivalent(raw + suffix, optimized + suffix, texts, flags)
+
+    def test_compose_tree__shuffled_fixed_width(self, store):
+        # This lexical form is also measured by the campaign scaling harness.
+        words = [f'commonprefix{index:04x}' for index in range(256)]
+        words = words[::2] + list(reversed(words[1::2]))
+        optimized = store.compose_tree(words)
+        assert len(optimized) < 100
+        assert_equivalent(
+            '(?:' + '|'.join(words) + ')',
+            optimized,
+            [*words, 'commonprefixffff', 'commonprefix000x'],
+        )
+
     def test_compose_tree__formatter_flag_context(self):
         store = RegexStore.new(
             dict(

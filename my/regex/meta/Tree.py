@@ -272,6 +272,31 @@ class Tree(pyd.BaseModel):
         return bool(lhs and rhs) and len(rhs) == len(lhs) + 1 and rhs[1:] == lhs
 
     @classmethod
+    def _regroup_independent(cls, branches: list[Regex]) -> list[Regex]:
+        # Capture-free fixed-width alternatives all succeed at the same endpoint, so
+        # their order cannot change the chosen span or an enclosing continuation.
+        widths = {cls._fixed_width(branch) for branch in branches}
+        if None not in widths and len(widths) == 1:
+            return sorted(branches)
+
+        # Recover shared structure across interleaved disjoint literal starts. Never
+        # reorder competitors in the same ASCII simple-fold class, or cross an atom
+        # whose first-character language is not proved here.
+        result: list[Regex] = []
+        buckets: dict[str, list[Regex]] = {}
+        for branch in branches:
+            atom = branch.first if branch else None
+            char = atom.literal if atom is not None and not atom.quantifier else None
+            if char is None or not char.isascii():
+                result.extend(mi.flatten(buckets.values()))
+                buckets.clear()
+                result.append(branch)
+            else:
+                buckets.setdefault(char.lower(), []).append(branch)
+        result.extend(mi.flatten(buckets.values()))
+        return result
+
+    @classmethod
     def group_branches_by_prefix(cls, branches: list[Regex]) -> Generator[list[Regex]]:
         """Group the given branches into buckets by their common prefixes (if any exist).
 
@@ -678,6 +703,7 @@ class Tree(pyd.BaseModel):
         if not self.is_transformable:
             return self
         self.clean().factor().clean()
+        self.branches = cls._regroup_independent(self.branches)
 
         # II. Recursively replace the block's body with an equivalent tree
         if not self:

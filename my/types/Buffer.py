@@ -130,7 +130,7 @@ class Buffer(pyd.BaseModel):
     #: Used by consumers to cache iterator results and invalidate on change.
     _version: int = pyd.PrivateAttr(default=0)
     #: Cache for `pair_list()`, cleared automatically by version bumps.
-    _pair_cache: dict = pyd.PrivateAttr(default_factory=dict)
+    _pair_cache: dict = pyd.PrivateAttr(default={})
 
     # -------------------
     # `.` Initial Methods

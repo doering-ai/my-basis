@@ -6,6 +6,8 @@ Where a change is a behavior break rather than an internal fix, it's called out 
 
 ## [Unreleased]
 
+- Reduce `Buffer` construction overhead while keeping its pair cache independent per instance.
+
 ## [1.2.5] — prepared, unpublished
 
 - Preserve escaped actual LF and other literal whitespace during regex AST tokenization and `<|>` factoring. Tokenization now retains unmatched source fragments instead of silently turning an incomplete expression into a different pattern; compiler validation remains authoritative.

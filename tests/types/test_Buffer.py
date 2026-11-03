@@ -7,6 +7,7 @@ from typing import Any
 import itertools as it
 import functools as ft
 import importlib
+import pickle
 import time
 
 ### EXTERNAL
@@ -477,6 +478,43 @@ class TestBuffer:
         first = buf.pair_list(rgx)
         second = buf.pair_list(rgx)
         assert first is second
+
+    @pyt.mark.parametrize('subclass', [False, True])
+    def test_pair_list__cache_is_independent_per_instance(self, subclass: bool):
+        class ChildBuffer(cls):
+            pass
+
+        buffer_type = ChildBuffer if subclass else cls
+        first = buffer_type.new('a {{ b }} c')
+        second = buffer_type.new('a {{ b }} c')
+        rgx = re.compile(r'(?P<start>{{)|(?P<end>}})')
+        pairs = first.pair_list(rgx)
+
+        assert first.pair_list(rgx) is pairs
+        assert first._pair_cache is not second._pair_cache
+        assert not second._pair_cache
+        assert second.pair_list(rgx) == pairs
+        first.drop(pairs[0][0])
+        assert first.pair_list(rgx) == []
+        assert second.pair_list(rgx) == pairs
+
+    def test_pair_list__cache_copy_and_serialization(self):
+        buf = cls.new('a {{ b }} c')
+        rgx = re.compile(r'(?P<start>{{)|(?P<end>}})')
+        pairs = buf.pair_list(rgx)
+        shallow = buf.model_copy()
+        deep = buf.model_copy(deep=True)
+        restored = pickle.loads(pickle.dumps(buf))
+
+        assert shallow._pair_cache is buf._pair_cache
+        assert deep._pair_cache is not buf._pair_cache
+        assert deep.pair_list(rgx) == pairs
+        assert restored._pair_cache is not buf._pair_cache
+        assert restored.pair_list(rgx) == pairs
+        assert buf.model_dump() == restored.model_dump() == str(buf)
+        deep.drop(pairs[0][0])
+        assert deep.pair_list(rgx) == []
+        assert buf.pair_list(rgx) is pairs
 
     @pyt.mark.parametrize(
         'text, replacement, expected',

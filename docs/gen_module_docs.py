@@ -4,6 +4,8 @@ For each subpackage with a module docstring:
   - Rewrites the generated header (frontmatter, title, currentmodule, prose)
   - Preserves the existing {toctree} block and everything after it
   - If docs/X.md does not exist, creates it with an empty toctree template
+  - Refuses changed intros containing manual directives, or directive taglines
+  - Exits nonzero if any target is refused, including in --check mode
 
 Usage:
     ```zsh
@@ -19,6 +21,7 @@ Usage:
 ### STANDARD
 from __future__ import annotations
 import ast
+import re
 import sys
 import textwrap
 from pathlib import Path
@@ -92,8 +95,8 @@ def render_page(pkg: str, tagline: str, body: str, preserved: str) -> str:
     )
 
 
-def sync_package(pkg: str, *, dry_run: bool = False) -> bool:
-    """Sync one package. Returns True if a change was written (or would be)."""
+def sync_package(pkg: str, *, dry_run: bool = False) -> bool | None:
+    """Return True for an update, False for no change, or None for a refusal."""
     init = MY_DIR / pkg / '__init__.py'
     if not init.exists():
         print(f'  MISS  {pkg}: no __init__.py')
@@ -105,13 +108,27 @@ def sync_package(pkg: str, *, dry_run: bool = False) -> bool:
         return False
 
     tagline, body = split_docstring(docstring)
+    if re.search(r'(?:`{3,}|~{3,}|:{3,})\s*\{', tagline):
+        print(f'  REFUSE {pkg}: directive cannot be used as a tagline')
+        return None
+
     doc_path = DOCS_DIR / f'{pkg}.md'
     preserved = get_preserved_section(doc_path)
     new_content = render_page(pkg, tagline, body, preserved)
 
-    if doc_path.exists() and doc_path.read_text(encoding='utf-8') == new_content:
+    old_content = doc_path.read_text(encoding='utf-8') if doc_path.exists() else ''
+    if old_content == new_content:
         print(f'  OK    {pkg}: up to date')
         return False
+
+    # Without parsing Markdown containers, a block comparison cannot prove that
+    # directives keep their bodies, nesting and order. Refuse any changed intro
+    # with a directive opening; ignore only our exact generated currentmodule.
+    old_intro = old_content.split('```{toctree}', 1)[0]
+    old_intro = old_intro.replace(f'```{{py:currentmodule}} my.{pkg}\n```', '', 1)
+    if re.search(r'(?:`{3,}|~{3,}|:{3,})\s*\{', old_intro):
+        print(f'  REFUSE {pkg}: existing MyST directive needs manual preservation in docs/{pkg}.md')
+        return None
 
     if dry_run:
         print(f'  DIFF  {pkg}: would update docs/{pkg}.md')
@@ -146,11 +163,18 @@ if __name__ == '__main__':
         )
 
     changed = 0
+    refused = 0
     for pkg in targets:
-        if sync_package(pkg, dry_run=dry_run):
+        result = sync_package(pkg, dry_run=dry_run)
+        if result is None:
+            refused += 1
+        elif result:
             changed += 1
 
     if dry_run:
         print(f'\n{changed} package(s) would be updated.')
     else:
         print(f'\n{changed} package(s) updated.')
+    if refused:
+        print(f'{refused} package(s) refused; generation incomplete.')
+        sys.exit(1)

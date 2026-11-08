@@ -19,6 +19,7 @@ Usage:
 ### STANDARD
 from __future__ import annotations
 import ast
+import re
 import sys
 import textwrap
 from pathlib import Path
@@ -109,8 +110,18 @@ def sync_package(pkg: str, *, dry_run: bool = False) -> bool:
     preserved = get_preserved_section(doc_path)
     new_content = render_page(pkg, tagline, body, preserved)
 
-    if doc_path.exists() and doc_path.read_text(encoding='utf-8') == new_content:
+    old_content = doc_path.read_text(encoding='utf-8') if doc_path.exists() else ''
+    if old_content == new_content:
         print(f'  OK    {pkg}: up to date')
+        return False
+
+    # Refuse to discard hand-maintained directives in the replaced introduction.
+    old_intro = old_content.split('```{toctree}', 1)[0]
+    blocks = re.finditer(
+        r'(?ms)^(`{3,}|~{3,})\{(?!py:currentmodule\})[^\n]*\n.*?^\1[ \t]*$', old_intro
+    )
+    if any(match.group() not in new_content for match in blocks):
+        print(f'  REFUSE {pkg}: existing MyST directive would be changed in docs/{pkg}.md')
         return False
 
     if dry_run:

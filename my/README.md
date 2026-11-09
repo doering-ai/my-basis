@@ -4,7 +4,9 @@
 
 <blockquote class="artificial-prose">
 
-`my` is the public namespace for the library’s internal layers. This page is the import map to consult before adding a relative import or moving a shared abstraction. For package installation and ordinary use, see the [project README](../README.md).
+`my` is the public namespace for the library’s internal layers.
+This page is the import map to consult before adding a relative import or moving a shared abstraction.
+For package installation and ordinary use, see the [project README](../README.md).
 
 </blockquote>
 
@@ -12,7 +14,8 @@
 
 <blockquote class="artificial-prose">
 
-The graph records relative-import dependencies. Keep a new edge within this ordering, or update the map with the implementation; that keeps an apparently small import from turning into a cycle through a higher layer.
+The graph records relative-import dependencies.
+Keep a new edge within this ordering, or update the map with the implementation; that keeps an apparently small import from turning into a cycle through a higher layer.
 
 </blockquote>
 
@@ -27,7 +30,8 @@ The graph records relative-import dependencies. Keep a new edge within this orde
 
 <blockquote class="artificial-prose">
 
-`data` and `scripts` sit outside this relative-import graph. `data` is a resource namespace read through `importlib.resources`, while scripts consume the finished public API through absolute `from my import ...` imports.
+`data` and `scripts` sit outside this relative-import graph.
+`data` is a resource namespace read through `importlib.resources`, while scripts consume the finished public API through absolute `from my import ...` imports.
 
 </blockquote>
 

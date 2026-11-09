@@ -885,7 +885,7 @@ class TestCast:
         result = typist.cast(serialized, target)
         assert result == data
 
-    # ---- MEMY-325 regression: scalar strings must not be split on delimiters ----
+    # ---- Regression: scalar strings must not be split on delimiters ----
 
     @pyt.mark.parametrize(
         'data, target, expected',
@@ -935,7 +935,7 @@ class TestCast:
         """
         assert typist.cast(data, target) == expected
 
-    # ---- MEMY-326 regression: AutocastModel must accept >=3-char field names ----
+    # ---- Regression: AutocastModel must accept >=3-char field names ----
 
     def test_cast__long_model_fields(self):
         """Constructing an ``AutocastModel`` with field names >= 3 chars must not raise.
@@ -1041,7 +1041,7 @@ class TestCast:
                     f'{earlier[2].__name__} but dispatches after it'
                 )
 
-    # ---- SUBL-32 regression: NamedTuple/tuple targets must rebuild positionally ----
+    # ---- Regression: NamedTuple/tuple targets must rebuild positionally ----
 
     def test_cast__namedtuple_positional_rebuild(self):
         """A defaulted NamedTuple must rebuild from a sequence one field at a time.

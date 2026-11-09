@@ -4,7 +4,8 @@
 
 <blockquote class="artificial-prose">
 
-`my.typing` makes runtime work with annotations explicit: parse a shape, check a value, compare two shapes, or coerce a value toward one. `Typist` gathers those operations behind the shared `ty` and `typist` facade; use the [project README](../../README.md) for installation.
+`my.typing` makes runtime work with annotations explicit: parse a shape, check a value, compare two shapes, or coerce a value toward one.
+`Typist` gathers those operations behind the shared `ty` and `typist` facade; use the [project README](../../README.md) for installation.
 
 </blockquote>
 
@@ -28,11 +29,15 @@ Func: [FunctionType, BuiltinFunctionType, Callable]
 
 <blockquote class="artificial-prose">
 
-`MyType` is the normalized representation that the rest of the package uses instead of inspecting raw annotations ad hoc. A `dict[str, int]` annotation, for example, records its root, key type, and value type in the same family of fields used for unions, literals, enums, and generics.
+`MyType` is the normalized representation that the rest of the package uses instead of inspecting raw annotations ad hoc.
+A `dict[str, int]` annotation, for example, records its root, key type, and value type in the same family of fields used for unions, literals, enums, and generics.
 
-The three chambers have distinct jobs: `tyc` checks a runtime value against a type, `tym` compares type shapes, and `tyt` coerces a value. `TypeCheck`, `TypeMatch`, and `TypeCast` provide those chambers; `Typist` combines them into the public facade.
+The three chambers have distinct jobs: `tyc` checks a runtime value against a type, `tym` compares type shapes, and `tyt` coerces a value.
+`TypeCheck`, `TypeMatch`, and `TypeCast` provide those chambers; `Typist` combines them into the public facade.
 
-Casting selects registered transforms from `_TRANSFORMS` by source and target `MyType` containment, then tries the most specific candidates first. A `Transform` carries one cast’s data and its source and target representations. It is a plain class because it is created in the hot cast path and does not cross a validation or serialization boundary.
+Casting selects registered transforms from `_TRANSFORMS` by source and target `MyType` containment, then tries the most specific candidates first.
+A `Transform` carries one cast’s data and its source and target representations.
+It is a plain class because it is created in the hot cast path and does not cross a validation or serialization boundary.
 
 </blockquote>
 
@@ -40,9 +45,12 @@ Casting selects registered transforms from `_TRANSFORMS` by source and target `M
 
 <blockquote class="artificial-prose">
 
-Pydantic models remain useful where data is validated, coerced, or serialized at a boundary. `MyType` and the public value objects therefore keep model behavior. `Transform` keeps direct attributes instead: repeatedly validating its nested type representations would add work to every cast and can recurse through the self-referential `POS` sentinel.
+Pydantic models remain useful where data is validated, coerced, or serialized at a boundary.
+`MyType` and the public value objects therefore keep model behavior.
+`Transform` keeps direct attributes instead: repeatedly validating its nested type representations would add work to every cast and can recurse through the self-referential `POS` sentinel.
 
-`AutocastModel` applies the same casting system to a Pydantic model’s fields during validation and simplifies nested values during serialization. It is a separate opt-in model base, not a change to Pydantic’s ordinary models.
+`AutocastModel` applies the same casting system to a Pydantic model’s fields during validation and simplifies nested values during serialization.
+It is a separate opt-in model base, not a change to Pydantic’s ordinary models.
 
 </blockquote>
 
@@ -50,7 +58,9 @@ Pydantic models remain useful where data is validated, coerced, or serialized at
 
 <blockquote class="artificial-prose">
 
-`CastFlags` freezes the leniency policy at a public `cast()` entry point. The global `Typist` still provides process-wide defaults, but an in-flight cast sees one snapshot even if a later call changes those defaults. `strict`, `basic`, and `flex` presets supply complete bundles; callers can also pass an explicit `CastFlags` value.
+`CastFlags` freezes the leniency policy at a public `cast()` entry point.
+The global `Typist` still provides process-wide defaults, but an in-flight cast sees one snapshot even if a later call changes those defaults.
+`strict`, `basic`, and `flex` presets supply complete bundles; callers can also pass an explicit `CastFlags` value.
 
 </blockquote>
 
@@ -63,7 +73,8 @@ Pydantic models remain useful where data is validated, coerced, or serialized at
 
 <blockquote class="artificial-prose">
 
-`check` and `match` have no equivalent behavior flags. Their task is to report the relation they were asked to evaluate; leniency belongs to coercion, where the caller can choose it deliberately.
+`check` and `match` have no equivalent behavior flags.
+Their task is to report the relation they were asked to evaluate; leniency belongs to coercion, where the caller can choose it deliberately.
 
 Dispatch candidate lists are memoized with the resolved flag state in the key; complete cast results are not memoized.
 `Typist` does not read configuration from the environment.

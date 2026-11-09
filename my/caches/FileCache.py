@@ -47,13 +47,13 @@ class FileCache[T]:
             >>> from my import FileCache
             >>> tmp = tempfile.TemporaryDirectory()
             >>> cache = FileCache(Path(tmp.name))
-            >>> cache.write('users', 'robb_doering', {'role': 'author'})
-            >>> cache[('users', 'robb_doering')]
+            >>> cache.write('users', 'alex_smith', {'role': 'author'})
+            >>> cache[('users', 'alex_smith')]
             {'role': 'author'}
-            >>> cache.move_to_sys('users', 'robb')  # written to <dir>/users/r/o/b/robb.json
-            {'robb_doering'}
-            >>> cache.move_to_mem('users', 'robb')
-            {'robb_doering': {'role': 'author'}}
+            >>> cache.move_to_sys('users', 'alex')  # written to <dir>/users/a/l/e/alex.json
+            {'alex_smith'}
+            >>> cache.move_to_mem('users', 'alex')
+            {'alex_smith': {'role': 'author'}}
     """
 
     DEBUG: ClassVar[bool] = False
@@ -476,8 +476,8 @@ class FileCache[T]:
                 >>> from my import FileCache
                 >>> tmp = tempfile.TemporaryDirectory()
                 >>> cache = FileCache(Path(tmp.name))
-                >>> cache.write('users', 'robb_doering', {'role': 'author'})
-                >>> list(cache.search('users', re.compile('robb'), re.compile('robb')))
+                >>> cache.write('users', 'alex_smith', {'role': 'author'})
+                >>> list(cache.search('users', re.compile('alex'), re.compile('alex')))
                 [{'role': 'author'}]
         """
         if mode == 'both':

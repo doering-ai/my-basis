@@ -49,9 +49,9 @@ class Predicate(pyd.BaseModel):
         Build a predicate and inspect its fields::
 
             >>> from my import Predicate
-            >>> pred = Predicate.new({'tags': ['py', 'docs'], 'user.name': 'robb'})
+            >>> pred = Predicate.new({'tags': ['py', 'docs'], 'user.name': 'alex'})
             >>> pred
-            {'tags': ['py', 'docs'], 'user.name': 'robb'}
+            {'tags': ['py', 'docs'], 'user.name': 'alex'}
             >>> pred['tags']
             ['py', 'docs']
             >>> 'tags' in pred
@@ -306,13 +306,13 @@ class Predicate(pyd.BaseModel):
             Serialize a predicate with a dotted key::
 
                 >>> from my import Predicate
-                >>> pred = Predicate.new({'tags': ['py', 'docs'], 'user.name': 'robb'})
+                >>> pred = Predicate.new({'tags': ['py', 'docs'], 'user.name': 'alex'})
                 >>> print(pred.to_yaml(), end='')
                 tags:
                     - py
                     - docs
                 user:
-                    name: robb
+                    name: alex
         """
         node_items = [(tuple(key.split('.')), val) for key, val in self.data.items()]
         tree = self._deepen(node_items, None, None)

@@ -37,11 +37,11 @@ class NestedCache[Keys: tuple, Value](pyd.BaseModel):
 
             >>> from my import NestedCache
             >>> cache = NestedCache(signature=(str, int))
-            >>> cache[('user', 1)] = 'robb'
+            >>> cache[('user', 1)] = 'alex'
             >>> cache.set(('user', 2), 'ada')
             1
             >>> cache[('user', 1)]
-            'robb'
+            'alex'
             >>> len(cache)
             2
             >>> cache.delete(('user', 2))

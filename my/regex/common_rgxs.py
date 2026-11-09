@@ -111,7 +111,7 @@ COMMON_RGXS = RegexStore.new(
     #: `20[01]\d|202[0-6]` split, which silently stopped matching any year from 2027 onward.
     year=(
         r'(?<![[:alnum:]])(?:1?\d\d\d|20\d\d|\'\d\d)(?=$|[\W_a-p])',
-        # Century pivot at 50 (operator decision): `yy > 50` resolves to the 1900s, `yy <= 50`
+        # Century pivot at 50: `yy > 50` resolves to the 1900s, `yy <= 50`
         # to the 2000s -- so `'99` -> 1999, `'50` -> 2050, `'24` -> 2024.
         lambda s: str((1900 if (yy := int(s[1:])) > 50 else 2000) + yy) if s.startswith("'") else s,
     ),

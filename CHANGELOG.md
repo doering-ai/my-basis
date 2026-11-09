@@ -25,13 +25,12 @@ Where a change is a behavior break rather than an internal fix, it's called out 
 - Inherit shared Markdown defaults in development hooks.
 
 This compatible fix release contains the changes since v1.2.2 only.
-Publish from the reviewed landed commit after its exact-head main pipeline is green;
-the operator alone plays the manual `Publish PyPI` job after inspecting artifacts.
+Publish from the reviewed landed commit after its exact-head main pipeline is green; the operator alone plays the manual `Publish PyPI` job after inspecting artifacts.
 Earlier entries below retain their historical unreleased classification.
 
 ## Earlier unreleased entries (historical)
 
-### `LIBS-80`: `MY_REGEX_TIMEOUT` sets the regex deadline
+### `MY_REGEX_TIMEOUT` sets the regex deadline
 
 - `Buffer`, `RegexStore` and `Filesystem` take their `REGEX_TIMEOUT` from one value, read once from
   the `MY_REGEX_TIMEOUT` environment variable when `my.infra.constants` is imported. It is a positive,
@@ -39,7 +38,7 @@ Earlier entries below retain their historical unreleased classification.
   `ValueError` at import. A batch caller on a busy machine can now lift the deadline with the
   variable instead of assigning a module global.
 
-### `LIBS-70`: `Buffer` regex replacement keeps its context, and `rgx_iterator` ends on empty matches
+### `Buffer` regex replacement keeps its context, and `rgx_iterator` ends on empty matches
 
 - `Buffer.replace()` with a compiled pattern expanded its template by matching the pattern again on the
   isolated matched text, so a lookbehind, lookahead, `\B`, `\b` or `^` saw the wrong context and the
@@ -48,16 +47,10 @@ Earlier entries below retain their historical unreleased classification.
   buffer yielded the same empty match forever. It now steps one character past an empty match, as the
   fenced branch already did, and stops at the end of the text.
 
-### `SUBL-32`: `flexcast` rebuilds NamedTuple targets positionally, not first-field-bound
+### `flexcast` rebuilds NamedTuple targets positionally, not first-field-bound
 
-The wave-2 pydantic 2.13.5 / Python 3.14 re-locks (Sublime 4213's plugin host) exposed a
-positional-rebuild bug in the cast engine: `Transform._finalize` constructed the target with
-`t1.main(data)`, so a NamedTuple target rebuilt from a normalized sequence bound the whole
-sequence to its first declared field. With field defaults the construction quietly
-"succeeded" -- `ty.flexcast((2, 3), Move)` returned `Move(depth=[2, 3], place=0)` -- while
-without defaults the constructor's `TypeError` accidentally pushed the cast to a candidate
-that unpacked, which is why only defaulted NamedTuple fields (e.g. `CommandArguments` unions
-with tuple members) mangled.
+The wave-2 pydantic 2.13.5 / Python 3.14 re-locks (Sublime 4213's plugin host) exposed a positional-rebuild bug in the cast engine: `Transform._finalize` constructed the target with `t1.main(data)`, so a NamedTuple target rebuilt from a normalized sequence bound the whole sequence to its first declared field.
+With field defaults the construction quietly "succeeded" -- `ty.flexcast((2, 3), Move)` returned `Move(depth=[2, 3], place=0)` -- while without defaults the constructor's `TypeError` accidentally pushed the cast to a candidate that unpacked, which is why only defaulted NamedTuple fields (e.g. `CommandArguments` unions with tuple members) mangled.
 
 - NamedTuple targets (tuple subclasses with `_fields`) now rebuild one argument per declared
   field, for list/tuple/iterator-shaped data; a wrong-arity sequence declines like any other
@@ -66,12 +59,9 @@ with tuple members) mangled.
 - Plain `tuple` targets (`tuple.__init__` takes an iterable) and every non-tuple path
   construct exactly as before.
 
-### `LIBS-62`: absorbed mySublimeBasis's `Utils` superset, lazy-imported the channel gap
+### absorbed mySublimeBasis's `Utils` superset, lazy-imported the channel gap
 
-Sublime Text 4213's plugin host runs Python 3.14 and provisions packages outside `uv`/PyPI;
-the Package Control channel doesn't carry `srsly`, `tomli-w`, or `unidecode` for 3.14 yet, so
-`import my` needed to stop requiring them eagerly before mySublimeBasis's own migration
-(`SUBL-32`) could adopt this package's `Utils` facade in place of its local copy.
+Sublime Text 4213's plugin host runs Python 3.14 and provisions packages outside `uv`/PyPI; the Package Control channel doesn't carry `srsly`, `tomli-w`, or `unidecode` for 3.14 yet, so `import my` needed to stop requiring them eagerly before mySublimeBasis's own migration could adopt this package's `Utils` facade in place of its local copy.
 
 - `srsly`, `tomli_w`, and `unidecode` (all unconditional dependencies, not optional extras)
   now import lazily on first use, through a shared `_UtilsBase._optional_import()` helper that
@@ -219,7 +209,7 @@ This release-readiness change set contains reproduced security and correctness f
 
 ## [0.8.3] - 2026-07-11
 
-Performance and security release for MEMY-175 wikiparse polish wave 2.
+Performance and security release for wikiparse polish wave 2.
 
 ### Performance
 
@@ -292,7 +282,8 @@ This drove 608 previously-swallowed latent crashes per green test run down to 0,
 Constrained `TypeVar`s (e.g. `TypeVar('T', int, str)`) now resolve to the **union of all constraints**, not an arbitrary single member.
 `TypeVar`s with a union bound (`TypeVar('T', bound=int | str)`) resolve to that union directly.
 Union cast members are now ranked by **fitness** instead of reverse declaration order, fixing a latent bug where a truthy `bool` could get mis-cast ahead of a better-fitting member, and a `TypeError` in `sort_options`.
-If any call site relied on "first union member wins" ordering or on a constrained/bound TypeVar resolving to a single type, re-check it. (`d8c8d3a`, `834c91c`)
+If any call site relied on "first union member wins" ordering or on a constrained/bound TypeVar resolving to a single type, re-check it.
+(`d8c8d3a`, `834c91c`)
 
 ### PEP 695 generic parsing
 

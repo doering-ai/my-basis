@@ -1,4 +1,4 @@
-"""Tests for the `Multiplex` tee writer, ported from mySublimeBasis (LIBS-62)."""
+"""Tests for the `Multiplex` tee writer, ported from mySublimeBasis."""
 
 ############
 ### HEAD ###

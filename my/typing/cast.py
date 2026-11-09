@@ -689,7 +689,7 @@ class Transform[T0, T1]:
                     # A NamedTuple rebuild is positional: one argument per declared field. Handing
                     # the whole sequence to the constructor binds it to the FIRST field -- and
                     # when the remaining fields have defaults, `Move([2, 3])` quietly "succeeds"
-                    # as `Move(depth=[2, 3], place=0)` instead of declining (SUBL-32). A wrong-
+                    # as `Move(depth=[2, 3], place=0)` instead of declining. A wrong-
                     # arity sequence raises here and declines like any other invalid build.
                     return main(*raw)  # type: ignore[bad-return]
                 return main(data)  # type: ignore[bad-return]

@@ -764,7 +764,7 @@ assert 'PYDANTIC_DISABLE_PLUGINS' not in os.environ
 
 #: Channel-gap dependencies: declared in `pyproject.toml`, but imported lazily (via
 #: `_UtilsBase._optional_import()`) so bare `import my` never requires them. Not optional
-#: extras -- see LIBS-62 and `SUBL-32` harness/libs.md #2c for why a plugin host that
+#: extras: a plugin host that
 #: provisions Python packages outside `uv`/PyPI needs `import my` to succeed without them.
 CHANNEL_GAP_MODULES = ('srsly', 'tomli_w', 'unidecode')
 
@@ -810,7 +810,7 @@ assert my.ut.multi_rgx('cat', 'dog') == '(?:cat|dog)'
         `to_yaml`/`to_json`/`from_json`/`from_yaml`/`to_toml` all route through the shared
         `Typist` (`cls.ty`), which is only populated by importing `my.typing` -- and
         `my.typing` transitively imports `my.caches.FileCache`, which itself eagerly imports
-        `srsly` (already lazy relative to bare `import my`, per LIBS-62 step 1, but not
+        `srsly` (already lazy relative to bare `import my`, but not
         relative to `my.typing`). So `ut.ty` is primed first, with `srsly` genuinely
         importable, then `sys.modules['srsly'] = None` re-blocks it -- overriding the now-
         cached real module -- immediately before exercising the srsly-guarded calls. A

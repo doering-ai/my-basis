@@ -107,8 +107,7 @@ Each `EvidenceRef` contains:
   `evidence` list contains the same path.
 
 A reference does not need a signal ID.
-Reject an unknown path or a changed full-file SHA-256.
-Line numbers, symbols, and excerpts can improve the narrative, but proposal v2 does not carry or validate them.
+Reject an unknown path or a changed full-file SHA-256. Line numbers, symbols, and excerpts can improve the narrative, but proposal v2 does not carry or validate them.
 
 `mode` records authorization.
 `status` records the result.

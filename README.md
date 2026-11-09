@@ -85,15 +85,15 @@ The heavier `apis` and `files` branches load lazily.
 
 </blockquote>
 
-| Area                | Start here                                                                | Useful for                                                                          | API reference                                       |
-| ------------------- | ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | --------------------------------------------------- |
-| Utilities           | [`ut`](my/utils/README.md)                                                | Partitioning iterables, transforming text, working with syntax and system resources | [Hosted](https://basis.docs.doering.ai/utils.html)  |
-| Runtime typing      | [`ty`, `MyType`, `AutocastModel`](my/typing/README.md)                    | Coercion, conformance checks, and inspecting annotations                            | [Hosted](https://basis.docs.doering.ai/typing.html) |
-| Reusable types      | [`Span`, `Buffer`, `Command`](my/types/README.md)                         | Intervals, mutable text, and reusable shell invocations                             | [Hosted](https://basis.docs.doering.ai/types.html)  |
-| Regular expressions | [`RegexStore`, `MatchData`](my/regex/README.md)                           | Composing named patterns and inspecting matches                                     | [Hosted](https://basis.docs.doering.ai/regex.html)  |
-| Caches              | [`Cache`, `NestedCache`, `FileCache`, `PickleCache`](my/caches/README.md) | In-memory, hierarchical, disk-backed, and expiring storage                          | [Hosted](https://basis.docs.doering.ai/caches.html) |
-| Interfaces          | [`env`, `fs`, `GoogleSheet`](my/apis/README.md)                           | Typed environment access, named paths, and optional spreadsheet integration         | [Hosted](https://basis.docs.doering.ai/apis.html)   |
-| File formats        | [`Markdown`](my/files/README.md)                                          | Parsing, walking, and editing a document tree                                       | [Hosted](https://basis.docs.doering.ai/files.html)  |
+| Area                | Start here                                         | Useful for                                                                          | API reference |
+| ------------------- | -------------------------------------------------- | ----------------------------------------------------------------------------------- | ------------- |
+| Utilities           | [`ut`](my/utils/README.md)                                               | Partitioning iterables, transforming text, working with syntax and system resources | [Hosted](https://basis.docs.doering.ai/utils.html)        |
+| Runtime typing      | [`ty`, `MyType`, `AutocastModel`](my/typing/README.md)                    | Coercion, conformance checks, and inspecting annotations                            | [Hosted](https://basis.docs.doering.ai/typing.html)        |
+| Reusable types      | [`Span`, `Buffer`, `Command`](my/types/README.md)                        | Intervals, mutable text, and reusable shell invocations                             | [Hosted](https://basis.docs.doering.ai/types.html)        |
+| Regular expressions | [`RegexStore`, `MatchData`](my/regex/README.md)                          | Composing named patterns and inspecting matches                                     | [Hosted](https://basis.docs.doering.ai/regex.html)        |
+| Caches              | [`Cache`, `NestedCache`, `FileCache`, `PickleCache`](my/caches/README.md) | In-memory, hierarchical, disk-backed, and expiring storage                          | [Hosted](https://basis.docs.doering.ai/caches.html)        |
+| Interfaces          | [`env`, `fs`, `GoogleSheet`](my/apis/README.md)                         | Typed environment access, named paths, and optional spreadsheet integration         | [Hosted](https://basis.docs.doering.ai/apis.html)        |
+| File formats        | [`Markdown`](my/files/README.md)                                         | Parsing, walking, and editing a document tree                                       | [Hosted](https://basis.docs.doering.ai/files.html)        |
 
 ## A short tour
 
@@ -240,13 +240,13 @@ In a uv-managed project, the equivalent dependency declaration is `uv add "my-ba
 
 </blockquote>
 
-| Extra      | Adds                                                                                        |
-| ---------- | ------------------------------------------------------------------------------------------- |
-| `metrics`  | Logfire/OpenTelemetry logging, counters, and instrumentation helpers through `MetricUtils`  |
-| `google`   | `GoogleSheet` access, OAuth support, and pandas `DataFrame` conversion                      |
-| `myst`     | MyST syntax support in `Markdown.render()`'s formatting pass                                |
-| `terminal` | The pyratatui-backed examples under [`my/scripts/tuitorii/`](my/scripts/tuitorii/README.md) |
-| `aiohttp`  | An HTTP-client convenience dependency; it does not unlock a separate API by itself          |
+| Extra      | Adds                                                                                       |
+| ---------- | ------------------------------------------------------------------------------------------ |
+| `metrics`  | Logfire/OpenTelemetry logging, counters, and instrumentation helpers through `MetricUtils` |
+| `google`   | `GoogleSheet` access, OAuth support, and pandas `DataFrame` conversion                     |
+| `myst`     | MyST syntax support in `Markdown.render()`'s formatting pass                               |
+| `terminal` | The pyratatui-backed examples under [`my/scripts/tuitorii/`](my/scripts/tuitorii/README.md)                                 |
+| `aiohttp`  | An HTTP-client convenience dependency; it does not unlock a separate API by itself         |
 
 ## Why this library
 

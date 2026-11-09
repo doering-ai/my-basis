@@ -26,7 +26,7 @@ from .IterUtils import iter_utils
 ############
 #: Matches a literal `{{.name}}` in a `regex_dict()` value, excluding an escaped `\{{.name}}`
 #: (single backslash) but permitting a literal `\\{{.name}}` (escaped backslash). Ported
-#: byte-for-byte from mySublimeBasis's `Utils.NO_ESC`/`RGX_REF_RGX` (LIBS-62).
+#: byte-for-byte from mySublimeBasis's `Utils.NO_ESC`/`RGX_REF_RGX`.
 _NO_ESC = r'(?<![^\\]\\)(?<!\\{3})'
 _RGX_REF_RGX = re.compile(_NO_ESC + r'\{\{\.(?P<name>[_[:lower:]][_[:lower:]\d]*)\}\}')
 

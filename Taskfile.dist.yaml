@@ -179,7 +179,8 @@ tasks:
 
     agent:new:
         cmd: '{{.AWT}} new {{.CLI_ARGS}}'
-        desc: 'Provision an isolated worktree+branch: `task agent:new -- MEMY-88 "short desc"`.'
+        desc: 'Provision an isolated worktree+branch: `task agent:new -- PROJECT-123 "short
+            desc"`.'
         aliases: ['wt:new']
 
     agent:list:

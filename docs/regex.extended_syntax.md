@@ -23,9 +23,7 @@ If you're new to regex in general, I recommend you start by reading [python's qu
 _([regular-expressions.info lesson](https://www.regular-expressions.info/modifiers.html))_
 
 ```{admonition} [Basic Syntax](https://docs.python.org/3/library/re.html#flags)
----
-class: hint
----
+:class: hint
 See Python's standard-library `re` documentation for the basic, global flag syntax; the sections below cover the scoped and extended flags added by the `regex` module.
 ```
 
@@ -36,15 +34,12 @@ Scoped flags can apply to only part of a pattern and can be turned on or off.
 #### `1.1.1.` Encoding
 
 ##### `1.1.1.1.` `(?u)` UNICODE
-
 The default encoding of a regex string, matching everything according to international Unicode standards.
 
 ##### `1.1.1.2.` `(?a)` ASCII
-
 Makes `\w`, `\W`, `\b`, `\B`, `\d`, `\D`, `\s` and `\S` match only ASCII characters.
 
 ##### `1.1.1.3.` `(?L)` LOCALE
-
 Makes `\w`, `\W`, `\b`, `\B`, `\d`, `\D`, `\s` and `\S` match according to the current locale settings.
 
 ```{caution}
@@ -55,11 +50,9 @@ We recommended you use `UNICODE` instead.
 #### `1.1.2.` Case
 
 ##### `1.1.2.1.` `(?i)` IGNORECASE
-
 Upper and lower case alphabet characters are matched as if they were identical.
 
 ##### `1.1.2.2.` `(?f)` FULLCASE
-
 When combined with `(?i)`, enables "full" [case-folding](https://www.w3.org/TR/charmod-norm/#definitionCaseFolding) of Unicode text, which is critical if dealing with non-romance languages.
 
 The flag is off by default in V0, and on by default in V1.
@@ -72,19 +65,16 @@ regex.match(r"(?iV1)stra\N{LATIN SMALL LETTER SHARP S}e", "STRASSE").span() # ->
 #### `1.1.3.` Whitespace
 
 ##### `1.1.3.1.` `(?m)` MULTILINE
-
 _([regular-expressions.info lesson](https://www.regular-expressions.info/anchors.html))_
 
 The `^` and `$` literals now match the beginnings and ends of lines, rather than of the whole string/file.
 
 ##### `1.1.3.2.` `(?s)` DOTALL
-
 _([regular-expressions.info lesson](https://www.regular-expressions.info/dot.html))_
 
 The catch-all literal `.` now also catches line separators.
 
 ##### `1.1.3.3.` `(?x)` VERBOSE (i.e. Extended)
-
 _([regular-expressions.info lesson](https://www.regular-expressions.info/freespacing.html))_
 
 Ignores all raw whitespace characters in the following pattern, allowing the user to include whitespace between components for clarity.
@@ -93,7 +83,6 @@ Also allows comments, which begin with an "#" and continue until the end of the 
 To match whitespace in an extended expression, wrap it in a character set (e.g. ` ?` -> `[ ]?`).
 
 ##### `1.1.3.4.` `(?w)` WORD
-
 Changes the definition of a 'word boundary' (`\b`/`\B`) to that of a default Unicode word boundary, a better choice for a variety of non-romance languages.
 
 It also affects line separators (and, in turn, `(?s)` and `(?m)`):
@@ -109,7 +98,6 @@ Global flags apply to the entire pattern and can only be turned on -- if these p
 #### `1.2.1.` General
 
 ##### `1.2.1.1.` `(?p)` Posix
-
 Enables POSIX (leftmost longest) matching.
 
 Note that it will take longer to find matches because when it finds a match at a certain position, it won't return that immediately, but will keep looking to see if there's another longer match there.
@@ -123,7 +111,6 @@ regex.search(r'(?p)one(self)?(selfsufficient)?', 'oneselfsufficient') # -> onese
 ```
 
 ##### `1.2.1.2.` `(?r)` Reverse
-
 Enables reverse matching (from the end of the string to the beginning).
 
 ```python
@@ -141,21 +128,17 @@ regex.findall(r"(?r)..", "abcde") # -> ['de', 'bc']
 #### `1.2.2.` Version
 
 ##### `1.2.2.1.` `(?V0)` Version0
-
 Enables version 0 behaviour (old behaviour, compatible with the re module).
 
 ##### `1.2.2.2.` `(?V1)` Version1
-
 Enables version 1 behaviour (new behaviour, possibly different from the re module).
 
 #### `1.2.3.` Fuzzy Match Modes
 
 ##### `1.2.3.1.` `(?b)` Best Match
-
 Enables [fuzzy matching](#fuzzy-matching) search for the best match instead of the next match.
 
 ##### `1.2.3.2.` `(?e)` Enhance Match
-
 Enables [fuzzy matching](#fuzzy-matching) to attempt to improve the fit of the next match that it finds.
 
 ## `2.` Sets
@@ -181,7 +164,7 @@ The operators, in order of increasing precedence, are:
 
 | Syntax | Name                 | Boolean | Example                                                        |
 | ------ | -------------------- | ------- | -------------------------------------------------------------- |
-| `\|\|` | Union                | OR      | `[\w\|\|[:punct:]]` matches word and punctuation characters.   |
+| `\|\|`   | Union                | OR      | `[\w\|\|[:punct:]]` matches word and punctuation characters.     |
 | `~~`   | Symmetric Difference | XOR     | `[\w~~[:punct:]]` matches words or punctuation, but *not* `_`. |
 | `&&`   | Intersection         | AND     | `[\w&&[:punct:]]` matches *only* `_`.                          |
 | `--`   | Difference           | SUB     | `[\w--[:punct:]]` matches all word characters *except* `_`.    |
@@ -208,13 +191,11 @@ r'[\p{ASCII}&&\p{Letter}]' # Set containing all characters which are ASCII and l
 _([regular-expressions.info lesson](https://www.regular-expressions.info/brackets.html))_
 
 (subroutines)=
-
 ### `3.1.` Subroutines
 
 _([regular-expressions.info lesson](https://www.regular-expressions.info/subroutine.html))_
 
-All unnamed capturing groups (`(...)`) are assigned a group number, starting from 1.
-Groups with the same group name will have the same group number, and groups with a different group name will have a different group number.
+All unnamed capturing groups (`(...)`) are assigned a group number, starting from 1. Groups with the same group name will have the same group number, and groups with a different group name will have a different group number.
 
 The same name can be used by more than one group, with later captures 'overwriting' earlier captures.
 All the captures of the group will be available from the `captures` method of the match object.
@@ -330,7 +311,6 @@ A lookbehind can match a variable-length string.
 ## `4.` Other Literals
 
 (unicode)=
-
 ### `4.1.` Unicode Properties (`\p{property}`)
 
 _([regular-expressions.info lesson](https://www.regular-expressions.info/unicode.html))_
@@ -360,7 +340,6 @@ In addition to the usual properties, you can also use:
 - `\p{Vert_Space}`/`\p{V}` matches vertical whitespace.
 
 (posix)=
-
 ### `4.2.` POSIX Character Classes (`[[:class:]]`)
 
 _([regular-expressions.info lesson](https://www.regular-expressions.info/posixbrackets.html))_
@@ -413,7 +392,6 @@ The grapheme matcher is supported.
 It conforms to the Unicode specification at `http://www.unicode.org/reports/tr29/`.
 
 (optimization)=
-
 ## `5.` Optimization
 
 ### `5.1.` Atomic grouping `(?>...)`
@@ -509,7 +487,6 @@ p = regex.compile(r"\L<options>", options=option_set, other_options=[])
 - This module supports Unicode 17.0.0 and full Unicode case-folding.
 
 (repeated-matches)=
-
 ### `6.2.` Repeated Matches
 
 #### `6.2.1.` Captures & Spans
@@ -779,7 +756,6 @@ regex.sub(r'[a-z]', slow_replace, 'abcde', timeout=2) # -> TimeoutError: regex t
 ```
 
 (fuzzy-matching)=
-
 ## `7.` Fuzzy Matching
 
 Regex usually attempts an exact match, but sometimes an approximate, or "fuzzy", match is needed, for those cases where the text being searched may contain errors in the form of inserted, deleted or substituted characters.

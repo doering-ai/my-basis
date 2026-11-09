@@ -45,8 +45,7 @@ Do not execute these blindly when the target uses a different package manager or
 
 ## Evidence rules
 
-For machine-enforced evidence, every `proposed` or `implemented` change cites at least one intake-relative path and that entry's full-file SHA-256.
-A `signal_id` is optional.
+For machine-enforced evidence, every `proposed` or `implemented` change cites at least one intake-relative path and that entry's full-file SHA-256. A `signal_id` is optional.
 When present, the signal must cite the same path.
 Line numbers, symbols, and excerpts are useful narrative context but are not proposal-v2 evidence fields.
 Always state the required behavior contract.

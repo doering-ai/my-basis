@@ -1,6 +1,6 @@
 """A singleton, registry-backed tee writer for stdout/stderr.
 
-Ported from mySublimeBasis's `infra/Multiplex.py` (LIBS-62): pure stdlib, zero Sublime
+Ported from mySublimeBasis's `infra/Multiplex.py`: pure stdlib, zero Sublime
 dependency, so it moves upstream unchanged. `Multiplex` lets several independent consumers
 (a log file, an output panel, a test harness, ...) each register a stream and receive every
 byte written to `sys.stdout`/`sys.stderr`, without stepping on each other or on the real

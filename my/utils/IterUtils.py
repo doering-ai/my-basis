@@ -484,7 +484,7 @@ class IterUtils(_UtilsBase):
                 >>> ut.get_any({'a': 1, 'b': 2}, 'a', 'z')
                 {'a': 1}
         """
-        if ret := cls.ty.cast(data, dict):
+        if ret := cls.typist().cast(data, dict):
             fns = tuple(map(cls.normalize_predicate, args))
             # NOTE: not `map_condense` -- its predicate is applied to each *value*, but here we
             # need to match against each *key*.
@@ -555,7 +555,7 @@ class IterUtils(_UtilsBase):
             if unique and len(matches) > 1:
                 raise ValueError(f'Multiple keys found: {matches}')
             return matches[0] if matches else default
-        elif cls.ty.is_map(data):
+        elif cls.typist().is_map(data):
             data = dict(data)
             matches = []
             for pred in preds:
@@ -605,7 +605,7 @@ class IterUtils(_UtilsBase):
         """
         # NOTE: `String`/`Map`/`Vec`/`Iter` are union aliases, so they can't be `match` class
         # patterns; dispatch with the equivalent `is_*` predicates instead. Conversions are done
-        # directly here (NOT via `cls.ty.cast`), since `cast` itself normalizes its input first --
+        # directly here (NOT via `Typist.cast`), since `cast` itself normalizes its input first --
         # routing back through it would recurse forever.
         if data is None or isinstance(data, (type, UnionType)):
             return data
@@ -623,7 +623,7 @@ class IterUtils(_UtilsBase):
             # An `Enum` (especially a single-member `Flag`) is atomic, but iterates to itself --
             # so it must short-circuit before the `is_iter` branch or normalize recurses forever.
             return data
-        elif cls.ty.is_model(data):
+        elif (ty := cls.typist()).is_model(data):
             # A `pydantic.BaseModel` also defines `__iter__` (yielding raw `(field, value)`
             # pairs, for `dict(model)` support), so it would otherwise fall into the `is_iter`
             # branch below and get exploded into its internal field tuples before any cast
@@ -631,9 +631,9 @@ class IterUtils(_UtilsBase):
             # untouched; `_model_to_*` transforms already normalize them correctly (e.g. via
             # `model_dump()`, which respects a custom serializer).
             return data
-        elif cls.ty.is_map(data):
+        elif ty.is_map(data):
             return {cls.normalize(k): cls.normalize(v) for k, v in cls.map_items(data)}
-        elif cls.ty.is_vec(data) or cls.ty.is_iter(data):
+        elif ty.is_vec(data) or ty.is_iter(data):
             return [cls.normalize(v) for v in data]
         else:
             return data

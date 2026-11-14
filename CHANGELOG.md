@@ -7,6 +7,7 @@ Where a change is a behavior break rather than an internal fix, it's called out 
 ## [Unreleased]
 
 - Reduce `Buffer` construction overhead while keeping its pair cache independent per instance.
+- Make `ut` self-sufficient: importing only `from my import ut` no longer leaves `ut.serialize`, `ut.to_json`, `ut.to_yaml`, `ut.to_toml` and the other `Typist`-backed helpers raising `AttributeError: Utils has no attribute ty`. They resolve the shared `Typist` on first use through `ut.typist()`, which imports `my.typing` itself, so `import my` stays cold.
 
 ## [1.2.5] — prepared, unpublished
 

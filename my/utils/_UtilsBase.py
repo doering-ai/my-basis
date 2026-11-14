@@ -39,8 +39,30 @@ class _UtilsBase:
 
     @staticmethod
     def typist() -> Typist:
-        """Return the shared `Typist` instance."""
-        return _UtilsBase.ty
+        """Return the shared `Typist` instance, importing `my.typing` on first use.
+
+        `my.typing` imports `utils`, so `utils` cannot import it back at load time. Instead the
+        first call that needs a `Typist` (`ut.serialize()`, `ut.to_json()`, ...) imports it
+        here; its last statement installs the instance through `set_typist()`. A caller that
+        imports only `ut` therefore works without also importing `ty`, and `import my` stays
+        cold. Every later call is a plain attribute read.
+
+        Returns:
+            The one `Typist` instance, shared by every utility class.
+        Raises:
+            AttributeError: If called while `my.typing` is still importing, before it has
+                installed the instance (a plain error beats a silent import loop).
+        """
+        try:
+            return _UtilsBase.ty
+        except AttributeError:
+            importlib.import_module('..typing', __package__)
+        try:
+            return _UtilsBase.ty
+        except AttributeError:
+            raise AttributeError(
+                'The shared `Typist` is unavailable: `my.typing` is still initializing.'
+            ) from None
 
     @staticmethod
     def _optional_import(name: str) -> ModuleType:

@@ -6,12 +6,14 @@ from typing import Any
 from collections.abc import Callable
 from collections import deque
 from dataclasses import dataclass
+from datetime import datetime, time, timedelta, timezone
 
 ### EXTERNAL
 import pytest as pyt
 import pydantic as pyd
 
 ### INTERNAL
+from my import ut
 from my.types import Buffer
 from my.typing import Typist
 
@@ -32,6 +34,16 @@ class Settings(pyd.BaseModel):
     required: int
     defaulted: int = 2
     optional: str | None = None
+
+
+#: A fixed offset west of UTC, as in the Atlanta receipts that exposed the datetime contract.
+EDT = timezone(timedelta(hours=-4))
+
+
+def keep_offset(value: object) -> str:
+    """A `cases=` handler that writes a datetime with its offset intact."""
+    assert isinstance(value, datetime)
+    return value.isoformat()
 
 
 ############
@@ -196,6 +208,42 @@ class TestTypist:
         """Serialization applies the full/sparse Pydantic contract recursively."""
         result = typist.serialize(data) if full is None else typist.serialize(data, full=full)
         assert result == expected
+
+    @pyt.mark.parametrize(
+        'data, expected',
+        [
+            # An aware datetime is converted to UTC, and the offset marker is then dropped.
+            (datetime(2026, 10, 20, 12, 34, 56, tzinfo=EDT), '2026-10-20T16:34:56'),
+            (
+                datetime(2026, 10, 20, 12, 34, 56, tzinfo=timezone(timedelta(hours=5, minutes=30))),
+                '2026-10-20T07:04:56',
+            ),
+            # The conversion can cross a date boundary.
+            (datetime(2026, 10, 20, 22, 0, tzinfo=EDT), '2026-10-21T02:00:00'),
+            # A bare time has no date to shift by, so it keeps its wall clock and loses its offset.
+            (time(10, 20, 30, tzinfo=EDT), '10:20:30'),
+        ],
+    )
+    def test_serialize__times_are_utc_wall_clock(self, data: datetime | time, expected: str):
+        """Aware datetimes serialize as UTC wall time with no offset marker (the default)."""
+        assert typist.serialize(data) == expected
+        assert typist.serialize({'when': [data]}) == {'when': [expected]}
+        assert ut.serialize(data) == expected
+
+    def test_serialize__equal_instants_serialize_equal(self):
+        """Two spellings of one instant collapse to one string, so the offset is not recoverable."""
+        east = datetime(2026, 10, 20, 17, 34, 56, tzinfo=timezone(timedelta(hours=1)))
+        west = datetime(2026, 10, 20, 12, 34, 56, tzinfo=EDT)
+        assert east == west
+        assert typist.serialize(east) == typist.serialize(west)
+
+    def test_serialize__cases_opts_in_to_offsets(self):
+        """`cases=` is the per-call opt-in that keeps an aware datetime's offset at any depth."""
+        when = datetime(2026, 10, 20, 12, 34, 56, tzinfo=EDT)
+        result = typist.serialize({'when': [when]}, cases={datetime: keep_offset})
+        assert result == {'when': ['2026-10-20T12:34:56-04:00']}
+        # The opt-in is per call: the default is unchanged afterwards.
+        assert typist.serialize(when) == '2026-10-20T16:34:56'
 
     @pyt.mark.parametrize(
         'data, expected',

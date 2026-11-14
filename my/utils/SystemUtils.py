@@ -1254,6 +1254,10 @@ class SystemUtils(_UtilsBase):
     def serialize(cls, data: object, full: bool = False) -> Any:
         """Thin wrapper around `Typist.serialize()` -- see there for usage info.
 
+        Aware datetimes are written as UTC wall time with no offset marker, in this method and in
+        every `to_*` serializer built on it. Only `Typist.serialize()` takes the `cases=` opt-in
+        that keeps an offset: serialize with it first, then pass the result to a `to_*` method.
+
         Examples:
             Reduce rich types to JSON-friendly forms::
 

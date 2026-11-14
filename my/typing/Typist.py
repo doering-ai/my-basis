@@ -730,12 +730,23 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
         - All **maps** are cast to dicts.
         - All **models** are converted to dicts using their ``model_dump()`` method.
 
+        Times follow the package's "all times are UTC" convention, and the offset marker is
+        implicit, so it is never written. An aware ``datetime`` is converted to UTC first, then
+        written as a bare ISO string (``12:34:56-04:00`` becomes ``16:34:56``); two spellings of
+        one instant therefore serialize alike, and the original offset cannot be recovered. A bare
+        ``time`` has no date to shift by, so it keeps its wall clock and loses its offset. A naive
+        ``datetime`` is read as the host's local time before the same conversion, so only a UTC
+        host leaves it unchanged; pass aware values for output that does not depend on the host.
+        Casting such a string back to ``datetime`` always yields a UTC value. Callers that must
+        keep the offset opt in per call with ``cases``, as in the last example below.
+
         Args:
             data: The source data to serialize.
             full: Whether to include unset and default-valued Pydantic fields. The default emits
                 only explicitly populated, non-default fields.
             cases: Optional special-case handlers, keyed by type or predicate, that trigger at
-                all depths.
+                all depths. They run before every rule above, so a ``datetime`` handler replaces
+                the UTC convention.
         Returns:
             The simplified data, recursively composed of dicts, lists, and atoms.
         Examples:
@@ -750,6 +761,15 @@ class Typist(TypeCheck, TypeMatch, TypeCast):
 
                 >>> ty.serialize({'pi': 3.7}, cases={float: round})
                 {'pi': 4}
+
+            Aware datetimes are written as UTC wall time, unless ``cases`` keeps the offset::
+
+                >>> from datetime import datetime, timedelta, timezone
+                >>> when = datetime(2026, 10, 20, 12, 34, 56, tzinfo=timezone(timedelta(hours=-4)))
+                >>> ty.serialize(when)
+                '2026-10-20T16:34:56'
+                >>> ty.serialize(when, cases={datetime: datetime.isoformat})
+                '2026-10-20T12:34:56-04:00'
         """
         # 0. If the caller specified a special handler, call that instead
         for key, handler in (cases or {}).items():

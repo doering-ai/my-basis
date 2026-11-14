@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone, UTC
 from pathlib import Path
 from typing import Any
 import importlib
+import json
 import logging
 import time
 import pickle
@@ -24,6 +25,12 @@ cls = SystemUtils
 #: The SystemUtils *module* (not the class) -- `my.utils` is the Utils facade class by design
 #: (see that package's docstring), so dotted-string patching can't reach module globals.
 _sysutils_mod = importlib.import_module('my.utils.SystemUtils')
+
+
+def keep_offset(value: object) -> str:
+    """A `Typist.serialize(cases=...)` handler that writes a datetime with its offset intact."""
+    assert isinstance(value, datetime)
+    return value.isoformat()
 
 
 ############
@@ -811,6 +818,14 @@ class TestSystemUtils:
         """Test serialize is a thin wrapper around ty.serialize."""
         result = cls.serialize({'key': 'value'})
         assert result == {'key': 'value'}
+
+    def test_serialize__aware_datetime_is_utc_and_cases_keep_offsets(self):
+        """`to_json` writes UTC wall time; serializing with `cases=` first keeps the offset."""
+        when = datetime(2026, 10, 20, 12, 34, 56, tzinfo=timezone(timedelta(hours=-4)))
+        assert json.loads(cls.to_json({'when': when})) == {'when': '2026-10-20T16:34:56'}
+
+        kept = cls.typist().serialize({'when': when}, cases={datetime: keep_offset})
+        assert json.loads(cls.to_json(kept)) == {'when': '2026-10-20T12:34:56-04:00'}
 
     # ---------
     # `4` SHELL

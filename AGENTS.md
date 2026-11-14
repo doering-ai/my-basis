@@ -49,7 +49,9 @@ The README's "What's inside" table enumerates `__all__`, so adding or removing a
   `cast('  test  ', str)` returns the value verbatim.
   Per-type parsers handle the whitespace they care about at parse time, so do not add `.strip()` to string-producing transforms or to `clean_data`.
 - `my.typing` assumes UTC.
-  Serializing a `datetime` or `time` drops the offset (`replace(tzinfo=None)`, with no conversion), so `10:20:30+00:00` becomes `10:20:30`.
+  Serializing an aware `datetime` converts it to UTC, then drops the offset, so `12:34:56-04:00` becomes `16:34:56`.
+  A bare `time` only loses its offset, and a naive `datetime` is read as host-local time first.
+  `Typist.serialize(cases={datetime: ...})` is the per-call way to keep offsets.
   Parsing normalizes naive inputs to UTC.
 
 ### Regex performance

@@ -827,6 +827,49 @@ class TestMetricUtils:
         assert 'test-pkg' not in cls.TELEMETRY_READY
         assert 'Remote telemetry setup failed' in caplog.text
 
+    @pyt.mark.parametrize('first_call', [True, False], ids=['first', 'cached'])
+    def test_setup_logging__never_export_skips_logfire_silently(
+        self,
+        monkeypatch: pyt.MonkeyPatch,
+        caplog: pyt.LogCaptureFixture,
+        first_call: bool,
+    ):
+        """`send_to_logfire=False` neither configures Logfire nor warns about a missing destination.
+
+        `means-bank` passes it with no token and no OTLP endpoint; without the early return the
+        destination check would fail and log "Remote telemetry setup failed" on every start.
+        """
+        logger = lg.getLogger('test-never-export')
+        logger.handlers.clear()
+        fire_calls: list[bool] = []
+        original_loggers = cls.LOGGERS
+        original_ready = cls.TELEMETRY_READY
+        cls.LOGGERS = {} if first_call else {'test-package': logger}
+        cls.TELEMETRY_READY = set()
+        monkeypatch.delenv('LOGFIRE_TOKEN', raising=False)
+        monkeypatch.delenv('OTEL_EXPORTER_OTLP_ENDPOINT', raising=False)
+        monkeypatch.delenv('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT', raising=False)
+        monkeypatch.setattr(cls, 'setup_py_logging', staticmethod(lambda **_: logger))
+        monkeypatch.setattr(metric_module.fire, 'configure', lambda **_: fire_calls.append(True))
+        try:
+            with caplog.at_level(lg.WARNING):
+                result = cls.setup_logging(
+                    logdir=Path(),
+                    is_dev=False,
+                    fire_token='',
+                    package='test-package',
+                    send_to_logfire=False,
+                )
+            ready = set(cls.TELEMETRY_READY)
+        finally:
+            cls.LOGGERS = original_loggers
+            cls.TELEMETRY_READY = original_ready
+
+        assert result is logger
+        assert fire_calls == []
+        assert ready == set()
+        assert 'Remote telemetry setup failed' not in caplog.text
+
     def test_configure_cached_logger__first_config_wins(self, caplog: pyt.LogCaptureFixture):
         """`_configure_cached_logger` warns and returns early when telemetry is already ready."""
         logger = lg.getLogger('test-cached-first-wins')

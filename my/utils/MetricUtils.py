@@ -504,8 +504,11 @@ class _MetricUtilsImplementation(_UtilsBase):
 
         On success the package is marked telemetry-ready. Returns True when the remote
         exporter was configured, False when it failed and the caller should keep going
-        without export.
+        without export. `send_to_logfire=False` asks for no export, so there is nothing to
+        configure and nothing that failed: it returns False without a warning.
         """
+        if (fire_kwargs or {}).get('send_to_logfire') is False:
+            return False
         try:
             cls.setup_fire_logging(
                 fire_token=fire_token,

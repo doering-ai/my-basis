@@ -804,7 +804,7 @@ class SystemUtils(_UtilsBase):
         """
         if not file:
             raise ValueError('No file provided.')
-        # NOTE: don't round-trip through `cls.ty.cast(file, str)` here -- the generic type-cast
+        # NOTE: don't round-trip through `Typist.cast(file, str)` here -- the generic type-cast
         # machinery has no registered `Path -> str` transform (only `String`-family sources), so
         # it silently returns `None` for `Path`/`Traversable` inputs. `cls.path()` already
         # accepts `str | Path | None` directly (mirroring the `isinstance(file, Path)` branches
@@ -893,7 +893,7 @@ class SystemUtils(_UtilsBase):
         elif isinstance(file, Path):
             cls.validate_file(file)
             ret = cls._optional_import('srsly').read_json(file)
-        elif (text := cls.ty.cast(file, str)) is not None:
+        elif (text := cls.typist().cast(file, str)) is not None:
             ret = cls._optional_import('srsly').json_loads(text)
         else:
             raise ValueError(f'Unsupported input type for JSON loading: {type(file)}')
@@ -985,7 +985,7 @@ class SystemUtils(_UtilsBase):
 
         # II. Verify & format the response
         # if isinstance(ret, tvar):
-        if cls.ty.check(ret, tvar):
+        if cls.typist().check(ret, tvar):
             return ret
         elif not ret:
             return tvar()  # type: ignore
@@ -1025,7 +1025,7 @@ class SystemUtils(_UtilsBase):
                 >>> ut.from_toml('x = 1')
                 {'x': 1}
         """
-        tvar = cls.ty.specify(tvar)
+        tvar = cls.typist().specify(tvar)
         if not file:
             return tvar()  # type: ignore
         elif isinstance(file, Path):
@@ -1109,7 +1109,7 @@ class SystemUtils(_UtilsBase):
                     - 1
                     - 2
         """
-        obj = cls.ty.serialize(data)
+        obj = cls.typist().serialize(data)
         text = cls._yaml_config().dump(obj, **kwargs)
         assert isinstance(text, str), 'Failed to write YAML data.'
 
@@ -1141,7 +1141,7 @@ class SystemUtils(_UtilsBase):
                     "a":1
                 }
         """
-        obj = cls.ty.serialize(data)
+        obj = cls.typist().serialize(data)
         if 'indent' not in kwargs:
             kwargs['indent'] = 4
         text = cls._optional_import('srsly').json_dumps(obj, **kwargs)
@@ -1168,7 +1168,7 @@ class SystemUtils(_UtilsBase):
                 >>> print(ut.to_toml({'x': 1}), end='')
                 x = 1
         """
-        obj = cls.ty.serialize(data)
+        obj = cls.typist().serialize(data)
 
         # Cast to dict, as toml only accepts dicts at the top level
         if not isinstance(obj, dict):
@@ -1201,7 +1201,7 @@ class SystemUtils(_UtilsBase):
                 >>> ut.from_pickle(ut.to_pickle({'a': 1}))
                 {'a': 1}
         """
-        obj = cls.ty.serialize(data)
+        obj = cls.typist().serialize(data)
         return pickle.dumps(obj, **kwargs)
 
     @classmethod
@@ -1254,6 +1254,10 @@ class SystemUtils(_UtilsBase):
     def serialize(cls, data: object, full: bool = False) -> Any:
         """Thin wrapper around `Typist.serialize()` -- see there for usage info.
 
+        Aware datetimes are written as UTC wall time with no offset marker, in this method and in
+        every `to_*` serializer built on it. Only `Typist.serialize()` takes the `cases=` opt-in
+        that keeps an offset: serialize with it first, then pass the result to a `to_*` method.
+
         Examples:
             Reduce rich types to JSON-friendly forms::
 
@@ -1264,7 +1268,7 @@ class SystemUtils(_UtilsBase):
                 >>> ut.serialize(datetime(2026, 1, 1, tzinfo=UTC))
                 '2026-01-01T00:00:00'
         """
-        return cls.ty.serialize(data, full=full)
+        return cls.typist().serialize(data, full=full)
 
     # ---------
     # `4` SHELL

@@ -111,7 +111,10 @@ class _MetricUtilsImplementation(_UtilsBase):
                 raise ValueError('Telemetry privacy controls cannot be weakened.')
         if kwargs.get('inspect_arguments', False) is not False:
             raise ValueError('Telemetry privacy controls cannot be weakened.')
-        if kwargs.get('send_to_logfire', 'if-token-present') != 'if-token-present':
+        # `False` never exports, so it only narrows the default. Compare it by identity: `0` and
+        # `''` equal `False`, and neither is a destination choice this guard has vetted.
+        send_to_logfire = kwargs.get('send_to_logfire', 'if-token-present')
+        if send_to_logfire != 'if-token-present' and send_to_logfire is not False:
             raise ValueError('Telemetry destination policy cannot be weakened.')
 
         try:

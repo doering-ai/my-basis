@@ -9,6 +9,7 @@ Where a change is a behavior break rather than an internal fix, it's called out 
 - Reduce `Buffer` construction overhead while keeping its pair cache independent per instance.
 - Make `ut` self-sufficient: importing only `from my import ut` no longer leaves `ut.serialize`, `ut.to_json`, `ut.to_yaml`, `ut.to_toml` and the other `Typist`-backed helpers raising `AttributeError: Utils has no attribute ty`. They resolve the shared `Typist` on first use through `ut.typist()`, which imports `my.typing` itself, so `import my` stays cold.
 - Document the datetime contract of `Typist.serialize`: aware datetimes are converted to UTC and written without an offset marker, and `cases=` keeps an offset per call. Default output is unchanged.
+- Accept `send_to_logfire=False` in the telemetry destination guard of `ut.setup_logging` and `ut.setup_fire_logging`. It never exports, so it is narrower than the default `'if-token-present'`; `True`, `0`, `None` and every other value stay rejected. Callers such as `means-bank` that pass `False` no longer crash at startup.
 
 ## [1.2.5] — prepared, unpublished
 

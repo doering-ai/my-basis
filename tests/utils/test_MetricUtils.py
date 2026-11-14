@@ -173,6 +173,16 @@ class TestMetricUtils:
                 id='hosted_send',
             ),
             pyt.param(
+                lambda: {'send_to_logfire': 0},
+                'destination policy',
+                id='hosted_send_zero_is_not_false',
+            ),
+            pyt.param(
+                lambda: {'send_to_logfire': None},
+                'destination policy',
+                id='hosted_send_none',
+            ),
+            pyt.param(
                 lambda: {'future_content_capture': True},
                 'Unsupported telemetry configuration',
                 id='unknown_option',
@@ -243,6 +253,32 @@ class TestMetricUtils:
                 'test-package',
                 lg.getLogger('test-unsafe-endpoint'),
             )
+
+    @pyt.mark.parametrize(
+        'send_to_logfire',
+        [
+            pyt.param('if-token-present', id='default'),
+            pyt.param(False, id='never_export'),
+        ],
+    )
+    def test_setup_fire_logging__accepts_narrower_destination(
+        self, monkeypatch: pyt.MonkeyPatch, send_to_logfire: str | bool
+    ):
+        """The default and the strictly narrower `False` pass the guard unchanged to Logfire."""
+        configured: dict[str, object] = {}
+        monkeypatch.setattr(
+            metric_module.fire, 'configure', lambda **kwargs: configured.update(kwargs)
+        )
+
+        cls.setup_fire_logging(
+            'synthetic-token',
+            'test-package',
+            lg.getLogger('test-narrow-destination'),
+            is_dev=False,
+            send_to_logfire=send_to_logfire,
+        )
+
+        assert configured['send_to_logfire'] is send_to_logfire
 
     def test_setup_fire_logging__accepts_gitlab(self, monkeypatch: pyt.MonkeyPatch):
         """The human-gated GitLab.com group endpoint remains an approved fan-out target."""

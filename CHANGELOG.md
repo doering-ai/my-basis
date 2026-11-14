@@ -6,12 +6,14 @@ Where a change is a behavior break rather than an internal fix, it's called out 
 
 ## [Unreleased]
 
+## [1.2.6] — prepared, unpublished
+
 - Reduce `Buffer` construction overhead while keeping its pair cache independent per instance.
 - Make `ut` self-sufficient: importing only `from my import ut` no longer leaves `ut.serialize`, `ut.to_json`, `ut.to_yaml`, `ut.to_toml` and the other `Typist`-backed helpers raising `AttributeError: Utils has no attribute ty`. They resolve the shared `Typist` on first use through `ut.typist()`, which imports `my.typing` itself, so `import my` stays cold.
 - Document the datetime contract of `Typist.serialize`: aware datetimes are converted to UTC and written without an offset marker, and `cases=` keeps an offset per call. Default output is unchanged.
 - Accept `send_to_logfire=False` in the telemetry destination guard of `ut.setup_logging` and `ut.setup_fire_logging`. It never exports, so it is narrower than the default `'if-token-present'`; `True`, `0`, `None` and every other value stay rejected. Callers such as `means-bank` that pass `False` no longer crash at startup. `setup_logging` then skips Logfire entirely, without the "Remote telemetry setup failed" warning that a missing destination would have raised on every start.
 
-## [1.2.5] — prepared, unpublished
+## [1.2.5] — 2026-10-31
 
 - Preserve escaped actual LF and other literal whitespace during regex AST tokenization and `<|>` factoring. Tokenization now retains unmatched source fragments instead of silently turning an incomplete expression into a different pattern; compiler validation remains authoritative.
 
@@ -21,7 +23,7 @@ Where a change is a behavior break rather than an internal fix, it's called out 
 - Reuse the existing regex AST/tree factoring for eligible finite literals, sets and plain groups. Captures, assertions, wildcard/repeated/lazy syntax, atomic commitments and unsupported syntax retain ordinary ordered composition. Literal punctuation remains escaped when moved into a set.
 - Propagate known compiler flags through composition and `define`; full-fold ignore-case, reverse, verbose, locale and fuzzy modes conservatively keep ordinary alternation. String-composition callers can pass eventual compiler flags with the optional `flags=` keyword.
 
-## [1.2.3] — prepared, unpublished
+## [1.2.3] — 2026-10-30
 
 - Invalidate Buffer's cached bracket pairs after `set`, `sub`, and every public mutation.
 - Reset fence ranges after whole-buffer replacement, so later matching uses the current text.
